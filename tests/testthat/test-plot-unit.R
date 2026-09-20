@@ -60,8 +60,8 @@ make_mock_fit <- function(n_draws = 100, n_params = 5, n_chains = 1, backend = "
   )
 }
 
-# Test mcmc_diagnostics helper
-test_that("mcmc_diagnostics returns diagnostics data frame", {
+# Test diagnostics() helper
+test_that("diagnostics() returns diagnostics data frame", {
   fit <- make_mock_fit()
 
   diag <- diagnostics(fit)
@@ -72,7 +72,7 @@ test_that("mcmc_diagnostics returns diagnostics data frame", {
   expect_true("ess_bulk" %in% names(diag) || "ess" %in% names(diag))
 })
 
-test_that("mcmc_diagnostics is per-parameter on a well-mixed multi-chain fit", {
+test_that("diagnostics() is per-parameter on a well-mixed multi-chain fit", {
   skip_if_not_installed("posterior")
 
   set.seed(20260719)

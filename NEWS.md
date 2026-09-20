@@ -1,3 +1,13 @@
+# tulpaRatio 1.7.3
+
+* **`mcmc_diagnostics()` is gone; use `diagnostics()` (#82).** It was an
+  exported `lifecycle::deprecate_warn()` shim forwarding to `diagnostics()`,
+  and the engine's shim of the same name was deleted in gcol33/tulpa#773, so
+  two packages exported the name and whichever attached second masked the
+  other. The package is pre-release, where the convention is to delete the old
+  name rather than carry a shim. `lifecycle` was reachable from nothing else
+  and leaves `Imports` with it.
+
 # tulpaRatio 1.7.2
 
 * **The standalone intrinsic walks take the same coordinate (#79).**

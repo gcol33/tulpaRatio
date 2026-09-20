@@ -256,7 +256,7 @@ test_that("summary.ratiod_fit respects prob argument", {
   expect_true(any(grepl("5%", output90)) || any(grepl("95%", output90)))
 })
 
-test_that("mcmc_diagnostics works", {
+test_that("diagnostics() works", {
   skip_on_cran()
 
   set.seed(666)
@@ -285,7 +285,7 @@ test_that("mcmc_diagnostics works", {
   expect_true(nrow(diag) > 0)
 })
 
-test_that("mcmc_diagnostics filters parameters", {
+test_that("diagnostics() filters parameters", {
   skip_on_cran()
 
   set.seed(777)

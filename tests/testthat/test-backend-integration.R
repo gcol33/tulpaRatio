@@ -227,8 +227,8 @@ test_that("predict.ratiod_fit without newdata returns fitted", {
   expect_s3_class(pred, "ratiod_fitted")
 })
 
-# Test mcmc_diagnostics
-test_that("mcmc_diagnostics returns diagnostics", {
+# Test diagnostics()
+test_that("diagnostics() returns diagnostics", {
   fit <- quick_fit()
 
   diag <- diagnostics(fit)

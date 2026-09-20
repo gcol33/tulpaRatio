@@ -1429,26 +1429,6 @@ diagnostics.ratiod_fit <- function(fit, pars = NULL, ...) {
   return(result)
 }
 
-#' Compute MCMC diagnostics (Rhat, ESS) for ratiod_fit
-#'
-#' @description
-#' `r lifecycle::badge("deprecated")`
-#'
-#' Use [diagnostics()]. The engine reports approximation reliability rather
-#' than chain mixing for deterministic fits, so the name described only one of
-#' the two answers it can return.
-#'
-#' @param fit A ratiod_fit object
-#' @param pars Character vector of parameter names (default: all).
-#' @return The value of [tulpa::diagnostics()] for `fit`.
-#' @keywords internal
-#' @export
-mcmc_diagnostics <- function(fit, pars = NULL) {
-  lifecycle::deprecate_warn("0.1.1", "mcmc_diagnostics()", "diagnostics()")
-  diagnostics(fit, pars = pars)
-}
-
-
 #' Print method for ratiod_diagnostics
 #'
 #' @param x A ratiod_diagnostics object

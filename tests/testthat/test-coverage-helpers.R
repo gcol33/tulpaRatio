@@ -32,7 +32,7 @@ test_that("print.ratiod_priors works", {
 # plot_diagnostics.R coverage
 # -----------------------------------------------------------------------------
 
-test_that("mcmc_diagnostics returns list with diagnostic info", {
+test_that("diagnostics() returns list with diagnostic info", {
   skip_on_cran()
   skip_if_not_installed("bayesplot")
 

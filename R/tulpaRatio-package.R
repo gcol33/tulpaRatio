@@ -3,7 +3,6 @@
 
 #' @useDynLib tulpaRatio, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
-#' @importFrom lifecycle deprecated
 #' @importFrom stats as.formula model.frame model.matrix na.pass quantile sd optim fitted predict rnorm rnbinom var ar cor pnorm qnorm reshape qlogis
 #' @importFrom utils head
 #' @importFrom grDevices adjustcolor
