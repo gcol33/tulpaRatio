@@ -1015,6 +1015,7 @@ detect_spatial_type <- function(object) {
 #' Predict spatial effects for HMC backend
 #' @keywords internal
 predict_spatial_hmc <- function(object, newdata, coords.0, spatial_type, return_spatial) {
+  refuse_restricted_field_prediction(object)
   hmc_data <- object$.internal$hmc_data
   samples <- object$.internal$samples
 
@@ -1252,10 +1253,27 @@ add_spatial_to_predictions <- function(pred_draws, w_pred, model_type, type) {
 }
 
 
+#' Refuse a spatial prediction from a restricted field
+#'
+#' A restricted field (`spatial_rsr()`) is the projection of the field across
+#' the fitted observations, so it has no value at a new row.
+#'
+#' @param object A fitted model
+#' @keywords internal
+refuse_restricted_field_prediction <- function(object) {
+  if (is.null(object$spatial$rsr_basis)) return(invisible(NULL))
+  stop("A restricted spatial field (`spatial_rsr()`) is defined through a ",
+       "projection over the fitted observations and has no value at a new ",
+       "row. Use `include_spatial = FALSE`, or fitted() for the in-sample fit.",
+       call. = FALSE)
+}
+
+
 #' Predict for PG backend
 #' @keywords internal
 predict_pg <- function(object, newdata, type, re_formula, allow_new_levels,
                        coords.0, include_spatial, return_spatial) {
+  if (include_spatial) refuse_restricted_field_prediction(object)
   # PG backend stores samples like HMC
   # Build design matrices for new data
   pred_data <- build_prediction_data_pg(object, newdata, re_formula, allow_new_levels)

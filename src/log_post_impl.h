@@ -25,6 +25,7 @@
 #include "hmc_temporal_multiscale.h"  // Templated multiscale temporal functions
 #include "tls_workspace.h"
 #include "omp_sum.h"
+#include "rsr.h"
 #include "hmc_gp_collapsed.h"     // Collapsed GP marginal (double only)
 #include "hmc_icar_collapsed.h"   // Collapsed ICAR/BYM2 marginal (double only)
 #include "hmc_car_proper.h"       // Proper CAR precision and log-determinant
@@ -486,8 +487,7 @@ T compute_log_post_impl(
             // built by the NNGP autoregression. The NNGP prior on w and the
             // Jacobian |dw/dz| cancel exactly, so what remains of the field's
             // own density is N(0, I) on z; both hyperparameters reach eta
-            // through the transform instead. RSR does not apply: the projection
-            // is defined on the centred coordinate.
+            // through the transform instead.
             std::vector<T> z_gp(n_gp);
             T z_sq_sum = T(0.0);
             for (int k = 0; k < n_gp; k++) {
@@ -506,18 +506,6 @@ T compute_log_post_impl(
             gp_w.resize(n_gp);
             for (int k = 0; k < n_gp; k++) {
                 gp_w[k] = params[layout.gp_w_start + k];
-            }
-
-            // Apply RSR projection if enabled
-            if (data.has_rsr && !data.rsr_projection.empty()) {
-                std::vector<T> w_projected(data.rsr_n, T(0.0));
-                for (int ii = 0; ii < data.rsr_n; ii++) {
-                    for (int jj = 0; jj < data.rsr_n; jj++) {
-                        w_projected[ii] = w_projected[ii]
-                            + T(data.rsr_projection[ii * data.rsr_n + jj]) * gp_w[jj];
-                    }
-                }
-                gp_w = w_projected;
             }
 
             // NNGP log-likelihood on spatial effects
@@ -668,8 +656,7 @@ T compute_log_post_impl(
             // the NNGP prior on w and the Jacobian |dw/dz| cancel exactly, so
             // what is left of the two fields' own density is N(0, I) on each
             // block, and all four hyperparameters reach eta through the
-            // transforms instead. RSR does not apply: the projection is
-            // defined on the centred coordinate.
+            // transforms instead.
             std::vector<T> z_local(n_gp_local), z_regional(n_gp_regional);
             T z_sq_sum = T(0.0);
             for (int k = 0; k < n_gp_local; k++) {
@@ -699,22 +686,6 @@ T compute_log_post_impl(
             ms_gp_w_regional.resize(n_gp_regional);
             for (int k = 0; k < n_gp_regional; k++) {
                 ms_gp_w_regional[k] = params[layout.gp_regional_start + k];
-            }
-
-            // Apply RSR projection if enabled
-            if (data.has_rsr && !data.rsr_projection.empty()) {
-                std::vector<T> local_proj(data.rsr_n, T(0.0));
-                std::vector<T> regional_proj(data.rsr_n, T(0.0));
-                for (int ii = 0; ii < data.rsr_n; ii++) {
-                    for (int jj = 0; jj < data.rsr_n; jj++) {
-                        local_proj[ii] = local_proj[ii]
-                            + T(data.rsr_projection[ii * data.rsr_n + jj]) * ms_gp_w_local[jj];
-                        regional_proj[ii] = regional_proj[ii]
-                            + T(data.rsr_projection[ii * data.rsr_n + jj]) * ms_gp_w_regional[jj];
-                    }
-                }
-                ms_gp_w_local = local_proj;
-                ms_gp_w_regional = regional_proj;
             }
 
             // Multiscale NNGP log-likelihood for both scales
@@ -1457,6 +1428,55 @@ T compute_log_post_impl(
     // LIKELIHOOD
     // ========================================================================
 
+    // The spatial field at observation i: an areal field (a collapsed field
+    // has no slot but does have a mode, which the collapsed contribution above
+    // pointed phi_spatial at), an NNGP field read at the observation's
+    // location, or a basis expansion evaluated at the observation. `shared`
+    // enters both predictors, `num_only` the numerator's alone.
+    const bool areal_field = layout.has_spatial && phi_spatial != nullptr
+                             && !data.spatial_group.empty();
+    const bool gp_field = layout.is_gp && !gp_w.empty();
+    const bool hsgp_field = !hsgp_f.empty();
+    const bool msgp_field = layout.is_multiscale_gp && !ms_gp_effect.empty();
+    const bool has_spatial_field = areal_field || gp_field || hsgp_field || msgp_field;
+
+    auto spatial_field_at = [&](int i, T& shared, T& num_only) {
+        if (areal_field && data.spatial_group[i] > 0) {
+            int s = data.spatial_group[i] - 1;
+            if (layout.is_bym2) {
+                T scaled_phi = phi_spatial[s] * T(data.bym2_scale_factor);
+                shared = shared + (sigma_s_bym2 * scaled_phi + sigma_u_bym2 * theta_bym2[s]);
+            } else {
+                shared = shared + phi_spatial[s];
+            }
+        }
+        if (gp_field) {
+            T e = gp_w[data.gp_data.obs_to_loc[i]];
+            if (data.gp_data.shared) shared = shared + e; else num_only = num_only + e;
+        }
+        if (hsgp_field) {
+            if (data.hsgp_data.shared) shared = shared + hsgp_f[i];
+            else num_only = num_only + hsgp_f[i];
+        }
+        if (msgp_field) {
+            if (data.multiscale_gp_data.shared) shared = shared + ms_gp_effect[i];
+            else num_only = num_only + ms_gp_effect[i];
+        }
+    };
+
+    // Under restricted spatial regression the predictors read the field's
+    // projection onto the complement of the restricted covariates (rsr.h).
+    std::vector<T> rsr_shared, rsr_num_only;
+    if (data.has_rsr && has_spatial_field) {
+        rsr_shared.assign(data.N, T(0.0));
+        rsr_num_only.assign(data.N, T(0.0));
+        for (int i = 0; i < data.N; i++) {
+            spatial_field_at(i, rsr_shared[i], rsr_num_only[i]);
+        }
+        ratiod_rsr::project_out(rsr_shared, data.rsr_basis, data.rsr_rank);
+        ratiod_rsr::project_out(rsr_num_only, data.rsr_basis, data.rsr_rank);
+    }
+
     // One observation's contribution, written once for every scalar type. How
     // the sum over observations is taken is what differs, below.
     auto obs_log_lik_i = [&](int i) -> T {
@@ -1478,52 +1498,17 @@ T compute_log_post_impl(
             eta_denom = eta_denom + re_contrib;
         }
 
-        // Add spatial effects. A collapsed field has no slot but does have a
-        // mode, which the collapsed contribution above pointed phi_spatial at.
-        if (layout.has_spatial && phi_spatial != nullptr
-            && !data.spatial_group.empty() && data.spatial_group[i] > 0) {
-            int s = data.spatial_group[i] - 1;
-            T spatial_effect;
-
-            if (layout.is_bym2) {
-                T scaled_phi = phi_spatial[s] * T(data.bym2_scale_factor);
-                spatial_effect = sigma_s_bym2 * scaled_phi + sigma_u_bym2 * theta_bym2[s];
+        // Add the spatial field.
+        if (has_spatial_field) {
+            T shared = T(0.0), num_only = T(0.0);
+            if (data.has_rsr) {
+                shared = rsr_shared[i];
+                num_only = rsr_num_only[i];
             } else {
-                spatial_effect = phi_spatial[s];
+                spatial_field_at(i, shared, num_only);
             }
-
-            eta_num = eta_num + spatial_effect;
-            eta_denom = eta_denom + spatial_effect;
-        }
-
-        // Add GP spatial effect (map observation to unique location)
-        if (layout.is_gp && !gp_w.empty()) {
-            int loc_i = data.gp_data.obs_to_loc[i];
-            T gp_effect = gp_w[loc_i];
-            if (data.gp_data.shared) {
-                eta_num = eta_num + gp_effect;
-                eta_denom = eta_denom + gp_effect;
-            } else {
-                eta_num = eta_num + gp_effect;
-            }
-        }
-
-        // Add HSGP spatial effect
-        if (!hsgp_f.empty()) {
-            T hsgp_effect = hsgp_f[i];
-            eta_num = eta_num + hsgp_effect;
-            if (data.hsgp_data.shared) eta_denom = eta_denom + hsgp_effect;
-        }
-
-        // Add multi-scale GP spatial effect
-        if (layout.is_multiscale_gp && !ms_gp_effect.empty()) {
-            T msgp_effect = ms_gp_effect[i];
-            if (data.multiscale_gp_data.shared) {
-                eta_num = eta_num + msgp_effect;
-                eta_denom = eta_denom + msgp_effect;
-            } else {
-                eta_num = eta_num + msgp_effect;
-            }
+            eta_num = eta_num + shared + num_only;
+            eta_denom = eta_denom + shared;
         }
 
         // Add temporal effects

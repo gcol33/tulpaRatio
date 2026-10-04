@@ -176,9 +176,14 @@ DISPATCH_MASK_FIELDS <- c("gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4",
 # have no autodiff case: the templated density cannot express the marginal.
 DISPATCH_MASK_COLLAPSED_FIELDS <- c("gp_collapsed_st4", "icar_collapsed_st4",
                                     "bym2_collapsed_st4")
+# A spatial field under restricted spatial regression reaches eta through a
+# projection across all observations, so its gradient couples every
+# observation to every unit; no hand-coded function writes that, and the
+# dispatch sends it to the arena gradient of the density (gcol33/tulpaRatio#92).
+RSR_FIELDS <- c("icar_rsr", "bym2_rsr", "hsgp_rsr", "gp_rsr")
 ALL_FIELDS <- c(FIELDS, MULTI_FIELDS, STRUCTURE_FIELDS, ST_IV_FIELDS,
                 ST_OTHER_FIELDS, ST_IV_AR1_FIELDS, ST_GP_FIELDS, KERNEL_FIELDS,
-                DISPATCH_MASK_FIELDS)
+                DISPATCH_MASK_FIELDS, RSR_FIELDS)
 MODES <- c("handcoded", "arena")
 AUTODIFF_MODES <- c("arena", "forward", "tape")
 # The same three under the names the front door takes.
@@ -286,7 +291,10 @@ test_that("resolve_gradient_fn sends each model to the function written for it",
     stgp_latent = "composite",
     # A collapsed marginal alongside a second block.
     gp_collapsed_st4 = "numerical", icar_collapsed_st4 = "numerical",
-    bym2_collapsed_st4 = "numerical"
+    bym2_collapsed_st4 = "numerical",
+    # A restricted field.
+    icar_rsr = "autodiff_arena", bym2_rsr = "autodiff_arena",
+    hsgp_rsr = "autodiff_arena", gp_rsr = "autodiff_arena"
   )
   got <- vapply(names(expected), tulpaRatio:::cpp_gradient_dispatch, character(1))
   expect_equal(got, expected)
@@ -311,7 +319,7 @@ for (field in CAR_PROPER_FIELDS) {
 
 for (field in c(MULTI_FIELDS, STRUCTURE_FIELDS, ST_IV_FIELDS,
                 ST_OTHER_FIELDS, ST_IV_AR1_FIELDS, ST_GP_FIELDS,
-                DISPATCH_MASK_FIELDS)) {
+                DISPATCH_MASK_FIELDS, RSR_FIELDS)) {
   for (mode in MODES) {
     test_that(sprintf("analytic gradient matches finite differences (%s, %s)", field, mode), {
       r <- tulpaRatio:::cpp_gradient_check(field, mode = mode)

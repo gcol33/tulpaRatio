@@ -224,6 +224,43 @@ laplace_spatial_support <- function(spatial, structures) {
 }
 
 
+#' Spatial support rule for backends without restricted spatial regression
+#'
+#' @description
+#' A restricted field reaches the predictor projected onto the complement of
+#' the restricted covariates; a backend whose sampler reads the field directly
+#' would fit the unrestricted model, so it names the restriction instead.
+#'
+#' @inheritParams laplace_spatial_support
+#' @return `TRUE`, or a phrase naming the restriction
+#' @keywords internal
+unrestricted_spatial_support <- function(spatial, structures) {
+  if (inherits(spatial, "ratiod_rsr")) {
+    return("restricted spatial regression (`spatial_rsr()`) is not implemented")
+  }
+  TRUE
+}
+
+
+#' Spatial support rule for the Polya-Gamma sampler
+#'
+#' @description
+#' The sampler carries restricted spatial regression on an intrinsic CAR field;
+#' a restricted BYM2, proper CAR or Gaussian-process field names itself.
+#'
+#' @inheritParams laplace_spatial_support
+#' @return `TRUE`, or a phrase naming the restriction
+#' @keywords internal
+pg_spatial_support <- function(spatial, structures) {
+  if (inherits(spatial, "ratiod_rsr") &&
+      (!identical(spatial$type, "car") ||
+       inherits(spatial, c("ratiod_gp", "ratiod_hsgp", "ratiod_multiscale")))) {
+    return("restricted spatial regression is implemented on an intrinsic CAR field only")
+  }
+  TRUE
+}
+
+
 #' Which structures each backend can fit
 #'
 #' @description
@@ -242,32 +279,32 @@ BACKEND_STRUCTURE_SUPPORT <- list(
     zi = TRUE, latent = TRUE
   ),
   ess = list(
-    spatial = TRUE, temporal = TRUE, spatiotemporal = FALSE,
-    zi = TRUE, latent = FALSE
+    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   gibbs = list(
-    spatial = TRUE, temporal = tvc_temporal_support, spatiotemporal = FALSE,
-    zi = FALSE, latent = FALSE
+    spatial = unrestricted_spatial_support, temporal = tvc_temporal_support,
+    spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   pg = list(
-    spatial = TRUE, temporal = multiscale_temporal_support,
+    spatial = pg_spatial_support, temporal = multiscale_temporal_support,
     spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   sghmc = list(
-    spatial = TRUE, temporal = TRUE, spatiotemporal = FALSE,
-    zi = TRUE, latent = FALSE
+    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   sgld = list(
-    spatial = TRUE, temporal = TRUE, spatiotemporal = FALSE,
-    zi = TRUE, latent = FALSE
+    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   laplace = list(
     spatial = laplace_spatial_support, temporal = laplace_temporal_support,
     spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   vi = list(
-    spatial = TRUE, temporal = TRUE, spatiotemporal = FALSE,
-    zi = TRUE, latent = FALSE
+    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   )
 )
 

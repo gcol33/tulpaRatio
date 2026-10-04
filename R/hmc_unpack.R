@@ -1087,24 +1087,32 @@ hmc_structure_contributions <- function(unpacked, design) {
     )
   }
 
+  # A restricted spatial field reaches the predictors projected onto the
+  # complement of the restricted covariates, as the sampler reads it.
+  Q <- spatial_info$rsr_basis
+  restrict <- function(eta) {
+    if (is.null(Q) || is.null(eta)) return(eta)
+    eta - (eta %*% Q) %*% t(Q)
+  }
+
   # Areal spatial: always shared between the two linear predictors
   if (!is.null(unpacked$spatial)) {
     field <- unpacked$spatial$field
-    add("spatial", spread_effect(field, spatial_info$group, N), TRUE,
+    add("spatial", restrict(spread_effect(field, spatial_info$group, N)), TRUE,
         if (is.null(field)) "collapsed_field_unavailable" else NULL)
   }
 
   # GP
   if (!is.null(unpacked$gp)) {
     field <- unpacked$gp$field
-    add("gp", spread_effect(field, spatial_info$group, N),
+    add("gp", restrict(spread_effect(field, spatial_info$group, N)),
         spatial_info$shared %||% TRUE,
         if (is.null(field)) "collapsed_field_unavailable" else NULL)
   }
 
   # HSGP: the basis is evaluated at the observations
   if (!is.null(unpacked$hsgp)) {
-    add("hsgp", unpacked$hsgp$field, spatial_info$shared %||% TRUE,
+    add("hsgp", restrict(unpacked$hsgp$field), spatial_info$shared %||% TRUE,
         unpacked$hsgp$field_reason)
   }
 
@@ -1116,7 +1124,8 @@ hmc_structure_contributions <- function(unpacked, design) {
     } else {
       spread_effect(field, spatial_info$group, N)
     }
-    add("msgp", eta, spatial_info$shared %||% TRUE, unpacked$msgp$field_reason)
+    add("msgp", restrict(eta), spatial_info$shared %||% TRUE,
+        unpacked$msgp$field_reason)
   }
 
   # Temporal

@@ -8294,6 +8294,12 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
     if (mode == GradientMode::AUTODIFF_FORWARD)
         return &compute_gradient_forward;
 
+    // A restricted spatial field reaches eta through a projection across all
+    // observations, which no hand-coded gradient carries; the arena gradient
+    // differentiates the log posterior that does.
+    if (data.has_rsr)
+        return &compute_gradient_arena;
+
     // AUTO or HANDCODED: use fastest available (H > A_r > A > N)
     if (can_use_analytical_gradient(data, layout)) {
         return &compute_gradient_analytical;
@@ -11623,6 +11629,9 @@ Rcpp::List cpp_hmc_fit(
           }
       }
   }
+  if (spatial_params.containsElementNamed("rsr")) {
+    apply_rsr_params(data, Rcpp::as<Rcpp::List>(spatial_params["rsr"]));
+  }
 
   // Temporal structure
   apply_temporal_params(data, temporal_params);
@@ -11676,7 +11685,6 @@ Rcpp::List cpp_hmc_fit(
   // trend, seasonal and short-term blocks off it.
   data.has_gp = false;
   data.has_multiscale_gp = false;
-  data.has_rsr = false;
   data.has_hsgp = false;
 
   apply_latent_params(data, latent_params);
@@ -11909,8 +11917,8 @@ Rcpp::List cpp_hmc_fit_gp(
 
   // Extract RSR parameters - eager copy
   bool has_rsr = Rcpp::as<bool>(rsr_params["has_rsr"]);
-  std::vector<double> rsr_projection_vec = Rcpp::as<std::vector<double>>(rsr_params["projection"]);
-  int rsr_n = Rcpp::as<int>(rsr_params["n"]);
+  std::vector<double> rsr_basis_vec = Rcpp::as<std::vector<double>>(rsr_params["basis"]);
+  int rsr_rank = Rcpp::as<int>(rsr_params["rank"]);
 
   // Second memory barrier after all Rcpp extractions
   std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -12206,14 +12214,7 @@ Rcpp::List cpp_hmc_fit_gp(
     data.multiscale_temporal_data.seasonal_period = 0;
   }
 
-  // RSR structure - use pre-copied std::vector
-  data.has_rsr = has_rsr;
-  if (has_rsr && !rsr_projection_vec.empty()) {
-    data.rsr_projection = rsr_projection_vec;
-    data.rsr_n = rsr_n;
-  } else {
-    data.rsr_n = 0;
-  }
+  set_rsr_basis(data, has_rsr, std::move(rsr_basis_vec), rsr_rank);
 
   // Zero-inflation structure (GP interface: no OI support, use matrix directly)
   data.zi_type = ratiod_zi::parse_zi_type(zi_type_str);

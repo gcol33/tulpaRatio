@@ -165,10 +165,17 @@ fit_hmc <- function(formula,
                          range_local_lower = gp_info$range_local_lower,
                          range_local_upper = gp_info$range_local_upper,
                          range_regional_lower = gp_info$range_regional_lower,
-                         range_regional_upper = gp_info$range_regional_upper)
+                         range_regional_upper = gp_info$range_regional_upper,
+                         rsr_basis = rsr_basis(spatial, data))
   } else {
     gp_info <- NULL
     spatial_info <- prepare_spatial_for_hmc(spatial, data, hmc_data$N)
+  }
+  if (!is.null(spatial_info$rsr_basis) &&
+      identical(spatial_info$parameterization, "collapsed")) {
+    stop("A restricted spatial field (`spatial_rsr()`) cannot be collapsed: ",
+         "the collapsed marginal integrates the unrestricted field. ",
+         "Use the default parameterization.", call. = FALSE)
   }
 
   # Auto-cap max_treedepth for GP/MSGP spatial models (many spatial params → deep trees)
@@ -511,9 +518,6 @@ fit_hmc <- function(formula,
 
   # Run sampler - branch based on GP vs non-GP spatial
   if (use_gp_sampler) {
-    # Prepare RSR if present
-    rsr_info <- prepare_rsr_for_hmc(spatial, data)
-
     # Bundle GP parameters into list for C++
     gp_params <- list(
       gp_type = gp_info$gp_type,
@@ -588,12 +592,7 @@ fit_hmc <- function(formula,
       sigma2_short_prior_alpha = priors$ms_sigma2_short_prior_alpha %||% 0.01
     )
 
-    # Bundle RSR parameters
-    rsr_params <- list(
-      has_rsr = rsr_info$has_rsr,
-      projection = rsr_info$rsr_projection,
-      n = as.integer(rsr_info$rsr_n)
-    )
+    rsr_params <- hmc_rsr_params(spatial_info)
 
     # Use O2-safe interface with single List parameter
     # This minimizes Rcpp template instantiation at ABI boundary
@@ -655,7 +654,8 @@ fit_hmc <- function(formula,
       rho_upper = spatial_info$rho_upper %||% 1.0,
       rho_prior_a = spatial_info$rho_prior_a %||% 1.0,
       rho_prior_b = spatial_info$rho_prior_b %||% 1.0,
-      center = spatial_info$center %||% TRUE
+      center = spatial_info$center %||% TRUE,
+      rsr = hmc_rsr_params(spatial_info)
     )
 
     prior_params <- list(
@@ -1443,7 +1443,8 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
     rho_upper = if (spatial_type == "car_proper") unname(rho_bounds["upper"]) %||% 1.0 else NULL,
     rho_prior_a = 1.0,
     rho_prior_b = 1.0,
-    center = spatial$center %||% TRUE
+    center = spatial$center %||% TRUE,
+    rsr_basis = rsr_basis(spatial, data)
   )
 }
 
@@ -2596,32 +2597,18 @@ prepare_multiscale_temporal_for_hmc <- function(temporal, data, N) {
   )
 }
 
-#' Prepare RSR structure for HMC
+#' RSR block of the sampler's data
+#'
+#' The restricted covariate basis `Q` (`N x r`, orthonormal columns) as the
+#' sampler reads it: `basis` row-major, so observation `i`'s row is
+#' `basis[i * r + (0:(r - 1))]`.
+#'
+#' @param spatial_info Output of `prepare_spatial_for_hmc()` or the GP branch
 #' @keywords internal
-prepare_rsr_for_hmc <- function(spatial, data) {
-  if (is.null(spatial) || !isTRUE(spatial$rsr)) {
-    return(list(
-      has_rsr = FALSE,
-      rsr_projection = numeric(0),
-      rsr_n = 0L
-    ))
+hmc_rsr_params <- function(spatial_info) {
+  Q <- spatial_info$rsr_basis
+  if (is.null(Q)) {
+    return(list(has_rsr = FALSE, basis = numeric(0), rank = 0L))
   }
-
-  # Validate RSR and compute projection
-  validated <- validate_rsr(spatial, data)
-
-  if (is.null(validated$rsr_projection)) {
-    return(list(
-      has_rsr = FALSE,
-      rsr_projection = numeric(0),
-      rsr_n = 0L
-    ))
-  }
-
-  n <- nrow(validated$rsr_projection)
-  list(
-    has_rsr = TRUE,
-    rsr_projection = as.vector(validated$rsr_projection),  # Row-major flatten
-    rsr_n = as.integer(n)
-  )
+  list(has_rsr = TRUE, basis = as.numeric(t(Q)), rank = ncol(Q))
 }

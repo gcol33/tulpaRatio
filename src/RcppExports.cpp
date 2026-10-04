@@ -509,8 +509,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_pg_binomial_gibbs_rsr
-Rcpp::List cpp_pg_binomial_gibbs_rsr(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, Rcpp::NumericVector rsr_projection, int rsr_n, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, bool store_eta, bool verbose, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_rsr(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP rsr_projectionSEXP, SEXP rsr_nSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
+Rcpp::List cpp_pg_binomial_gibbs_rsr(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, Rcpp::NumericMatrix rsr_design, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, bool store_eta, bool verbose, int n_threads);
+RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_rsr(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP rsr_designSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -523,8 +523,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_spatial_units(n_spatial_unitsSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type adj_list(adj_listSEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type n_neighbors(n_neighborsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type rsr_projection(rsr_projectionSEXP);
-    Rcpp::traits::input_parameter< int >::type rsr_n(rsr_nSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type rsr_design(rsr_designSEXP);
     Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
     Rcpp::traits::input_parameter< int >::type n_warmup(n_warmupSEXP);
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
@@ -535,7 +534,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type store_eta(store_etaSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_rsr(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_projection, rsr_n, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads));
+    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_rsr(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_design, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1914,7 +1913,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_pg_binomial_gibbs_gp", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_gp, 27},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_temporal", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_temporal, 22},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_multiscale_gp", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_multiscale_gp, 37},
-    {"_tulpaRatio_cpp_pg_binomial_gibbs_rsr", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_rsr, 21},
+    {"_tulpaRatio_cpp_pg_binomial_gibbs_rsr", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_rsr, 20},
     {"_tulpaRatio_cpp_pg_negbin_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_gibbs, 15},
     {"_tulpaRatio_cpp_pg_negbin_negbin_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_negbin_gibbs, 19},
     {"_tulpaRatio_cpp_pg_negbin_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_gibbs_spatial, 21},

@@ -289,10 +289,12 @@ struct ModelData {
   int hsgp_m_per_dim = 15;             // Basis functions per dimension
   double hsgp_boundary_factor = 1.5;   // Boundary factor (c)
 
-  // RSR (Restricted Spatial Regression) structure
+  // RSR (Restricted Spatial Regression): orthonormal basis Q of the restricted
+  // covariates, N x rsr_rank row-major; the spatial field reaches eta as
+  // (I - Q Q') f. See rsr.h.
   bool has_rsr = false;
-  std::vector<double> rsr_projection;   // P_perp matrix (n x n, flattened)
-  int rsr_n = 0;                        // Dimension of projection matrix
+  std::vector<double> rsr_basis;
+  int rsr_rank = 0;
 
   // Latent factors for unmeasured confounders
   bool has_latent = false;

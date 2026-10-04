@@ -1,5 +1,24 @@
 # tulpaRatio 1.7.3
 
+* **`spatial_rsr()` is carried, or refused, by every backend (#92).** HMC
+  received the restriction only on its centred NNGP branch, where it projected
+  the field and then evaluated the NNGP prior on the projected values, with an
+  N x N projection applied to a field held at the unique locations; on an areal
+  field the entry point cleared the flag, so `spatial_rsr(spatial_car(...))`
+  gave draws bit-identical to the unrestricted fit. The log posterior now
+  builds the spatial field's value at each observation once (areal, NNGP,
+  HSGP or multi-scale GP), and under RSR the predictors read `(I - Q Q') f`
+  with `Q` the orthonormal basis of the restricted covariates; every field
+  prior reads `f`. The gradient of a restricted model is the arena gradient of
+  that density, and `fitted()` applies the same projection. A collapsed
+  parameterization is refused under RSR. The PG sampler drew the field from
+  the unrestricted ICAR conditional and read a corner of the projection; it now
+  draws it from its exact Gaussian conditional, with precision
+  `tau Q + A' Omega A` for `A = (I - Q Q') S`, and its R wrapper no longer
+  errors before sampling. ESS, Gibbs, SGHMC, SGLD and VI, which never read the
+  restriction, refuse it, and PG refuses it on anything but an intrinsic CAR
+  field. `predict()` refuses a restricted field at new rows.
+
 * **The log posterior no longer depends on the thread count on Windows arm64
   (#83).** On aarch64-w64-mingw (Rtools45 clang 19) an OpenMP
   `reduction(+:double)` over a 4-thread team returned the serial value in 0 of

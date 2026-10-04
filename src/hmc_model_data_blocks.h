@@ -479,6 +479,30 @@ inline void apply_re_params(ModelData& data, const Rcpp::List& re_params) {
   }
 }
 
+// The restricted-spatial-regression block, as hmc_rsr_params() builds it:
+// `has_rsr`, the row-major basis `basis` and its column count `rank`.
+inline void set_rsr_basis(ModelData& data, bool has_rsr,
+                          std::vector<double> basis, int rank) {
+  data.has_rsr = has_rsr;
+  data.rsr_basis = std::move(basis);
+  data.rsr_rank = rank;
+  if (!data.has_rsr) {
+    data.rsr_basis.clear();
+    data.rsr_rank = 0;
+  } else if (data.rsr_rank <= 0 ||
+             static_cast<int>(data.rsr_basis.size()) != data.N * data.rsr_rank) {
+    Rcpp::stop("The restricted spatial regression basis has %d entries for %d "
+               "observations and rank %d.",
+               static_cast<int>(data.rsr_basis.size()), data.N, data.rsr_rank);
+  }
+}
+
+inline void apply_rsr_params(ModelData& data, const Rcpp::List& rsr_params) {
+  set_rsr_basis(data, Rcpp::as<bool>(rsr_params["has_rsr"]),
+                Rcpp::as<std::vector<double>>(rsr_params["basis"]),
+                Rcpp::as<int>(rsr_params["rank"]));
+}
+
 // The temporal block: the RW1 / RW2 / AR1 margin, the continuous-time GP
 // margin, the multi-scale decomposition, and the prior anchors each of them
 // reads. Every field the bundle carries is assigned here, so a knob the R

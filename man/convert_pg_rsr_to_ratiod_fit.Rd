@@ -12,7 +12,6 @@ convert_pg_rsr_to_ratiod_fit(
   X,
   re_info,
   spatial_info,
-  rsr_projection,
   chains,
   iter,
   warmup,

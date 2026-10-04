@@ -2274,24 +2274,47 @@ print.ratiod_rsr <- function(x, ...) {
 #' @return Projection matrix (n x n)
 #' @keywords internal
 compute_rsr_projection <- function(X) {
-  n <- nrow(X)
-  p <- ncol(X)
+  Q <- rsr_basis_of(X)
+  diag(nrow(X)) - Q %*% t(Q)
+}
 
-  if (p >= n) {
+
+#' Orthonormal basis of the restricted covariate space
+#'
+#' @description
+#' The columns of `Q` span the column space of `X`, one column per unit of its
+#' numerical rank, so `I - Q Q'` is the projection onto the orthogonal
+#' complement.
+#'
+#' @param X Design matrix of covariates to orthogonalize against
+#' @return An `n x rank(X)` matrix with orthonormal columns
+#' @keywords internal
+rsr_basis_of <- function(X) {
+  if (ncol(X) >= nrow(X)) {
     warning("More covariates than observations; RSR may not be effective",
             call. = FALSE)
   }
-
-  # QR decomposition is more numerically stable than direct inverse
   qr_X <- qr(X)
+  qr.Q(qr_X)[, seq_len(qr_X$rank), drop = FALSE]
+}
 
-  # P_X = Q %*% Q' where Q is orthonormal basis for col(X)
-  Q <- qr.Q(qr_X)
 
-  # P_perp = I - Q %*% Q'
-  P_perp <- diag(n) - Q %*% t(Q)
-
-  P_perp
+#' Restricted-covariate basis of a spatial specification
+#'
+#' @param spatial A spatial specification
+#' @param data Data frame
+#' @return The basis from [rsr_basis_of()] for a `spatial_rsr()`
+#'   specification, `NULL` otherwise
+#' @keywords internal
+rsr_basis <- function(spatial, data) {
+  if (!inherits(spatial, "ratiod_rsr")) return(NULL)
+  rsr_vars <- all.vars(spatial$rsr_formula)
+  missing_vars <- setdiff(rsr_vars, names(data))
+  if (length(missing_vars) > 0) {
+    stop(sprintf("RSR variables not found in data: %s",
+                 paste(missing_vars, collapse = ", ")), call. = FALSE)
+  }
+  rsr_basis_of(model.matrix(spatial$rsr_formula, data = data))
 }
 
 
@@ -2308,23 +2331,9 @@ validate_rsr <- function(spatial, data, formula) {
     return(spatial)
   }
 
-  # Build design matrix for RSR covariates
-  rsr_formula <- spatial$rsr_formula
-
-  # Check if terms exist in data
-  rsr_vars <- all.vars(rsr_formula)
-  missing_vars <- setdiff(rsr_vars, names(data))
-  if (length(missing_vars) > 0) {
-    stop(sprintf("RSR variables not found in data: %s",
-                 paste(missing_vars, collapse = ", ")), call. = FALSE)
-  }
-
-  # Build design matrix
-  X_rsr <- model.matrix(rsr_formula, data = data)
-
-  # Compute projection matrix
-  spatial$rsr_projection <- compute_rsr_projection(X_rsr)
-  spatial$rsr_vars <- rsr_vars
+  Q <- rsr_basis(spatial, data)
+  spatial$rsr_projection <- diag(nrow(Q)) - Q %*% t(Q)
+  spatial$rsr_vars <- all.vars(spatial$rsr_formula)
 
   spatial
 }

@@ -8,6 +8,7 @@
 #include "cov_type_code.h"
 #include "linalg_fast.h"
 #include "omp_thread_scope.h"
+#include <RcppEigen.h>
 #include <Rcpp.h>
 #include <cmath>
 #include <algorithm>
@@ -2116,7 +2117,12 @@ Rcpp::List cpp_pg_binomial_gibbs_multiscale_gp(
 
 // ---------------------------------------------------------------------
 // RSR (Restricted Spatial Regression) Gibbs sampler
-// Projects spatial effects to be orthogonal to covariates
+//
+// The intrinsic CAR field phi reaches the predictor as A phi, A = (I - Q Q') S
+// with S the observation-to-unit incidence and Q the orthonormal basis of the
+// restricted covariates. Given the Polya-Gamma weights, phi is Gaussian with
+// precision tau Q_icar + A' Omega A and linear term A' (kappa - Omega offset),
+// and is drawn from that conditional in one block.
 // ---------------------------------------------------------------------
 
 // [[Rcpp::export]]
@@ -2130,8 +2136,8 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
     int n_spatial_units,
     Rcpp::List adj_list,
     Rcpp::IntegerVector n_neighbors,
-    Rcpp::NumericVector rsr_projection,  // P_perp matrix (n_spatial x n_spatial, row-major)
-    int rsr_n,
+    Rcpp::NumericMatrix rsr_design,  // A = (I - Q Q') S, N x n_spatial_units
+
     int n_iter = 2000,
     int n_warmup = 1000,
     int thin = 1,
@@ -2157,7 +2163,7 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
   Rcpp::NumericMatrix re_draws(n_save, n_re_groups);
   Rcpp::NumericVector sigma_re_draws(n_save);
   Rcpp::NumericMatrix spatial_raw_draws(n_save, n_spatial_units);
-  Rcpp::NumericMatrix spatial_proj_draws(n_save, n_spatial_units);
+  Rcpp::NumericMatrix spatial_proj_draws(n_save, N);
   Rcpp::NumericVector tau_draws(n_save);
   Rcpp::NumericMatrix eta_draws(n_save, N);
 
@@ -2165,9 +2171,38 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  Rcpp::NumericVector phi(n_spatial_units, 0.0);  // Raw (unprojected) spatial effects
-  Rcpp::NumericVector phi_proj(n_spatial_units, 0.0);  // Projected spatial effects
+  Rcpp::NumericVector phi(n_spatial_units, 0.0);
   double tau = 1.0;
+
+  const int S = n_spatial_units;
+  if (rsr_design.nrow() != N || rsr_design.ncol() != S) {
+    Rcpp::stop("The RSR design is %d x %d; expected %d x %d.",
+               rsr_design.nrow(), rsr_design.ncol(), N, S);
+  }
+  Eigen::Map<const Eigen::MatrixXd> A(rsr_design.begin(), N, S);
+
+  // Intrinsic CAR structure Q = D - W; adj_list holds 1-based neighbours.
+  Eigen::MatrixXd Q_icar = Eigen::MatrixXd::Zero(S, S);
+  for (int s = 0; s < S; s++) {
+    Q_icar(s, s) = n_neighbors[s];
+    Rcpp::IntegerVector nb = adj_list[s];
+    for (int k = 0; k < nb.size(); k++) Q_icar(s, nb[k] - 1) -= 1.0;
+  }
+
+  // When the restricted span holds the constant, A 1 = 0: neither the
+  // likelihood nor the intrinsic prior sees the field's level. Adding 1 1' to
+  // the conditional precision gives that direction a proper law, independent
+  // of the rest, and centring the draw removes it again, which is the draw
+  // under the sum-to-zero constraint.
+  const double a_scale = std::max(1.0, A.cwiseAbs().maxCoeff());
+  const bool level_removed =
+      (A * Eigen::VectorXd::Ones(S)).cwiseAbs().maxCoeff() < 1e-8 * a_scale;
+
+  Eigen::VectorXd phi_e = Eigen::VectorXd::Zero(S);
+  Eigen::VectorXd field_obs = Eigen::VectorXd::Zero(N);
+  Eigen::VectorXd resid(N);
+  Eigen::VectorXd z(S);
+  Eigen::MatrixXd OA(N, S);
 
   // Compute kappa once
   Rcpp::NumericVector kappa(N);
@@ -2193,31 +2228,20 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
 
   int save_idx = 0;
 
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute projected spatial effects: phi_proj = P_perp * phi
-    for (int s = 0; s < n_spatial_units; s++) {
-      phi_proj[s] = 0.0;
-      for (int k = 0; k < n_spatial_units; k++) {
-        phi_proj[s] += rsr_projection[s * rsr_n + k] * phi[k];
-      }
-    }
-
-    // 2. Compute spatial contribution with projected effects
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
+  // The restricted field at the observations and eta of the current state,
+  // refreshed for the omega draw and again at the save so the stored field
+  // and eta match the saved parameters.
+  auto refresh_eta = [&]() {
+    field_obs.noalias() = A * phi_e;
     for (int i = 0; i < N; i++) {
-      int s = spatial_group[i] - 1;
-      spatial_contrib[i] = (s >= 0 && s < n_spatial_units) ? phi_proj[s] : 0.0;
-    }
-
-    // 3. Compute eta
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
+      spatial_contrib[i] = field_obs[i];
       eta[i] = X_beta[i] + re_contrib[i] + spatial_contrib[i];
     }
+  };
+
+  for (int iter = 0; iter < n_iter; iter++) {
+    // 1-3. The restricted field and eta
+    refresh_eta();
 
     // 4. Sample omega ~ PG(n, eta)
     // Note: NOT parallelized - R's RNG is not thread-safe
@@ -2265,28 +2289,27 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
       }
     }
 
-    // 8. Update spatial effects (raw, unprojected)
-    // The key insight: we update phi based on the pseudo-likelihood
-    // But the offset should account for the RSR projection
-    // Offset for spatial update = X*beta + re, then we need to handle projection
-
-    // For RSR, we work with the transformed residuals
-    // kappa_adj = P' * (kappa - omega * (X*beta + re))
-    // omega_adj = P' * diag(omega) * P
-
-    // Simpler approach: update phi as ICAR, but use offset computed with projection
-    // This is approximate but maintains ICAR structure
-
-    // Compute offset with projection for spatial update
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
+    // 8. phi | omega, beta, re, tau from its Gaussian conditional.
     for (int i = 0; i < N; i++) {
-      offset[i] = X_beta[i] + re_contrib[i];
+      resid[i] = kappa[i] - omega[i] * (X_beta[i] + re_contrib[i]);
     }
-
-    // Update spatial effects using ICAR
-    phi = ratiod::update_spatial_icar(kappa, omega, offset, spatial_group, adj_list, n_neighbors, tau);
+    OA = A;
+    for (int i = 0; i < N; i++) OA.row(i) *= omega[i];
+    Eigen::MatrixXd M = tau * Q_icar;
+    M.noalias() += A.transpose() * OA;
+    if (level_removed) M.array() += 1.0;
+    Eigen::LLT<Eigen::MatrixXd> llt(M);
+    if (llt.info() != Eigen::Success) {
+      PutRNGstate();
+      Rcpp::stop("The conditional precision of the restricted field is not "
+                 "positive definite; the restricted covariates leave a "
+                 "direction of the field unidentified.");
+    }
+    Eigen::VectorXd mu = llt.solve(A.transpose() * resid);
+    for (int s = 0; s < S; s++) z[s] = R::norm_rand();
+    phi_e = mu + llt.matrixU().solve(z);
+    if (level_removed) phi_e.array() -= phi_e.mean();
+    for (int s = 0; s < S; s++) phi[s] = phi_e[s];
 
     // 9. Update tau (spatial precision)
     tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_tau_shape, prior_tau_rate);
@@ -2301,10 +2324,13 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
       }
       sigma_re_draws[save_idx] = sigma_re;
 
-      // Store both raw and projected spatial effects
+      // The field, and the restricted field at the observations.
+      refresh_eta();
       for (int s = 0; s < n_spatial_units; s++) {
         spatial_raw_draws(save_idx, s) = phi[s];
-        spatial_proj_draws(save_idx, s) = phi_proj[s];
+      }
+      for (int i = 0; i < N; i++) {
+        spatial_proj_draws(save_idx, i) = spatial_contrib[i];
       }
       tau_draws[save_idx] = tau;
 

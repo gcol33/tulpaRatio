@@ -156,7 +156,25 @@ const char* const KNOWN_FIELDS[] = {
   "gp_tgp", "svc_ms", "gp_slopes", "gp_slopes_corr", "gp_crossed"
 };
 
+// The spatial fields make_model() also builds under restricted spatial
+// regression, named with the suffix `_rsr`.
+const char* const RSR_FIELDS[] = {"icar", "bym2", "hsgp", "gp"};
+const char* const RSR_SUFFIX = "_rsr";
+
+bool is_rsr_field(const std::string& field) {
+  const std::string suffix(RSR_SUFFIX);
+  return field.size() > suffix.size() &&
+         field.compare(field.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
 bool is_known_field(const std::string& field) {
+  if (is_rsr_field(field)) {
+    const std::string base = field.substr(0, field.size() - std::string(RSR_SUFFIX).size());
+    for (const char* known : RSR_FIELDS) {
+      if (base == known) return true;
+    }
+    return false;
+  }
   for (const char* known : KNOWN_FIELDS) {
     if (field == known) return true;
   }
@@ -239,13 +257,49 @@ STNNGPNeighbors build_nngp_st(const std::vector<double>& coords,
 // is what exercises the paths that treat the two linear predictors
 // differently, `temporal_shared` among them. `zi` attaches a zero-inflation or
 // hurdle structure to the numerator, with its own two-column design matrix.
-ModelData make_model(const std::string& field, int n_obs, int n_units,
+// Restricted spatial regression on the numerator's own design: the basis is
+// the two orthonormalized columns (intercept, x), so the field reaches eta
+// with both directions removed.
+void restrict_to_numerator_design(ModelData& data) {
+  const int n = data.N;
+  std::vector<double> q0(n), q1(n);
+  double n0 = 0.0;
+  for (int i = 0; i < n; i++) {
+    q0[i] = data.X_num_flat[static_cast<size_t>(i) * 2 + 0];
+    n0 += q0[i] * q0[i];
+  }
+  n0 = std::sqrt(n0);
+  double dot = 0.0;
+  for (int i = 0; i < n; i++) {
+    q0[i] /= n0;
+    dot += q0[i] * data.X_num_flat[static_cast<size_t>(i) * 2 + 1];
+  }
+  double n1 = 0.0;
+  for (int i = 0; i < n; i++) {
+    q1[i] = data.X_num_flat[static_cast<size_t>(i) * 2 + 1] - dot * q0[i];
+    n1 += q1[i] * q1[i];
+  }
+  n1 = std::sqrt(n1);
+  data.has_rsr = true;
+  data.rsr_rank = 2;
+  data.rsr_basis.resize(static_cast<size_t>(n) * 2);
+  for (int i = 0; i < n; i++) {
+    data.rsr_basis[static_cast<size_t>(i) * 2 + 0] = q0[i];
+    data.rsr_basis[static_cast<size_t>(i) * 2 + 1] = q1[i] / n1;
+  }
+}
+
+ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                      int n_times, unsigned int seed,
                      const std::string& family = "binomial",
                      bool temporal_shared = true,
                      const std::string& zi = "none") {
-  if (!is_known_field(field)) {
-    Rcpp::stop("cpp_gradient_check: unknown field '" + field +
+  const bool want_rsr = is_rsr_field(field_in);
+  const std::string field = want_rsr
+      ? field_in.substr(0, field_in.size() - std::string(RSR_SUFFIX).size())
+      : field_in;
+  if (!is_known_field(field_in)) {
+    Rcpp::stop("cpp_gradient_check: unknown field '" + field_in +
                "'. A name make_model() does not build a structure for would "
                "yield a model with no structured field, and the check would "
                "pass while testing nothing.");
@@ -984,6 +1038,8 @@ ModelData make_model(const std::string& field, int n_obs, int n_units,
   data.zi_prior_sd = 1.0;
   data.p_oi = 0;
   data.oi_prior_sd = 1.0;
+
+  if (want_rsr) restrict_to_numerator_design(data);
 
   return data;
 }

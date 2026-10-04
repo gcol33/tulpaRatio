@@ -1174,31 +1174,19 @@ fit_pg_binomial_rsr <- function(formula,
   # Prepare spatial info
   spatial_info <- prepare_spatial_for_pg(spatial, data, formula)
 
-  # Validate and compute RSR projection matrix
-  spatial <- validate_rsr(spatial, data, formula)
-
-  if (is.null(spatial$rsr_projection)) {
-    stop("Failed to compute RSR projection matrix", call. = FALSE)
-  }
-
-  rsr_projection <- spatial$rsr_projection
-  rsr_n <- nrow(rsr_projection)
+  # The field reaches the observations as A phi, A = (I - Q Q') S.
+  Q <- rsr_basis(spatial, data)
+  N <- length(spatial_info$group_idx)
+  incidence <- matrix(0, N, spatial_info$n_units)
+  incidence[cbind(seq_len(N), spatial_info$group_idx)] <- 1
+  rsr_design <- incidence - Q %*% crossprod(Q, incidence)
+  spatial_info$rsr_basis <- Q
 
   if (verbose) {
-    message(sprintf("  RSR projection dimension: %d x %d", rsr_n, rsr_n))
-    message(sprintf("  Orthogonal to: %s", paste(spatial$rsr_vars, collapse = ", ")))
+    message(sprintf("  Orthogonal to: %s",
+                    paste(all.vars(spatial$rsr_formula), collapse = ", ")))
   }
 
-  # Prepare adjacency list format
-  adj_list <- lapply(seq_len(spatial_info$n_units), function(s) {
-    start_idx <- spatial_info$adj_row_ptr[s] + 1
-    end_idx <- spatial_info$adj_row_ptr[s + 1]
-    if (end_idx >= start_idx) {
-      spatial_info$adj_col_idx[start_idx:end_idx]
-    } else {
-      integer(0)
-    }
-  })
 
   n_iter <- as.integer(iter)
   n_warmup <- as.integer(warmup)
@@ -1223,10 +1211,9 @@ fit_pg_binomial_rsr <- function(formula,
       n_re_groups = re_info$n_groups,
       spatial_group = spatial_info$group_idx,
       n_spatial_units = spatial_info$n_units,
-      adj_list = adj_list,
+      adj_list = spatial_info$adj_list,
       n_neighbors = spatial_info$n_neighbors,
-      rsr_projection = as.vector(t(rsr_projection)),  # Row-major flatten
-      rsr_n = as.integer(rsr_n),
+      rsr_design = rsr_design,
       n_iter = n_iter,
       n_warmup = n_warmup,
       thin = as.integer(thin),
@@ -1249,7 +1236,6 @@ fit_pg_binomial_rsr <- function(formula,
     X = X,
     re_info = re_info,
     spatial_info = spatial_info,
-    rsr_projection = rsr_projection,
     chains = chains,
     iter = iter,
     warmup = warmup,
@@ -1264,7 +1250,7 @@ fit_pg_binomial_rsr <- function(formula,
 #' @keywords internal
 convert_pg_rsr_to_ratiod_fit <- function(chain_results, formula, data, family,
                                           X, re_info, spatial_info,
-                                          rsr_projection, chains, iter, warmup, thin) {
+                                          chains, iter, warmup, thin) {
   n_chains <- length(chain_results)
   p <- ncol(X)
   n_re <- re_info$n_groups
@@ -1339,7 +1325,6 @@ convert_pg_rsr_to_ratiod_fit <- function(chain_results, formula, data, family,
       eta = combined_eta,
       spatial = combined_spatial,
       spatial_raw = combined_spatial_raw,
-      rsr_projection = rsr_projection,
       X = X,
       re_info = re_info,
       spatial_info = spatial_info,
