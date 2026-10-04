@@ -18,5 +18,5 @@ jobs:
         run: |
           $bin = "C:\rtools45-aarch64\aarch64-w64-mingw32.static.posix\bin"
           & "$bin\clang++.exe" --version
-          & "$bin\clang++.exe" -O2 -fopenmp dev_notes/omp_arm64_probe.cpp -o probe.exe
+          & "$bin\clang++.exe" -O2 -fopenmp .github/omp_arm64_probe.cpp -o probe.exe
           .\probe.exe
