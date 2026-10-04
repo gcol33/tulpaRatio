@@ -1,5 +1,14 @@
 # tulpaRatio 1.7.3
 
+* **The log posterior no longer depends on the thread count on Windows arm64
+  (#83).** On aarch64-w64-mingw (Rtools45 clang 19) an OpenMP
+  `reduction(+:double)` over a 4-thread team returned the serial value in 0 of
+  500 repeats of a plain Poisson sum on a 4-core runner, while 1 and 2 threads
+  and a hand-rolled per-thread sum were exact. The observation sum in the
+  density, the Laplace log-likelihood and the test kernels now go through
+  `ratiod_omp::sum_range()` (`src/omp_sum.h`): each thread sums one chunk into
+  its own slot and the slots are added in thread order.
+
 * **`summary()` on a Laplace fit reads the closed-form Gaussian (#84).** The
   fixed-effect mean, sd and interval came from 1000 Monte Carlo draws of a
   posterior the fit states exactly, so a bound moved by a fraction of the sd

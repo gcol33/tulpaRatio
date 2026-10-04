@@ -8,6 +8,7 @@
 #include "autodiff.h"
 #include "laplace_core.h"
 #include "pg_binomial.h"
+#include "omp_sum.h"
 
 using namespace Rcpp;
 
@@ -1045,16 +1046,11 @@ List cpp_test_parallel_dot_products(NumericMatrix X, NumericVector y, int n_thre
   }
 
   NumericVector results(N);
-  double total_sum = 0.0;
-
-#ifdef _OPENMP
-  #pragma omp parallel for reduction(+:total_sum) schedule(static) num_threads(n_threads)
-#endif
-  for (int i = 0; i < N; i++) {
-    double dot = ratiod_linalg::dot_product(&X_flat[i * p], y.begin(), p);
+  const double total_sum = ratiod_omp::sum_range(N, n_threads, [&](int i) {
+    const double dot = ratiod_linalg::dot_product(&X_flat[i * p], y.begin(), p);
     results[i] = dot;
-    total_sum += dot;
-  }
+    return dot;
+  });
 
   return List::create(
     Named("results") = results,
@@ -1070,17 +1066,11 @@ List cpp_test_parallel_likelihood(
 ) {
   // Test OpenMP parallel reduction for likelihood computation
   int N = y.size();
-  double log_lik = 0.0;
-
-#ifdef _OPENMP
-  #pragma omp parallel for reduction(+:log_lik) schedule(static) num_threads(n_threads)
-#endif
-  for (int i = 0; i < N; i++) {
+  const double log_lik = ratiod_omp::sum_range(N, n_threads, [&](int i) {
     // Poisson log-likelihood
-    if (mu[i] > 0) {
-      log_lik += y[i] * std::log(mu[i]) - mu[i] - std::lgamma(y[i] + 1);
-    }
-  }
+    return mu[i] > 0 ? y[i] * std::log(mu[i]) - mu[i] - std::lgamma(y[i] + 1)
+                     : 0.0;
+  });
 
   return List::create(
     Named("log_lik") = log_lik,

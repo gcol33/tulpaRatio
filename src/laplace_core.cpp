@@ -6,6 +6,7 @@
 #include "linalg_fast.h"
 #include "ar1_shared.h"
 #include "omp_thread_scope.h"
+#include "omp_sum.h"
 #include <tulpa/soft_sum_to_zero.h>
 #include <Rcpp.h>
 #include <cmath>
@@ -554,19 +555,11 @@ LaplaceResult laplace_mode_dense(
   result.log_det_Q = 2.0 * log_det;  // log|H| = 2 * sum(log(diag(L)))
 
   // Compute log marginal likelihood approximation (parallelized)
-  double log_lik = 0.0;
-  #ifdef _OPENMP
-  #pragma omp parallel for reduction(+:log_lik) schedule(static)
-  #endif
-  for (int i = 0; i < N; i++) {
-    if (family == "binomial") {
-      log_lik += log_lik_binomial(y[i], n[i], eta_final[i]);
-    } else if (family == "negbin") {
-      log_lik += log_lik_negbin(y[i], eta_final[i], phi);
-    } else {
-      log_lik += log_lik_poisson(y[i], eta_final[i]);
-    }
-  }
+  const double log_lik = ratiod_omp::sum_range(N, 0, [&](int i) {
+    if (family == "binomial") return log_lik_binomial(y[i], n[i], eta_final[i]);
+    if (family == "negbin") return log_lik_negbin(y[i], eta_final[i], phi);
+    return log_lik_poisson(y[i], eta_final[i]);
+  });
 
   // Log prior for RE
   double log_prior_re = 0.0;
@@ -969,18 +962,11 @@ LaplaceResult laplace_mode_spatial(
     }
   }
 
-  #ifdef _OPENMP
-  #pragma omp parallel for reduction(+:log_lik) schedule(static)
-  #endif
-  for (int i = 0; i < N; i++) {
-    if (family == "binomial") {
-      log_lik += log_lik_binomial(y[i], n[i], eta_final[i]);
-    } else if (family == "negbin") {
-      log_lik += log_lik_negbin(y[i], eta_final[i], phi);
-    } else {
-      log_lik += log_lik_poisson(y[i], eta_final[i]);
-    }
-  }
+  log_lik = ratiod_omp::sum_range(N, 0, [&](int i) {
+    if (family == "binomial") return log_lik_binomial(y[i], n[i], eta_final[i]);
+    if (family == "negbin") return log_lik_negbin(y[i], eta_final[i], phi);
+    return log_lik_poisson(y[i], eta_final[i]);
+  });
 
   // Log prior for RE
   double log_prior_re = 0.0;

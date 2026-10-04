@@ -10,6 +10,7 @@
 #include <cstring>
 #include <algorithm>
 #include <numeric>
+#include "omp_sum.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -269,19 +270,11 @@ inline double block_reduce(int N, int block_size, Func f) {
 // Parallel block reduce
 template<typename Func>
 inline double parallel_block_reduce(int N, int block_size, int n_threads, Func f) {
-  double total = 0.0;
-  int n_blocks = (N + block_size - 1) / block_size;
-
-  #ifdef _OPENMP
-  #pragma omp parallel for reduction(+:total) num_threads(n_threads)
-  #endif
-  for (int b = 0; b < n_blocks; b++) {
-    int start = b * block_size;
-    int end = std::min(start + block_size, N);
-    total += f(start, end);
-  }
-
-  return total;
+  const int n_blocks = (N + block_size - 1) / block_size;
+  return ratiod_omp::sum_range(n_blocks, n_threads, [&](int b) {
+    const int start = b * block_size;
+    return f(start, std::min(start + block_size, N));
+  });
 }
 
 // ============================================================================

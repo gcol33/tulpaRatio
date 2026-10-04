@@ -8,6 +8,7 @@
 // macro's shape carries no destructor, so it comes back with a finite number.
 
 #include "tls_workspace.h"
+#include "omp_sum.h"
 
 #include <Rcpp.h>
 
@@ -45,21 +46,15 @@ double touch(std::size_t n, int seed) {
 // A free written through a dangling destructor surfaces at a later unrelated
 // free, so each cycle ends by exercising the allocator on every worker.
 double churn(int rounds) {
-  double s = 0.0;
-#ifdef _OPENMP
-  #pragma omp parallel reduction(+ : s)
-#endif
-  {
-    for (int r = 0; r < rounds; r++) {
-      const std::size_t sz = static_cast<std::size_t>(1 + (r * 37) % 512);
-      double* p = new double[sz];
-      p[0] = static_cast<double>(sz);
-      p[sz - 1] = 1.0;
-      s += p[0] + p[sz - 1];
-      delete[] p;
-    }
-  }
-  return s;
+  return ratiod_omp::sum_range(rounds * 8, 0, [&](int r) {
+    const std::size_t sz = static_cast<std::size_t>(1 + (r * 37) % 512);
+    double* p = new double[sz];
+    p[0] = static_cast<double>(sz);
+    p[sz - 1] = 1.0;
+    const double v = p[0] + p[sz - 1];
+    delete[] p;
+    return v;
+  });
 }
 
 }  // namespace
@@ -74,10 +69,9 @@ double cpp_tls_workspace_shrink(int cycles, int work, int n) {
   const int widths[] = {16, 2, 12, 1, 8, 3, 32, 1, 4, 2};
   const int n_widths = 10;
   for (int cy = 0; cy < cycles; cy++) {
-    double local = 0.0;
-    #pragma omp parallel for schedule(static) num_threads(widths[cy % n_widths]) \
-        reduction(+ : local)
-    for (int i = 0; i < work; i++) local += touch(len, i + cy);
+    const double local = ratiod_omp::sum_range(
+        work, widths[cy % n_widths],
+        [&](int i) { return touch(len, i + cy); });
     acc += local + churn(32);
   }
 #else

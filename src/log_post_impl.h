@@ -24,6 +24,7 @@
 #include "hmc_latent_autodiff.h"  // Templated latent factor functions
 #include "hmc_temporal_multiscale.h"  // Templated multiscale temporal functions
 #include "tls_workspace.h"
+#include "omp_sum.h"
 #include "hmc_gp_collapsed.h"     // Collapsed GP marginal (double only)
 #include "hmc_icar_collapsed.h"   // Collapsed ICAR/BYM2 marginal (double only)
 #include "hmc_car_proper.h"       // Proper CAR precision and log-determinant
@@ -1720,15 +1721,10 @@ T compute_log_post_impl(
             // Only the double instantiation takes this in parallel: an autodiff
             // tape is not thread-safe. The NNGP paths read shared neighbour
             // structures, so they stay on one thread.
-            double obs_log_lik = 0.0;
-            const int n_rows = data.N;
-#ifdef _OPENMP
             const int use_threads =
                 (layout.is_gp || layout.is_multiscale_gp) ? 1 : data.n_threads;
-            #pragma omp parallel for reduction(+:obs_log_lik) schedule(static) \
-                    num_threads(use_threads)
-#endif
-            for (int i = 0; i < n_rows; i++) obs_log_lik += obs_log_lik_i(i);
+            const double obs_log_lik = ratiod_omp::sum_range(
+                data.N, use_threads, [&](int i) { return obs_log_lik_i(i); });
             log_post = log_post + obs_log_lik;
         } else {
             T obs_log_lik = T(0.0);
