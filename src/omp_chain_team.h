@@ -18,10 +18,10 @@ namespace ratiod_omp {
 // surplus workers alive as well.
 //
 // The size is the widest budget any fit has asked for so far, never
-// omp_get_max_threads(). The nthreads-var is not a fixed quantity: laplace_core
-// and the Polya-Gamma samplers move it through omp_set_num_threads(), so a
-// Laplace fit ahead of the first chain fit would pin the team at 1 and
-// serialize every chain fit for the rest of the session.
+// omp_get_max_threads(). The nthreads-var is not a fixed quantity: the
+// Polya-Gamma samplers move it through omp_set_num_threads(), so one of them
+// ahead of the first chain fit would pin the team at 1 and serialize every
+// chain fit for the rest of the session.
 //
 // Called only from the thread that launches a fit, which is R's, so the running
 // maximum needs no synchronization.

@@ -2,11 +2,11 @@
 % Please edit documentation in R/backend_laplace.R
 \name{prepare_spatial_for_laplace}
 \alias{prepare_spatial_for_laplace}
-\title{Prepare spatial structure for Laplace}
+\title{Prepare spatial structure for the Laplace backend}
 \usage{
 prepare_spatial_for_laplace(spatial, data, formula)
 }
 \description{
-Prepare spatial structure for Laplace
+Prepare spatial structure for the Laplace backend
 }
 \keyword{internal}

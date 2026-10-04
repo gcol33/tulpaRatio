@@ -4,37 +4,6 @@
 # get_laplace_family tests
 # ---------------------------------------------------------------------------
 
-test_that("get_laplace_family returns binomial for binomial family", {
-  family <- ratiod_binomial()
-  result <- tulpaRatio:::get_laplace_family(family)
-  expect_equal(result, "binomial")
-})
-
-test_that("get_laplace_family returns negbin for negbin family", {
-  family <- ratiod_negbin_negbin()
-  result <- tulpaRatio:::get_laplace_family(family)
-  expect_equal(result, "negbin")
-})
-
-test_that("get_laplace_family returns poisson for poisson_gamma family", {
-  family <- ratiod_poisson_gamma()
-  result <- tulpaRatio:::get_laplace_family(family)
-  expect_equal(result, "poisson")
-})
-
-test_that("get_laplace_family errors on unsupported family", {
-  # Create a mock unsupported family
-  mock_family <- list(
-    numerator = list(distribution = "unknown_dist")
-  )
-  class(mock_family) <- "ratiod_family"
-
-  expect_error(
-    tulpaRatio:::get_laplace_family(mock_family),
-    "Unsupported family for Laplace backend"
-  )
-})
-
 # ---------------------------------------------------------------------------
 # extract_re_for_laplace tests
 # ---------------------------------------------------------------------------
@@ -92,7 +61,7 @@ test_that("extract_re_for_laplace with slopes warns", {
 
   expect_warning(
     re_info <- tulpaRatio:::extract_re_for_laplace(f),
-    "Random slopes not yet fully supported"
+    "Random slopes are not carried"
   )
 
   expect_true(re_info$has_slopes)
@@ -121,12 +90,6 @@ test_that("extract_re_for_laplace with multiple RE terms", {
 # ---------------------------------------------------------------------------
 # can_use_laplace_backend tests
 # ---------------------------------------------------------------------------
-
-test_that("can_use_laplace_backend returns TRUE for all families", {
-  expect_true(tulpaRatio:::can_use_laplace_backend(ratiod_binomial()))
-  expect_true(tulpaRatio:::can_use_laplace_backend(ratiod_negbin_negbin()))
-  expect_true(tulpaRatio:::can_use_laplace_backend(ratiod_poisson_gamma()))
-})
 
 # ---------------------------------------------------------------------------
 # prepare_spatial_for_laplace tests
@@ -200,288 +163,17 @@ test_that("prepare_spatial_for_laplace errors without adjacency matrix", {
 # compute_hessian_at_mode tests
 # ---------------------------------------------------------------------------
 
-test_that("compute_hessian_at_mode returns symmetric matrix", {
-  set.seed(666)
-  n <- 10
-  y <- rpois(n, 5)
-  n_trials <- rep(10L, n)
-  X <- cbind(1, rnorm(n))
-  re_idx <- as.numeric(rep(1:2, each = 5))
-  n_re_groups <- 2L
-  mode <- c(0.5, -0.2, 0.1, -0.1)  # 2 fixed + 2 RE
-
-  result <- tulpaRatio:::compute_hessian_at_mode(
-    y = y,
-    n_trials = n_trials,
-    X = X,
-    re_idx = re_idx,
-    n_re_groups = n_re_groups,
-    mode = mode,
-    family = "binomial",
-    phi = 1.0,
-    sigma_re = 1.0
-  )
-
-  H <- result$H
-  expect_equal(nrow(H), 4)
-  expect_equal(ncol(H), 4)
-  # Hessian should be symmetric
-  expect_equal(H, t(H), tolerance = 1e-10)
-})
-
-test_that("compute_hessian_at_mode works for negbin family", {
-  set.seed(777)
-  n <- 10
-  y <- rnbinom(n, size = 5, mu = 10)
-  n_trials <- rep(1L, n)
-  X <- cbind(1, rnorm(n))
-  re_idx <- rep(1, n)
-  n_re_groups <- 0L
-  mode <- c(2.0, 0.5)
-
-  result <- tulpaRatio:::compute_hessian_at_mode(
-    y = y,
-    n_trials = n_trials,
-    X = X,
-    re_idx = re_idx,
-    n_re_groups = n_re_groups,
-    mode = mode,
-    family = "negbin",
-    phi = 5.0,
-    sigma_re = 1.0
-  )
-
-  expect_equal(nrow(result$H), 2)
-  expect_equal(ncol(result$H), 2)
-})
-
-test_that("compute_hessian_at_mode works for poisson family", {
-  set.seed(888)
-  n <- 10
-  y <- rpois(n, 10)
-  n_trials <- rep(1L, n)
-  X <- cbind(1, rnorm(n))
-  re_idx <- rep(1, n)
-  n_re_groups <- 0L
-  mode <- c(2.3, 0.1)
-
-  result <- tulpaRatio:::compute_hessian_at_mode(
-    y = y,
-    n_trials = n_trials,
-    X = X,
-    re_idx = re_idx,
-    n_re_groups = n_re_groups,
-    mode = mode,
-    family = "poisson",
-    phi = 1.0,
-    sigma_re = 1.0
-  )
-
-  expect_equal(nrow(result$H), 2)
-  expect_equal(ncol(result$H), 2)
-})
-
 # ---------------------------------------------------------------------------
 # convert_laplace_to_ratiod_fit tests
 # ---------------------------------------------------------------------------
-
-test_that("convert_laplace_to_ratiod_fit creates valid ratiod_fit", {
-  set.seed(999)
-  n <- 10
-  p <- 2
-  n_re <- 0
-  n_samples <- 100
-
-  df <- data.frame(
-    count = rpois(n, 5),
-    effort = rgamma(n, 3, 1),
-    x = rnorm(n)
-  )
-
-  formula <- ratiod_formula(count | effort ~ x, data = df)
-  X <- model.matrix(~ x, data = df)
-  samples <- matrix(rnorm(n_samples * p), nrow = n_samples, ncol = p)
-
-  result <- list(
-    mode = rnorm(p),
-    sigma_re_opt = 1.0,
-    log_marginal = -50.0
-  )
-
-  re_info <- list(
-    n_groups = 0L,
-    group_idx = rep(1, n),
-    group_var = NULL
-  )
-
-  fit <- tulpaRatio:::convert_laplace_to_ratiod_fit(
-    samples = samples,
-    result = result,
-    formula = formula,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    X = X,
-    re_info = re_info,
-    n_samples = n_samples
-  )
-
-  expect_s3_class(fit, "ratiod_fit")
-  expect_equal(fit$backend, "laplace")
-  expect_equal(fit$n_save, n_samples)
-  expect_equal(nrow(fit$draws), n_samples)
-  expect_equal(ncol(fit$draws), p)
-})
-
-test_that("convert_laplace_to_ratiod_fit handles random effects", {
-  set.seed(1000)
-  n <- 12
-  p <- 2
-  n_re <- 3
-  n_samples <- 50
-
-  df <- data.frame(
-    count = rpois(n, 5),
-    effort = rgamma(n, 3, 1),
-    x = rnorm(n),
-    site = factor(rep(1:3, each = 4))
-  )
-
-  formula <- ratiod_formula(count | effort ~ x + (1 | site), data = df)
-  X <- model.matrix(~ x, data = df)
-  samples <- matrix(rnorm(n_samples * (p + n_re)), nrow = n_samples, ncol = p + n_re)
-
-  result <- list(
-    mode = rnorm(p + n_re),
-    sigma_re_opt = 0.5,
-    log_marginal = -60.0
-  )
-
-  re_info <- list(
-    n_groups = n_re,
-    group_idx = as.numeric(df$site),
-    group_var = "site"
-  )
-
-  fit <- tulpaRatio:::convert_laplace_to_ratiod_fit(
-    samples = samples,
-    result = result,
-    formula = formula,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    X = X,
-    re_info = re_info,
-    n_samples = n_samples
-  )
-
-  expect_s3_class(fit, "ratiod_fit")
-  expect_true("sigma_re" %in% colnames(fit$draws))
-  expect_equal(unique(fit$draws[, "sigma_re"]), 0.5)
-})
 
 # ---------------------------------------------------------------------------
 # compute_hessian_spatial tests
 # ---------------------------------------------------------------------------
 
-test_that("compute_hessian_spatial returns correct dimensions", {
-  set.seed(1111)
-  n <- 12
-  y <- rpois(n, 5)
-  n_trials <- rep(10L, n)
-  X <- cbind(1, rnorm(n))
-  re_idx <- rep(1, n)
-  n_re_groups <- 0L
-  spatial_idx <- as.integer(rep(1:4, each = 3))
-  n_spatial_units <- 4L
-
-  # Simple chain adjacency (0-based indexing for C++ compatibility)
-  # Site 1 neighbors: [2], Site 2: [1,3], Site 3: [2,4], Site 4: [3]
-  adj_row_ptr <- c(0L, 1L, 3L, 5L, 6L)  # 0-based row pointers
-  adj_col_idx <- c(1L, 0L, 2L, 1L, 3L, 2L)  # 0-based neighbor indices
-  n_neighbors <- c(1L, 2L, 2L, 1L)
-
-  p <- ncol(X)
-  n_x <- p + n_re_groups + n_spatial_units
-  mode <- rnorm(n_x)
-
-  result <- tulpaRatio:::compute_hessian_spatial(
-    y = y,
-    n_trials = n_trials,
-    X = X,
-    re_idx = re_idx,
-    n_re_groups = n_re_groups,
-    spatial_idx = spatial_idx,
-    n_spatial_units = n_spatial_units,
-    adj_row_ptr = adj_row_ptr,
-    adj_col_idx = adj_col_idx,
-    n_neighbors = n_neighbors,
-    mode = mode,
-    family = "binomial",
-    phi = 1.0,
-    sigma_re = 1.0,
-    tau_spatial = 1.0
-  )
-
-  expect_equal(nrow(result$H), n_x)
-  expect_equal(ncol(result$H), n_x)
-})
-
 # ---------------------------------------------------------------------------
 # convert_laplace_spatial_to_ratiod_fit tests
 # ---------------------------------------------------------------------------
-
-test_that("convert_laplace_spatial_to_ratiod_fit creates valid fit", {
-  set.seed(1212)
-  n <- 12
-  p <- 2
-  n_re <- 0
-  n_spatial <- 4
-  n_samples <- 50
-
-  df <- data.frame(
-    count = rpois(n, 5),
-    effort = rgamma(n, 3, 1),
-    x = rnorm(n),
-    site = factor(rep(1:4, each = 3))
-  )
-
-  formula <- ratiod_formula(count | effort ~ x, data = df)
-  X <- model.matrix(~ x, data = df)
-
-  samples <- matrix(rnorm(n_samples * (p + n_re + n_spatial)),
-                    nrow = n_samples, ncol = p + n_re + n_spatial)
-
-  result <- list(
-    mode = rnorm(p + n_re + n_spatial),
-    log_marginal = -40.0
-  )
-
-  re_info <- list(
-    n_groups = 0L,
-    group_idx = rep(1, n),
-    group_var = NULL
-  )
-
-  spatial_info <- list(
-    n_units = n_spatial,
-    group_idx = as.integer(df$site)
-  )
-
-  fit <- tulpaRatio:::convert_laplace_spatial_to_ratiod_fit(
-    samples = samples,
-    result = result,
-    formula = formula,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    X = X,
-    re_info = re_info,
-    spatial_info = spatial_info,
-    n_samples = n_samples
-  )
-
-  expect_s3_class(fit, "ratiod_fit")
-  expect_equal(fit$backend, "laplace")
-  expect_true(any(grepl("spatial", colnames(fit$draws))))
-})
 
 # ---------------------------------------------------------------------------
 # ratiod_compare error handling tests

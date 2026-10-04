@@ -115,34 +115,6 @@ test_that("extract_re_from_data warns about slopes", {
 # backend_laplace.R coverage
 # -----------------------------------------------------------------------------
 
-test_that("can_use_laplace_backend always returns TRUE", {
-  expect_true(tulpaRatio:::can_use_laplace_backend(ratiod_binomial()))
-  expect_true(tulpaRatio:::can_use_laplace_backend(ratiod_negbin_negbin()))
-  expect_true(tulpaRatio:::can_use_laplace_backend(ratiod_poisson_gamma()))
-})
-
-test_that("get_laplace_family correctly maps families", {
-  expect_equal(tulpaRatio:::get_laplace_family(ratiod_binomial()), "binomial")
-
-  # Test negbin variants
-  fam <- list(numerator = list(distribution = "negbin"))
-  expect_equal(tulpaRatio:::get_laplace_family(fam), "negbin")
-
-  fam <- list(numerator = list(distribution = "negative_binomial"))
-  expect_equal(tulpaRatio:::get_laplace_family(fam), "negbin")
-
-  fam <- list(numerator = list(distribution = "poisson"))
-  expect_equal(tulpaRatio:::get_laplace_family(fam), "poisson")
-})
-
-test_that("get_laplace_family errors for unsupported family", {
-  fam <- list(numerator = list(distribution = "unknown"))
-  expect_error(
-    tulpaRatio:::get_laplace_family(fam),
-    "Unsupported family"
-  )
-})
-
 test_that("extract_re_for_laplace handles no RE", {
   mock_formula <- list(
     numerator = list(
@@ -203,7 +175,7 @@ test_that("extract_re_for_laplace handles multiple RE with warning for slopes", 
 
   expect_warning(
     result <- tulpaRatio:::extract_re_for_laplace(mock_formula),
-    "Random slopes not yet fully supported"
+    "Random slopes are not carried"
   )
   expect_equal(result$n_re_terms, 2)
   expect_true(result$has_slopes)

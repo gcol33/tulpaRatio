@@ -88,7 +88,7 @@ silently drops to an approximation that lacks a convergence guarantee.
 
 - **Tier 1 (exact):** HMC/NUTS (default), elliptical slice sampling,
   Pólya-Gamma Gibbs for binomial models.
-- **Tier 2 (structured):** Laplace approximation for large datasets.
+- **Tier 2 (structured):** nested Laplace approximation for large datasets, integrating the hyperparameters on an outer grid.
 - **Tier 3 (optimized):** variational inference and stochastic-gradient MCMC,
   available by explicit opt-in only.
 

@@ -57,42 +57,6 @@ cpp_kriging_predict <- function(coords_train, coords_new, w_train, sigma2, phi, 
     .Call(`_tulpaRatio_cpp_kriging_predict`, coords_train, coords_new, w_train, sigma2, phi, cov_type, nn)
 }
 
-cpp_laplace_fit <- function(y, n, X, re_idx, n_re_groups, sigma_re, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit`, y, n, X, re_idx, n_re_groups, sigma_re, family, phi, max_iter, tol, n_threads)
-}
-
-cpp_laplace_get_max_threads <- function() {
-    .Call(`_tulpaRatio_cpp_laplace_get_max_threads`)
-}
-
-cpp_laplace_fit_spatial <- function(y, n, X, re_idx, n_re_groups, sigma_re, spatial_idx, n_spatial_units, adj_row_ptr, adj_col_idx, n_neighbors, tau_spatial, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit_spatial`, y, n, X, re_idx, n_re_groups, sigma_re, spatial_idx, n_spatial_units, adj_row_ptr, adj_col_idx, n_neighbors, tau_spatial, family, phi, max_iter, tol, n_threads)
-}
-
-cpp_laplace_sample <- function(mode, H, n_samples) {
-    .Call(`_tulpaRatio_cpp_laplace_sample`, mode, H, n_samples)
-}
-
-cpp_laplace_fit_bym2 <- function(y, n, X, re_idx, n_re_groups, sigma_re, spatial_idx, n_spatial_units, adj_row_ptr, adj_col_idx, n_neighbors, sigma_spatial, rho, scale_factor, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit_bym2`, y, n, X, re_idx, n_re_groups, sigma_re, spatial_idx, n_spatial_units, adj_row_ptr, adj_col_idx, n_neighbors, sigma_spatial, rho, scale_factor, family, phi, max_iter, tol, n_threads)
-}
-
-cpp_laplace_fit_gp <- function(y, n, X, re_idx, n_re_groups, sigma_re, coords, obs_to_loc, nn_idx, nn_dist, nn_order, n_spatial, nn, sigma2_gp, phi_gp, cov_type, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit_gp`, y, n, X, re_idx, n_re_groups, sigma_re, coords, obs_to_loc, nn_idx, nn_dist, nn_order, n_spatial, nn, sigma2_gp, phi_gp, cov_type, family, phi, max_iter, tol, n_threads)
-}
-
-cpp_laplace_fit_rsr <- function(y, n, X, re_idx, n_re_groups, sigma_re, spatial_idx, n_spatial_units, adj_row_ptr, adj_col_idx, n_neighbors, tau_spatial, rsr_projection, rsr_n, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit_rsr`, y, n, X, re_idx, n_re_groups, sigma_re, spatial_idx, n_spatial_units, adj_row_ptr, adj_col_idx, n_neighbors, tau_spatial, rsr_projection, rsr_n, family, phi, max_iter, tol, n_threads)
-}
-
-cpp_laplace_fit_multiscale_gp <- function(y, n, X, re_idx, n_re_groups, sigma_re, coords, obs_to_loc, nn_idx_local, nn_dist_local, nn_order_local, nn_local, nn_idx_regional, nn_dist_regional, nn_order_regional, nn_regional, n_spatial, sigma2_local, phi_local, sigma2_regional, phi_regional, cov_type, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit_multiscale_gp`, y, n, X, re_idx, n_re_groups, sigma_re, coords, obs_to_loc, nn_idx_local, nn_dist_local, nn_order_local, nn_local, nn_idx_regional, nn_dist_regional, nn_order_regional, nn_regional, n_spatial, sigma2_local, phi_local, sigma2_regional, phi_regional, cov_type, family, phi, max_iter, tol, n_threads)
-}
-
-cpp_laplace_fit_multiscale_temporal <- function(y, n, X, re_idx, n_re_groups, sigma_re, time_idx, n_times, seasonal_period, trend_type, short_type, sigma2_trend, sigma2_seasonal, sigma2_short, rho_short, family, phi = 1.0, max_iter = 100L, tol = 1e-6, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_laplace_fit_multiscale_temporal`, y, n, X, re_idx, n_re_groups, sigma_re, time_idx, n_times, seasonal_period, trend_type, short_type, sigma2_trend, sigma2_seasonal, sigma2_short, rho_short, family, phi, max_iter, tol, n_threads)
-}
-
 cpp_pg_binomial_gibbs <- function(y, n, X, group, n_groups, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_scale = 2.5, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs`, y, n, X, group, n_groups, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_scale, store_eta, verbose, n_threads)
 }
@@ -315,18 +279,6 @@ cpp_test_autodiff_logit <- function(x_val) {
 
 cpp_test_autodiff_negbin_loglik <- function(y, mu, phi) {
     .Call(`_tulpaRatio_cpp_test_autodiff_negbin_loglik`, y, mu, phi)
-}
-
-cpp_test_laplace_binomial <- function(y, n, eta) {
-    .Call(`_tulpaRatio_cpp_test_laplace_binomial`, y, n, eta)
-}
-
-cpp_test_laplace_negbin <- function(y, eta, phi) {
-    .Call(`_tulpaRatio_cpp_test_laplace_negbin`, y, eta, phi)
-}
-
-cpp_test_laplace_poisson <- function(y, eta) {
-    .Call(`_tulpaRatio_cpp_test_laplace_poisson`, y, eta)
 }
 
 cpp_test_pg_update_beta <- function(kappa, omega, X, re_contrib, prior_sd) {

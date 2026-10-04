@@ -161,10 +161,10 @@ tvc_temporal_support <- function(temporal, structures) {
 }
 
 
-#' Temporal support rule for the Laplace and Polya-Gamma samplers
+#' Temporal support rule for the Polya-Gamma sampler
 #'
 #' @description
-#' Both hold one multi-scale temporal fit, and both dispatch on spatial
+#' The sampler holds one multi-scale temporal fit and dispatches on spatial
 #' structure ahead of temporal, so the temporal fit is out of reach once a
 #' spatial field is in the model.
 #'
@@ -183,26 +183,42 @@ multiscale_temporal_support <- function(temporal, structures) {
 }
 
 
-#' Spatial support rule for the Laplace sampler
+#' Temporal support rule for the Laplace backend
 #'
 #' @description
-#' The Laplace backend holds a mode-finder per spatial field: ICAR, BYM2, RSR,
-#' single-scale NNGP, and multi-scale NNGP. Proper CAR needs a dense
-#' log-determinant, and the HSGP basis and spatially-varying coefficients have
-#' no mode-finder here, so each of those names itself rather than reaching a
-#' dispatch that would fit the model without the field.
+#' The trend, seasonal and short-term components of a multi-scale temporal term
+#' are latent blocks of the nested-Laplace engine, and they sit beside an areal
+#' or Gaussian-process field in one fit.
+#'
+#' @inheritParams tvc_temporal_support
+#' @return `TRUE`, or a phrase naming the restriction
+#' @keywords internal
+laplace_temporal_support <- function(temporal, structures) {
+  if (!inherits(temporal, "ratiod_temporal_multiscale")) {
+    return(paste0("only multi-scale temporal is implemented; ",
+                  "build the term with temporal_multiscale()"))
+  }
+  TRUE
+}
+
+
+#' Spatial support rule for the Laplace backend
+#'
+#' @description
+#' The Laplace backend hands every field to the nested-Laplace engine as a
+#' latent block: ICAR, BYM2, proper CAR, and Gaussian-process fields on a
+#' Hilbert-space basis (single scale, two scales), each also under restricted
+#' spatial regression. Spatially varying coefficients carry no block and name
+#' themselves rather than reaching a dispatch that would fit the model without
+#' the field.
 #'
 #' @inheritParams tvc_temporal_support
 #' @param spatial The spatial specification
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 laplace_spatial_support <- function(spatial, structures) {
-  type <- spatial$type %||% "car"
-  if (type == "car_proper") {
-    return("proper CAR needs a dense log-determinant, which is not written here")
-  }
-  if (type %in% c("hsgp", "svc")) {
-    return(sprintf("no mode-finder for `%s` is written here", type))
+  if (inherits(spatial, "ratiod_svc") || identical(spatial$type, "svc")) {
+    return("spatially varying coefficients have no latent block on the nested-Laplace engine")
   }
   TRUE
 }
@@ -246,7 +262,7 @@ BACKEND_STRUCTURE_SUPPORT <- list(
     zi = TRUE, latent = FALSE
   ),
   laplace = list(
-    spatial = laplace_spatial_support, temporal = multiscale_temporal_support,
+    spatial = laplace_spatial_support, temporal = laplace_temporal_support,
     spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   vi = list(

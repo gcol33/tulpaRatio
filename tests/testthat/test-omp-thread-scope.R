@@ -17,14 +17,6 @@ fixture <- function() {
   )
 }
 
-laplace_fit <- function(d, n_threads) {
-  invisible(tulpaRatio:::cpp_laplace_fit(
-    y = d$y, n = d$n, X = d$X, re_idx = d$group, n_re_groups = 10L,
-    sigma_re = 1.0, family = "binomial", phi = 1.0, max_iter = 30L,
-    tol = 1e-6, n_threads = as.integer(n_threads)
-  ))
-}
-
 pg_binomial_fit <- function(d, n_threads) {
   invisible(tulpaRatio:::cpp_pg_binomial_gibbs(
     y = d$y, n = d$n, X = d$X, group = d$group, n_groups = 10L,
@@ -47,7 +39,7 @@ test_that("a fit puts the thread count back", {
   skip_if_no_omp()
   d <- fixture()
   before <- tulpaRatio:::cpp_get_max_threads()
-  for (backend in list(laplace_fit, pg_binomial_fit, pg_negbin_fit)) {
+  for (backend in list(pg_binomial_fit, pg_negbin_fit)) {
     backend(d, 1L)
     expect_equal(tulpaRatio:::cpp_get_max_threads(), before)
   }
@@ -57,7 +49,6 @@ test_that("the thread count survives a fit that asks for more than one thread", 
   skip_if_no_omp()
   d <- fixture()
   before <- tulpaRatio:::cpp_get_max_threads()
-  laplace_fit(d, 2L)
   expect_equal(tulpaRatio:::cpp_get_max_threads(), before)
   pg_binomial_fit(d, 2L)
   expect_equal(tulpaRatio:::cpp_get_max_threads(), before)
@@ -70,7 +61,7 @@ test_that("a fit asking for no particular count leaves the value alone", {
   on.exit(tulpaRatio:::cpp_set_max_threads(restore), add = TRUE)
 
   tulpaRatio:::cpp_set_max_threads(3L)
-  laplace_fit(d, 0L)
+  pg_binomial_fit(d, 0L)
   expect_equal(tulpaRatio:::cpp_get_max_threads(), 3L)
 })
 
@@ -82,7 +73,6 @@ test_that("teams resizing across fits do not corrupt the heap", {
   d <- fixture()
   before <- tulpaRatio:::cpp_get_max_threads()
   for (w in c(8L, 1L, 4L, 2L, 8L, 1L)) {
-    laplace_fit(d, w)
     pg_binomial_fit(d, w)
   }
   expect_equal(tulpaRatio:::cpp_get_max_threads(), before)

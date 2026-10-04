@@ -4,7 +4,7 @@
 \alias{print_param_summary}
 \title{Print categorized parameter summary}
 \usage{
-print_param_summary(summ, family_name, ci_names)
+print_param_summary(summ, family_name, ci_names, fixed = character(0))
 }
 \description{
 Print categorized parameter summary

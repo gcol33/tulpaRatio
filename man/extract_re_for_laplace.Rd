@@ -10,10 +10,11 @@ extract_re_for_laplace(formula)
 \item{formula}{A ratiod_formula object}
 }
 \value{
-List with RE structure for Laplace backend
+List with the RE structure
 }
 \description{
-Extracts random effects information for the Laplace backend.
-Supports multiple crossed random effects (e.g., \code{(1|site) + (1|year)}).
+Random-effect structure of the numerator formula: one entry per term, with
+the group index and the number of groups. A random slope is not carried and
+is reported.
 }
 \keyword{internal}

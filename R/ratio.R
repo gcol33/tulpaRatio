@@ -542,41 +542,34 @@ compute_fitted_pg <- function(object) {
 
 #' Linear predictor draws of a Laplace fit
 #'
-#' The Laplace sample matrix is laid out `[beta, re, spatial]`.
+#' The stored sample matrix holds the fixed effects of each process followed by
+#' the effect of every latent block on the linear predictor. A block's effect is
+#' read at the unit each observation belongs to, and enters both processes.
 #'
 #' @keywords internal
 laplace_eta_draws <- function(object) {
   internal <- object$.internal
   samples <- internal$samples
-  X <- internal$X
-  if (is.null(samples) || is.null(X)) {
+  layout <- internal$layout
+  if (is.null(samples) || is.null(layout)) {
     stop("This Laplace fit stores no posterior samples.", call. = FALSE)
   }
-  p <- ncol(X)
-  N <- nrow(X)
 
-  eta <- samples[, seq_len(p), drop = FALSE] %*% t(X)
-
-  re_info <- internal$re_info
-  n_re <- re_info$n_groups %||% 0L
-  if (n_re > 0L) {
-    re <- samples[, p + seq_len(n_re), drop = FALSE]
-    eta <- eta + spread_effect(re, re_info$group_idx, N)
+  N <- nrow(internal$X_num)
+  eta_num <- samples[, layout$beta$num, drop = FALSE] %*% t(internal$X_num)
+  eta_denom <- if (!is.null(layout$beta$denom)) {
+    samples[, layout$beta$denom, drop = FALSE] %*% t(internal$X_denom)
+  } else {
+    matrix(0, nrow(eta_num), ncol(eta_num))
   }
 
-  spatial_info <- internal$spatial_info
-  n_spatial <- spatial_info$n_units %||% 0L
-  if (n_spatial > 0L && ncol(samples) >= p + n_re + n_spatial) {
-    field <- samples[, p + n_re + seq_len(n_spatial), drop = FALSE]
-    group <- spatial_info$group %||% seq_len(N)
-    eta <- eta + spread_effect(field, group, N)
-  } else if (!is.null(internal$w_gp)) {
-    field <- internal$w_gp
-    group <- if (ncol(field) == N) seq_len(N) else internal$spatial$group
-    eta <- eta + spread_effect(field, group, N)
+  for (part in layout$parts) {
+    effect <- spread_effect(samples[, part$cols, drop = FALSE], part$index, N)
+    eta_num <- eta_num + effect
+    eta_denom <- eta_denom + effect
   }
 
-  list(eta_num = eta, eta_denom = matrix(0, nrow(eta), ncol(eta)))
+  list(eta_num = eta_num, eta_denom = eta_denom)
 }
 
 
@@ -794,10 +787,11 @@ build_prediction_data <- function(object, newdata, re_formula, allow_new_levels)
   # Build design matrix for numerator
   # Extract fixed effect terms from formula
   num_terms <- formula$numerator$terms
+  design_info <- prediction_design_info(object)
   if (is.null(num_terms)) {
     # Fall back to using X column names
     X_num <- model.matrix(~ 1, data = newdata)
-    colnames_orig <- colnames(object$.internal$hmc_data$X_num)
+    colnames_orig <- colnames(design_info$X_num)
     if (ncol(X_num) != length(colnames_orig)) {
       # Try to match the original predictors
       pred_vars <- setdiff(colnames_orig, "(Intercept)")
@@ -812,13 +806,13 @@ build_prediction_data <- function(object, newdata, re_formula, allow_new_levels)
 
   # Build design matrix for denominator
   # For binomial/beta_binomial, denominator is fixed trials - no design matrix
-  if (object$.internal$hmc_data$p_denom == 0) {
+  if (design_info$p_denom == 0) {
     X_denom <- matrix(numeric(0), nrow = nrow(newdata), ncol = 0)
   } else {
     denom_terms <- formula$denominator$terms
     if (is.null(denom_terms)) {
       X_denom <- model.matrix(~ 1, data = newdata)
-      colnames_orig <- colnames(object$.internal$hmc_data$X_denom)
+      colnames_orig <- colnames(design_info$X_denom)
       if (ncol(X_denom) != length(colnames_orig)) {
         pred_vars <- setdiff(colnames_orig, "(Intercept)")
         if (length(pred_vars) > 0) {
@@ -844,6 +838,26 @@ build_prediction_data <- function(object, newdata, re_formula, allow_new_levels)
     N = nrow(newdata),
     include_re = include_re
   )
+}
+
+
+#' Design matrices a fit was made with
+#'
+#' The HMC converter keeps them on `hmc_data`, the Laplace converter beside its
+#' sample matrix. A fit without a denominator process carries a matrix of no
+#' columns for it.
+#'
+#' @keywords internal
+prediction_design_info <- function(object) {
+  internal <- object$.internal
+  if (!is.null(internal$hmc_data)) {
+    return(list(X_num = internal$hmc_data$X_num,
+                X_denom = internal$hmc_data$X_denom,
+                p_denom = internal$hmc_data$p_denom))
+  }
+  X_num <- internal$X_num
+  X_denom <- internal$X_denom %||% matrix(numeric(0), nrow(X_num), 0L)
+  list(X_num = X_num, X_denom = X_denom, p_denom = ncol(X_denom))
 }
 
 
@@ -1624,30 +1638,43 @@ predict_gibbs <- function(object, newdata, type, re_formula, allow_new_levels,
 #' @keywords internal
 predict_laplace <- function(object, newdata, type, re_formula, allow_new_levels,
                             coords.0, include_spatial, return_spatial, n_samples) {
-  # Laplace stores mode and Hessian
-  # Sample from MVN(mode, H^{-1}) for uncertainty quantification
-
-  mode <- object$.internal$mode
-  hessian_inv <- object$.internal$hessian_inv
-
-  if (is.null(mode) || is.null(hessian_inv)) {
-    stop("Laplace fit missing mode or Hessian. Cannot generate predictions.",
+  internal <- object$.internal
+  layout <- internal$layout
+  if (is.null(internal$samples) || is.null(layout)) {
+    stop("This Laplace fit stores no posterior samples. Cannot generate predictions.",
          call. = FALSE)
   }
 
-  # Sample from approximate posterior
-  samples <- mvtnorm_rmvnorm(n_samples, mode, hessian_inv)
+  structured <- Filter(function(p) !identical(p$role, "re"), layout$parts)
+  if (length(structured) > 0L) {
+    stop("predict() on a Laplace fit that carries a spatial or temporal field ",
+         "is not implemented, since the field has no value at a new row. ",
+         "Use fitted() for the in-sample fit.", call. = FALSE)
+  }
 
-  # Build prediction data and compute (similar to HMC)
   pred_data <- build_prediction_data(object, newdata, re_formula, allow_new_levels)
+  N <- pred_data$N
+  samples <- internal$samples
 
-  # Create temporary object with samples for compute_predictions_hmc
-  temp_object <- object
-  temp_object$.internal$samples <- samples
+  eta_num <- samples[, layout$beta$num, drop = FALSE] %*% t(pred_data$X_num)
+  eta_denom <- if (!is.null(layout$beta$denom)) {
+    samples[, layout$beta$denom, drop = FALSE] %*% t(pred_data$X_denom)
+  } else {
+    matrix(0, nrow(eta_num), ncol(eta_num))
+  }
 
-  pred_draws <- compute_predictions_hmc(temp_object, pred_data, type)
+  if (isTRUE(pred_data$include_re)) {
+    re_parts <- Filter(function(p) identical(p$role, "re"), layout$parts)
+    for (t in seq_along(re_parts)) {
+      g <- pred_data$re_group_matrix[, t]
+      effect <- spread_effect(samples[, re_parts[[t]]$cols, drop = FALSE], g, N)
+      eta_num <- eta_num + effect
+      eta_denom <- eta_denom + effect
+    }
+  }
 
-  # Spatial not yet supported for Laplace
+  pred_draws <- hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
+                                   fit_model_type(object), type)
   list(draws = pred_draws, w_samples = NULL)
 }
 

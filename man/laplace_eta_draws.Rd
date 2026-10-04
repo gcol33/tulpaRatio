@@ -7,6 +7,8 @@
 laplace_eta_draws(object)
 }
 \description{
-The Laplace sample matrix is laid out \verb{[beta, re, spatial]}.
+The stored sample matrix holds the fixed effects of each process followed by
+the effect of every latent block on the linear predictor. A block's effect is
+read at the unit each observation belongs to, and enters both processes.
 }
 \keyword{internal}

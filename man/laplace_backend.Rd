@@ -4,26 +4,30 @@
 \alias{laplace_backend}
 \title{Laplace Approximation Backend}
 \description{
-Fast approximate inference using nested Laplace approximation.
-Suitable for large areal datasets where full MCMC is too slow.
+Approximate inference on the nested-Laplace engine. The model is handed to
+\code{\link[tulpa:tulpa_nested_laplace_joint]{tulpa::tulpa_nested_laplace_joint()}} as one likelihood arm per process and
+one latent block per random effect or structured field. The engine
+integrates the hyperparameters of every block, and of every dispersion, over
+an outer grid and solves the latent Gaussian at each grid cell, so the
+fixed-effect posterior is the grid mixture rather than a Gaussian
+conditioned on one value of each hyperparameter.
 }
 \details{
-The Laplace backend finds the mode of the posterior and uses a Gaussian
-approximation centered at the mode. This is much faster than MCMC but
-provides approximate inference.
-
 \strong{Supported model structures:}
 \itemize{
 \item Fixed effects
-\item Group-level random intercepts
-\item All three families (binomial, negbin, poisson_gamma)
+\item Group-level random intercepts, crossed or nested terms (one \code{iid} block per
+term)
+\item Areal fields: ICAR, BYM2, proper CAR
+\item Gaussian-process fields (single scale, two scales) on a Hilbert-space basis
+\item Multi-scale temporal: trend (\code{rw1} / \code{rw2}), cyclic seasonal, short-term
+(\code{iid} / \code{ar1})
 }
 
-\strong{When to use:}
-\itemize{
-\item Large datasets (N > 10,000)
-\item Screening models before full MCMC
-\item When approximate posteriors are acceptable
-}
+\strong{Supported families:} binomial (one process), and the two-process families
+\code{poisson_gamma}, \code{negbin_gamma}, \code{negbin_negbin} and \code{gamma_gamma}. A
+two-process model is two likelihood arms, numerator and denominator, each
+with its own fixed effects and dispersion, and every latent block enters both
+arms.
 }
 \keyword{internal}

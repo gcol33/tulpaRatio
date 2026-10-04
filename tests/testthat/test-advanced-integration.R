@@ -234,7 +234,7 @@ test_that("SVC model fits with single varying coefficient", {
 
 
 # ============================================================================
-# Laplace Backend Fitting (laplace_core.cpp, backend_laplace.R coverage)
+# Laplace Backend Fitting (backend_laplace.R coverage)
 # ============================================================================
 
 test_that("Laplace backend fits binomial model", {

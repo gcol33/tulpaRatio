@@ -2,7 +2,7 @@
 % Please edit documentation in R/inference_modes.R
 \name{laplace_spatial_support}
 \alias{laplace_spatial_support}
-\title{Spatial support rule for the Laplace sampler}
+\title{Spatial support rule for the Laplace backend}
 \usage{
 laplace_spatial_support(spatial, structures)
 }
@@ -16,10 +16,11 @@ depend on what else is in the model}
 \code{TRUE}, or a phrase naming the restriction
 }
 \description{
-The Laplace backend holds a mode-finder per spatial field: ICAR, BYM2, RSR,
-single-scale NNGP, and multi-scale NNGP. Proper CAR needs a dense
-log-determinant, and the HSGP basis and spatially-varying coefficients have
-no mode-finder here, so each of those names itself rather than reaching a
-dispatch that would fit the model without the field.
+The Laplace backend hands every field to the nested-Laplace engine as a
+latent block: ICAR, BYM2, proper CAR, and Gaussian-process fields on a
+Hilbert-space basis (single scale, two scales), each also under restricted
+spatial regression. Spatially varying coefficients carry no block and name
+themselves rather than reaching a dispatch that would fit the model without
+the field.
 }
 \keyword{internal}

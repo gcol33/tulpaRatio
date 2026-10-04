@@ -378,7 +378,7 @@ test_that("ratio_contrast computes ratio of ratios", {
 })
 
 # ---------------------------------------------------------------------------
-# Laplace backend tests (exercises laplace_core.cpp)
+# Laplace backend tests
 # ---------------------------------------------------------------------------
 
 test_that("Laplace backend works with binomial", {

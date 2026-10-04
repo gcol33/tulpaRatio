@@ -950,7 +950,7 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
   # Compute summary statistics
   summ <- compute_param_summary(draws, probs)
   if (identical(backend, "laplace")) {
-    summ <- apply_laplace_gaussian_summary(summ, object, probs)
+    summ <- apply_laplace_engine_summary(summ, object, level = prob)
   }
 
   # Add diagnostics for MCMC backends
@@ -970,7 +970,8 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
   summ_main <- summ[summ$parameter %in% main_pars, ]
 
   # Categorize and print parameters
-  print_param_summary(summ_main, object$family$name, ci_names)
+  print_param_summary(summ_main, object$family$name, ci_names,
+                      fixed = object$fixed_columns)
 
   # Print diagnostics summary
   print_diagnostics_summary(object)
@@ -1001,32 +1002,28 @@ compute_param_summary <- function(draws, probs) {
 }
 
 
-#' Replace Monte Carlo rows of a Laplace summary by the closed form
+#' Read the fixed effects of a Laplace summary off the engine's mixture
 #'
-#' The fixed effects of a Laplace fit are `N(mean, cov)` exactly, so their
-#' mean, sd and quantiles are read from that Gaussian. A plug-in
-#' hyperparameter is a point value: its sd and quantiles are `NA`.
+#' The engine integrates the hyperparameters over its outer grid, so the
+#' fixed-effect posterior is a Gaussian mixture whose mean, covariance and
+#' interval it reads exactly. The stored draws serve derived quantities; the
+#' fixed-effect rows of the summary do not move with their seed.
 #' @keywords internal
-apply_laplace_gaussian_summary <- function(summ, fit, probs) {
-  g <- fit$fixed_gaussian
-  if (!is.null(g)) {
-    sds <- sqrt(diag(g$cov))
-    rows <- match(g$names, summ$parameter)
-    summ$mean[rows] <- g$mean
-    summ$sd[rows] <- sds
-    summ$q_lower[rows] <- g$mean + stats::qnorm(probs[1]) * sds
-    summ$q_median[rows] <- g$mean + stats::qnorm(probs[2]) * sds
-    summ$q_upper[rows] <- g$mean + stats::qnorm(probs[3]) * sds
-  }
-  rows <- match(fit$plug_in, summ$parameter)
-  summ[rows, c("sd", "q_lower", "q_median", "q_upper")] <- NA_real_
+apply_laplace_engine_summary <- function(summ, fit, level) {
+  engine <- fit$engine
+  rows <- match(fit$fixed_columns, summ$parameter)
+  interval <- stats::confint(engine, level = level)
+  summ$mean[rows] <- stats::coef(engine)
+  summ$sd[rows] <- sqrt(diag(stats::vcov(engine)))
+  summ$q_lower[rows] <- interval[, 1L]
+  summ$q_upper[rows] <- interval[, 2L]
   summ
 }
 
 
 #' Print categorized parameter summary
 #' @keywords internal
-print_param_summary <- function(summ, family_name, ci_names) {
+print_param_summary <- function(summ, family_name, ci_names, fixed = character(0)) {
   # Format columns
   summ$mean <- round(summ$mean, 3)
   summ$sd <- round(summ$sd, 3)
@@ -1065,7 +1062,8 @@ print_param_summary <- function(summ, family_name, ci_names) {
   }
 
   # Fixed effects (binomial - single process)
-  beta_single <- summ[grepl("^\\(Intercept\\)|^beta\\[", summ$parameter), ]
+  beta_single <- summ[grepl("^\\(Intercept\\)|^beta\\[", summ$parameter) |
+                        summ$parameter %in% fixed, ]
   if (nrow(beta_single) > 0 && nrow(beta_num) == 0) {
     cat("Fixed effects:\n")
     print(beta_single[, display_cols, drop = FALSE], row.names = FALSE)

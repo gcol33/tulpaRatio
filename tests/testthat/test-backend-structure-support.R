@@ -84,6 +84,14 @@ test_that("Gibbs carries TVC temporal only", {
 })
 
 
+test_that("Laplace carries a multi-scale temporal term beside a spatial field", {
+  ms <- temporal_multiscale("year", trend = "rw1", short_term = "none")
+  expect_true(tulpaRatio:::backend_fits_structures(
+    "laplace", list(spatial = car_spec(), temporal = ms)
+  ))
+})
+
+
 test_that("Laplace and PG carry multi-scale temporal on its own", {
   ms <- temporal_multiscale("year", trend = "rw1", short_term = "none")
   rw1 <- temporal_rw1("year")
@@ -92,12 +100,12 @@ test_that("Laplace and PG carry multi-scale temporal on its own", {
   for (backend in c("laplace", "pg")) {
     expect_true(tulpaRatio:::backend_fits_structures(backend, list(temporal = ms)))
     expect_false(tulpaRatio:::backend_fits_structures(backend, list(temporal = rw1)))
-    # Both dispatch on spatial ahead of temporal, so the two together would
-    # fit the spatial model alone.
-    expect_false(tulpaRatio:::backend_fits_structures(
-      backend, list(spatial = spat, temporal = ms)
-    ))
   }
+  # The sampler dispatches on spatial ahead of temporal, so the two together
+  # would fit the spatial model alone.
+  expect_false(tulpaRatio:::backend_fits_structures(
+    "pg", list(spatial = spat, temporal = ms)
+  ))
 })
 
 
@@ -282,7 +290,7 @@ test_that("Laplace fits a multi-scale temporal model", {
   expect_s3_class(fit, "ratiod_fit")
   expect_equal(fit$backend, "laplace")
   expect_equal(ncol(fit$.internal$temporal_draws$trend), 6L)
-  expect_true(all(grepl("^trend\\[", colnames(fit$draws)[-(1:2)])))
+  expect_equal(sum(grepl("^trend\\[", colnames(fit$draws))), 6L)
   expect_true(all(is.finite(fit$.internal$temporal_draws$trend)))
 })
 

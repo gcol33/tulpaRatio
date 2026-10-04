@@ -28,11 +28,12 @@ fit_laplace(
 \item{temporal}{Optional multi-scale temporal structure. See
 \code{BACKEND_STRUCTURE_SUPPORT} for what this backend carries.}
 
-\item{priors}{Prior specification}
+\item{priors}{Prior specification. A \code{prior_pc()} or \code{prior_half_normal()} on
+\code{sigma} is carried to the random-effect standard deviations.}
 
 \item{n_samples}{Number of posterior samples to draw}
 
-\item{cores}{Number of cores for parallel computation}
+\item{cores}{Number of threads for the engine}
 
 \item{verbose}{Print progress}
 }

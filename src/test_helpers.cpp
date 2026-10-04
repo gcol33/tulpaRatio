@@ -6,7 +6,6 @@
 #include <vector>
 #include <random>
 #include "autodiff.h"
-#include "laplace_core.h"
 #include "pg_binomial.h"
 #include "omp_sum.h"
 
@@ -656,49 +655,6 @@ List cpp_test_autodiff_negbin_loglik(IntegerVector y, NumericVector mu, double p
     Named("value") = value,
     Named("gradient_mu") = grads_mu,
     Named("gradient_phi") = grad_phi
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Laplace core likelihood functions (from laplace_core.cpp)
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-List cpp_test_laplace_binomial(int y, int n, double eta) {
-  double ll = ratiod::log_lik_binomial(y, n, eta);
-  double grad = ratiod::grad_log_lik_binomial(y, n, eta);
-  double neg_hess = ratiod::neg_hess_log_lik_binomial(y, n, eta);
-
-  return List::create(
-    Named("log_lik") = ll,
-    Named("gradient") = grad,
-    Named("neg_hessian") = neg_hess
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_laplace_negbin(int y, double eta, double phi) {
-  double ll = ratiod::log_lik_negbin(y, eta, phi);
-  double grad = ratiod::grad_log_lik_negbin(y, eta, phi);
-  double neg_hess = ratiod::neg_hess_log_lik_negbin(y, eta, phi);
-
-  return List::create(
-    Named("log_lik") = ll,
-    Named("gradient") = grad,
-    Named("neg_hessian") = neg_hess
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_laplace_poisson(int y, double eta) {
-  double ll = ratiod::log_lik_poisson(y, eta);
-  double grad = ratiod::grad_log_lik_poisson(y, eta);
-  double neg_hess = ratiod::neg_hess_log_lik_poisson(y, eta);
-
-  return List::create(
-    Named("log_lik") = ll,
-    Named("gradient") = grad,
-    Named("neg_hessian") = neg_hess
   );
 }
 

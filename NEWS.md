@@ -9,14 +9,41 @@
   `ratiod_omp::sum_range()` (`src/omp_sum.h`): each thread sums one chunk into
   its own slot and the slots are added in thread order.
 
-* **`summary()` on a Laplace fit reads the closed-form Gaussian (#84).** The
-  fixed-effect mean, sd and interval came from 1000 Monte Carlo draws of a
-  posterior the fit states exactly, so a bound moved by a fraction of the sd
-  between seeds. The fit now keeps the fixed-effect block of `H^{-1}`
-  (`fit$fixed_gaussian`) and `summary()` reports `mode +/- z * sd` from it.
-  The draws stay for `ratio()` and other nonlinear derived quantities. Plug-in
-  hyperparameters (`sigma_re`, `sigma_spatial`, `rho`) are listed as point
-  values with no interval.
+* **The Laplace tier runs on the nested-Laplace engine (#85, #84).** The
+  in-tree mode-finder (`laplace_core.cpp`) picked one value per hyperparameter
+  and conditioned the fixed effects on it, so intervals omitted hyperparameter
+  uncertainty. The tier now hands the model to `tulpa::tulpa_nested_laplace_joint()`:
+  one likelihood arm per process, one latent block per random-effect term,
+  areal field (ICAR, BYM2, proper CAR), Gaussian-process field (single and two
+  scale, on a Hilbert-space basis) and multi-scale temporal component. The
+  engine integrates every block hyperparameter and every dispersion on its outer
+  grid. `summary()` reads the fixed effects off the grid mixture (mean,
+  covariance, skew-aware interval), so the rows no longer move with a draw seed;
+  hyperparameters are reported as posteriors instead of constant columns; the
+  stored draws are drawn from the mixture.
+
+  Consequences of the move:
+  - Two-process families (`poisson_gamma`, `negbin_gamma`, `negbin_negbin`,
+    `gamma_gamma`) are fitted as two arms with their own fixed effects and
+    dispersions, shared latent blocks entering both. The old tier fitted the
+    numerator alone, so `ratio()` of such a fit was a numerator rate (#89).
+  - Every random-effect term is fitted; only the first was (#88).
+  - `predict()` works for fits without a spatial or temporal field (it always
+    errored, #87), and `fitted()` reads each random effect at the group each row
+    belongs to (#90).
+  - A Gaussian-process field uses the Hilbert-space basis, not the nearest-
+    neighbour approximation, and takes the squared-exponential kernel.
+  - Spatial and multi-scale temporal terms can share a Laplace fit; proper CAR
+    and `spatial_hsgp()` are fitted.
+  - Restricted spatial regression reaches the engine as a projected areal block
+    (the field enters each arm as `(I - Q Q') S z`) or as a projected
+    Hilbert-space basis; the projected effect is orthogonal to the restricted
+    covariates. Spatially varying coefficients have no block on the engine and
+    are refused with `mode = "hmc"` as the way out.
+  - A model with no random effect and no field is fitted on the dispersion axes
+    alone.
+  - `summary()` lists every fixed effect of a one-process fit; it listed the
+    intercept only (#91).
 
 * **The SoftAbs divergence retry is off by default (#86).** `control$riemannian`
   used to resolve to an automatic setting that switched the retry on for BYM2
