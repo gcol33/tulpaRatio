@@ -1647,6 +1647,8 @@ validate_tvc <- function(tvc, data, X) {
 #'
 #' @param object A `ratiod_fit` object fitted with `tvc` argument
 #' @param terms Which TVC terms to extract. If NULL (default), extracts all.
+#' @param group Which level of the temporal grouping variable to report, as an
+#'   index into its levels; a model without temporal groups has the one level 1.
 #' @param summary Logical; if TRUE, return summary statistics instead of
 #'   full posterior draws.
 #' @param probs Quantiles to compute if `summary = TRUE`.

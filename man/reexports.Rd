@@ -7,12 +7,7 @@
 \alias{pp_check}
 \alias{posterior_predict}
 \alias{diagnostics}
-\title{Verbs this package supplies methods for}
-\description{
-Each of these is defined elsewhere and re-exported here so that
-\code{as_draws(fit)}, \code{pp_check(fit)} and \code{posterior_predict(fit)} reach the
-\code{ratiod_fit} methods through the same generic every other package uses.
-}
+\title{Objects exported from other packages}
 \keyword{internal}
 \description{
 These objects are imported from other packages. Follow the links

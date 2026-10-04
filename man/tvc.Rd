@@ -28,6 +28,9 @@ tvc(
 
 \item{terms}{Which TVC terms to extract. If NULL (default), extracts all.}
 
+\item{group}{Which level of the temporal grouping variable to report, as an
+index into its levels; a model without temporal groups has the one level 1.}
+
 \item{summary}{Logical; if TRUE, return summary statistics instead of
 full posterior draws.}
 
