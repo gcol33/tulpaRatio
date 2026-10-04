@@ -19,6 +19,23 @@
   restriction, refuse it, and PG refuses it on anything but an intrinsic CAR
   field. `predict()` refuses a restricted field at new rows.
 
+* **`predict()` on the fitted rows reproduces `fitted()` (#93, #94, #95).**
+  Three separate defects pulled the two apart:
+  - The HMC areal lookup, the PG areal lookup and the PG random-effect lookup
+    numbered a grouping variable's units in order of first appearance, where the
+    fit numbers them by factor level, so whenever the two orders differed each
+    row read another unit's effect (#93).
+  - An HMC binomial prediction with a spatial field added the field to
+    `log(p)` and took `plogis()` of that, which is not the predictor; the field
+    now enters the linear predictors and the response is taken once through
+    `hmc_response_draws()`, as `fitted()` takes it (#94).
+  - Every Polya-Gamma sampler stored the predictor computed at the top of an
+    iteration beside the parameters updated during it, so saved draw `s` paired
+    the parameters of iteration `s` with the predictor of iteration `s - 1`; the
+    predictor is refreshed at the save (#95). The field-free and
+    random-effect-only fits run tulpa's own sampler, which has the same lag
+    (gcol33/tulpa#941).
+
 * **The log posterior no longer depends on the thread count on Windows arm64
   (#83).** On aarch64-w64-mingw (Rtools45 clang 19) an OpenMP
   `reduction(+:double)` over a 4-thread team returned the serial value in 0 of

@@ -324,10 +324,10 @@ List pg_binomial_gibbs_impl(
     kappa[i] = y[i] - n[i] / 2.0;
   }
 
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute linear predictor (parallelized)
+  // The linear predictor of the current state. It is refreshed at the top of
+  // an iteration for the omega draw and again at the save, so the stored eta
+  // belongs to the parameters saved beside it.
+  auto refresh_eta = [&]() {
     #ifdef _OPENMP
     #pragma omp parallel for schedule(static)
     #endif
@@ -344,6 +344,13 @@ List pg_binomial_gibbs_impl(
       }
       eta[i] = X_beta[i] + re_contrib[i];
     }
+  };
+
+  // Gibbs iterations
+  int save_idx = 0;
+  for (int iter = 0; iter < n_iter; iter++) {
+    // 1. Compute linear predictor
+    refresh_eta();
 
     // 2. Sample omega ~ PG(n, eta)
     // Note: NOT parallelized - R's RNG is not thread-safe
@@ -384,6 +391,7 @@ List pg_binomial_gibbs_impl(
       sigma_draws[save_idx] = sigma_re;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
           eta_draws(save_idx, i) = eta[i];
         }
@@ -541,10 +549,9 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
     kappa[i] = y[i] - n[i] / 2.0;
   }
 
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute linear predictor (parallelized)
+  // The linear predictor of the current state, refreshed for the omega draw
+  // and again at the save so the stored eta matches the saved parameters.
+  auto refresh_eta = [&]() {
     #ifdef _OPENMP
     #pragma omp parallel for schedule(static)
     #endif
@@ -557,6 +564,13 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
       spatial_contrib[i] = phi[spatial_group[i] - 1];
       eta[i] = X_beta[i] + re_contrib[i] + spatial_contrib[i];
     }
+  };
+
+  // Gibbs iterations
+  int save_idx = 0;
+  for (int iter = 0; iter < n_iter; iter++) {
+    // 1. Compute linear predictor
+    refresh_eta();
 
     // 2. Sample omega ~ PG(n, eta)
     // Note: NOT parallelized - R's RNG is not thread-safe
@@ -636,6 +650,7 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
       tau_draws[save_idx] = tau;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
           eta_draws(save_idx, i) = eta[i];
         }
@@ -777,10 +792,9 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
     kappa[i] = y[i] - n[i] / 2.0;
   }
 
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute linear predictor (parallelized)
+  // The linear predictor of the current state, refreshed for the omega draw
+  // and again at the save so the stored eta matches the saved parameters.
+  auto refresh_eta = [&]() {
     #ifdef _OPENMP
     #pragma omp parallel for schedule(static)
     #endif
@@ -793,6 +807,13 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       spatial_contrib[i] = u[spatial_group[i] - 1];
       eta[i] = X_beta[i] + re_contrib[i] + spatial_contrib[i];
     }
+  };
+
+  // Gibbs iterations
+  int save_idx = 0;
+  for (int iter = 0; iter < n_iter; iter++) {
+    // 1. Compute linear predictor
+    refresh_eta();
 
     // 2. Sample omega ~ PG(n, eta)
     // Note: NOT parallelized - R's RNG is not thread-safe
@@ -896,6 +917,7 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       rho_draws[save_idx] = rho;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
           eta_draws(save_idx, i) = eta[i];
         }
@@ -1403,15 +1425,22 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
 
   int save_idx = 0;
 
+  // The contributions are kept current through the sweep; eta is refreshed
+  // from them for the omega draw and again at the save, so the stored eta
+  // matches the saved parameters.
+  auto refresh_eta = [&]() {
+    for (int i = 0; i < N; i++) {
+      eta[i] = X_beta[i] + re_contrib[i] + gp_contrib[i];
+    }
+  };
+
   for (int iter = 0; iter < n_iter; iter++) {
     if (verbose && (iter + 1) % 200 == 0) {
       Rcpp::Rcout << "  Iteration " << (iter + 1) << "/" << n_iter << "\n";
     }
 
     // 1. Compute eta
-    for (int i = 0; i < N; i++) {
-      eta[i] = X_beta[i] + re_contrib[i] + gp_contrib[i];
-    }
+    refresh_eta();
 
     // 2. Update omega | eta
     for (int i = 0; i < N; i++) {
@@ -1481,6 +1510,7 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
       phi_gp_draws[save_idx] = phi_gp;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
           eta_draws_gp(save_idx, i) = eta[i];
         }
@@ -1596,12 +1626,10 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
 
   int save_idx = 0;
 
-  for (int iter = 0; iter < n_iter; iter++) {
-    if (verbose && (iter + 1) % 200 == 0) {
-      Rcpp::Rcout << "  Iteration " << (iter + 1) << "/" << n_iter << "\n";
-    }
-
-    // 1. Compute eta and temporal contributions
+  // The temporal contributions and eta of the current state, refreshed for the
+  // omega draw and again at the save so the stored eta matches the saved
+  // parameters.
+  auto refresh_eta = [&]() {
     for (int i = 0; i < N; i++) {
       int t = time_idx[i] - 1;
       double temp_eff = 0.0;
@@ -1613,6 +1641,15 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
       temp_contrib[i] = temp_eff;
       eta[i] = X_beta[i] + re_contrib[i] + temp_contrib[i];
     }
+  };
+
+  for (int iter = 0; iter < n_iter; iter++) {
+    if (verbose && (iter + 1) % 200 == 0) {
+      Rcpp::Rcout << "  Iteration " << (iter + 1) << "/" << n_iter << "\n";
+    }
+
+    // 1. Compute eta and temporal contributions
+    refresh_eta();
 
     // 2. Update omega
     for (int i = 0; i < N; i++) {
@@ -1821,6 +1858,7 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
       rho_short_draws[save_idx] = rho_short;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
           eta_draws_temp(save_idx, i) = eta[i];
         }
@@ -1979,15 +2017,22 @@ Rcpp::List cpp_pg_binomial_gibbs_multiscale_gp(
 
   int save_idx = 0;
 
+  // The contributions are kept current through the sweep; eta is refreshed
+  // from them for the omega draw and again at the save, so the stored eta
+  // matches the saved parameters.
+  auto refresh_eta = [&]() {
+    for (int i = 0; i < N; i++) {
+      eta_vec[i] = X_beta[i] + re_contrib[i] + local_contrib[i] + regional_contrib[i];
+    }
+  };
+
   for (int iter = 0; iter < n_iter; iter++) {
     if (verbose && (iter + 1) % 200 == 0) {
       Rcpp::Rcout << "  Iteration " << (iter + 1) << "/" << n_iter << "\n";
     }
 
     // 1. Compute eta
-    for (int i = 0; i < N; i++) {
-      eta_vec[i] = X_beta[i] + re_contrib[i] + local_contrib[i] + regional_contrib[i];
-    }
+    refresh_eta();
 
     // 2. Update omega | eta
     for (int i = 0; i < N; i++) {
@@ -2084,6 +2129,7 @@ Rcpp::List cpp_pg_binomial_gibbs_multiscale_gp(
       phi_regional_draws[save_idx] = phi_regional;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
           eta_draws_temp(save_idx, i) = eta_vec[i];
         }

@@ -518,12 +518,10 @@ List pg_negbin_gibbs(
   // a ~ IG(1/2, 1/scale^2) => E[a] = 2*scale^2
   double sigma_aux = 2.0 * prior_sigma_scale * prior_sigma_scale;
 
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-
-    // 1. Compute linear predictor
-    // Clamp eta to [-15, 15] to prevent numerical instability
+  // The contributions of the current state, refreshed for the omega draw and
+  // again at the save so the stored predictor matches the saved parameters.
+  // The draw reads eta clamped to [-15, 15] for numerical stability.
+  auto refresh_eta = [&]() {
     #ifdef _OPENMP
     #pragma omp parallel for schedule(static)
     #endif
@@ -540,6 +538,14 @@ List pg_negbin_gibbs(
       double eta_raw = X_beta[i] + re_contrib[i];
       eta[i] = std::max(-15.0, std::min(15.0, eta_raw));
     }
+  };
+
+  // Gibbs iterations
+  int save_idx = 0;
+  for (int iter = 0; iter < n_iter; iter++) {
+
+    // 1. Compute linear predictor
+    refresh_eta();
 
     // 2. Compute success probabilities: p_i = logistic(eta_i)
     for (int i = 0; i < N; i++) {
@@ -670,8 +676,9 @@ List pg_negbin_gibbs(
       r_draws[save_idx] = r;
 
       if (store_eta) {
+        refresh_eta();
         for (int i = 0; i < N; i++) {
-          eta_draws(save_idx, i) = eta[i];
+          eta_draws(save_idx, i) = X_beta[i] + re_contrib[i];
         }
       }
       save_idx++;

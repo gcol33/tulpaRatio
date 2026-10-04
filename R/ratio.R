@@ -958,22 +958,18 @@ predict_hmc <- function(object, newdata, type, re_formula, allow_new_levels,
     }
   }
 
-  # Compute fixed effects + RE predictions
-  pred_draws <- compute_predictions_hmc(object, pred_data, type)
-
-  # Add spatial effects if applicable
+  # The field at the new rows, on the link scale
+  w_pred <- NULL
   w_samples <- NULL
   if (has_spatial) {
     spatial_result <- predict_spatial_hmc(object, newdata, coords.0, spatial_type,
                                           return_spatial)
+    w_pred <- spatial_result$w_pred
     w_samples <- spatial_result$w_samples
-
-    # Add spatial effects to linear predictor
-    if (!is.null(spatial_result$w_pred)) {
-      pred_draws <- add_spatial_to_predictions(pred_draws, spatial_result$w_pred,
-                                               object$.internal$model_type, type)
-    }
   }
+
+  pred_draws <- compute_predictions_hmc(object, pred_data, type, w_pred,
+                                        w_shared = spatial$shared %||% TRUE)
 
   list(draws = pred_draws, w_samples = w_samples)
 }
@@ -1149,9 +1145,9 @@ predict_spatial_areal <- function(object, newdata, return_spatial) {
     return(list(w_pred = NULL, w_samples = NULL))
   }
 
-  # Map new data spatial groups to training groups
+  # Map new data spatial groups onto the units the fit numbered by factor level
   orig_data <- object$data
-  orig_levels <- unique(orig_data[[spatial_var]])
+  orig_levels <- levels(as.factor(orig_data[[spatial_var]]))
   new_levels <- newdata[[spatial_var]]
 
   n_new <- nrow(newdata)
@@ -1215,41 +1211,6 @@ predict_spatial_areal <- function(object, newdata, return_spatial) {
     w_pred = w_pred,
     w_samples = if (return_spatial) w_pred else NULL
   )
-}
-
-
-#' Add spatial effects to prediction draws
-#' @keywords internal
-add_spatial_to_predictions <- function(pred_draws, w_pred, model_type, type) {
-  n_samples <- nrow(w_pred)
-  n_obs <- ncol(w_pred)
-
-  if (type == "link") {
-    # Add to linear predictor
-    pred_draws$numerator <- pred_draws$numerator + w_pred
-    pred_draws$denominator <- pred_draws$denominator + w_pred  # shared spatial effect
-
-    if (model_type == "binomial") {
-      pred_draws$ratio <- pred_draws$numerator
-    } else {
-      pred_draws$ratio <- pred_draws$numerator - pred_draws$denominator
-    }
-  } else {
-    # Response scale: need to recompute
-    eta_num <- log(pred_draws$numerator) + w_pred
-    eta_denom <- log(pred_draws$denominator) + w_pred
-
-    if (model_type == "binomial") {
-      pred_draws$numerator <- 1 / (1 + exp(-eta_num))
-      pred_draws$ratio <- pred_draws$numerator
-    } else {
-      pred_draws$numerator <- exp(eta_num)
-      pred_draws$denominator <- exp(eta_denom)
-      pred_draws$ratio <- pred_draws$numerator / pred_draws$denominator
-    }
-  }
-
-  pred_draws
 }
 
 
@@ -1360,7 +1321,7 @@ build_prediction_data_pg <- function(object, newdata, re_formula, allow_new_leve
       re_var <- re_info$group_var
       if (!is.null(re_var) && re_var %in% names(newdata)) {
         orig_data <- object$data
-        orig_levels <- unique(orig_data[[re_var]])
+        orig_levels <- levels(as.factor(orig_data[[re_var]]))
         for (i in seq_len(nrow(newdata))) {
           match_idx <- match(newdata[[re_var]][i], orig_levels)
           if (!is.na(match_idx)) {
@@ -1469,9 +1430,9 @@ predict_spatial_areal_pg <- function(object, newdata, return_spatial) {
     return(list(w_pred = NULL, w_samples = NULL))
   }
 
-  # Map groups
+  # Map groups onto the units the fit numbered by factor level
   orig_data <- object$data
-  orig_levels <- unique(orig_data[[spatial_var]])
+  orig_levels <- levels(as.factor(orig_data[[spatial_var]]))
   n_new <- nrow(newdata)
   n_samples <- nrow(spatial_draws)
 
@@ -1758,12 +1719,16 @@ sample_vi_posterior <- function(vi_params, n_samples) {
 
 #' Compute predictions for HMC backend
 #'
-#' Fixed effects and random effects, remapped onto the new data. The structured
-#' blocks are added by `predict_spatial_hmc()`, which knows how to carry a field
-#' to locations the fit did not see.
+#' Fixed effects and random effects, remapped onto the new data, plus the
+#' spatial field at the new rows when `predict_spatial_hmc()` supplies one. The
+#' field enters the linear predictors, and the response is taken once from
+#' them, as `fitted()` takes it.
 #'
+#' @param w_pred Draws of the field at the new rows (draws by rows), or `NULL`
+#' @param w_shared Whether the field enters the denominator's predictor too
 #' @keywords internal
-compute_predictions_hmc <- function(object, pred_data, type) {
+compute_predictions_hmc <- function(object, pred_data, type, w_pred = NULL,
+                                    w_shared = TRUE) {
   unpacked <- hmc_fit_unpack(object)
   design <- hmc_eta_design(
     X_num = pred_data$X_num,
@@ -1775,6 +1740,10 @@ compute_predictions_hmc <- function(object, pred_data, type) {
     structures = FALSE
   )
   eta <- hmc_eta_draws(unpacked, design)
+  if (!is.null(w_pred)) {
+    eta$eta_num <- eta$eta_num + w_pred
+    if (isTRUE(w_shared)) eta$eta_denom <- eta$eta_denom + w_pred
+  }
   hmc_response_draws(eta, fit_model_type(object), type)
 }
 

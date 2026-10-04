@@ -4,11 +4,23 @@
 \alias{compute_predictions_hmc}
 \title{Compute predictions for HMC backend}
 \usage{
-compute_predictions_hmc(object, pred_data, type)
+compute_predictions_hmc(
+  object,
+  pred_data,
+  type,
+  w_pred = NULL,
+  w_shared = TRUE
+)
+}
+\arguments{
+\item{w_pred}{Draws of the field at the new rows (draws by rows), or \code{NULL}}
+
+\item{w_shared}{Whether the field enters the denominator's predictor too}
 }
 \description{
-Fixed effects and random effects, remapped onto the new data. The structured
-blocks are added by \code{predict_spatial_hmc()}, which knows how to carry a field
-to locations the fit did not see.
+Fixed effects and random effects, remapped onto the new data, plus the
+spatial field at the new rows when \code{predict_spatial_hmc()} supplies one. The
+field enters the linear predictors, and the response is taken once from
+them, as \code{fitted()} takes it.
 }
 \keyword{internal}
