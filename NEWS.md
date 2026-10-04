@@ -103,15 +103,26 @@
   - `summary()` lists every fixed effect of a one-process fit; it listed the
     intercept only (#91).
 
-* **The SoftAbs divergence retry is off by default (#86).** `control$riemannian`
-  used to resolve to an automatic setting that switched the retry on for BYM2
-  and ICAR fits with a dense mass matrix. The retry replaces a divergent NUTS
-  trajectory with a second one under a Hessian-based metric, so which kernel
-  moves the chain depends on the current state and no acceptance correction
-  covers the choice. On the engine's copy of the scheme (gcol33/tulpa#937,
-  Neal's funnel) a seed settled in the neck with 451 divergent transitions
-  against 6 without it. `control = list(riemannian = TRUE)` still enables it;
-  the automatic setting is removed.
+* **The SoftAbs divergence retry is replaced by a WALNUTS transition (#86).**
+  `control$riemannian` used to resolve to an automatic setting that switched
+  the retry on for BYM2 and ICAR fits with a dense mass matrix. The retry
+  replaced a divergent NUTS trajectory with a second one under a
+  Hessian-based metric, so which kernel moved the chain depended on the
+  current state and no acceptance correction covered the choice. On the
+  engine's copy of the scheme (gcol33/tulpa#937, Neal's funnel) a seed settled
+  in the neck with 451 divergent transitions against 6 without it. The retry,
+  its finite-difference Hessian and `control$riemannian` are removed.
+  `control = list(walnuts = TRUE)` runs each trajectory as the engine's
+  WALNUTS transition (`<tulpa/walnuts.h>`, the code tulpa's own sampler runs):
+  every macro step takes the coarsest leapfrog subdivision that keeps the
+  joint log density within tolerance, and only if the reversed step picks the
+  same one, so the kernel is exact. On a BYM2 field over 12 units with one
+  observation each at `adapt_delta = 0.5`, NUTS diverged 2 to 122 times over
+  5 seeds and WALNUTS never, and both sat within 0.06 reference SDs of a long
+  `adapt_delta = 0.95` NUTS run on every fixed effect and hyperparameter, with
+  SD ratios 0.93 to 1.05 under WALNUTS. NUTS stays the default, and its draws
+  are bit-identical to those before the change. Needs tulpa with
+  `<tulpa/walnuts.h>` (gcol33/tulpa@7fddf507).
 
 * **`mcmc_diagnostics()` is gone; use `diagnostics()` (#82).** It was an
   exported `lifecycle::deprecate_warn()` shim forwarding to `diagnostics()`,

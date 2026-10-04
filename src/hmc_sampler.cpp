@@ -3,6 +3,7 @@
 // Provides Stan-free Bayesian inference for all ratiod models
 
 #include "hmc_sampler.h"
+#include <tulpa/walnuts.h>
 #include "omp_chain_team.h"
 #include "tls_workspace.h"
 #include "linalg_fast.h"
@@ -9411,99 +9412,40 @@ TreeStats build_tree_fast(
 }
 
 // =====================================================================
-// SoftAbs per-trajectory metric (Riemannian-like divergence retry)
+// The WALNUTS model over this sampler's metric
 // =====================================================================
 
-void compute_hessian_finite_diff(
-    const std::vector<double>& params,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::vector<double>& hessian,
-    double h
-) {
-  int p = static_cast<int>(params.size());
-  hessian.resize(static_cast<size_t>(p) * p);
+// What tulpa::walnuts_transition() reads of a chain: the dispatched gradient,
+// and the kinetic energy, metric product and momentum draw of the adapted
+// mass matrix, with the drift theta += step * M^-1 rho through the same
+// product the NUTS U-turn criterion uses.
+struct RatioWalnutsModel {
+  const DenseMassMatrix& mass;
+  GradientFn gradient_fn;
+  const ModelData& data;
+  const ParamLayout& layout;
+  int n;
 
-  // Base gradient
-  std::vector<double> grad_base(p);
-  compute_gradient(params, data, layout, grad_base);
-
-  // Perturb each parameter and compute column of Hessian
-  std::vector<double> params_pert = params;
-  std::vector<double> grad_pert(p);
-  for (int i = 0; i < p; i++) {
-    double orig = params_pert[i];
-    double hi = std::max(h, h * std::abs(orig));  // relative step for large params
-    params_pert[i] = orig + hi;
-    compute_gradient(params_pert, data, layout, grad_pert);
-    for (int j = 0; j < p; j++) {
-      hessian[static_cast<size_t>(i) * p + j] = (grad_pert[j] - grad_base[j]) / hi;
-    }
-    params_pert[i] = orig;
+  void gradient(const std::vector<double>& theta, std::vector<double>& grad,
+                double* log_density) {
+    gradient_fn(theta, data, layout, grad, log_density);
   }
-
-  // Symmetrize: H = 0.5 * (H + H^T)
-  for (int i = 0; i < p; i++) {
-    for (int j = i + 1; j < p; j++) {
-      double avg = 0.5 * (hessian[static_cast<size_t>(i) * p + j] +
-                          hessian[static_cast<size_t>(j) * p + i]);
-      hessian[static_cast<size_t>(i) * p + j] = avg;
-      hessian[static_cast<size_t>(j) * p + i] = avg;
-    }
+  double kinetic_energy(const double* rho) const {
+    return mass.kinetic_energy(rho);
   }
-}
-
-bool compute_softabs_metric(
-    const std::vector<double>& neg_hessian,
-    int p,
-    double alpha,
-    std::vector<double>& G_inv,
-    std::vector<double>& L_G_inv
-) {
-  // Map to Eigen (column-major)
-  Eigen::Map<const Eigen::MatrixXd> H_map(neg_hessian.data(), p, p);
-
-  // Eigendecomposition (symmetric)
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(H_map);
-  if (eigen.info() != Eigen::Success) return false;
-
-  const auto& lambdas = eigen.eigenvalues();
-  const auto& Q = eigen.eigenvectors();
-
-  // Apply SoftAbs: f(λ) = λ * coth(α * λ)
-  // Properties: always positive, f(|λ|>>0) ≈ |λ|, f(0) → 1/α
-  Eigen::VectorXd softabs_inv_eig(p);
-  for (int i = 0; i < p; i++) {
-    double lam = lambdas(i);
-    double al = alpha * lam;
-    double f;
-    if (std::abs(al) > 20.0) {
-      f = std::abs(lam);
-    } else if (std::abs(al) < 1e-10) {
-      f = 1.0 / alpha;
-    } else {
-      f = lam * std::cosh(al) / std::sinh(al);
-    }
-    f = std::max(f, 1e-6);  // floor to ensure positive definiteness
-    softabs_inv_eig(i) = 1.0 / f;
+  void inv_mass_times_p(const double* rho, double* out) const {
+    mass.inv_mass_times_p(rho, out);
   }
-
-  // Reconstruct G^{-1} = Q diag(1/f(λ)) Q^T
-  Eigen::MatrixXd G_inv_mat = Q * softabs_inv_eig.asDiagonal() * Q.transpose();
-
-  // Cholesky of G^{-1}
-  Eigen::LLT<Eigen::MatrixXd> llt(G_inv_mat);
-  if (llt.info() != Eigen::Success) return false;
-  Eigen::MatrixXd L_mat = llt.matrixL();
-
-  // Copy to output (column-major)
-  G_inv.resize(static_cast<size_t>(p) * p);
-  L_G_inv.resize(static_cast<size_t>(p) * p);
-  Eigen::Map<Eigen::MatrixXd>(G_inv.data(), p, p) = G_inv_mat;
-  Eigen::Map<Eigen::MatrixXd>(L_G_inv.data(), p, p) = L_mat;
-
-  return true;
-}
+  void drift(double step, double* theta, const double* rho,
+             double* scratch) const {
+    mass.inv_mass_times_p(rho, scratch);
+    for (int i = 0; i < n; i++) theta[i] += step * scratch[i];
+  }
+  template <class Rng>
+  void sample_momentum(double* rho, Rng& rng) const {
+    mass.sample_momentum(rho, rng);
+  }
+};
 
 // =====================================================================
 // Run single HMC chain
@@ -9523,7 +9465,7 @@ HMCResultCpp run_hmc_chain_cpp(
     int max_treedepth,
     MassMatrixType metric_type,
     double adapt_delta,
-    int riemannian
+    const tulpa::WalnutsConfig* walnuts
 ) {
   int n_params = q_init.size();
   int n_sample = n_iter - n_warmup;
@@ -10157,23 +10099,15 @@ HMCResultCpp run_hmc_chain_cpp(
   int nuts_probe_maxd = 0;  // Count of maxd hits in probe window
   bool nuts_probing = use_nuts && (L == 0);  // Only probe when using NUTS by default
 
-  // SoftAbs divergence retry: compute a local Hessian-based metric on
-  // divergent trajectories and retry. Active only when requested.
-  bool use_softabs_retry = (riemannian == 1);
-  // Disable if not using NUTS (SoftAbs retry only makes sense with NUTS)
-  if (!use_nuts) use_softabs_retry = false;
-  int softabs_retries = 0;
-  int softabs_successes = 0;
-  constexpr int SOFTABS_MAX_RETRIES = 3;  // Up to 3 retry attempts per divergence
-
-  // Persistent SoftAbs metric: once computed, reuse for
-  // all subsequent trajectories. Initialized at warmup→sampling transition
-  // or on first divergence, whichever comes first.
-  bool softabs_metric_active = false;
-  DenseMassMatrix softabs_persistent_mass;
-  double softabs_persistent_eps = 0.0;
-  if (use_softabs_retry) {
-    softabs_persistent_mass.init(n_params, MassMatrixType::DENSE);
+  // WALNUTS in place of the NUTS trajectory (tulpa/walnuts.h): an exact kernel
+  // whose macro step is subdivided where the local curvature needs it.
+  // `epsilon` is the macro step; dual averaging tunes it on the mean
+  // acceptance of each macro step's coarsest subdivision.
+  const bool use_walnuts = (walnuts != nullptr) && use_nuts;
+  tulpa::WalnutsWorkspace walnuts_ws;
+  if (use_walnuts) {
+    walnuts_ws.init(n_params, max_treedepth);
+    result.sampler = "WALNUTS";
   }
 
   int warmup_total_leapfrog = 0;  // TEMP: diagnostic counter
@@ -10342,6 +10276,17 @@ HMCResultCpp run_hmc_chain_cpp(
     int iter_treedepth = 0;
 
     if (use_nuts && !(use_lbfgs && !lbfgs_warmup_done)) {
+      if (use_walnuts) {
+        RatioWalnutsModel walnuts_model{mass, nuts_ws.gradient_fn, data,
+                                        layout, n_params};
+        tulpa::WalnutsTransitionResult w = tulpa::walnuts_transition(
+          q, current_grad, log_prob_current, epsilon, max_treedepth,
+          *walnuts, walnuts_model, walnuts_ws, rng);
+        alpha = w.mean_accept;
+        divergent = w.divergent;
+        iter_n_leapfrog = w.n_grad;
+        iter_treedepth = w.depth;
+      } else {
       // -----------------------------------------------------------------
       // NUTS: No-U-Turn Sampler (optimized zero-allocation path)
       // -----------------------------------------------------------------
@@ -10536,197 +10481,16 @@ HMCResultCpp run_hmc_chain_cpp(
         if (!persist) break;
       }
 
-      // SoftAbs divergence retry: if trajectory diverged,
-      // compute local Hessian-based metric and retry up to SOFTABS_MAX_RETRIES
-      // times, halving step size each attempt. On first successful metric
-      // computation, persist it for all subsequent trajectories.
-      if (divergent && !is_warmup && use_softabs_retry) {
-        softabs_retries++;
-
-        // Compute fresh Hessian at current position (p+1 gradient evals)
-        std::vector<double> hessian_buf;
-        compute_hessian_finite_diff(q, data, layout, hessian_buf);
-        for (auto& v : hessian_buf) v = -v;  // Negate: -H = curvature
-
-        std::vector<double> G_inv_buf, L_G_inv_buf;
-        bool metric_ok = compute_softabs_metric(
-          hessian_buf, n_params, 1.0, G_inv_buf, L_G_inv_buf
-        );
-
-        if (metric_ok) {
-          // Update persistent SoftAbs metric for retry use only.
-          // Do NOT override main mass/epsilon — warmup-adapted values work better
-          // for general trajectories. SoftAbs is rescue-only.
-          softabs_persistent_mass.set_from_metric(G_inv_buf, L_G_inv_buf);
-          double eps_base = find_reasonable_epsilon_dense(
-            q, data, layout, rng, softabs_persistent_mass);
-          softabs_persistent_eps = eps_base;
-          softabs_metric_active = true;
-
-          // Try up to SOFTABS_MAX_RETRIES times, halving the step size
-          // each attempt
-          for (int retry_attempt = 0; retry_attempt < SOFTABS_MAX_RETRIES; retry_attempt++) {
-            double eps_retry = eps_base * std::pow(0.5, retry_attempt);
-
-            // Sample new momentum and re-run NUTS trajectory
-            softabs_persistent_mass.sample_momentum(p.data(), rng);
-            double H0_retry = nuts_compute_hamiltonian_fast(
-              log_prob_current, p.data(), softabs_persistent_mass, n_params
-            );
-
-            // Load current state into workspace
-            nuts_ws.load_node(NUTSWorkspace::NODE_LEFT_SLOT,
-                              q.data(), p.data(), current_grad.data(), log_prob_current);
-            nuts_ws.load_node(NUTSWorkspace::NODE_RIGHT_SLOT,
-                              q.data(), p.data(), current_grad.data(), log_prob_current);
-
-            std::memcpy(q_proposal_data.data(), q.data(), n_params * sizeof(double));
-            std::memcpy(grad_proposal_data.data(), current_grad.data(), n_params * sizeof(double));
-            log_prob_proposal = log_prob_current;
-            sum_log_weight = 0.0;
-            total_leapfrog = 0;
-            sum_accept_prob = 0.0;
-            bool retry_divergent = false;
-
-            // Full NUTS tree with SoftAbs metric + 3-juncture U-turn
-            std::memcpy(rho.data(), p.data(), n_params * sizeof(double));
-            std::fill(rho_bck.begin(), rho_bck.end(), 0.0);
-            std::fill(rho_fwd.begin(), rho_fwd.end(), 0.0);
-            softabs_persistent_mass.inv_mass_times_p(p.data(), p_sharp_init.data());
-            std::copy(p.begin(), p.end(), p_fwd_beg.begin());
-            std::copy(p.begin(), p.end(), p_fwd_end.begin());
-            std::copy(p.begin(), p.end(), p_bck_beg.begin());
-            std::copy(p.begin(), p.end(), p_bck_end.begin());
-            std::copy(p_sharp_init.begin(), p_sharp_init.end(), p_sharp_fwd_beg.begin());
-            std::copy(p_sharp_init.begin(), p_sharp_init.end(), p_sharp_fwd_end.begin());
-            std::copy(p_sharp_init.begin(), p_sharp_init.end(), p_sharp_bck_beg.begin());
-            std::copy(p_sharp_init.begin(), p_sharp_init.end(), p_sharp_bck_end.begin());
-
-            int retry_treedepth = 0;
-            for (int j = 0; j < max_treedepth; j++) {
-              std::uniform_int_distribution<int> dir_dist(0, 1);
-              int direction = 2 * dir_dist(rng) - 1;
-
-              nuts_ws.reset_tree();
-              int start_slot = nuts_ws.alloc_slot();
-              if (start_slot < 0) break;
-              if (direction == 1) {
-                nuts_ws.copy_node(start_slot, NUTSWorkspace::NODE_RIGHT_SLOT);
-              } else {
-                nuts_ws.copy_node(start_slot, NUTSWorkspace::NODE_LEFT_SLOT);
-              }
-
-              if (direction == 1) {
-                std::memcpy(rho_bck.data(), rho.data(), n_params * sizeof(double));
-                std::memcpy(p_bck_beg.data(), p_fwd_end.data(), n_params * sizeof(double));
-                std::memcpy(p_sharp_bck_beg.data(), p_sharp_fwd_end.data(), n_params * sizeof(double));
-              } else {
-                std::memcpy(rho_fwd.data(), rho.data(), n_params * sizeof(double));
-                std::memcpy(p_fwd_beg.data(), p_bck_end.data(), n_params * sizeof(double));
-                std::memcpy(p_sharp_fwd_beg.data(), p_sharp_bck_end.data(), n_params * sizeof(double));
-              }
-
-              TreeStats subtree = build_tree_fast(
-                nuts_ws, start_slot, direction, j,
-                eps_retry, softabs_persistent_mass, H0_retry, 1000.0,
-                data, layout, rng
-              );
-
-              total_leapfrog += subtree.n_leapfrog;
-              sum_accept_prob += subtree.sum_accept_prob;
-              if (subtree.divergent) retry_divergent = true;
-
-              if (!subtree.stop) {
-                double log_sum_weight_subtree = subtree.sum_log_weight;
-                double new_sum_log_weight = nuts_log_sum_exp(sum_log_weight, log_sum_weight_subtree);
-                double accept_prob_subtree;
-                if (log_sum_weight_subtree > new_sum_log_weight) {
-                  accept_prob_subtree = 1.0;
-                } else {
-                  accept_prob_subtree = std::exp(log_sum_weight_subtree - new_sum_log_weight);
-                }
-                if (!std::isfinite(accept_prob_subtree)) accept_prob_subtree = 0.0;
-
-                std::uniform_real_distribution<double> unif01(0.0, 1.0);
-                if (unif01(rng) < accept_prob_subtree) {
-                  std::memcpy(q_proposal_data.data(), nuts_ws.q_at(subtree.proposal_slot),
-                              n_params * sizeof(double));
-                  std::memcpy(grad_proposal_data.data(), nuts_ws.grad_at(subtree.proposal_slot),
-                              n_params * sizeof(double));
-                  log_prob_proposal = subtree.log_prob_proposal;
-                }
-                sum_log_weight = new_sum_log_weight;
-              }
-
-              if (direction == 1) {
-                nuts_ws.copy_node(NUTSWorkspace::NODE_RIGHT_SLOT, subtree.right_slot);
-                std::memcpy(rho_fwd.data(), subtree.rho.data(), n_params * sizeof(double));
-                std::memcpy(p_fwd_beg.data(), subtree.p_beg.data(), n_params * sizeof(double));
-                std::memcpy(p_fwd_end.data(), subtree.p_end.data(), n_params * sizeof(double));
-                std::memcpy(p_sharp_fwd_beg.data(), subtree.p_sharp_beg.data(), n_params * sizeof(double));
-                std::memcpy(p_sharp_fwd_end.data(), subtree.p_sharp_end.data(), n_params * sizeof(double));
-              } else {
-                nuts_ws.copy_node(NUTSWorkspace::NODE_LEFT_SLOT, subtree.left_slot);
-                std::memcpy(rho_bck.data(), subtree.rho.data(), n_params * sizeof(double));
-                std::memcpy(p_bck_beg.data(), subtree.p_beg.data(), n_params * sizeof(double));
-                std::memcpy(p_bck_end.data(), subtree.p_end.data(), n_params * sizeof(double));
-                std::memcpy(p_sharp_bck_beg.data(), subtree.p_sharp_beg.data(), n_params * sizeof(double));
-                std::memcpy(p_sharp_bck_end.data(), subtree.p_sharp_end.data(), n_params * sizeof(double));
-              }
-
-              for (int i = 0; i < n_params; i++) {
-                rho[i] = rho_bck[i] + rho_fwd[i];
-              }
-              retry_treedepth = j + 1;
-
-              if (subtree.stop) break;
-
-              bool persist = compute_criterion(p_sharp_bck_end.data(), p_sharp_fwd_end.data(),
-                                               rho.data(), n_params);
-              auto& rho_seam_retry = nuts_ws.iter_rho_seam;
-              for (int i = 0; i < n_params; i++) {
-                rho_seam_retry[i] = rho_bck[i] + p_fwd_beg[i];
-              }
-              persist &= compute_criterion(p_sharp_bck_end.data(), p_sharp_fwd_beg.data(),
-                                            rho_seam_retry.data(), n_params);
-              for (int i = 0; i < n_params; i++) {
-                rho_seam_retry[i] = rho_fwd[i] + p_bck_beg[i];
-              }
-              persist &= compute_criterion(p_sharp_bck_beg.data(), p_sharp_fwd_end.data(),
-                                            rho_seam_retry.data(), n_params);
-              if (!persist) break;
-            }
-
-            // If retry succeeded (no divergence), accept and stop retrying
-            if (!retry_divergent) {
-              divergent = false;
-              iter_treedepth = retry_treedepth;
-              softabs_successes++;
-              alpha = (total_leapfrog > 0) ? (sum_accept_prob / total_leapfrog) : 0.0;
-              iter_n_leapfrog = total_leapfrog;
-              break;  // Success — stop retry loop
-            }
-            // Otherwise: try again with halved step size (next iteration)
-          }  // end retry_attempt loop
-
-          // If all retries failed, update stats from last attempt
-          if (divergent) {
-            alpha = (total_leapfrog > 0) ? (sum_accept_prob / total_leapfrog) : 0.0;
-            iter_n_leapfrog = total_leapfrog;
-          }
-        }
-        // else: metric computation failed, keep original divergent result
-      }
-
       // Accept proposal: copy from persistent proposal buffers (memcpy, no alloc)
       std::memcpy(q.data(), q_proposal_data.data(), n_params * sizeof(double));
       std::memcpy(current_grad.data(), grad_proposal_data.data(), n_params * sizeof(double));
       log_prob_current = log_prob_proposal;
-      n_accept++;
 
       // Average acceptance statistic for dual averaging
       alpha = (total_leapfrog > 0) ? (sum_accept_prob / total_leapfrog) : 0.0;
       iter_n_leapfrog = total_leapfrog;
+      }
+      n_accept++;
 
       if (divergent) n_divergent++;
       if (iter_treedepth >= max_treedepth) result.n_max_treedepth++;
@@ -10923,29 +10687,6 @@ HMCResultCpp run_hmc_chain_cpp(
           if (verbose) {
             REprintf("  [METRIC] Warmup done: epsilon=%.6f, mass.type=%s, mass.adapted=%d\n",
                      epsilon, metric_name(mass.type), (int)mass.adapted);
-          }
-          // Proactive SoftAbs metric at the warmup→sampling transition:
-          // Pre-compute SoftAbs metric so it's ready for retry attempts.
-          // Do NOT override main mass/epsilon — warmup-adapted values are better
-          // for general sampling. SoftAbs is only used as rescue on divergences.
-          if (use_softabs_retry && !softabs_metric_active) {
-            std::vector<double> hessian_warmup_end;
-            compute_hessian_finite_diff(q, data, layout, hessian_warmup_end);
-            for (auto& v : hessian_warmup_end) v = -v;
-
-            std::vector<double> G_inv_init, L_G_inv_init;
-            if (compute_softabs_metric(hessian_warmup_end, n_params, 1.0,
-                                       G_inv_init, L_G_inv_init)) {
-              softabs_persistent_mass.set_from_metric(G_inv_init, L_G_inv_init);
-              softabs_persistent_eps = find_reasonable_epsilon_dense(
-                q, data, layout, rng, softabs_persistent_mass);
-              softabs_metric_active = true;
-              // Note: main mass and epsilon are NOT overridden
-              if (verbose) {
-                REprintf("  [SoftAbs] Proactive metric pre-computed at warmup end: retry_eps=%.6f\n",
-                         softabs_persistent_eps);
-              }
-            }
           }
         }
         // Print tree depth for last 10 warmup iterations
@@ -11278,14 +11019,6 @@ HMCResultCpp run_hmc_chain_cpp(
              warmup_total_leapfrog + sampling_total_lf, result.epsilon);
   }
 
-  if (verbose && (softabs_retries > 0 || softabs_metric_active)) {
-    REprintf("  [SoftAbs] Chain %d: metric=%s, %d divergent retried (up to %d attempts), %d resolved (%d remained)\n",
-             chain_id + 1,
-             softabs_metric_active ? "active" : "inactive",
-             softabs_retries, SOFTABS_MAX_RETRIES, softabs_successes,
-             softabs_retries - softabs_successes);
-  }
-
   return result;
 }
 
@@ -11303,14 +11036,14 @@ HMCResult run_hmc_chain(
     int max_treedepth,
     MassMatrixType metric_type,
     double adapt_delta,
-    int riemannian
+    const tulpa::WalnutsConfig* walnuts
 ) {
   // Runtime gradient check: compare active gradient function against numerical
   verify_gradient_or_fallback(q_init, data, layout);
 
   // Run C++ version - pass verbose through for debugging
   HMCResultCpp cpp_result = run_hmc_chain_cpp(
-    q_init, data, layout, n_iter, n_warmup, L, chain_id, seed, verbose, max_treedepth, metric_type, adapt_delta, riemannian
+    q_init, data, layout, n_iter, n_warmup, L, chain_id, seed, verbose, max_treedepth, metric_type, adapt_delta, walnuts
   );
 
   // Convert to R result
@@ -11345,7 +11078,7 @@ std::vector<HMCResult> run_hmc_parallel_chains(
     int max_treedepth,
     MassMatrixType metric_type,
     double adapt_delta,
-    int riemannian
+    const tulpa::WalnutsConfig* walnuts
 ) {
   ParamLayout layout = compute_param_layout(data);
   int n_params = layout.total_params;
@@ -11375,14 +11108,14 @@ std::vector<HMCResult> run_hmc_parallel_chains(
     ratiod_omp::for_each_chain(n_chains, max_concurrent, [&](int c) {
       cpp_results[c] = run_hmc_chain_cpp(
         q_init, data, layout,
-        n_iter, n_warmup, L, c, seed, false, max_treedepth, metric_type, adapt_delta, riemannian
+        n_iter, n_warmup, L, c, seed, false, max_treedepth, metric_type, adapt_delta, walnuts
       );
     });
   } else {
     // Single chain - run sequentially with verbose output
     cpp_results[0] = run_hmc_chain_cpp(
       q_init, data, layout,
-      n_iter, n_warmup, L, 0, seed, verbose, max_treedepth, metric_type, adapt_delta, riemannian
+      n_iter, n_warmup, L, 0, seed, verbose, max_treedepth, metric_type, adapt_delta, walnuts
     );
   }
 
@@ -11450,7 +11183,7 @@ Rcpp::List cpp_hmc_fit(
     int max_treedepth = 10,
     std::string metric_str = "auto",
     double adapt_delta = -1.0,
-    int riemannian = 0,
+    bool walnuts = false,
     int n_cores = 0
 ) {
   using namespace ratiod_hmc;
@@ -11458,6 +11191,9 @@ Rcpp::List cpp_hmc_fit(
   // Set global gradient mode from R parameter
   GradientMode grad_mode = parse_gradient_mode(gradient_mode_str);
   set_gradient_mode(grad_mode);
+
+  const tulpa::WalnutsConfig walnuts_cfg;
+  const tulpa::WalnutsConfig* walnuts_ptr = walnuts ? &walnuts_cfg : nullptr;
 
   // Parse metric type
   MassMatrixType metric_type = parse_metric_type(metric_str);
@@ -11712,7 +11448,7 @@ Rcpp::List cpp_hmc_fit(
   if (n_chains == 1) {
     ParamLayout layout = compute_param_layout(data);
     HMCResult result = run_hmc_chain(
-      q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth, metric_type, adapt_delta, riemannian
+      q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth, metric_type, adapt_delta, walnuts_ptr
     );
 
     Rcpp::List ret = Rcpp::List::create(
@@ -11743,7 +11479,7 @@ Rcpp::List cpp_hmc_fit(
   } else {
     // Multiple chains
     std::vector<HMCResult> results = run_hmc_parallel_chains(
-      q0, data, n_iter, n_warmup, L, n_chains, seed, verbose, max_treedepth, metric_type, adapt_delta, riemannian
+      q0, data, n_iter, n_warmup, L, n_chains, seed, verbose, max_treedepth, metric_type, adapt_delta, walnuts_ptr
     );
 
     // Combine results
@@ -12267,7 +12003,7 @@ Rcpp::List cpp_hmc_fit_gp(
     ParamLayout layout = compute_param_layout(data);
     HMCResult result = run_hmc_chain(
       q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth,
-      metric_type, adapt_delta, -1
+      metric_type, adapt_delta, nullptr
     );
 
     return Rcpp::List::create(
@@ -12289,7 +12025,7 @@ Rcpp::List cpp_hmc_fit_gp(
     // Multiple chains
     std::vector<HMCResult> results = run_hmc_parallel_chains(
       q0, data, n_iter, n_warmup, L, n_chains, seed, verbose, max_treedepth,
-      metric_type, adapt_delta, -1
+      metric_type, adapt_delta, nullptr
     );
 
     // Combine results

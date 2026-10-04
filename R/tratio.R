@@ -101,13 +101,13 @@
 #'     random slopes, BYM2, HSGP, TVC); `"diag"` diagonal (faster per step, may
 #'     need deeper trees); `"block_diag"` per parameter group. Auto falls back
 #'     to diagonal when p > 2000.
-#'   - `riemannian`: enable per-trajectory SoftAbs metric retry on divergence,
-#'     computing a local Hessian-based metric and retrying. `FALSE` (default)
-#'     leaves it off: which kernel moves the chain then depends on whether
-#'     the first trajectory diverged, and no acceptance correction covers that
-#'     choice, so the combined kernel is not guaranteed to leave the target
-#'     invariant. Costs about (p+1) gradient evaluations per divergent
-#'     trajectory only.
+#'   - `walnuts`: run each NUTS trajectory as a WALNUTS transition
+#'     (Bou-Rabee et al. 2025, tulpa's `<tulpa/walnuts.h>`), which integrates
+#'     each macro step at the coarsest leapfrog subdivision that keeps the
+#'     joint log density within tolerance and keeps it only if the reversed
+#'     step picks the same one. The kernel is exact, and its step follows the
+#'     local curvature, which is what a funnel-shaped posterior (a hierarchical
+#'     scale near zero) needs. `FALSE` (default) runs NUTS.
 #'   - `gradient_mode`: `"auto"` (default) selects the fastest available;
 #'     `"H"` hand-coded analytical (fastest); `"A_r"` arena reverse-mode
 #'     autodiff (fast, O(N)); `"A"` forward-mode (O(p*N), thread-safe);
@@ -220,7 +220,7 @@ tratio <- function(formula,
   metric        <- ctrl$metric
   adapt_delta   <- ctrl$adapt_delta
   max_treedepth <- ctrl$max_treedepth
-  riemannian    <- ctrl$riemannian
+  walnuts       <- ctrl$walnuts
   L             <- as.integer(ctrl$L %||% 0L)
 
   # Test suites silence fit chatter to keep it out of the output buffer; an
@@ -562,7 +562,7 @@ tratio <- function(formula,
       gradient_mode = gradient_mode,
       re_param = re_param,
       metric = metric,
-      riemannian = riemannian
+      walnuts = walnuts
     )
 
     # Add mode information

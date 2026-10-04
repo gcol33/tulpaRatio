@@ -37,8 +37,8 @@ cpp_gpu_info <- function() {
     .Call(`_tulpaRatio_cpp_gpu_info`)
 }
 
-cpp_hmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, model_type_str, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str = "auto", max_treedepth = 10L, metric_str = "auto", adapt_delta = -1.0, riemannian = 0L, n_cores = 0L) {
-    .Call(`_tulpaRatio_cpp_hmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, model_type_str, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str, max_treedepth, metric_str, adapt_delta, riemannian, n_cores)
+cpp_hmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, model_type_str, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str = "auto", max_treedepth = 10L, metric_str = "auto", adapt_delta = -1.0, walnuts = FALSE, n_cores = 0L) {
+    .Call(`_tulpaRatio_cpp_hmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, model_type_str, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str, max_treedepth, metric_str, adapt_delta, walnuts, n_cores)
 }
 
 cpp_get_max_threads <- function() {

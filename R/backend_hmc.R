@@ -62,7 +62,8 @@ NULL
 #' @param gradient_mode Gradient computation method: "auto", "H", "A_r", "A", "N"
 #' @param re_param Random effects parameterization: "centered" or "noncentered"
 #' @param metric Mass matrix type: "auto" (default), "diag", "dense", or "block_diag"
-#' @param riemannian Use Riemannian (SoftAbs) metric: TRUE or FALSE (default)
+#' @param walnuts Run each NUTS trajectory as a WALNUTS transition: TRUE or
+#'   FALSE (default)
 #'
 #' @return A ratiod_fit object
 #' @keywords internal
@@ -87,7 +88,7 @@ fit_hmc <- function(formula,
                     gradient_mode = "auto",
                     re_param = "noncentered",
                     metric = "auto",
-                    riemannian = FALSE) {
+                    walnuts = FALSE) {
 
   # Set cores. Defaults to the machine's OpenMP cap, matching how the PG and
   # Laplace backends default their own (purely within-chain) `cores` budget:
@@ -105,8 +106,6 @@ fit_hmc <- function(formula,
 
   # Resolve adapt_delta: NULL → -1.0 (C++ sentinel for auto-selection)
   adapt_delta_value <- if (is.null(adapt_delta)) -1.0 else as.double(adapt_delta)
-
-  riemannian_value <- as.integer(isTRUE(riemannian))
 
   # Get model type
   model_type <- get_hmc_model_type(family)
@@ -982,7 +981,7 @@ fit_hmc <- function(formula,
         max_treedepth = as.integer(max_treedepth),
         metric_str = metric,
         adapt_delta = adapt_delta_value,
-        riemannian = riemannian_value,
+        walnuts = isTRUE(walnuts),
         n_cores = as.integer(concurrent_chains)
       )
     }

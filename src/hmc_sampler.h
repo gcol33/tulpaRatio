@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 #include <random>
+#include <tulpa/walnuts_config.h>
 #include "linalg_fast.h"
 #include "hmc_temporal.h"
 #include "hmc_temporal_gp.h"
@@ -1569,19 +1570,6 @@ struct DenseMassMatrix {
     }
   }
 
-  // Set metric directly from precomputed G^{-1} and its Cholesky L.
-  // Used by SoftAbs per-trajectory metric retry. No shrinkage applied.
-  void set_from_metric(const std::vector<double>& g_inv,
-                       const std::vector<double>& l_g_inv) {
-    inv_mass_dense = g_inv;
-    L_inv_mass = l_g_inv;
-    for (int i = 0; i < n; i++) {
-      inv_mass_diag[i] = g_inv[static_cast<size_t>(i) * n + i];
-      sqrt_mass_diag[i] = 1.0 / std::sqrt(std::max(inv_mass_diag[i], 1e-10));
-    }
-    adapted = true;
-  }
-
   // Set diagonal mass from WelfordStats output (same interface as before)
   // When type==DENSE, also populate the dense matrices as diagonal so that
   // the dense code paths (sample_momentum, kinetic_energy, inv_mass_times_p)
@@ -1985,8 +1973,8 @@ double find_reasonable_epsilon_dense(
 );
 
 // Run single HMC chain (C++ version - safe for parallel)
-// riemannian: 1 = retry divergent trajectories under a SoftAbs metric,
-//              0 = off (default)
+// walnuts: run each NUTS trajectory as a WALNUTS transition
+//          (tulpa/walnuts.h) with these settings; nullptr = NUTS.
 HMCResultCpp run_hmc_chain_cpp(
     const std::vector<double>& q_init,
     const ModelData& data,
@@ -2000,7 +1988,7 @@ HMCResultCpp run_hmc_chain_cpp(
     int max_treedepth = 10,
     MassMatrixType metric_type = MassMatrixType::DIAG,
     double adapt_delta = -1.0,
-    int riemannian = 0
+    const tulpa::WalnutsConfig* walnuts = nullptr
 );
 
 // Run single HMC chain (R wrapper)
@@ -2017,7 +2005,7 @@ HMCResult run_hmc_chain(
     int max_treedepth = 10,
     MassMatrixType metric_type = MassMatrixType::DIAG,
     double adapt_delta = -1.0,
-    int riemannian = 0
+    const tulpa::WalnutsConfig* walnuts = nullptr
 );
 
 // Run multiple chains in parallel (across-chain parallelization)
@@ -2033,33 +2021,7 @@ std::vector<HMCResult> run_hmc_parallel_chains(
     int max_treedepth = 10,
     MassMatrixType metric_type = MassMatrixType::DIAG,
     double adapt_delta = -1.0,
-    int riemannian = 0
-);
-
-// =====================================================================
-// SoftAbs per-trajectory metric (Riemannian-like divergence retry)
-// =====================================================================
-
-// Compute full Hessian via finite differences of the H-mode gradient.
-// H[i,j] = (grad_j(q + h*e_i) - grad_j(q)) / h
-// Cost: (p+1) gradient evaluations.
-void compute_hessian_finite_diff(
-    const std::vector<double>& params,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::vector<double>& hessian,
-    double h = 1e-5
-);
-
-// Compute SoftAbs metric from negative Hessian.
-// G = Q diag(f(λ_i)) Q^T where f(λ) = λ * coth(α * λ)
-// Returns G^{-1} and its Cholesky L. Returns false on failure.
-bool compute_softabs_metric(
-    const std::vector<double>& neg_hessian,
-    int p,
-    double alpha,
-    std::vector<double>& G_inv,
-    std::vector<double>& L_G_inv
+    const tulpa::WalnutsConfig* walnuts = nullptr
 );
 
 // =====================================================================

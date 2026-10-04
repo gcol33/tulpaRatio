@@ -62,7 +62,7 @@
   # NUTS / HMC.
   adapt_delta   = list(default = NULL, validate = .tratio_adapt_delta),
   max_treedepth = list(default = NULL, validate = .tratio_count),
-  riemannian    = list(default = FALSE, validate = .tratio_flag),
+  walnuts       = list(default = FALSE, validate = .tratio_flag),
   L             = list(default = NULL, validate = .tratio_nonneg_int),
   metric        = list(default = "auto",
                        choices = c("auto", "dense", "diag", "block_diag")),

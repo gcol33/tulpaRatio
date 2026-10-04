@@ -134,13 +134,13 @@ iteration.
 random slopes, BYM2, HSGP, TVC); \code{"diag"} diagonal (faster per step, may
 need deeper trees); \code{"block_diag"} per parameter group. Auto falls back
 to diagonal when p > 2000.
-\item \code{riemannian}: enable per-trajectory SoftAbs metric retry on divergence,
-computing a local Hessian-based metric and retrying. \code{FALSE} (default)
-leaves it off: which kernel moves the chain then depends on whether
-the first trajectory diverged, and no acceptance correction covers that
-choice, so the combined kernel is not guaranteed to leave the target
-invariant. Costs about (p+1) gradient evaluations per divergent
-trajectory only.
+\item \code{walnuts}: run each NUTS trajectory as a WALNUTS transition
+(Bou-Rabee et al. 2025, tulpa's \verb{<tulpa/walnuts.h>}), which integrates
+each macro step at the coarsest leapfrog subdivision that keeps the
+joint log density within tolerance and keeps it only if the reversed
+step picks the same one. The kernel is exact, and its step follows the
+local curvature, which is what a funnel-shaped posterior (a hierarchical
+scale near zero) needs. \code{FALSE} (default) runs NUTS.
 \item \code{gradient_mode}: \code{"auto"} (default) selects the fastest available;
 \code{"H"} hand-coded analytical (fastest); \code{"A_r"} arena reverse-mode
 autodiff (fast, O(N)); \code{"A"} forward-mode (O(p*N), thread-safe);
