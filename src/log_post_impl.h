@@ -1048,7 +1048,7 @@ T compute_log_post_impl(
                 double rate_sigma = 4.6;
                 log_post = log_post - rate_sigma * sigma_j + T(0.5) * log_sigma2;
 
-                T log_ls = params[layout.log_phi_svc_start + j];
+                T log_ls = params[layout.range_svc_start + j];
                 T ls_j = safe_exp(log_ls);
 
                 // LogNormal(0,1) on lengthscale
@@ -1085,17 +1085,14 @@ T compute_log_post_impl(
                 log_post = log_post + log_sigma2;
             }
 
-            // Extract phi (spatial range) parameters
+            // Range parameters: uniform on the prior interval, sampled on its
+            // logit scale (svc_range)
             svc_phi.resize(n_svc);
             for (int j = 0; j < n_svc; j++) {
-                T log_phi = params[layout.log_phi_svc_start + j];
-                svc_phi[j] = safe_exp(log_phi);
-
-                double phi_val = get_value(svc_phi[j]);
-                if (phi_val < data.svc_phi_prior_lower || phi_val > data.svc_phi_prior_upper) {
-                    return T(-INFINITY);
-                }
-                log_post = log_post + log_phi;
+                const T u = params[layout.range_svc_start + j];
+                svc_phi[j] = ratiod_svc_ad::svc_range(
+                    u, data.svc_phi_prior_lower, data.svc_phi_prior_upper);
+                log_post = log_post + ratiod_svc_ad::svc_range_log_density(u);
             }
 
             // The sampled block, and the field it stands for

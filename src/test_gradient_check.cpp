@@ -1059,7 +1059,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
 
 // A point away from the origin, so that terms which vanish at zero (a
 // sum-to-zero penalty among them) still contribute.
-std::vector<double> draw_params(const ParamLayout& layout, int n_params,
+std::vector<double> draw_params(const ModelData& data, const ParamLayout& layout,
+                                int n_params,
                                 unsigned int seed) {
   std::mt19937 rng(seed + 1000u);
   std::normal_distribution<double> rnorm(0.0, 0.35);
@@ -1081,9 +1082,19 @@ std::vector<double> draw_params(const ParamLayout& layout, int n_params,
                   layout.log_phi_st_space_idx, layout.log_phi_st_time_idx}) {
     if (idx >= 0 && idx < n_params) params[idx] += log_phi_center;
   }
-  if (layout.log_phi_svc_start >= 0) {
-    for (int j = layout.log_phi_svc_start; j < layout.log_phi_svc_end; j++) {
-      if (j < n_params) params[j] += log_phi_center;
+  // An NNGP SVC range slot holds the logit of phi on its prior interval, so
+  // the same centring is placed through svc_range_coord; the HSGP slot is a
+  // log lengthscale and shifts as the others do.
+  if (layout.range_svc_start >= 0) {
+    for (int j = layout.range_svc_start; j < layout.range_svc_end; j++) {
+      if (j >= n_params) continue;
+      if (data.svc_is_hsgp) {
+        params[j] += log_phi_center;
+      } else {
+        params[j] = ratiod_svc_ad::svc_range_coord(
+            std::exp(params[j] + log_phi_center), data.svc_phi_prior_lower,
+            data.svc_phi_prior_upper);
+      }
     }
   }
   return params;
@@ -1152,7 +1163,7 @@ Rcpp::List cpp_gradient_check(std::string field,
   // what the gap is. Report it so a caller can assert on it.
   const char* impl_gap = ratiod::log_post_impl_gap(data, layout);
 
-  std::vector<double> params = draw_params(layout, n_params, seed);
+  std::vector<double> params = draw_params(data, layout, n_params, seed);
 
   // Every AR1 correlation is drawn centred on rho = 0, so nothing in the
   // sweep reaches the edge of its range. near_unit_rho places each sampled
@@ -1296,7 +1307,7 @@ double cpp_gradient_race(std::string field,
 
   std::vector<std::vector<double>> points(n_points);
   for (int k = 0; k < n_points; k++) {
-    points[k] = draw_params(layout, n_params, seed + static_cast<unsigned int>(k));
+    points[k] = draw_params(data, layout, n_params, seed + static_cast<unsigned int>(k));
   }
 
   // Hands the calling thread a second model of the same dimensions at the same

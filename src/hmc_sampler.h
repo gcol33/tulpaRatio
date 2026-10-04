@@ -424,7 +424,9 @@ struct ParamLayout {
 
   // SVC parameters
   int log_sigma2_svc_start, log_sigma2_svc_end;  // Log spatial variance per SVC term
-  int log_phi_svc_start, log_phi_svc_end;        // Log range parameter per SVC term
+  // Range per SVC term: NNGP, the logit of phi on its prior interval
+  // (svc_range); HSGP, the log lengthscale.
+  int range_svc_start, range_svc_end;
   int svc_w_start, svc_w_end;                    // SVC values (n_obs x n_svc)
 
   // GP spatial parameters

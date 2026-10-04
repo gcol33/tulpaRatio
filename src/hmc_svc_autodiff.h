@@ -201,14 +201,37 @@ T log_prior_sigma2_svc(const T& sigma2, double scale) {
     return T(std::log(2.0 / M_PI / scale)) - safe_log(T(1.0) + sigma * sigma / T(scale * scale));
 }
 
-// Log prior for phi (range parameter): Uniform on [lower, upper]
+// The range of an NNGP term carries a uniform prior on (lower, upper) and is
+// sampled on the logit scale of that interval: phi = lower + (upper - lower) *
+// s(u), s the inverse logit. Every value of u lies inside the support, so no
+// proposal meets the -Inf edge a hard bound on log(phi) puts in the sampled
+// space. The uniform density times the Jacobian dphi/du is s(u) (1 - s(u)) up
+// to a constant, which is u's own log density.
 template<typename T>
-T log_prior_phi_svc(const T& phi, double lower, double upper) {
-    double phi_val = get_value(phi);
-    if (phi_val < lower || phi_val > upper) {
-        return T(-INFINITY);
-    }
-    return T(-std::log(upper - lower));
+T svc_range(const T& u, double lower, double upper) {
+    return T(lower) + T(upper - lower) * inv_logit(u);
+}
+
+template<typename T>
+T svc_range_log_density(const T& u) {
+    const T s = inv_logit(u);
+    return safe_log(s) + safe_log(T(1.0) - s);
+}
+
+// u for a given range: the inverse map, for a coordinate placed at a chosen phi.
+inline double svc_range_coord(double phi, double lower, double upper) {
+    const double s = (phi - lower) / (upper - lower);
+    return std::log(s) - std::log1p(-s);
+}
+
+// A gradient accumulated with respect to log(phi), carried onto u, plus the
+// derivative of u's own log density.
+inline double svc_range_grad_to_coord(double grad_log_phi, double u,
+                                      double lower, double upper) {
+    const double s = inv_logit(u);
+    const double phi = lower + (upper - lower) * s;
+    return grad_log_phi / phi * (upper - lower) * s * (1.0 - s) +
+           (1.0 - 2.0 * s);
 }
 
 } // namespace ratiod_svc_ad

@@ -2141,7 +2141,8 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
         # log_sigma2_svc (n_svc) + log_lengthscale_svc (n_svc) + beta (n_svc * m^2)
         q_init <- c(q_init, rep(0.0, 2 * n_svc + n_svc * m_total))
       } else {
-        # log_sigma2_svc (n_svc) + log_phi_svc (n_svc) + svc_w (n_svc * n_obs)
+        # log_sigma2_svc (n_svc) + range_svc (n_svc: the logit of phi on its
+        # prior interval, so 0 is the interval's midpoint) + svc_w (n_svc * n_obs)
         q_init <- c(q_init, rep(0.0, 2 * n_svc + n_svc * n_obs))
       }
     }

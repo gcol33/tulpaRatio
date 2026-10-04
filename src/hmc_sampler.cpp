@@ -509,9 +509,9 @@ ParamLayout compute_param_layout(const ModelData& data) {
     layout.log_sigma2_svc_end = idx;
 
     // Log phi/lengthscale per SVC term (spatial range)
-    layout.log_phi_svc_start = idx;
+    layout.range_svc_start = idx;
     idx += data.svc_data.n_svc;
-    layout.log_phi_svc_end = idx;
+    layout.range_svc_end = idx;
 
     // SVC spatial parameters:
     //   NNGP: w_flat[j * n_obs + i] for j in 0..n_svc-1, i in 0..n_obs-1
@@ -525,7 +525,7 @@ ParamLayout compute_param_layout(const ModelData& data) {
     layout.svc_w_end = idx;
   } else {
     layout.log_sigma2_svc_start = layout.log_sigma2_svc_end = -1;
-    layout.log_phi_svc_start = layout.log_phi_svc_end = -1;
+    layout.range_svc_start = layout.range_svc_end = -1;
     layout.svc_w_start = layout.svc_w_end = -1;
   }
 
@@ -4842,6 +4842,19 @@ void compute_gradient_msgp_temporal_handcoded(
 // Uses analytical gradients from svc_nngp_gradients for NNGP prior
 // =====================================================================
 
+// The NNGP range slots hold u with phi = svc_range(u). Every gradient term for
+// them is accumulated with respect to log(phi), as the NNGP derivatives are
+// written; this carries the sum onto u and adds u's own log density.
+static inline void svc_range_grads_to_coord(const std::vector<double>& params,
+                                            const ModelData& data,
+                                            const ParamLayout& layout,
+                                            std::vector<double>& grad) {
+    for (int k = layout.range_svc_start; k < layout.range_svc_end; k++) {
+        grad[k] = ratiod_svc_ad::svc_range_grad_to_coord(
+            grad[k], params[k], data.svc_phi_prior_lower, data.svc_phi_prior_upper);
+    }
+}
+
 void compute_gradient_svc_handcoded(
     const std::vector<double>& params,
     const ModelData& data,
@@ -4878,16 +4891,9 @@ void compute_gradient_svc_handcoded(
     double* svc_phi = svc_scratch.phi.data();
     for (int j = 0; j < n_svc; j++) {
         svc_sigma2[j] = std::exp(params[layout.log_sigma2_svc_start + j]);
-        svc_phi[j] = std::exp(params[layout.log_phi_svc_start + j]);
-
-        // Outside the uniform prior's support the density is -Inf, so the
-        // gradient is zero -- but the fused log posterior has to be written
-        // too, or the caller reads whatever was in it and cannot tell the
-        // proposal left the support.
-        if (svc_phi[j] < data.svc_phi_prior_lower || svc_phi[j] > data.svc_phi_prior_upper) {
-            if (log_post_out) *log_post_out = compute_log_post(params, data, layout);
-            return;
-        }
+        svc_phi[j] = ratiod_svc_ad::svc_range(params[layout.range_svc_start + j],
+                                              data.svc_phi_prior_lower,
+                                              data.svc_phi_prior_upper);
     }
 
     // The SVC field at the sampled coordinate, into per-thread scratch
@@ -4912,9 +4918,6 @@ void compute_gradient_svc_handcoded(
         double ratio = sigma / scale;
         double ratio_sq = ratio * ratio;
         grad[layout.log_sigma2_svc_start + j] = -ratio_sq / (1.0 + ratio_sq) + 1.0;
-
-        // Uniform prior on phi - just Jacobian
-        grad[layout.log_phi_svc_start + j] = 1.0;
     }
 
     // =========================================================================
@@ -4924,7 +4927,7 @@ void compute_gradient_svc_handcoded(
     if (!data.svc_noncentered) {
         ratiod_svc::svc_nngp_prior_grads(
             svc_w_flat, svc_sigma2, svc_phi, data.svc_data,
-            layout.svc_w_start, layout.log_sigma2_svc_start, layout.log_phi_svc_start,
+            layout.svc_w_start, layout.log_sigma2_svc_start, layout.range_svc_start,
             svc_scratch, grad.data());
     }
 
@@ -5005,7 +5008,8 @@ void compute_gradient_svc_handcoded(
     ratiod_svc::svc_field_accumulate<ratiod_svc::SVC_GRAD_SLOT>(
         svc_block, svc_sigma2, svc_phi, data.svc_data, data.svc_gp_view,
         data.svc_noncentered, svc_lik_grad, layout.svc_w_start,
-        layout.log_sigma2_svc_start, layout.log_phi_svc_start, grad.data());
+        layout.log_sigma2_svc_start, layout.range_svc_start, grad.data());
+    svc_range_grads_to_coord(params, data, layout, grad);
 
     // Non-centered RE chain rule transformation
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
@@ -5052,8 +5056,8 @@ void compute_gradient_svc_hsgp_handcoded(
                               data.model_type == ModelType::BETA_BINOMIAL);
 
     // Per-term HSGP parameters: sigma2_k, lengthscale_k, beta_k[m_total]
-    // Stored in params as: [log_sigma2_svc[0..n_svc], log_phi_svc[0..n_svc], beta[0..n_svc*m_total]]
-    // (log_phi_svc holds log_lengthscale for HSGP-SVC)
+    // Stored in params as: [log_sigma2_svc[0..n_svc], log_lengthscale_svc[0..n_svc], beta[0..n_svc*m_total]]
+    // (the range_svc slot holds the log lengthscale for HSGP-SVC)
 
     // Evaluate f_k(s_i) for each SVC term and accumulate SVC contribution to eta
     // svc_f[j][i] = Phi * (sqrt(S_j) * beta_j)  -- spatial function for SVC term j at obs i
@@ -5064,7 +5068,7 @@ void compute_gradient_svc_hsgp_handcoded(
 
     for (int j = 0; j < n_svc; j++) {
         double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
-        double lengthscale_j = std::exp(params[layout.log_phi_svc_start + j]);
+        double lengthscale_j = std::exp(params[layout.range_svc_start + j]);
         const double* beta_j = &params[layout.svc_w_start + j * m_total];
 
         // Evaluate f_j = Phi * (sqrt(S_j) ⊙ beta_j)
@@ -5086,7 +5090,7 @@ void compute_gradient_svc_hsgp_handcoded(
     // Per-term HSGP hyperparameter priors
     for (int j = 0; j < n_svc; j++) {
         double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
-        double log_ls_j = params[layout.log_phi_svc_start + j];
+        double log_ls_j = params[layout.range_svc_start + j];
 
         // PC prior on sigma: log_post += -rate*sigma + 0.5*log_sigma2
         // d/d(log_sigma2) = -0.5*rate*sigma + 0.5
@@ -5095,7 +5099,7 @@ void compute_gradient_svc_hsgp_handcoded(
         grad[layout.log_sigma2_svc_start + j] = -0.5 * rate_sigma * sigma_j + 0.5;
 
         // LogNormal(0,1) on lengthscale: d/d(log_ell) = -log_ell
-        grad[layout.log_phi_svc_start + j] = -log_ls_j;
+        grad[layout.range_svc_start + j] = -log_ls_j;
 
         // N(0,I) prior on beta: d/d(beta_j_k) = -beta_j_k
         for (int k = 0; k < m_total; k++) {
@@ -5164,7 +5168,7 @@ void compute_gradient_svc_hsgp_handcoded(
     // where dLL/d(svc_eta_i) = resid_num[i] + (shared ? resid_denom[i] : 0)
     for (int j = 0; j < n_svc; j++) {
         double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
-        double lengthscale_j = std::exp(params[layout.log_phi_svc_start + j]);
+        double lengthscale_j = std::exp(params[layout.range_svc_start + j]);
         const double* beta_j = &params[layout.svc_w_start + j * m_total];
 
         // Build grad_f for this SVC term
@@ -5192,7 +5196,7 @@ void compute_gradient_svc_hsgp_handcoded(
             grad[layout.svc_w_start + j * m_total + k] += hsgp_ws.grad_beta_out[k];
         }
         grad[layout.log_sigma2_svc_start + j] += grad_log_sigma2_j;
-        grad[layout.log_phi_svc_start + j] += grad_log_lengthscale_j;
+        grad[layout.range_svc_start + j] += grad_log_lengthscale_j;
     }
 
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
@@ -7186,13 +7190,9 @@ void compute_gradient_composite(
         svc_phi_c.resize(n_svc);
         for (int j = 0; j < n_svc; j++) {
             svc_sigma2_c[j] = std::exp(params[layout.log_sigma2_svc_start + j]);
-            svc_phi_c[j] = std::exp(params[layout.log_phi_svc_start + j]);
-            if (svc_phi_c[j] < data.svc_phi_prior_lower ||
-                svc_phi_c[j] > data.svc_phi_prior_upper) {
-                if (log_post_out && !layout.has_zi)
-                    *log_post_out = compute_log_post(params_in, data, layout);
-                return;
-            }
+            svc_phi_c[j] = ratiod_svc_ad::svc_range(params[layout.range_svc_start + j],
+                                                    data.svc_phi_prior_lower,
+                                                    data.svc_phi_prior_upper);
         }
         ratiod_svc::svc_field<ratiod_svc::SVC_GRAD_SLOT>(&params[layout.svc_w_start], svc_sigma2_c.data(),
                               svc_phi_c.data(), data.svc_data, data.svc_gp_view,
@@ -7219,7 +7219,7 @@ void compute_gradient_composite(
 
         for (int j = 0; j < n_svc; j++) {
             double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
-            double lengthscale_j = std::exp(params[layout.log_phi_svc_start + j]);
+            double lengthscale_j = std::exp(params[layout.range_svc_start + j]);
             const double* beta_j = &params[layout.svc_w_start + j * svc_m_total];
 
             ratiod_hsgp::hsgp_evaluate_ws(beta_j, sigma2_j, lengthscale_j,
@@ -7415,16 +7415,17 @@ void compute_gradient_composite(
         grad[layout.log_phi_gp_regional_idx] += 1.0;
     }
 
-    // SVC (NNGP) priors: half-Cauchy on each sigma, uniform on each range, and
-    // the NNGP field prior. Centred, that prior is placed on the UNCENTRED w and
-    // so is not projected; non-centred, it is N(0, I) on z and is seeded by
+    // SVC (NNGP) priors: half-Cauchy on each sigma, and the NNGP field prior.
+    // Centred, that prior is placed on the UNCENTRED w and so is not
+    // projected; non-centred, it is N(0, I) on z and is seeded by
     // svc_field_accumulate below. The likelihood's gradient is grad_svc_w_lik.
+    // Each range's uniform prior is u's own log density, added where the
+    // range slots are carried onto u (svc_range_grads_to_coord).
     if (has_svc_nngp) {
         for (int j = 0; j < n_svc; j++) {
             const double ratio = std::sqrt(svc_sigma2_c[j]) / data.svc_sigma2_prior_scale;
             const double ratio_sq = ratio * ratio;
             grad[layout.log_sigma2_svc_start + j] += -ratio_sq / (1.0 + ratio_sq) + 1.0;
-            grad[layout.log_phi_svc_start + j] += 1.0;
         }
         if (!data.svc_noncentered) {
             RATIOD_TLS_WORKSPACE(ratiod_svc::SVCGradWorkspace, svc_scratch);
@@ -7432,7 +7433,7 @@ void compute_gradient_composite(
             ratiod_svc::svc_nngp_prior_grads(
                 svc_w_nngp.data(), svc_sigma2_c.data(), svc_phi_c.data(),
                 data.svc_data, layout.svc_w_start, layout.log_sigma2_svc_start,
-                layout.log_phi_svc_start, svc_scratch, grad.data());
+                layout.range_svc_start, svc_scratch, grad.data());
         }
     }
 
@@ -7506,8 +7507,8 @@ void compute_gradient_composite(
             // d/d(log_sigma2) [-rate*sigma + 0.5*log_sigma2] = -0.5*rate*sigma + 0.5
             grad[layout.log_sigma2_svc_start + j] = -0.5 * rate_svc * sigma_j + 0.5;
             // LogNormal(0,1) on lengthscale: d/d(log_ls) [-0.5*log_ls^2] = -log_ls
-            double log_ls_j = params[layout.log_phi_svc_start + j];
-            grad[layout.log_phi_svc_start + j] = -log_ls_j;
+            double log_ls_j = params[layout.range_svc_start + j];
+            grad[layout.range_svc_start + j] = -log_ls_j;
             // N(0,I) prior on SVC beta
             for (int m = 0; m < svc_m_total; m++)
                 grad[layout.svc_w_start + j * svc_m_total + m] = -params[layout.svc_w_start + j * svc_m_total + m];
@@ -7985,7 +7986,8 @@ void compute_gradient_composite(
             &params[layout.svc_w_start], svc_sigma2_c.data(), svc_phi_c.data(),
             data.svc_data, data.svc_gp_view, data.svc_noncentered,
             grad_svc_w_lik.data(), layout.svc_w_start,
-            layout.log_sigma2_svc_start, layout.log_phi_svc_start, grad.data());
+            layout.log_sigma2_svc_start, layout.range_svc_start, grad.data());
+        svc_range_grads_to_coord(params, data, layout, grad);
     }
 
     // HSGP spectral density gradients
@@ -8101,7 +8103,7 @@ void compute_gradient_composite(
     if (layout.has_svc && data.has_svc && data.svc_is_hsgp) {
         for (int j = 0; j < n_svc; j++) {
             double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
-            double lengthscale_j = std::exp(params[layout.log_phi_svc_start + j]);
+            double lengthscale_j = std::exp(params[layout.range_svc_start + j]);
             const double* beta_j = &params[layout.svc_w_start + j * svc_m_total];
 
             // Re-evaluate to cache sqrt_S
@@ -8117,7 +8119,7 @@ void compute_gradient_composite(
                 data.svc_hsgp_data, svc_hsgp_ws, gls2, gll);
 
             grad[layout.log_sigma2_svc_start + j] += gls2;
-            grad[layout.log_phi_svc_start + j] += gll;
+            grad[layout.range_svc_start + j] += gll;
             for (int m = 0; m < svc_m_total; m++)
                 grad[layout.svc_w_start + j * svc_m_total + m] += svc_hsgp_ws.grad_beta_out[m];
         }
@@ -9640,11 +9642,11 @@ HMCResultCpp run_hmc_chain_cpp(
       }
     }
     if (layout.has_svc && layout.log_sigma2_svc_start >= 0 &&
-        layout.log_phi_svc_start >= 0) {
+        layout.range_svc_start >= 0) {
       int n_svc = layout.log_sigma2_svc_end - layout.log_sigma2_svc_start;
       for (int t = 0; t < n_svc; t++) {
         int sigma_idx = layout.log_sigma2_svc_start + t;
-        int phi_idx = layout.log_phi_svc_start + t;
+        int phi_idx = layout.range_svc_start + t;
         if (phi_idx == sigma_idx + n_svc) {
           // SVC sigma2 and phi are in separate contiguous blocks; can't form a 2x2 block
           // unless they're consecutive. Skip non-consecutive pairs.
@@ -9653,7 +9655,7 @@ HMCResultCpp run_hmc_chain_cpp(
       // SVC layout: [sigma2_0, sigma2_1, ..., phi_0, phi_1, ...]
       // These aren't consecutive pairs, so we'd need per-SVC blocks of non-contiguous params.
       // For now, only handle n_svc=1 where sigma2 and phi are adjacent:
-      if (n_svc == 1 && layout.log_phi_svc_start == layout.log_sigma2_svc_start + 1) {
+      if (n_svc == 1 && layout.range_svc_start == layout.log_sigma2_svc_start + 1) {
         block_specs.push_back({layout.log_sigma2_svc_start, 2});
       }
     }
@@ -10901,14 +10903,18 @@ HMCResultCpp run_hmc_chain_cpp(
           }
           // The SVC row carries the field eta reads: each term on the effect
           // scale whichever coordinate it was sampled in, centred over
-          // locations as svc_center_eta enters it.
+          // locations as svc_center_eta enters it. Each range slot carries
+          // log(phi), the unconstrained value the row has always held there.
           if (layout.has_svc && data.has_svc && !data.svc_is_hsgp &&
               data.svc_data.n_svc > 0) {
               const int n_svc_store = data.svc_data.n_svc;
               std::vector<double> svc_s2_store(n_svc_store), svc_phi_store(n_svc_store);
               for (int j = 0; j < n_svc_store; j++) {
                   svc_s2_store[j] = std::exp(q[layout.log_sigma2_svc_start + j]);
-                  svc_phi_store[j] = std::exp(q[layout.log_phi_svc_start + j]);
+                  svc_phi_store[j] = ratiod_svc_ad::svc_range(
+                      q[layout.range_svc_start + j], data.svc_phi_prior_lower,
+                      data.svc_phi_prior_upper);
+                  row[layout.range_svc_start + j] = std::log(svc_phi_store[j]);
               }
               ratiod_svc::svc_field<ratiod_svc::SVC_DENSITY_SLOT>(
                   &q[layout.svc_w_start], svc_s2_store.data(), svc_phi_store.data(),

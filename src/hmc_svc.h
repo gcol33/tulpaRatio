@@ -228,13 +228,6 @@ inline double log_prior_sigma2(double sigma2, double scale) {
   return std::log(2.0 / (M_PI * scale)) - std::log(1.0 + sigma * sigma / (scale * scale));
 }
 
-// Log prior for phi (range parameter): Uniform or exponential
-inline double log_prior_phi(double phi, double lower, double upper) {
-  // Uniform(lower, upper)
-  if (phi < lower || phi > upper) return -INFINITY;
-  return -std::log(upper - lower);
-}
-
 // Parse covariance type from string
 inline CovType parse_cov_type(const std::string& cov_str) {
   if (cov_str == "exponential") return CovType::EXPONENTIAL;

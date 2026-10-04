@@ -11,6 +11,15 @@
   most 1.020 and at least 167 non-centred. Both coordinates place the same
   prior on `w`; a spec built before the argument existed runs centred.
 
+* **An NNGP SVC range no longer flags most transitions divergent (#99).** The
+  range carried its uniform prior as a hard bound on `log(phi)`, so a proposal
+  past either end of `range` met a log density of `-Inf`, which the sampler
+  records as a divergence; with the posterior near the upper end, 442 of 500
+  transitions were flagged on an 80-row fixture. The range is now sampled on
+  the logit scale of its interval, which places the same uniform prior with no
+  edge in the sampled space: 2 of 500 centred and 0 of 500 non-centred on the
+  same fixture and seed. The draws still report `phi_svc` itself.
+
 * **A stored SVC draw is the field the likelihood reads (#98).** eta reads each
   term centred over locations, but the sampler stored `w` uncentred, so
   `svc()` and the fit's eta carried a level the likelihood removes: 0.73 on
