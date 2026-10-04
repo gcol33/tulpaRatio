@@ -170,10 +170,11 @@ fit_laplace <- function(formula,
   )
 
   # Sample from N(mode, H^{-1})
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = hess_result$H,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   # Convert to ratiod_fit format
@@ -503,6 +504,42 @@ compute_hessian_at_mode <- function(y, n_trials, X, re_idx, n_re_groups,
 }
 
 
+#' Column names of the fixed effects in a Laplace fit
+#' @keywords internal
+laplace_beta_names <- function(X) {
+  colnames(X) %||% paste0("beta[", seq_len(ncol(X)), "]")
+}
+
+
+#' Draw from the Laplace Gaussian and keep its fixed-effect block
+#'
+#' The Laplace approximation is `N(mode, H^{-1})`. The draws serve nonlinear
+#' derived quantities; the fixed-effect rows of `summary()` read the closed
+#' form, so the leading `p x p` block of `H^{-1}` travels with the draws.
+#'
+#' @param mode Posterior mode.
+#' @param H Precision (negative Hessian) at the mode.
+#' @param n_samples Number of draws.
+#' @param X Design matrix; its columns are the leading entries of `mode`.
+#' @return The `n_samples x length(mode)` draw matrix, with the attribute
+#'   `fixed_gaussian` holding `mean`, `cov` and `names` of the fixed effects.
+#' @keywords internal
+sample_laplace_gaussian <- function(mode, H, n_samples, X) {
+  samples <- cpp_laplace_sample(mode = mode, H = H, n_samples = n_samples)
+  idx <- seq_len(ncol(X))
+  selector <- diag(1, nrow(H), length(idx))
+  cov <- solve(H, selector)[idx, , drop = FALSE]
+  names <- laplace_beta_names(X)
+  attr(samples, "fixed_gaussian") <- list(
+    mean = stats::setNames(mode[idx], names),
+    cov = matrix((cov + t(cov)) / 2, length(idx), length(idx),
+                 dimnames = list(names, names)),
+    names = names
+  )
+  samples
+}
+
+
 #' Convert Laplace results to ratiod_fit
 #' @keywords internal
 convert_laplace_to_ratiod_fit <- function(samples, result, formula, data,
@@ -512,10 +549,7 @@ convert_laplace_to_ratiod_fit <- function(samples, result, formula, data,
   n_re <- re_info$n_groups
 
   # Extract fixed effects samples
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
+  beta_names <- laplace_beta_names(X)
 
   draws_list <- list()
   for (j in seq_len(p)) {
@@ -538,6 +572,8 @@ convert_laplace_to_ratiod_fit <- function(samples, result, formula, data,
     backend = "laplace",
     n_save = n_samples,
     laplace_result = result,
+    fixed_gaussian = attr(samples, "fixed_gaussian"),
+    plug_in = if (n_re > 0) "sigma_re",
     .internal = list(
       mode = result$mode,
       sigma_re = result$sigma_re_opt,
@@ -763,10 +799,11 @@ fit_laplace_spatial <- function(formula,
   )
 
   # Sample from Laplace approximation
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = hess_result$H,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   # Convert to ratiod_fit
@@ -964,10 +1001,7 @@ convert_laplace_spatial_to_ratiod_fit <- function(samples, result, formula, data
   spatial_start <- p + n_re
 
   # Extract fixed effects samples
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
+  beta_names <- laplace_beta_names(X)
 
   draws_list <- list()
   for (j in seq_len(p)) {
@@ -992,6 +1026,7 @@ convert_laplace_spatial_to_ratiod_fit <- function(samples, result, formula, data
     backend = "laplace",
     n_save = n_samples,
     laplace_result = result,
+    fixed_gaussian = attr(samples, "fixed_gaussian"),
     .internal = list(
       mode = result$mode,
       log_marginal = result$log_marginal,
@@ -1109,10 +1144,11 @@ fit_laplace_bym2 <- function(formula,
   )
 
   # Sample from Laplace approximation
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = hess_result$H,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   # Convert to ratiod_fit
@@ -1372,10 +1408,11 @@ fit_laplace_gp <- function(formula,
   }
 
   # Sample from Laplace approximation
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = result$hessian,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   # Convert to ratiod_fit
@@ -1482,10 +1519,11 @@ fit_laplace_multiscale_gp <- function(formula,
     message("Sampling from Laplace approximation...")
   }
 
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = result$hessian,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   convert_laplace_gp_to_ratiod_fit(
@@ -1517,10 +1555,7 @@ convert_laplace_gp_to_ratiod_fit <- function(samples, result, formula, data,
   spatial_start <- p + n_re
 
   # Extract fixed effects samples
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
+  beta_names <- laplace_beta_names(X)
 
   draws_list <- list()
   for (j in seq_len(p)) {
@@ -1552,6 +1587,7 @@ convert_laplace_gp_to_ratiod_fit <- function(samples, result, formula, data,
     backend = "laplace",
     n_save = n_samples,
     laplace_result = result,
+    fixed_gaussian = attr(samples, "fixed_gaussian"),
     spatial_type = spatial_type,
     .internal = c(
       list(
@@ -1677,10 +1713,11 @@ fit_laplace_temporal <- function(formula,
   }
 
   # Sample from Laplace approximation
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = result$hessian,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   # Convert to ratiod_fit
@@ -1718,10 +1755,7 @@ convert_laplace_temporal_to_ratiod_fit <- function(samples, result, formula, dat
   temporal_start <- p + n_re
 
   # Extract fixed effects samples
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
+  beta_names <- laplace_beta_names(X)
 
   draws_list <- list()
   for (j in seq_len(p)) {
@@ -1772,6 +1806,7 @@ convert_laplace_temporal_to_ratiod_fit <- function(samples, result, formula, dat
     backend = "laplace",
     n_save = n_samples,
     laplace_result = result,
+    fixed_gaussian = attr(samples, "fixed_gaussian"),
     temporal = temporal,
     .internal = list(
       mode = result$mode,
@@ -1804,10 +1839,7 @@ convert_laplace_bym2_to_ratiod_fit <- function(samples, result, formula, data,
   sqrt_1_rho <- sqrt(1.0 - rho + 1e-10)
 
   # Extract fixed effects samples
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
+  beta_names <- laplace_beta_names(X)
 
   draws_list <- list()
   for (j in seq_len(p)) {
@@ -1841,6 +1873,8 @@ convert_laplace_bym2_to_ratiod_fit <- function(samples, result, formula, data,
     backend = "laplace",
     n_save = n_samples,
     laplace_result = result,
+    fixed_gaussian = attr(samples, "fixed_gaussian"),
+    plug_in = c("sigma_spatial", "rho"),
     spatial_type = "bym2",
     .internal = list(
       mode = result$mode,
@@ -1958,10 +1992,11 @@ fit_laplace_rsr <- function(formula,
   )
 
   # Sample from Laplace approximation
-  samples <- cpp_laplace_sample(
+  samples <- sample_laplace_gaussian(
     mode = result$mode,
     H = hess_result$H,
-    n_samples = as.integer(n_samples)
+    n_samples = as.integer(n_samples),
+    X = X
   )
 
   # Convert to ratiod_fit
@@ -2142,10 +2177,7 @@ convert_laplace_rsr_to_ratiod_fit <- function(samples, result, formula, data,
   spatial_start <- p + n_re
 
   # Extract fixed effects samples
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
+  beta_names <- laplace_beta_names(X)
 
   draws_list <- list()
   for (j in seq_len(p)) {
@@ -2185,6 +2217,8 @@ convert_laplace_rsr_to_ratiod_fit <- function(samples, result, formula, data,
     spatial_type = "rsr",
     n_save = n_samples,
     laplace_result = result,
+    fixed_gaussian = attr(samples, "fixed_gaussian"),
+    plug_in = if (n_re > 0) "sigma_re",
     .internal = list(
       mode = result$mode,
       log_marginal = result$log_marginal,

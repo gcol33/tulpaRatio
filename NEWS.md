@@ -1,5 +1,14 @@
 # tulpaRatio 1.7.3
 
+* **`summary()` on a Laplace fit reads the closed-form Gaussian (#84).** The
+  fixed-effect mean, sd and interval came from 1000 Monte Carlo draws of a
+  posterior the fit states exactly, so a bound moved by a fraction of the sd
+  between seeds. The fit now keeps the fixed-effect block of `H^{-1}`
+  (`fit$fixed_gaussian`) and `summary()` reports `mode +/- z * sd` from it.
+  The draws stay for `ratio()` and other nonlinear derived quantities. Plug-in
+  hyperparameters (`sigma_re`, `sigma_spatial`, `rho`) are listed as point
+  values with no interval.
+
 * **The SoftAbs divergence retry is off by default (#86).** `control$riemannian`
   used to resolve to an automatic setting that switched the retry on for BYM2
   and ICAR fits with a dense mass matrix. The retry replaces a divergent NUTS

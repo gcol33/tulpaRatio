@@ -949,6 +949,9 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
 
   # Compute summary statistics
   summ <- compute_param_summary(draws, probs)
+  if (identical(backend, "laplace")) {
+    summ <- apply_laplace_gaussian_summary(summ, object, probs)
+  }
 
   # Add diagnostics for MCMC backends
   if (backend %in% c("hmc", "pg", "sghmc", "sgld", "ess")) {
@@ -995,6 +998,29 @@ compute_param_summary <- function(draws, probs) {
     q_upper = quants[3, ],
     stringsAsFactors = FALSE
   )
+}
+
+
+#' Replace Monte Carlo rows of a Laplace summary by the closed form
+#'
+#' The fixed effects of a Laplace fit are `N(mean, cov)` exactly, so their
+#' mean, sd and quantiles are read from that Gaussian. A plug-in
+#' hyperparameter is a point value: its sd and quantiles are `NA`.
+#' @keywords internal
+apply_laplace_gaussian_summary <- function(summ, fit, probs) {
+  g <- fit$fixed_gaussian
+  if (!is.null(g)) {
+    sds <- sqrt(diag(g$cov))
+    rows <- match(g$names, summ$parameter)
+    summ$mean[rows] <- g$mean
+    summ$sd[rows] <- sds
+    summ$q_lower[rows] <- g$mean + stats::qnorm(probs[1]) * sds
+    summ$q_median[rows] <- g$mean + stats::qnorm(probs[2]) * sds
+    summ$q_upper[rows] <- g$mean + stats::qnorm(probs[3]) * sds
+  }
+  rows <- match(fit$plug_in, summ$parameter)
+  summ[rows, c("sd", "q_lower", "q_median", "q_upper")] <- NA_real_
+  summ
 }
 
 
