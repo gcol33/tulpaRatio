@@ -1295,45 +1295,74 @@ void compute_gradient_analytical(
   double grad_phi_num_lik = 0.0;
   double grad_phi_denom_lik = 0.0;
 
-  #ifdef _OPENMP
-  // Per-thread partial sums, reduced afterwards in thread-index order rather
-  // than in a critical section: a critical section sums in thread-arrival
+  // Every likelihood sum the observation loop builds has a region in each
+  // thread's slot of `red_partials`; the slots are added afterwards in
+  // thread-index order. Nothing is combined by the runtime: libomp's atomic
+  // and tree-reduction paths for doubles drop updates on aarch64-w64-mingw
+  // (omp_sum.h), and a critical section or atomic sums in thread-arrival
   // order, which varies from run to run. The buffer is sized by
   // omp_get_max_threads() and the region below carries no num_threads clause,
   // so both read the same value and every thread of the team has a slot. The
   // backends that take a per-fit thread count scope it (omp_thread_scope.h),
   // which holds that value still for the length of a fit.
+  #ifdef _OPENMP
   const int grad_team = std::max(1, omp_get_max_threads());
-  const int red_n_re = layout.has_re ? data.n_re_groups : 0;
-  const int red_n_re_crossed =
+  #else
+  const int grad_team = 1;
+  #endif
+  const bool acc_zi = layout.has_zi && data.p_zi > 0;
+  const bool acc_oi = layout.has_oi && data.p_oi > 0;
+  const bool acc_slopes = layout.has_re_slopes && n_re_terms_slopes > 0 &&
+                          !grad_re_slopes_lik.empty();
+  const bool acc_bym2 = layout.has_spatial &&
+                        data.spatial_type == SpatialType::BYM2;
+  const int n_re_acc = layout.has_re ? data.n_re_groups : 0;
+  const int n_re_crossed_acc =
       (layout.has_re && data.n_re_terms > 1) ? data.total_re_groups : 0;
-  const int red_stride = data.p_num + data.p_denom + 2 + red_n_re +
-                         red_n_re_crossed + 1;
-  std::vector<double> red_partials((size_t)grad_team * red_stride, 0.0);
-
-  #pragma omp parallel
+  const int n_slopes_acc =
+      acc_slopes ? (int)grad_re_slopes_lik[0].size() : 0;
+  struct {
+    int beta_num, beta_denom, phi_num, phi_denom, re, re_crossed, ll,
+        beta_zi, beta_oi, re_slopes, temporal, spatial, theta_bym2, stride;
+  } acc_at;
   {
-    std::vector<double> local_grad_beta_num(data.p_num, 0.0);
-    std::vector<double> local_grad_beta_denom(data.p_denom, 0.0);
-    double local_grad_phi_num = 0.0;
-    double local_grad_phi_denom = 0.0;
-    std::vector<double> local_grad_re(layout.has_re ? data.n_re_groups : 0, 0.0);
-    // Thread-local buffer for crossed RE gradients (all terms combined)
-    std::vector<double> local_grad_re_crossed(
-        (layout.has_re && data.n_re_terms > 1) ? data.total_re_groups : 0, 0.0);
-    double local_obs_ll = 0.0;  // Fused log-likelihood accumulator
+    int n = 0;
+    auto region = [&n](int len) { const int at = n; n += len; return at; };
+    acc_at.beta_num = region(data.p_num);
+    acc_at.beta_denom = region(data.p_denom);
+    acc_at.phi_num = region(1);
+    acc_at.phi_denom = region(1);
+    acc_at.re = region(n_re_acc);
+    acc_at.re_crossed = region(n_re_crossed_acc);
+    acc_at.ll = region(1);
+    acc_at.beta_zi = region(acc_zi ? data.p_zi : 0);
+    acc_at.beta_oi = region(acc_oi ? data.p_oi : 0);
+    acc_at.re_slopes = region(n_slopes_acc);
+    acc_at.temporal = region((int)grad_temporal_lik.size());
+    acc_at.spatial = region((int)grad_spatial_lik.size());
+    acc_at.theta_bym2 = region(acc_bym2 ? n_spatial : 0);
+    // Whole cache lines per slot, so neighbouring threads share none.
+    acc_at.stride = (n + 7) / 8 * 8;
+  }
+  std::vector<double> red_partials((size_t)grad_team * acc_at.stride, 0.0);
+
+  #ifdef _OPENMP
+  #pragma omp parallel
+  #endif
+  {
+    #ifdef _OPENMP
+    double* acc = &red_partials[(size_t)omp_get_thread_num() * acc_at.stride];
+    #else
+    double* acc = red_partials.data();
+    #endif
     // Pre-allocated per-obs group index buffer for crossed RE (reused across iterations)
     std::vector<int> re_idx_multi_buf(
         (layout.has_re && data.n_re_terms > 1) ? data.n_re_terms : 0, -1);
 
+    #ifdef _OPENMP
     #pragma omp for schedule(static)
+    #endif
     for (int i = 0; i < data.N; i++) {
-  #else
-    // Pre-allocated per-obs group index buffer for crossed RE
-    std::vector<int> re_idx_multi_buf(
-        (layout.has_re && data.n_re_terms > 1) ? data.n_re_terms : 0, -1);
-    for (int i = 0; i < data.N; i++) {
-  #endif
       // Compute linear predictors
       double eta_num = ratiod_linalg::dot_product(
           &data.X_num_flat[i * data.p_num], beta_num, data.p_num);
@@ -1903,45 +1932,30 @@ void compute_gradient_analytical(
       }
 
       // Accumulate ZI coefficient gradients
-      if (layout.has_zi && data.p_zi > 0) {
+      if (acc_zi) {
         for (int j = 0; j < data.p_zi; j++) {
-          #ifdef _OPENMP
-          #pragma omp atomic
-          grad_beta_zi[j] += data.X_zi_flat[i * data.p_zi + j] * grad_logit_zi_i;
-          #else
-          grad_beta_zi[j] += data.X_zi_flat[i * data.p_zi + j] * grad_logit_zi_i;
-          #endif
+          acc[acc_at.beta_zi + j] +=
+              data.X_zi_flat[i * data.p_zi + j] * grad_logit_zi_i;
         }
       }
 
       // Accumulate OI coefficient gradients
-      if (layout.has_oi && data.p_oi > 0) {
+      if (acc_oi) {
         for (int j = 0; j < data.p_oi; j++) {
-          #ifdef _OPENMP
-          #pragma omp atomic
-          grad_beta_oi[j] += data.X_oi_flat[i * data.p_oi + j] * grad_logit_oi_i;
-          #else
-          grad_beta_oi[j] += data.X_oi_flat[i * data.p_oi + j] * grad_logit_oi_i;
-          #endif
+          acc[acc_at.beta_oi + j] +=
+              data.X_oi_flat[i * data.p_oi + j] * grad_logit_oi_i;
         }
       }
 
       // Accumulate beta gradients: grad += X[i,:] * resid
       for (int j = 0; j < data.p_num; j++) {
-        #ifdef _OPENMP
-        local_grad_beta_num[j] += data.X_num_flat[i * data.p_num + j] * resid_num;
-        #else
-        grad_beta_num[j] += data.X_num_flat[i * data.p_num + j] * resid_num;
-        #endif
+        acc[acc_at.beta_num + j] += data.X_num_flat[i * data.p_num + j] * resid_num;
       }
       // For BINOMIAL, beta_denom doesn't affect likelihood
       if (data.model_type != ModelType::BINOMIAL) {
         for (int j = 0; j < data.p_denom; j++) {
-          #ifdef _OPENMP
-          local_grad_beta_denom[j] += data.X_denom_flat[i * data.p_denom + j] * resid_denom;
-          #else
-          grad_beta_denom[j] += data.X_denom_flat[i * data.p_denom + j] * resid_denom;
-          #endif
+          acc[acc_at.beta_denom + j] +=
+              data.X_denom_flat[i * data.p_denom + j] * resid_denom;
         }
       }
 
@@ -1956,23 +1970,13 @@ void compute_gradient_analytical(
         int n_coefs = re_n_coefs_i;
 
         // Intercept gradient: same as simple RE
-        #ifdef _OPENMP
-        #pragma omp atomic
-        grad_re_slopes_lik[0][g * n_coefs] += re_grad_base;
-        #else
-        grad_re_slopes_lik[0][g * n_coefs] += re_grad_base;
-        #endif
+        acc[acc_at.re_slopes + g * n_coefs] += re_grad_base;
 
         // Slope gradients: multiply by slope design value
         int n_slopes = n_coefs - 1;
         for (int s = 0; s < n_slopes; s++) {
-          double slope_grad = re_grad_base * re_slope_x_i[s];
-          #ifdef _OPENMP
-          #pragma omp atomic
-          grad_re_slopes_lik[0][g * n_coefs + 1 + s] += slope_grad;
-          #else
-          grad_re_slopes_lik[0][g * n_coefs + 1 + s] += slope_grad;
-          #endif
+          acc[acc_at.re_slopes + g * n_coefs + 1 + s] +=
+              re_grad_base * re_slope_x_i[s];
         }
       } else if (n_crossed_terms > 0) {
         // Crossed RE (multiple intercept-only terms)
@@ -1982,12 +1986,8 @@ void compute_gradient_analytical(
         }
         for (int t = 0; t < n_crossed_terms; t++) {
           if (re_idx_multi_buf[t] >= 0) {
-            #ifdef _OPENMP
-            // Thread-local accumulation (reduced at end of parallel block)
-            local_grad_re_crossed[data.re_offsets[t] + re_idx_multi_buf[t]] += re_grad_i;
-            #else
-            grad[layout.re_start_multi[t] + re_idx_multi_buf[t]] += re_grad_i;
-            #endif
+            acc[acc_at.re_crossed + data.re_offsets[t] + re_idx_multi_buf[t]] +=
+                re_grad_i;
           }
         }
       } else if (re_idx >= 0) {
@@ -1996,11 +1996,7 @@ void compute_gradient_analytical(
         if (data.model_type != ModelType::BINOMIAL) {
           re_grad_i += resid_denom;  // Shared RE affects both processes
         }
-        #ifdef _OPENMP
-        local_grad_re[re_idx] += re_grad_i;
-        #else
-        grad[layout.re_start + re_idx] += re_grad_i;
-        #endif
+        acc[acc_at.re + re_idx] += re_grad_i;
       }
 
       // Accumulate temporal gradient (from likelihood)
@@ -2009,12 +2005,7 @@ void compute_gradient_analytical(
         if (data.model_type != ModelType::BINOMIAL) {
           temp_grad_i += resid_denom;
         }
-        #ifdef _OPENMP
-        #pragma omp atomic
-        grad_temporal_lik[t_idx] += temp_grad_i;
-        #else
-        grad_temporal_lik[t_idx] += temp_grad_i;
-        #endif
+        acc[acc_at.temporal + t_idx] += temp_grad_i;
       }
 
       // Accumulate spatial gradient (from likelihood)
@@ -2025,31 +2016,16 @@ void compute_gradient_analytical(
         }
         // For ICAR: grad_spatial[s] += lik_grad (d_spatial_d_phi = 1)
         // For BYM2: grad_phi[s] += lik_grad * d_spatial_d_phi, grad_theta[s] += lik_grad * d_spatial_d_theta
-        #ifdef _OPENMP
-        #pragma omp atomic
-        grad_spatial_lik[s_idx] += lik_grad * d_spatial_d_phi;
-        #else
-        grad_spatial_lik[s_idx] += lik_grad * d_spatial_d_phi;
-        #endif
+        acc[acc_at.spatial + s_idx] += lik_grad * d_spatial_d_phi;
 
-        if (data.spatial_type == SpatialType::BYM2) {
-          #ifdef _OPENMP
-          #pragma omp atomic
-          grad[layout.theta_bym2_start + s_idx] += lik_grad * d_spatial_d_theta;
-          #else
-          grad[layout.theta_bym2_start + s_idx] += lik_grad * d_spatial_d_theta;
-          #endif
+        if (acc_bym2) {
+          acc[acc_at.theta_bym2 + s_idx] += lik_grad * d_spatial_d_theta;
         }
       }
 
       // Accumulate phi gradients
-      #ifdef _OPENMP
-      local_grad_phi_num += grad_phi_num_i;
-      local_grad_phi_denom += grad_phi_denom_i;
-      #else
-      grad_phi_num_lik += grad_phi_num_i;
-      grad_phi_denom_lik += grad_phi_denom_i;
-      #endif
+      acc[acc_at.phi_num] += grad_phi_num_i;
+      acc[acc_at.phi_denom] += grad_phi_denom_i;
 
       // Fused log-likelihood: compute per-observation log_lik using already-computed
       // intermediates. This avoids a separate O(N) pass through compute_log_post.
@@ -2122,53 +2098,54 @@ void compute_gradient_analytical(
           ll_i += -std::lgamma(alpha_i) - std::lgamma(beta_i) + std::lgamma(phi_num);
           ll_i += ratiod::math::portable_lchoose(n_i, y_i);
         }
-        #ifdef _OPENMP
-        local_obs_ll += ll_i;
-        #else
-        obs_log_lik += ll_i;
-        #endif
+        acc[acc_at.ll] += ll_i;
       }
-    }
-
-  #ifdef _OPENMP
-    // Park this thread's partials; the reduction runs serially below.
-    {
-      double* slot = &red_partials[(size_t)omp_get_thread_num() * red_stride];
-      int off = 0;
-      for (int j = 0; j < data.p_num; j++) slot[off++] = local_grad_beta_num[j];
-      for (int j = 0; j < data.p_denom; j++) slot[off++] = local_grad_beta_denom[j];
-      slot[off++] = local_grad_phi_num;
-      slot[off++] = local_grad_phi_denom;
-      for (int g = 0; g < red_n_re; g++) slot[off++] = local_grad_re[g];
-      for (int g = 0; g < red_n_re_crossed; g++) slot[off++] = local_grad_re_crossed[g];
-      slot[off] = local_obs_ll;
     }
   }  // end parallel
 
   // Deterministic reduction: thread-index order, fixed team size.
   for (int th = 0; th < grad_team; th++) {
-    const double* slot = &red_partials[(size_t)th * red_stride];
-    int off = 0;
-    for (int j = 0; j < data.p_num; j++) grad_beta_num[j] += slot[off++];
-    for (int j = 0; j < data.p_denom; j++) grad_beta_denom[j] += slot[off++];
-    grad_phi_num_lik += slot[off++];
-    grad_phi_denom_lik += slot[off++];
-    for (int g = 0; g < red_n_re; g++) grad[layout.re_start + g] += slot[off++];
+    const double* slot = &red_partials[(size_t)th * acc_at.stride];
+    for (int j = 0; j < data.p_num; j++) grad_beta_num[j] += slot[acc_at.beta_num + j];
+    for (int j = 0; j < data.p_denom; j++) grad_beta_denom[j] += slot[acc_at.beta_denom + j];
+    grad_phi_num_lik += slot[acc_at.phi_num];
+    grad_phi_denom_lik += slot[acc_at.phi_denom];
+    for (int g = 0; g < n_re_acc; g++) {
+      grad[layout.re_start + g] += slot[acc_at.re + g];
+    }
     // Crossed intercept-only RE (n_re_terms > 1, not slopes) scatter to
     // non-contiguous grad positions.
-    if (red_n_re_crossed > 0) {
+    if (n_re_crossed_acc > 0) {
       for (int t = 0; t < (int)data.re_n_groups_multi.size(); t++) {
         int re_start_t = layout.re_start_multi[t];
         int offset_t = data.re_offsets[t];
         for (int g = 0; g < data.re_n_groups_multi[t]; g++) {
-          grad[re_start_t + g] += slot[off + offset_t + g];
+          grad[re_start_t + g] += slot[acc_at.re_crossed + offset_t + g];
         }
       }
     }
-    off += red_n_re_crossed;
-    obs_log_lik += slot[off];
+    obs_log_lik += slot[acc_at.ll];
+    if (acc_zi) {
+      for (int j = 0; j < data.p_zi; j++) grad_beta_zi[j] += slot[acc_at.beta_zi + j];
+    }
+    if (acc_oi) {
+      for (int j = 0; j < data.p_oi; j++) grad_beta_oi[j] += slot[acc_at.beta_oi + j];
+    }
+    for (int k = 0; k < n_slopes_acc; k++) {
+      grad_re_slopes_lik[0][k] += slot[acc_at.re_slopes + k];
+    }
+    for (int t = 0; t < (int)grad_temporal_lik.size(); t++) {
+      grad_temporal_lik[t] += slot[acc_at.temporal + t];
+    }
+    for (int s = 0; s < (int)grad_spatial_lik.size(); s++) {
+      grad_spatial_lik[s] += slot[acc_at.spatial + s];
+    }
+    if (acc_bym2) {
+      for (int s = 0; s < n_spatial; s++) {
+        grad[layout.theta_bym2_start + s] += slot[acc_at.theta_bym2 + s];
+      }
+    }
   }
-  #endif
 
   // Add likelihood gradients to total
   for (int j = 0; j < data.p_num; j++) {

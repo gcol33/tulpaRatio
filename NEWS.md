@@ -43,7 +43,12 @@
   and a hand-rolled per-thread sum were exact. The observation sum in the
   density, the Laplace log-likelihood and the test kernels now go through
   `ratiod_omp::sum_range()` (`src/omp_sum.h`): each thread sums one chunk into
-  its own slot and the slots are added in thread order.
+  its own slot and the slots are added in thread order. The HMC gradient's
+  observation loop summed the zero- and one-inflation coefficients, the
+  temporal and spatial fields and the random slopes with `omp atomic`, and on
+  the same platform the analytic `beta_zi` gradient missed finite differences
+  by up to a factor of four; those sums now share the loop's per-thread slots
+  with the other blocks.
 
 * **The Laplace tier runs on the nested-Laplace engine (#85, #84).** The
   in-tree mode-finder (`laplace_core.cpp`) picked one value per hyperparameter
