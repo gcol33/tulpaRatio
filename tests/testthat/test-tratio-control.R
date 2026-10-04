@@ -50,6 +50,7 @@ test_that("enumerated knobs are checked against their choices", {
 test_that("scalar knobs are range- and type-checked", {
   expect_equal(.tratio_control(list(adapt_delta = 0.95))$adapt_delta, 0.95)
   expect_error(.tratio_control(list(adapt_delta = 1.5)), "between 0.5 and 0.99")
+  expect_false(.tratio_control(list())$riemannian)
   expect_true(.tratio_control(list(riemannian = TRUE))$riemannian)
   expect_error(.tratio_control(list(riemannian = "yes")), "TRUE or FALSE")
   expect_error(.tratio_control(list(chains = 0)), "positive whole number")

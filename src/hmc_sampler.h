@@ -1977,8 +1977,8 @@ double find_reasonable_epsilon_dense(
 );
 
 // Run single HMC chain (C++ version - safe for parallel)
-// riemannian: -1=auto (retry divergences with SoftAbs for BYM2/ICAR),
-//              1=force on, 0=force off
+// riemannian: 1 = retry divergent trajectories under a SoftAbs metric,
+//              0 = off (default)
 HMCResultCpp run_hmc_chain_cpp(
     const std::vector<double>& q_init,
     const ModelData& data,
@@ -1992,7 +1992,7 @@ HMCResultCpp run_hmc_chain_cpp(
     int max_treedepth = 10,
     MassMatrixType metric_type = MassMatrixType::DIAG,
     double adapt_delta = -1.0,
-    int riemannian = -1
+    int riemannian = 0
 );
 
 // Run single HMC chain (R wrapper)
@@ -2009,7 +2009,7 @@ HMCResult run_hmc_chain(
     int max_treedepth = 10,
     MassMatrixType metric_type = MassMatrixType::DIAG,
     double adapt_delta = -1.0,
-    int riemannian = -1
+    int riemannian = 0
 );
 
 // Run multiple chains in parallel (across-chain parallelization)
@@ -2025,7 +2025,7 @@ std::vector<HMCResult> run_hmc_parallel_chains(
     int max_treedepth = 10,
     MassMatrixType metric_type = MassMatrixType::DIAG,
     double adapt_delta = -1.0,
-    int riemannian = -1
+    int riemannian = 0
 );
 
 // =====================================================================

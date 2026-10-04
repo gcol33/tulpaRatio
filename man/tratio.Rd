@@ -135,9 +135,12 @@ random slopes, BYM2, HSGP, TVC); \code{"diag"} diagonal (faster per step, may
 need deeper trees); \code{"block_diag"} per parameter group. Auto falls back
 to diagonal when p > 2000.
 \item \code{riemannian}: enable per-trajectory SoftAbs metric retry on divergence,
-computing a local Hessian-based metric and retrying. \code{NULL} (default)
-enables for BYM2 and ICAR with a dense mass matrix. Costs about (p+1)
-gradient evaluations per divergent trajectory only.
+computing a local Hessian-based metric and retrying. \code{FALSE} (default)
+leaves it off: which kernel moves the chain then depends on whether
+the first trajectory diverged, and no acceptance correction covers that
+choice, so the combined kernel is not guaranteed to leave the target
+invariant. Costs about (p+1) gradient evaluations per divergent
+trajectory only.
 \item \code{gradient_mode}: \code{"auto"} (default) selects the fastest available;
 \code{"H"} hand-coded analytical (fastest); \code{"A_r"} arena reverse-mode
 autodiff (fast, O(N)); \code{"A"} forward-mode (O(p*N), thread-safe);

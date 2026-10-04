@@ -102,9 +102,12 @@
 #'     need deeper trees); `"block_diag"` per parameter group. Auto falls back
 #'     to diagonal when p > 2000.
 #'   - `riemannian`: enable per-trajectory SoftAbs metric retry on divergence,
-#'     computing a local Hessian-based metric and retrying. `NULL` (default)
-#'     enables for BYM2 and ICAR with a dense mass matrix. Costs about (p+1)
-#'     gradient evaluations per divergent trajectory only.
+#'     computing a local Hessian-based metric and retrying. `FALSE` (default)
+#'     leaves it off: which kernel moves the chain then depends on whether
+#'     the first trajectory diverged, and no acceptance correction covers that
+#'     choice, so the combined kernel is not guaranteed to leave the target
+#'     invariant. Costs about (p+1) gradient evaluations per divergent
+#'     trajectory only.
 #'   - `gradient_mode`: `"auto"` (default) selects the fastest available;
 #'     `"H"` hand-coded analytical (fastest); `"A_r"` arena reverse-mode
 #'     autodiff (fast, O(N)); `"A"` forward-mode (O(p*N), thread-safe);

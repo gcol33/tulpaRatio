@@ -62,7 +62,7 @@ NULL
 #' @param gradient_mode Gradient computation method: "auto", "H", "A_r", "A", "N"
 #' @param re_param Random effects parameterization: "centered" or "noncentered"
 #' @param metric Mass matrix type: "auto" (default), "diag", "dense", or "block_diag"
-#' @param riemannian Use Riemannian (SoftAbs) metric: NULL (auto), TRUE, or FALSE
+#' @param riemannian Use Riemannian (SoftAbs) metric: TRUE or FALSE (default)
 #'
 #' @return A ratiod_fit object
 #' @keywords internal
@@ -87,7 +87,7 @@ fit_hmc <- function(formula,
                     gradient_mode = "auto",
                     re_param = "noncentered",
                     metric = "auto",
-                    riemannian = NULL) {
+                    riemannian = FALSE) {
 
   # Set cores. Defaults to the machine's OpenMP cap, matching how the PG and
   # Laplace backends default their own (purely within-chain) `cores` budget:
@@ -106,8 +106,7 @@ fit_hmc <- function(formula,
   # Resolve adapt_delta: NULL → -1.0 (C++ sentinel for auto-selection)
   adapt_delta_value <- if (is.null(adapt_delta)) -1.0 else as.double(adapt_delta)
 
-  # Resolve riemannian: NULL → -1 (auto), TRUE → 1, FALSE → 0
-  riemannian_value <- if (is.null(riemannian)) -1L else as.integer(riemannian)
+  riemannian_value <- as.integer(isTRUE(riemannian))
 
   # Get model type
   model_type <- get_hmc_model_type(family)

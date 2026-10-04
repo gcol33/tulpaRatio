@@ -1,5 +1,15 @@
 # tulpaRatio 1.7.3
 
+* **The SoftAbs divergence retry is off by default (#86).** `control$riemannian`
+  used to resolve to an automatic setting that switched the retry on for BYM2
+  and ICAR fits with a dense mass matrix. The retry replaces a divergent NUTS
+  trajectory with a second one under a Hessian-based metric, so which kernel
+  moves the chain depends on the current state and no acceptance correction
+  covers the choice. On the engine's copy of the scheme (gcol33/tulpa#937,
+  Neal's funnel) a seed settled in the neck with 451 divergent transitions
+  against 6 without it. `control = list(riemannian = TRUE)` still enables it;
+  the automatic setting is removed.
+
 * **`mcmc_diagnostics()` is gone; use `diagnostics()` (#82).** It was an
   exported `lifecycle::deprecate_warn()` shim forwarding to `diagnostics()`,
   and the engine's shim of the same name was deleted in gcol33/tulpa#773, so

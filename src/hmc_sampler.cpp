@@ -10161,18 +10161,9 @@ HMCResultCpp run_hmc_chain_cpp(
   int nuts_probe_maxd = 0;  // Count of maxd hits in probe window
   bool nuts_probing = use_nuts && (L == 0);  // Only probe when using NUTS by default
 
-  // SoftAbs divergence retry: compute local Hessian-based metric on divergent
-  // trajectories and retry. Only active for BYM2/ICAR + dense mass (auto) or
-  // when explicitly forced on.
-  bool use_softabs_retry = false;
-  if (riemannian == 1) {
-    use_softabs_retry = true;
-  } else if (riemannian == -1) {
-    // Auto: enable for BYM2/ICAR with dense mass
-    use_softabs_retry = (mass.type == MassMatrixType::DENSE &&
-                         (data.spatial_type == SpatialType::BYM2 ||
-                          data.spatial_type == SpatialType::ICAR));
-  }
+  // SoftAbs divergence retry: compute a local Hessian-based metric on
+  // divergent trajectories and retry. Active only when requested.
+  bool use_softabs_retry = (riemannian == 1);
   // Disable if not using NUTS (SoftAbs retry only makes sense with NUTS)
   if (!use_nuts) use_softabs_retry = false;
   int softabs_retries = 0;
@@ -11446,7 +11437,7 @@ Rcpp::List cpp_hmc_fit(
     int max_treedepth = 10,
     std::string metric_str = "auto",
     double adapt_delta = -1.0,
-    int riemannian = -1,
+    int riemannian = 0,
     int n_cores = 0
 ) {
   using namespace ratiod_hmc;

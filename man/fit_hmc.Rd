@@ -26,7 +26,7 @@ fit_hmc(
   gradient_mode = "auto",
   re_param = "noncentered",
   metric = "auto",
-  riemannian = NULL
+  riemannian = FALSE
 )
 }
 \arguments{
@@ -66,7 +66,7 @@ gradient/likelihood work. Defaults to the machine's OpenMP thread cap.}
 
 \item{metric}{Mass matrix type: "auto" (default), "diag", "dense", or "block_diag"}
 
-\item{riemannian}{Use Riemannian (SoftAbs) metric: NULL (auto), TRUE, or FALSE}
+\item{riemannian}{Use Riemannian (SoftAbs) metric: TRUE or FALSE (default)}
 }
 \value{
 A ratiod_fit object
