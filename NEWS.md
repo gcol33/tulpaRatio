@@ -1,5 +1,22 @@
 # tulpaRatio 1.7.3
 
+* **`spatial_svc()` samples each NNGP term non-centred by default (#96).** The
+  new `parameterization` argument takes `"noncentered"` (default) or
+  `"centered"`. Non-centred, each term's block holds `z ~ N(0, I)` and the
+  field is `w = L(sigma2, phi) z` through the NNGP autoregression the spatial
+  GP already uses, so the variance reaches the field through the transform.
+  Centred, the field's level is identified by the NNGP prior alone and wanders
+  with `sigma2`: on the 80-row recovery fixture, five chain seeds at 4 x 3000
+  gave intercept R-hat up to 1.117 and a `sigma2` bulk ESS of 12, against at
+  most 1.020 and at least 167 non-centred. Both coordinates place the same
+  prior on `w`; a spec built before the argument existed runs centred.
+
+* **A stored SVC draw is the field the likelihood reads (#98).** eta reads each
+  term centred over locations, but the sampler stored `w` uncentred, so
+  `svc()` and the fit's eta carried a level the likelihood removes: 0.73 on
+  average on an 80-row fixture with a true slope of 0.3. The draw store now
+  writes the centred field, in either coordinate.
+
 * **`spatial_rsr()` is carried, or refused, by every backend (#92).** HMC
   received the restriction only on its centred NNGP branch, where it projected
   the field and then evaluated the NNGP prior on the projected values, with an

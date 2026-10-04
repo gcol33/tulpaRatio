@@ -16,6 +16,7 @@
 #include "hmc_zi.h"
 #include "hmc_svc.h"
 #include "hmc_gp.h"
+#include "hmc_svc_field.h"
 #include "hmc_temporal_multiscale.h"
 #include "hmc_latent.h"
 #include "hmc_spatiotemporal.h"
@@ -232,6 +233,11 @@ struct ModelData {
   // svc_default_range() in R rather than a second pair a model could run under.
   double svc_phi_prior_lower = 0.3;
   double svc_phi_prior_upper = 30.0;
+  // Coordinate the NNGP terms are sampled in: the block holds w (centred) or
+  // z with w = L(sigma2, phi) z (non-centred), read through hmc_svc_field.h.
+  // svc_gp_view is the neighbour structure that transform reads.
+  bool svc_noncentered = false;
+  ratiod_gp::GPData svc_gp_view;
 
   // GP spatial structure (single-scale)
   GPData gp_data;

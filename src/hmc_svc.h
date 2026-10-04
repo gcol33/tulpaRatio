@@ -190,7 +190,8 @@ inline double nngp_log_lik(
 // projection applied to the accumulated per-term block. The field prior's own
 // gradient is NOT projected -- the NNGP density is placed on the uncentred w.
 // So the likelihood contribution is accumulated apart from the prior one and
-// added here, which is what keeps the two from being projected together.
+// projected on its own (svc_center_terms), which is what keeps the two from
+// being projected together.
 // Per-term means of a term-major field block: the quantity the centring
 // removes. A gradient path keeps the UNCENTRED w for the field prior and
 // subtracts these on its way into eta, so one buffer serves both readers.
@@ -204,20 +205,14 @@ inline void svc_term_means(
                                              svc_data.n_obs);
 }
 
-inline void svc_center_project_lik_grad(
-    const double* lik_grad,      // n_svc x n_obs, term-major: dL/dw_c
-    const SVCData& svc_data,
-    int base_idx,
-    double* grad
-) {
+// P applied in place to a term-major block: each term less its mean over
+// locations. On a field it is the field eta reads; on dL/dw_c it is dL/dw.
+inline void svc_center_terms(double* block, const SVCData& svc_data) {
   const int n_obs = svc_data.n_obs;
-  const int n_svc = svc_data.n_svc;
-
-  for (int j = 0; j < n_svc; j++) {
+  for (int j = 0; j < svc_data.n_svc; j++) {
     const int off = j * n_obs;
-    const double m = tulpa::s2z_component_mean(lik_grad, off, n_obs);
-    for (int i = 0; i < n_obs; i++)
-      grad[base_idx + off + i] += lik_grad[off + i] - m;
+    const double m = tulpa::s2z_component_mean(block, off, n_obs);
+    for (int i = 0; i < n_obs; i++) block[off + i] -= m;
   }
 }
 

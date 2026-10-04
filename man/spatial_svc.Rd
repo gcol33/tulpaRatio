@@ -14,7 +14,8 @@ spatial_svc(
   approx = c("nngp", "hsgp"),
   m = 6,
   c_boundary = 1.5,
-  range = svc_default_range()
+  range = svc_default_range(),
+  parameterization = c("noncentered", "centered")
 )
 }
 \arguments{
@@ -59,6 +60,17 @@ posterior that piles up against either end is reporting that the data
 want a range the interval excludes. Default \code{c(0.3, 30)}. Applies to
 \code{approx = "nngp"}; the HSGP arm carries a LogNormal(0, 1) prior on its
 lengthscale instead and rejects a \code{range} set here.}
+
+\item{parameterization}{Coordinate each NNGP term is sampled in.
+\code{"noncentered"} (default) samples \eqn{z_j \sim N(0, I)} and builds
+\eqn{w_j = L(\sigma^2_j, \phi_j) z_j} through the NNGP autoregression, so
+the variance reaches the field through the transform rather than through
+the prior's quadratic form. \code{"centered"} samples the field \eqn{w_j}
+directly under its NNGP prior, where the field's level and
+\eqn{\sigma^2_j} form a funnel that mixes slowly on small data. Both place
+the same prior on \eqn{w_j}.
+Applies to \code{approx = "nngp"}; the HSGP arm already samples standardised
+basis coefficients.}
 }
 \value{
 A \code{ratiod_svc} object

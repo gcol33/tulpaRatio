@@ -199,3 +199,42 @@ test_that("the SVC range prior a spec declares is the one the sampler runs", {
   expect_gt(max(wide), 3)
   expect_false(isTRUE(all.equal(unname(tight), unname(wide))))
 })
+
+test_that("spatial_svc() validates the parameterization", {
+  expect_identical(spatial_svc(~ lon + lat, terms = 1)$parameterization,
+                   "noncentered")
+  expect_identical(spatial_svc(~ lon + lat, terms = 1,
+                               parameterization = "centered")$parameterization,
+                   "centered")
+  expect_error(spatial_svc(~ lon + lat, terms = 1, parameterization = "x"))
+  expect_error(spatial_svc(~ lon + lat, terms = 1, approx = "hsgp",
+                           parameterization = "noncentered"),
+               "approx")
+})
+
+# eta reads each term centred over locations, so the stored draw is that
+# field in either coordinate (gcol33/tulpaRatio#98): an uncentred draw carries
+# a level the likelihood never saw into svc() and into the fit's eta.
+test_that("a stored SVC draw is the centred field eta reads", {
+  skip_on_cran()
+
+  set.seed(11)
+  N <- 80
+  x <- rnorm(N)
+  trials <- sample(10:50, N, replace = TRUE)
+  df <- data.frame(y = rbinom(N, trials, plogis(0.5 + 0.3 * x)), trials = trials,
+                   x = x, lon = runif(N), lat = runif(N))
+
+  for (p in c("centered", "noncentered")) {
+    set.seed(3)
+    fit <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
+                  spatial = spatial_svc(~ lon + lat, terms = ~ x - 1, nn = 8,
+                                        parameterization = p),
+                  control = list(iter = 200, warmup = 100, chains = 1,
+                                 verbose = FALSE))
+    w <- svc(fit)$draws[, , 1]
+    expect_lt(max(abs(rowMeans(w))), 1e-10, label = p)
+    # The non-centred block is z ~ N(0, I); what is stored is the field.
+    expect_gt(max(apply(w, 1, stats::sd)), 0, label = p)
+  }
+})

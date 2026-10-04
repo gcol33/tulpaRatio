@@ -1098,20 +1098,34 @@ T compute_log_post_impl(
                 log_post = log_post + log_phi;
             }
 
-            // Extract SVC values
+            // The sampled block, and the field it stands for
             int n_svc_params = n_svc * n_obs;
-            svc_w_flat.resize(n_svc_params);
+            std::vector<T> svc_block(n_svc_params);
             for (int k = 0; k < n_svc_params; k++) {
-                svc_w_flat[k] = params[layout.svc_w_start + k];
+                svc_block[k] = params[layout.svc_w_start + k];
             }
+            svc_w_flat.resize(n_svc_params);
+            ratiod_svc::svc_field<ratiod_svc::SVC_DENSITY_SLOT>(svc_block.data(), svc_sigma2.data(),
+                                  svc_phi.data(), data.svc_data,
+                                  data.svc_gp_view, data.svc_noncentered,
+                                  svc_w_flat.data());
 
-            // NNGP prior on each SVC term
-            for (int j = 0; j < n_svc; j++) {
-                std::vector<T> w_j(n_obs);
-                for (int k = 0; k < n_obs; k++) {
-                    w_j[k] = svc_w_flat[j * n_obs + k];
+            if (data.svc_noncentered) {
+                // The NNGP prior on w and the Jacobian |dw/dz| cancel, so the
+                // field's own density is N(0, I) on z.
+                T z_sq_sum = T(0.0);
+                for (int k = 0; k < n_svc_params; k++)
+                    z_sq_sum = z_sq_sum + svc_block[k] * svc_block[k];
+                log_post = log_post - T(0.5) * z_sq_sum;
+            } else {
+                // NNGP prior on each SVC term
+                for (int j = 0; j < n_svc; j++) {
+                    std::vector<T> w_j(n_obs);
+                    for (int k = 0; k < n_obs; k++) {
+                        w_j[k] = svc_w_flat[j * n_obs + k];
+                    }
+                    log_post = log_post + ratiod_svc_ad::nngp_log_lik(w_j, svc_sigma2[j], svc_phi[j], data.svc_data);
                 }
-                log_post = log_post + ratiod_svc_ad::nngp_log_lik(w_j, svc_sigma2[j], svc_phi[j], data.svc_data);
             }
 
             // Identify each term's level by centring it on its way into eta:

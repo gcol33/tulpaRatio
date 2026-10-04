@@ -341,6 +341,17 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
                    "exponential, matern, gaussian, spherical.",
                    svc_cov_type_str);
       }
+
+      const std::string svc_param_str =
+          Rcpp::as<std::string>(svc_params["parameterization"]);
+      if (svc_param_str != "centered" && svc_param_str != "noncentered") {
+        Rcpp::stop("Unknown SVC parameterization '%s'. Expected centered or "
+                   "noncentered.", svc_param_str);
+      }
+      data.svc_noncentered = (svc_param_str == "noncentered");
+      if (data.svc_noncentered) {
+        data.svc_gp_view = ratiod_svc::make_svc_gp_view(data.svc_data);
+      }
     }
 
     // Prior parameters

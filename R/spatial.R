@@ -1319,6 +1319,16 @@ svc_default_range <- function() c(0.3, 30)
 #'   want a range the interval excludes. Default `c(0.3, 30)`. Applies to
 #'   `approx = "nngp"`; the HSGP arm carries a LogNormal(0, 1) prior on its
 #'   lengthscale instead and rejects a `range` set here.
+#' @param parameterization Coordinate each NNGP term is sampled in.
+#'   `"noncentered"` (default) samples \eqn{z_j \sim N(0, I)} and builds
+#'   \eqn{w_j = L(\sigma^2_j, \phi_j) z_j} through the NNGP autoregression, so
+#'   the variance reaches the field through the transform rather than through
+#'   the prior's quadratic form. `"centered"` samples the field \eqn{w_j}
+#'   directly under its NNGP prior, where the field's level and
+#'   \eqn{\sigma^2_j} form a funnel that mixes slowly on small data. Both place
+#'   the same prior on \eqn{w_j}.
+#'   Applies to `approx = "nngp"`; the HSGP arm already samples standardised
+#'   basis coefficients.
 #'
 #' @return A `ratiod_svc` object
 #'
@@ -1401,10 +1411,17 @@ spatial_svc <- function(coords,
                         approx = c("nngp", "hsgp"),
                         m = 6,
                         c_boundary = 1.5,
-                        range = svc_default_range()) {
+                        range = svc_default_range(),
+                        parameterization = c("noncentered", "centered")) {
 
   cov <- match.arg(cov)
   approx <- match.arg(approx)
+  parameterization_set <- !missing(parameterization)
+  parameterization <- match.arg(parameterization)
+  if (approx == "hsgp" && parameterization_set) {
+    stop("`parameterization` applies to `approx = \"nngp\"`. The HSGP arm\n",
+         "samples standardised basis coefficients already.", call. = FALSE)
+  }
 
   # Parse coordinate specification
   if (inherits(coords, "formula")) {
@@ -1489,6 +1506,7 @@ spatial_svc <- function(coords,
       m = m,
       c_boundary = c_boundary,
       range = range,
+      parameterization = parameterization,
       # Filled in during validation
       n_obs = NULL,
       n_svc = NULL,

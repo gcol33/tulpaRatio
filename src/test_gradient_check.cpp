@@ -146,14 +146,14 @@ const char* const KNOWN_FIELDS[] = {
   "gp", "gp_matern", "gp_gaussian", "gp_spherical",
   "gp_nc", "gp_collapsed", "gp_temporal",
   "msgp", "msgp_nc", "msgp_temporal", "msgp_hsgp",
-  "svc", "svc_hsgp",
+  "svc", "svc_hsgp", "svc_nc",
   "temporal_gp", "ms_temporal", "latent",
   // Combinations a specialized gradient used to be selected for while writing
   // none of the second block. Each is routed by its feature mask now, and each
   // of these is what says the function it lands on writes both blocks.
   "gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4", "gp_collapsed_st4",
   "icar_collapsed_st4", "bym2_collapsed_st4", "tvc_st4", "temporal_gp_st4",
-  "gp_tgp", "svc_ms", "gp_slopes", "gp_slopes_corr", "gp_crossed"
+  "gp_tgp", "svc_ms", "svc_ms_nc", "gp_slopes", "gp_slopes_corr", "gp_crossed"
 };
 
 // The spatial fields make_model() also builds under restricted spatial
@@ -323,6 +323,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // field is identified.
   const bool want_ms = (field == "icar_ms" || field == "bym2_ms" ||
                         field == "ms_temporal" || field == "svc_ms" ||
+                        field == "svc_ms_nc" ||
                         field == "car_proper_ms" ||
                         field == "ms_temporal_nc" ||
                         field == "ms_temporal_rw2" ||
@@ -435,7 +436,11 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // lengthscale in place of an NNGP density.
   const bool want_msgp_hsgp = (field == "msgp_hsgp");
   const bool want_svc_hsgp = (field == "svc_hsgp");
-  const bool want_svc = (field == "svc" || want_svc_hsgp || field == "svc_ms");
+  // svc_nc / svc_ms_nc sample each term in the non-centred coordinate;
+  // svc_nc carries two terms so each one's transform reads its own workspace.
+  const bool want_svc_nc = (field == "svc_nc" || field == "svc_ms_nc");
+  const bool want_svc = (field == "svc" || want_svc_hsgp || field == "svc_ms" ||
+                         want_svc_nc);
   const bool want_temporal_gp = (field == "temporal_gp" ||
                                  field == "temporal_gp_st4" ||
                                  field == "gp_tgp");
@@ -710,8 +715,9 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     data.bym2_scale_factor = 1.0;
   }
 
-  // SVC: one spatially-varying slope on the covariate, either as an NNGP field
-  // over the observation locations or on an HSGP spectral basis.
+  // SVC: a spatially-varying slope on the covariate (and, for svc_nc, on the
+  // intercept too), either as an NNGP field over the observation locations or
+  // on an HSGP spectral basis.
   if (want_svc) {
     std::vector<double> coords(static_cast<size_t>(n_obs) * 2);
     std::uniform_real_distribution<double> runif_c(0.0, 1.0);
@@ -720,14 +726,19 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       coords[static_cast<size_t>(i) * 2 + 1] = runif_c(rng);
     }
     auto& svc = data.svc_data;
+    const int n_svc = (field == "svc_nc") ? 2 : 1;
     svc.n_obs = n_obs;
-    svc.n_svc = 1;
+    svc.n_svc = n_svc;
     svc.shared = true;
     svc.coords = coords;
-    svc.svc_indices.assign(1, 1);
-    svc.X_svc.resize(n_obs);
+    svc.svc_indices.clear();
+    for (int j = 0; j < n_svc; j++) svc.svc_indices.push_back(2 - n_svc + j);
+    svc.X_svc.resize(static_cast<size_t>(n_obs) * n_svc);
     for (int i = 0; i < n_obs; i++) {
-      svc.X_svc[i] = data.X_num_flat[static_cast<size_t>(i) * 2 + 1];
+      for (int j = 0; j < n_svc; j++) {
+        svc.X_svc[static_cast<size_t>(i) * n_svc + j] =
+            data.X_num_flat[static_cast<size_t>(i) * 2 + svc.svc_indices[j]];
+      }
     }
     svc.cov_type = ratiod_svc::CovType::EXPONENTIAL;
 
@@ -748,6 +759,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       svc.nn_dist = nb.nn_dist;
       svc.nn_order = nb.nn_order;
       svc.nn_order_inv = nb.nn_order_inv;
+      data.svc_noncentered = want_svc_nc;
+      if (want_svc_nc) data.svc_gp_view = ratiod_svc::make_svc_gp_view(svc);
     }
     data.svc_sigma2_prior_scale = 1.0;
     data.svc_phi_prior_lower = 0.001;

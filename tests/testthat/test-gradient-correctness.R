@@ -128,12 +128,16 @@ ST_GP_FIELDS <- c("stgp", "stgp_matern", "stgp_gneiting", "stgp_latent")
 #                scale's block holds z ~ N(0, I) and its field is
 #                w = L(sigma2, phi) z, so all four hyperparameters reach eta
 #                through the transforms as well as through the priors.
+#   svc_nc    -- spatial_svc(parameterization = "noncentered") with two
+#                terms: each term's block holds z ~ N(0, I) and its field is
+#                w_j = L(sigma2_j, phi_j) z_j, read through a workspace of its
+#                own, before eta takes the centred field.
 # Both were declared gaps in the templated density until gcol33/tulpaRatio#26;
 # the autodiff modes now differentiate a density that expresses them, so they
 # belong here rather than with the collapsed fields.
 KERNEL_FIELDS <- c("gp", "gp_matern", "gp_gaussian", "gp_spherical",
                    "gp_temporal", "gp_nc", "msgp", "msgp_temporal",
-                   "msgp_hsgp", "msgp_nc", "svc", "svc_hsgp",
+                   "msgp_hsgp", "msgp_nc", "svc", "svc_hsgp", "svc_nc",
                    "temporal_gp", "ms_temporal", "latent",
                    # The intrinsic multi-scale arms in either coordinate. The
                    # non-centred one holds z ~ N(0, I) and reaches eta through
@@ -167,7 +171,8 @@ BLOCKED_FIELDS <- character(0)
 # crossed term carries no slope, so GF_RE_SLOPES does not see it.
 DISPATCH_MASK_FIELDS <- c("gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4",
                           "tvc_st4", "temporal_gp_st4", "gp_tgp", "svc_ms",
-                          "gp_slopes", "gp_slopes_corr", "gp_crossed")
+                          "svc_ms_nc", "gp_slopes", "gp_slopes_corr",
+                          "gp_crossed")
 # The same, for a collapsed field. Its marginal is an inner Laplace at a mode
 # that moves with every other block in eta, which nothing but the collapsed
 # kernels' own companion-temporal path carries, so the dispatch returns the
@@ -271,7 +276,7 @@ test_that("resolve_gradient_fn sends each model to the function written for it",
     # One structure: the specialized function keeps it.
     gp = "gp", gp_temporal = "gp_temporal", msgp = "msgp",
     msgp_temporal = "msgp_temporal", hsgp = "hsgp",
-    svc = "svc", svc_hsgp = "svc_hsgp", tvc = "tvc",
+    svc = "svc", svc_hsgp = "svc_hsgp", svc_nc = "svc", tvc = "tvc",
     temporal_gp = "temporal_gp", ms_temporal = "ms_temporal",
     ms_temporal_nc = "ms_temporal", ms_temporal_rw2 = "ms_temporal",
     ms_temporal_rw2_nc = "ms_temporal",
@@ -286,7 +291,8 @@ test_that("resolve_gradient_fn sends each model to the function written for it",
     gp_st4 = "composite", gp_stgp = "composite",
     gp_temporal_st4 = "composite", msgp_st4 = "composite",
     tvc_st4 = "composite", temporal_gp_st4 = "composite",
-    gp_tgp = "composite", svc_ms = "composite", gp_slopes = "composite",
+    gp_tgp = "composite", svc_ms = "composite", svc_ms_nc = "composite",
+    gp_slopes = "composite",
     gp_slopes_corr = "composite", gp_crossed = "composite",
     stgp_latent = "composite",
     # A collapsed marginal alongside a second block.

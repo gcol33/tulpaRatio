@@ -4889,11 +4889,11 @@ void compute_gradient_svc_handcoded(
         }
     }
 
-    // Extract SVC spatial effects into per-thread scratch
+    // The SVC field at the sampled coordinate, into per-thread scratch
     double* svc_w_flat = svc_scratch.w_flat.data();
-    for (int k = 0; k < N_obs * n_svc; k++) {
-        svc_w_flat[k] = params[layout.svc_w_start + k];
-    }
+    const double* svc_block = &params[layout.svc_w_start];
+    ratiod_svc::svc_field<ratiod_svc::SVC_GRAD_SLOT>(svc_block, svc_sigma2, svc_phi, data.svc_data,
+                          data.svc_gp_view, data.svc_noncentered, svc_w_flat);
 
     // =========================================================================
     // Prior gradients
@@ -4917,17 +4917,20 @@ void compute_gradient_svc_handcoded(
     }
 
     // =========================================================================
-    // Compute NNGP gradients w.r.t. SVC effects (analytical)
+    // NNGP field prior (centred: on w; non-centred: N(0, I) on z, seeded by
+    // svc_field_accumulate below)
     // =========================================================================
-    ratiod_svc::svc_nngp_prior_grads(
-        svc_w_flat, svc_sigma2, svc_phi, data.svc_data,
-        layout.svc_w_start, layout.log_sigma2_svc_start, layout.log_phi_svc_start,
-        svc_scratch, grad.data());
+    if (!data.svc_noncentered) {
+        ratiod_svc::svc_nngp_prior_grads(
+            svc_w_flat, svc_sigma2, svc_phi, data.svc_data,
+            layout.svc_w_start, layout.log_sigma2_svc_start, layout.log_phi_svc_start,
+            svc_scratch, grad.data());
+    }
 
     // The field prior's gradient above is placed on the uncentred w and is
     // NOT projected. The likelihood's is: eta reads the CENTRED field, so its
     // gradient is accumulated apart in svc_scratch.lik_grad and projected onto
-    // the sum-to-zero subspace by svc_center_project_lik_grad below.
+    // the sum-to-zero subspace by svc_center_terms below.
     double* svc_lik_grad = svc_scratch.lik_grad.data();
     std::fill(svc_scratch.lik_grad.begin(), svc_scratch.lik_grad.end(), 0.0);
 
@@ -4997,8 +5000,11 @@ void compute_gradient_svc_handcoded(
         }
     }
 
-    ratiod_svc::svc_center_project_lik_grad(svc_lik_grad, data.svc_data,
-                                            layout.svc_w_start, grad.data());
+    ratiod_svc::svc_center_terms(svc_lik_grad, data.svc_data);
+    ratiod_svc::svc_field_accumulate<ratiod_svc::SVC_GRAD_SLOT>(
+        svc_block, svc_sigma2, svc_phi, data.svc_data, data.svc_gp_view,
+        data.svc_noncentered, svc_lik_grad, layout.svc_w_start,
+        layout.log_sigma2_svc_start, layout.log_phi_svc_start, grad.data());
 
     // Non-centered RE chain rule transformation
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
@@ -7171,19 +7177,25 @@ void compute_gradient_composite(
     const int N_svc = has_svc_nngp ? data.svc_data.n_obs : 0;
     std::vector<double> svc_w_nngp;
     std::vector<double> svc_term_mean;
+    std::vector<double> svc_sigma2_c, svc_phi_c;
     if (has_svc_nngp) {
         n_svc = data.svc_data.n_svc;
         svc_w_nngp.resize(static_cast<size_t>(N_svc) * n_svc);
+        svc_sigma2_c.resize(n_svc);
+        svc_phi_c.resize(n_svc);
         for (int j = 0; j < n_svc; j++) {
-            const double phi_j = std::exp(params[layout.log_phi_svc_start + j]);
-            if (phi_j < data.svc_phi_prior_lower || phi_j > data.svc_phi_prior_upper) {
+            svc_sigma2_c[j] = std::exp(params[layout.log_sigma2_svc_start + j]);
+            svc_phi_c[j] = std::exp(params[layout.log_phi_svc_start + j]);
+            if (svc_phi_c[j] < data.svc_phi_prior_lower ||
+                svc_phi_c[j] > data.svc_phi_prior_upper) {
                 if (log_post_out && !layout.has_zi)
                     *log_post_out = compute_log_post(params_in, data, layout);
                 return;
             }
         }
-        for (int k = 0; k < N_svc * n_svc; k++)
-            svc_w_nngp[k] = params[layout.svc_w_start + k];
+        ratiod_svc::svc_field<ratiod_svc::SVC_GRAD_SLOT>(&params[layout.svc_w_start], svc_sigma2_c.data(),
+                              svc_phi_c.data(), data.svc_data, data.svc_gp_view,
+                              data.svc_noncentered, svc_w_nngp.data());
         // eta reads the CENTRED field, the NNGP prior below reads w itself.
         svc_term_mean.assign(n_svc, 0.0);
         ratiod_svc::svc_term_means(svc_w_nngp.data(), data.svc_data,
@@ -7403,26 +7415,24 @@ void compute_gradient_composite(
     }
 
     // SVC (NNGP) priors: half-Cauchy on each sigma, uniform on each range, and
-    // the NNGP field prior, which is placed on the UNCENTRED w and so is not
-    // projected. The likelihood's gradient is (grad_svc_w_lik, applied below).
+    // the NNGP field prior. Centred, that prior is placed on the UNCENTRED w and
+    // so is not projected; non-centred, it is N(0, I) on z and is seeded by
+    // svc_field_accumulate below. The likelihood's gradient is grad_svc_w_lik.
     if (has_svc_nngp) {
-        RATIOD_TLS_WORKSPACE(ratiod_svc::SVCGradWorkspace, svc_scratch);
-        svc_scratch.resize(n_svc, N_svc);
-
         for (int j = 0; j < n_svc; j++) {
-            const double sigma_j = std::exp(0.5 * params[layout.log_sigma2_svc_start + j]);
-            const double ratio = sigma_j / data.svc_sigma2_prior_scale;
+            const double ratio = std::sqrt(svc_sigma2_c[j]) / data.svc_sigma2_prior_scale;
             const double ratio_sq = ratio * ratio;
             grad[layout.log_sigma2_svc_start + j] += -ratio_sq / (1.0 + ratio_sq) + 1.0;
             grad[layout.log_phi_svc_start + j] += 1.0;
-
-            svc_scratch.sigma2[j] = std::exp(params[layout.log_sigma2_svc_start + j]);
-            svc_scratch.phi[j] = std::exp(params[layout.log_phi_svc_start + j]);
         }
-        ratiod_svc::svc_nngp_prior_grads(
-            svc_w_nngp.data(), svc_scratch.sigma2.data(), svc_scratch.phi.data(),
-            data.svc_data, layout.svc_w_start, layout.log_sigma2_svc_start,
-            layout.log_phi_svc_start, svc_scratch, grad.data());
+        if (!data.svc_noncentered) {
+            RATIOD_TLS_WORKSPACE(ratiod_svc::SVCGradWorkspace, svc_scratch);
+            svc_scratch.resize(n_svc, N_svc);
+            ratiod_svc::svc_nngp_prior_grads(
+                svc_w_nngp.data(), svc_sigma2_c.data(), svc_phi_c.data(),
+                data.svc_data, layout.svc_w_start, layout.log_sigma2_svc_start,
+                layout.log_phi_svc_start, svc_scratch, grad.data());
+        }
     }
 
     // HSGP priors (must match hardcoded rate=4.6 in compute_log_post)
@@ -7969,9 +7979,12 @@ void compute_gradient_composite(
     }
 
     if (has_svc_nngp) {
-        ratiod_svc::svc_center_project_lik_grad(grad_svc_w_lik.data(),
-                                                data.svc_data,
-                                                layout.svc_w_start, grad.data());
+        ratiod_svc::svc_center_terms(grad_svc_w_lik.data(), data.svc_data);
+        ratiod_svc::svc_field_accumulate<ratiod_svc::SVC_GRAD_SLOT>(
+            &params[layout.svc_w_start], svc_sigma2_c.data(), svc_phi_c.data(),
+            data.svc_data, data.svc_gp_view, data.svc_noncentered,
+            grad_svc_w_lik.data(), layout.svc_w_start,
+            layout.log_sigma2_svc_start, layout.log_phi_svc_start, grad.data());
     }
 
     // HSGP spectral density gradients
@@ -11144,6 +11157,23 @@ HMCResultCpp run_hmc_chain_cpp(
               for (int i = 0; i < N_gp; i++) {
                   row[layout.gp_w_start + i] = nc_ws_store.w[i];
               }
+          }
+          // The SVC row carries the field eta reads: each term on the effect
+          // scale whichever coordinate it was sampled in, centred over
+          // locations as svc_center_eta enters it.
+          if (layout.has_svc && data.has_svc && !data.svc_is_hsgp &&
+              data.svc_data.n_svc > 0) {
+              const int n_svc_store = data.svc_data.n_svc;
+              std::vector<double> svc_s2_store(n_svc_store), svc_phi_store(n_svc_store);
+              for (int j = 0; j < n_svc_store; j++) {
+                  svc_s2_store[j] = std::exp(q[layout.log_sigma2_svc_start + j]);
+                  svc_phi_store[j] = std::exp(q[layout.log_phi_svc_start + j]);
+              }
+              ratiod_svc::svc_field<ratiod_svc::SVC_DENSITY_SLOT>(
+                  &q[layout.svc_w_start], svc_s2_store.data(), svc_phi_store.data(),
+                  data.svc_data, data.svc_gp_view, data.svc_noncentered,
+                  &row[layout.svc_w_start]);
+              ratiod_svc::svc_center_terms(&row[layout.svc_w_start], data.svc_data);
           }
           if (msgp_nc(data, layout)) {
               MultiscaleGPView msgp_store;
