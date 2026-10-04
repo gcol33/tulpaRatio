@@ -33,8 +33,8 @@
     iteration beside the parameters updated during it, so saved draw `s` paired
     the parameters of iteration `s` with the predictor of iteration `s - 1`; the
     predictor is refreshed at the save (#95). The field-free and
-    random-effect-only fits run tulpa's own sampler, which has the same lag
-    (gcol33/tulpa#941).
+    random-effect-only fits run tulpa's own sampler, which stores the saved
+    draw's predictor from gcol33/tulpa#941 on.
 
 * **The log posterior no longer depends on the thread count on Windows arm64
   (#83).** On aarch64-w64-mingw (Rtools45 clang 19) an OpenMP

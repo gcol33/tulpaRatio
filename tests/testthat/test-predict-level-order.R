@@ -46,7 +46,6 @@ test_that("an areal prediction reads each row's own unit (HMC)", {
 
 test_that("a PG fit stores the predictor of the draw it saves", {
   skip_on_cran()
-  skip("blocked on gcol33/tulpa#941: the field-free PG sampler is tulpa's")
   df <- level_order_data()
   fit <- suppressWarnings(tratio(
     y | trials ~ x, data = df, family = ratiod_binomial(), mode = "pg",
