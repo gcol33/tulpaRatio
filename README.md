@@ -17,6 +17,15 @@ install. The usual approach divides first and models the quotient (or pins
 the denominator into an `offset`); that discards the shared structure and
 mis-states the uncertainty.
 
+## Installation
+
+```r
+install.packages("pak")                   # development version
+pak::pak("gcol33/tulpaRatio")
+```
+
+## Quick start
+
 ```r
 library(tulpaRatio)
 
@@ -107,13 +116,6 @@ fit <- tratio(
   data   = df,
   family = ratiod_negbin_negbin()
 )
-```
-
-## Installation
-
-```r
-install.packages("pak")                   # development version
-pak::pak("gcol33/tulpaRatio")
 ```
 
 ## Documentation

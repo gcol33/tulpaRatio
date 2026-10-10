@@ -19,6 +19,13 @@ knitr::opts_chunk$set(
 )
 ```
 
+## Installation
+
+```{r, eval = FALSE}
+install.packages("pak")                   # development version
+pak::pak("gcol33/tulpaRatio")
+```
+
 ## Overview
 
 Ecological and survey data often exhibit excess zeros beyond what standard distributions predict. numdenom provides several families to handle this:

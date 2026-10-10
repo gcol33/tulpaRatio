@@ -17,6 +17,13 @@ knitr::opts_chunk$set(
 )
 ```
 
+## Installation
+
+```{r, eval = FALSE}
+install.packages("pak")                   # development version
+pak::pak("gcol33/tulpaRatio")
+```
+
 ## Overview
 
 This vignette covers spatial and temporal extensions in numdenom. These allow borrowing strength across neighboring locations or time points, improving estimates in data-sparse regions.

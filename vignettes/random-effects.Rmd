@@ -19,6 +19,13 @@ knitr::opts_chunk$set(
 )
 ```
 
+## Installation
+
+```{r, eval = FALSE}
+install.packages("pak")                   # development version
+pak::pak("gcol33/tulpaRatio")
+```
+
 ## Overview
 
 This vignette covers random effects in numdenom, including random intercepts, random slopes, crossed effects, and nested effects. numdenom uses lme4-style formula syntax with extensions for correlated vs. uncorrelated slopes.

@@ -17,6 +17,13 @@ knitr::opts_chunk$set(
 )
 ```
 
+## Installation
+
+```{r, eval = FALSE}
+install.packages("pak")                   # development version
+pak::pak("gcol33/tulpaRatio")
+```
+
 ## Overview
 
 This vignette demonstrates complete analysis workflows using numdenom. Each example shows data preparation, model fitting, diagnostics, and inference. See `vignette("getting-started")` for basic usage and `vignette("philosophy")` for statistical motivation.

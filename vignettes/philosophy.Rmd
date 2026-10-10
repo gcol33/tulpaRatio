@@ -20,6 +20,13 @@ knitr::opts_chunk$set(
 )
 ```
 
+## Installation
+
+```{r, eval = FALSE}
+install.packages("pak")                   # development version
+pak::pak("gcol33/tulpaRatio")
+```
+
 ## The Core Problem
 
 Ecologists routinely analyse ratios: catch per unit effort (CPUE), species per unit area, biomass per trawl hour, detections per camera-night. The standard approach is to compute the ratio and model it directly:
