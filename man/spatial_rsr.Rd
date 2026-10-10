@@ -76,6 +76,7 @@ df <- data.frame(
 fit1 <- tratio(
   count | effort ~ depth + temp,
   data = df,
+  family = ratiod_poisson_gamma(),
   spatial = spatial_gp(~ lon + lat),
   mode = "hmc",
   control = list(iter = 200, warmup = 100, chains = 1)
@@ -85,6 +86,7 @@ fit1 <- tratio(
 fit2 <- tratio(
   count | effort ~ depth + temp,
   data = df,
+  family = ratiod_poisson_gamma(),
   spatial = spatial_rsr(
     spatial_gp(~ lon + lat),
     restrict_to = ~ depth + temp

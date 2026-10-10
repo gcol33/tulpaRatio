@@ -75,6 +75,7 @@ df <- data.frame(
 fit1 <- tratio(
   count | effort ~ temperature,
   data = df,
+  family = ratiod_poisson_gamma(),
   temporal = temporal_rw2("year"),
   mode = "hmc",
   control = list(iter = 200, warmup = 100, chains = 1)
@@ -84,6 +85,7 @@ fit1 <- tratio(
 fit2 <- tratio(
   count | effort ~ temperature,
   data = df,
+  family = ratiod_poisson_gamma(),
   temporal = temporal_rtr(
     temporal_rw2("year"),
     restrict_to = ~ temperature

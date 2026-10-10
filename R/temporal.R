@@ -1976,6 +1976,7 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #' fit1 <- tratio(
 #'   count | effort ~ temperature,
 #'   data = df,
+#'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw2("year"),
 #'   mode = "hmc",
 #'   control = list(iter = 200, warmup = 100, chains = 1)
@@ -1985,6 +1986,7 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #' fit2 <- tratio(
 #'   count | effort ~ temperature,
 #'   data = df,
+#'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rtr(
 #'     temporal_rw2("year"),
 #'     restrict_to = ~ temperature
