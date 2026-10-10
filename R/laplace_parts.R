@@ -14,7 +14,7 @@
 #' `iid` block enters the predictor as `sigma * z`, a `bym2` block as
 #' `sigma * (sqrt(rho) * s * a + sqrt(1 - rho) * b)` with the scale factor `s`, an `hsgp` block through
 #' `sqrt(S_j) * z_j` with the squared-exponential spectral density `S`, whose
-#' amplitude and lengthscale axes are held on the log scale; the
+#' amplitude and lengthscale axes are held on their own scale; the
 #' precision of `icar`, `car_proper`, `rw1`, `rw2` and `ar1` blocks carries their
 #' scale, so their coordinates are the effect.
 #'
@@ -180,8 +180,8 @@ laplace_hsgp_part <- function(k, label, columns, basis, obs_to_loc, n_arms,
     role = "spatial", label = label, block = block,
     n = nrow(Phi), index = obs_to_loc,
     effect = function(Z, theta) {
-      sigma2 <- exp(theta[, paste0("b", k, ".sigma2")])
-      ell2 <- exp(2 * theta[, paste0("b", k, ".lengthscale")])
+      sigma2 <- theta[, paste0("b", k, ".sigma2")]
+      ell2 <- theta[, paste0("b", k, ".lengthscale")]^2
       sqrt_S <- sqrt(sigma2 * 2 * pi * ell2 * exp(-0.5 * outer(ell2, lam)))
       (Z * sqrt_S) %*% t(Phi)
     },

@@ -17,7 +17,7 @@ the blocks in order. A block's latent coordinates are unit-precision: an
 \code{iid} block enters the predictor as \code{sigma * z}, a \code{bym2} block as
 \code{sigma * (sqrt(rho) * s * a + sqrt(1 - rho) * b)} with the scale factor \code{s}, an \code{hsgp} block through
 \code{sqrt(S_j) * z_j} with the squared-exponential spectral density \code{S}, whose
-amplitude and lengthscale axes are held on the log scale; the
+amplitude and lengthscale axes are held on their own scale; the
 precision of \code{icar}, \code{car_proper}, \code{rw1}, \code{rw2} and \code{ar1} blocks carries their
 scale, so their coordinates are the effect.
 }
