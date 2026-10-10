@@ -105,7 +105,6 @@ reference:
     desc: "Joint spatiotemporal specifications"
     contents:
       - spatiotemporal
-      - spatiotemporal_gp
       - spatiotemporal_effects
 
   - title: "Latent Factors"
@@ -165,7 +164,6 @@ reference:
       - waic.ratiod_fit
       - check_diagnostics
       - diagnostic_summary
-      - mcmc_diagnostics
       - diagnostics.ratiod_fit
       - geweke_test
       - n_divergent
