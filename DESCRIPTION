@@ -44,7 +44,8 @@ Suggests:
     MASS,
     testthat (>= 3.0.0),
     knitr,
-    rmarkdown
+    rmarkdown,
+    svglite
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
