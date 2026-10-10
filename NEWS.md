@@ -130,8 +130,8 @@
   5 seeds and WALNUTS never, and both sat within 0.06 reference SDs of a long
   `adapt_delta = 0.95` NUTS run on every fixed effect and hyperparameter, with
   SD ratios 0.93 to 1.05 under WALNUTS. NUTS stays the default, and its draws
-  are bit-identical to those before the change. Needs tulpa with
-  `<tulpa/walnuts.h>` (gcol33/tulpa@7fddf507).
+  are bit-identical to those before the change. Needs tulpa 0.7.1 or later,
+  the first version that ships `<tulpa/walnuts.h>` (gcol33/tulpa@7fddf507).
 
 * **`mcmc_diagnostics()` is gone; use `diagnostics()` (#82).** It was an
   exported `lifecycle::deprecate_warn()` shim forwarding to `diagnostics()`,

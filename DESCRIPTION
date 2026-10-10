@@ -27,12 +27,12 @@ Imports:
     posterior,
     loo,
     stats,
-    tulpa (>= 0.1.12),
+    tulpa (>= 0.7.1),
     Rcpp (>= 1.0.0)
 LinkingTo:
     Rcpp,
     RcppEigen,
-    tulpa
+    tulpa (>= 0.7.1)
 Additional_repositories: https://gcol33.r-universe.dev
 Suggests:
     patchwork,
