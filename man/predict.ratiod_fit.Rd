@@ -77,15 +77,21 @@ Compute posterior predictions for new data from a fitted ratio model.
 }
 \examples{
 \donttest{
+# A smooth spatial field w shared by count and effort
 set.seed(321)
 n <- 60
+x <- runif(n)
+y <- runif(n)
+w <- 0.6 * sin(2 * pi * x) + 0.6 * cos(2 * pi * y)
+depth <- rnorm(n)
+season <- factor(sample(c("summer", "winter"), n, replace = TRUE))
 df <- data.frame(
-  count = rpois(n, lambda = 18),
-  effort = rgamma(n, shape = 9, rate = 1),
-  depth = rnorm(n),
-  season = factor(sample(c("summer", "winter"), n, replace = TRUE)),
-  x = runif(n),
-  y = runif(n)
+  count = rpois(n, exp(2.5 + 0.3 * depth + 0.4 * (season == "winter") + w)),
+  effort = rgamma(n, shape = 9, rate = exp(-w)),
+  depth = depth,
+  season = season,
+  x = x,
+  y = y
 )
 fit <- tratio(
   count | effort ~ depth + season,

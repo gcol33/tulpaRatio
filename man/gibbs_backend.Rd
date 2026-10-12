@@ -4,7 +4,7 @@
 \alias{gibbs_backend}
 \title{Gibbs Sampling Backend for Spatial Models}
 \description{
-Component-wise Gibbs sampler for ICAR and BYM2 spatial models. Uses univariate
+Component-wise Gibbs sampler for ICAR spatial models. Uses univariate
 MH updates for spatial effects with the ICAR conditional prior as proposal,
 conjugate Gamma update for spatial precision, and block MH for fixed effects.
 }
@@ -24,7 +24,6 @@ effects one at a time, avoiding the curse of dimensionality.
 \strong{Supported spatial structures:}
 \itemize{
 \item ICAR (intrinsic CAR) via \code{spatial_car()}
-\item BYM2 via \code{spatial_bym2()}
 }
 }
 \keyword{internal}

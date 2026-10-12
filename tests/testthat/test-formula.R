@@ -204,3 +204,23 @@ test_that("(1 | a:b) groups by the interaction, as the second term of (1 | a/b)"
   expect_error(tulpaRatio:::extract_random_effects("(1 | site:block)", df),
                "'block' not found")
 })
+
+test_that("random-effect terms are removed without touching inline transforms", {
+  rre <- function(f) deparse(tulpaRatio:::remove_random_effects(f))
+  expect_identical(rre(y ~ x + I(x^2) + (1 | site)), "y ~ x + I(x^2)")
+  expect_identical(rre(y ~ log(x) + (1 + x || site) + poly(z, 2)), "y ~ log(x) + poly(z, 2)")
+  expect_identical(rre(y ~ (1 | site)), "y ~ 1")
+  expect_identical(rre(y ~ 0 + x + (1 | a/b)), "y ~ 0 + x")
+})
+
+test_that("a formula with transforms and a random effect fits", {
+  skip_on_cran()
+  set.seed(2)
+  df <- data.frame(count = rpois(60, 20), effort = rgamma(60, 10, 1),
+                   x = runif(60, 1, 3), site = factor(rep(1:6, 10)))
+  fit <- tratio(count | effort ~ log(x) + I(x^2) + (1 | site), data = df,
+                family = ratiod_poisson_gamma(),
+                control = list(iter = 200, chains = 1, seed = 1))
+  expect_named(coef(fit), c("num:(Intercept)", "num:log(x)", "num:I(x^2)",
+                            "denom:(Intercept)", "denom:log(x)", "denom:I(x^2)"))
+})

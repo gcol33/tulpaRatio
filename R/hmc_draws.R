@@ -75,8 +75,9 @@ hmc_draws_list <- function(unpacked) {
         }
         put(name, term$sigma[[c]])
       }
-      for (c in seq_along(term$chol)) {
-        put(paste0("L_chol[", t, ",", c, "]"), term$chol[[c]])
+      for (k in seq_along(term$cor)) {
+        pair <- coef_labels[term$cor_pairs[k, 2:1]]
+        put(paste0("cor_re[", t, ",", pair[1], ":", pair[2], "]"), term$cor[[k]])
       }
       for (c in seq_len(term$n_coefs)) {
         m <- term$coefs[[c]]
@@ -208,7 +209,6 @@ hmc_draws_list <- function(unpacked) {
   if (!is.null(lf)) {
     for (k in seq_len(ncol(lf$sigma))) {
       put(paste0("sigma_latent[", k, "]"), lf$sigma[, k])
-      put(paste0("latent_mean[", k, "]"), rowMeans(lf$factors[[k]]))
     }
   }
 

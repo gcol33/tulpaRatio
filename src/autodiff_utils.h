@@ -479,6 +479,37 @@ inline T log_lik_zoib(int y, int n, const T& p, const T& logit_zi, const T& logi
     }
 }
 
+// PC prior on the standard deviation sigma = tau^(-1/2) of a field with
+// precision tau: sigma ~ Exponential(lambda), lambda = -log(alpha) / U, so
+// that P(sigma > U) = alpha. As a density of the sampled coordinate log tau,
+// lambda exp(-lambda sigma) |d sigma / d log tau| = lambda exp(-lambda sigma)
+// sigma / 2, which is proper at both ends.
+template<typename T>
+inline T pc_log_prior_log_precision(const T& log_tau, double U, double alpha) {
+    const double lambda = -std::log(alpha) / U;
+    const T log_sigma = T(-0.5) * log_tau;
+    return T(std::log(0.5 * lambda)) - T(lambda) * safe_exp(log_sigma) + log_sigma;
+}
+
+// Its derivative with respect to log tau: lambda sigma / 2 - 1 / 2.
+inline double pc_log_prior_log_precision_grad(double log_tau, double U, double alpha) {
+    const double lambda = -std::log(alpha) / U;
+    return 0.5 * lambda * std::exp(-0.5 * log_tau) - 0.5;
+}
+
+// log(1 - exp(x)) for x < 0, the log mass a zero-truncated distribution keeps.
+// Near x = 0, 1 - exp(x) rounds to zero long before it is zero; there
+// -expm1(x) = -x (1 + x/2 + x^2/6 + x^3/24 + ...), so the logarithm is
+// log(-x) + log1p(x/2 + x^2/6 + x^3/24), exact to ~1e-14 for |x| < 1e-3.
+template<typename T>
+inline T log1m_exp(const T& x) {
+    if (get_value(x) > -1e-3) {
+        return safe_log(-x)
+            + log1p_fn(x * T(0.5) + x * x * T(1.0 / 6.0) + x * x * x * T(1.0 / 24.0));
+    }
+    return log1p_fn(-safe_exp(x));
+}
+
 // Hurdle binomial: separate zero vs non-zero
 template<typename T>
 inline T log_lik_hurdle_binomial(int y, int n, const T& p, const T& logit_theta) {
@@ -490,7 +521,7 @@ inline T log_lik_hurdle_binomial(int y, int n, const T& p, const T& logit_theta)
     } else {
         // P(Y=y|Y>0) = Binom(y|n,p) / (1 - (1-p)^n)
         T log_binom = log_lik_binomial(y, n, p);
-        T log_1m_zero = safe_log(T(1.0) - safe_exp(n * safe_log(T(1.0) - p)));
+        T log_1m_zero = log1m_exp(T(double(n)) * log1p_fn(-p));
         return log_theta + log_binom - log_1m_zero;
     }
 }

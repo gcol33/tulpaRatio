@@ -173,14 +173,6 @@ test_that("ratiod_zibinomial creates correct structure", {
 })
 
 
-test_that("ratiod_zibinomial accepts different links", {
-  fam <- ratiod_zibinomial(link_num = "probit", link_zi = "cloglog")
-
-  expect_equal(fam$numerator$link, "probit")
-  expect_equal(fam$numerator$link_zi, "cloglog")
-})
-
-
 test_that("ratiod_oibinomial creates one-inflated structure", {
   fam <- ratiod_oibinomial()
 

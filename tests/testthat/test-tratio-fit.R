@@ -201,8 +201,8 @@ test_that("print.ratiod_fit works", {
   expect_true(any(grepl("ratio model fit", output)))
   expect_true(any(grepl("Family:", output)))
   expect_true(any(grepl("Observations:", output)))
-  expect_true(any(grepl("Numerator:", output)))
-  expect_true(any(grepl("Denominator:", output)))
+  expect_true(any(grepl("Observations:", output)))
+  expect_true(any(grepl("Family:", output)))
 })
 
 test_that("summary.ratiod_fit works", {

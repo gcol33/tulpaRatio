@@ -4,15 +4,12 @@
 \alias{ratiod_lognormal}
 \title{Log-Normal Family for Multiplicative Processes}
 \usage{
-ratiod_lognormal(link_num = "log", link_denom = "log", denom_fixed = FALSE)
+ratiod_lognormal(link_num = "log", link_denom = "log")
 }
 \arguments{
-\item{link_num}{Link function for numerator (default: "log")}
+\item{link_num}{Link function for the numerator median: "log".}
 
-\item{link_denom}{Link function for denominator (default: "log")}
-
-\item{denom_fixed}{Logical; if TRUE, denominator is treated as fixed
-(only numerator is modelled as log-normal). Default FALSE.}
+\item{link_denom}{Link function for the denominator median: "log".}
 }
 \value{
 A \code{ratiod_family} object

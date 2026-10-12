@@ -85,12 +85,16 @@ print(hsgp)
 # Generate synthetic spatial data
 set.seed(42)
 n <- 100
+lon <- runif(n, 0, 10)
+lat <- runif(n, 0, 10)
+w <- 0.6 * sin(lon / 2) + 0.6 * cos(lat / 2)
+x <- rnorm(n)
 df <- data.frame(
-  lon = runif(n, 0, 10),
-  lat = runif(n, 0, 10),
-  x = rnorm(n),
-  count = rpois(n, 25),
-  effort = rgamma(n, shape = 4, rate = 1)
+  lon = lon,
+  lat = lat,
+  x = x,
+  count = rpois(n, exp(3 + 0.3 * x + w)),
+  effort = rgamma(n, shape = 4, rate = exp(-w))
 )
 
 # Fast spatial effect with HSGP (much faster than spatial_gp)
@@ -100,7 +104,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_hsgp(~ lon + lat, m = 6),
   mode = "hmc",
-  control = list(iter = 500, warmup = 250, chains = 2)
+  control = list(iter = 500, warmup = 250, chains = 2, seed = 1)
 )
 summary(fit)
 }

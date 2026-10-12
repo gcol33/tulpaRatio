@@ -7,7 +7,7 @@
 hmc_fit_unpack(object)
 }
 \arguments{
-\item{object}{A \code{ratiod_fit} from the HMC backend}
+\item{object}{A \code{ratiod_fit} from the HMC or ESS backend}
 }
 \value{
 Output of \code{hmc_unpack_draws()}

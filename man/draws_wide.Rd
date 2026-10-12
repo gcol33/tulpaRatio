@@ -35,12 +35,15 @@ prefixes, so \code{beta_num} reaches \code{beta_num[1]}, \code{beta_num[2]} and 
 \donttest{
 # Generate synthetic data
 set.seed(222)
-n <- 50
+n <- 48
+site <- rep(letters[1:12], each = 4)
+u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+depth <- rnorm(n)
 df <- data.frame(
-  count = rpois(n, lambda = 20),
-  effort = rgamma(n, shape = 10, rate = 1),
-  depth = rnorm(n),
-  site = sample(letters[1:5], n, replace = TRUE)
+  count = rpois(n, exp(3 + 0.3 * depth + u)),
+  effort = rgamma(n, shape = 10, rate = exp(-u)),
+  depth = depth,
+  site = site
 )
 
 # Fit model

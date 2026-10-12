@@ -763,13 +763,17 @@ test_that("a non-centred GP fit keeps its handcoded gradient (gcol33/tulpaRatio#
     y = rbinom(n_loc * reps, n, plogis(-0.3 + 0.6 * x + w[loc])),
     n = n, x = x, lon = co[loc, 1], lat = co[loc, 2]
   )
+  # A 30-iteration warmup can leave divergences; the check is on the fallback.
   for (par in c("centered", "noncentered")) {
-    expect_warning(
-      tratio(y | n ~ x, data = df, family = ratiod_binomial(), mode = "hmc",
-             spatial = spatial_gp(~ lon + lat, parameterization = par, nn = 5),
-             control = list(iter = 60, warmup = 30, chains = 1,
-                            verbose = FALSE, seed = 7)),
-      NA
+    expect_no_warning(
+      suppressWarnings(
+        tratio(y | n ~ x, data = df, family = ratiod_binomial(), mode = "hmc",
+               spatial = spatial_gp(~ lon + lat, parameterization = par, nn = 5),
+               control = list(iter = 60, warmup = 30, chains = 1,
+                              verbose = FALSE, seed = 7)),
+        classes = "tulpaRatio_divergence"
+      ),
+      message = "finite difference"
     )
   }
 })
@@ -860,4 +864,18 @@ test_that("every gradient fixture builds the structure its name claims", {
     if (n <= bare) structureless <- c(structureless, field)
   }
   expect_equal(structureless, character())
+})
+
+test_that("every binomial inflation type reports the density its gradient describes", {
+  for (zi in c("zi_binomial", "hurdle_binomial", "oi_binomial", "zoib")) {
+    for (field in c("none", "re", "icar")) {
+      for (mode in c("handcoded", "arena")) {
+        r <- tulpaRatio:::cpp_gradient_check(field, mode = mode, family = "binomial", zi = zi)
+        info <- sprintf("%s/%s/%s", zi, field, mode)
+        expect_equal(r$log_post, r$log_post_mode, tolerance = 1e-8, info = info)
+        expect_lt(max(abs(r$analytic - r$finite_diff) / pmax(1, abs(r$finite_diff))),
+                  1e-4, label = info)
+      }
+    }
+  }
 })

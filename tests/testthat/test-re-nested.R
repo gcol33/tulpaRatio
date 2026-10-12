@@ -71,13 +71,10 @@ test_that("nested RE metadata is correct", {
 
   f <- ratiod_formula(y | n ~ (1 | site/plot), data = df)
 
-  # First term should be nested_level 1
-  expect_equal(f$numerator$random_effects[[1]]$nested_level, 1)
   expect_equal(f$numerator$random_effects[[1]]$nested_vars, "site")
-
-  # Second term should be nested_level 2
-  expect_equal(f$numerator$random_effects[[2]]$nested_level, 2)
+  expect_equal(f$numerator$random_effects[[1]]$group_var, "site")
   expect_equal(f$numerator$random_effects[[2]]$nested_vars, c("site", "plot"))
+  expect_equal(f$numerator$random_effects[[2]]$group_var, "site:plot")
 })
 
 

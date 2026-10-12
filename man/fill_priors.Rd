@@ -13,7 +13,7 @@ fill_priors(priors, model_type = NULL)
 }
 \value{
 A \code{ratiod_priors} object whose \code{NULL} components hold
-\code{\link[=default_prior]{default_prior()}}.
+\code{default_prior()}.
 }
 \description{
 A prior specification with every component filled

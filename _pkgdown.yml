@@ -145,7 +145,6 @@ reference:
     desc: "Prior specification helpers"
     contents:
       - ratiod_priors
-      - ratiod_priors_legacy
       - priors_default
       - prior_normal
       - prior_half_normal
@@ -199,11 +198,9 @@ reference:
   - title: "Methods"
     desc: "S3 methods for ratiod objects"
     contents:
-      - starts_with("print.")
       - starts_with("summary.")
       - starts_with("fitted.")
       - starts_with("predict.")
-      - starts_with("weights.")
       - as.data.frame.ratiod_fit
 
   - title: "Documentation"

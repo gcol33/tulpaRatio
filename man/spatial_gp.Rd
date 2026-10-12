@@ -91,16 +91,22 @@ gp <- spatial_gp(~ lon + lat)
 print(gp)
 
 \donttest{
-# Generate synthetic spatial data
+# Generate synthetic spatial data with a smooth field w shared by
+# count and effort
 set.seed(789)
-n <- 50
+n <- 40
+lon <- runif(n, 0, 10)
+lat <- runif(n, 0, 10)
+w <- 0.6 * sin(lon / 2) + 0.6 * cos(lat / 2)
+depth <- rnorm(n)
+temp <- rnorm(n)
 df <- data.frame(
-  lon = runif(n, 0, 10),
-  lat = runif(n, 0, 10),
-  depth = rnorm(n),
-  temp = rnorm(n),
-  count = rpois(n, 25),
-  effort = rgamma(n, shape = 4, rate = 1)
+  lon = lon,
+  lat = lat,
+  depth = depth,
+  temp = temp,
+  count = rpois(n, exp(3 + 0.3 * depth - 0.2 * temp + w)),
+  effort = rgamma(n, shape = 4, rate = exp(-w))
 )
 
 # Continuous spatial effect with exponential covariance
@@ -110,7 +116,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_gp(~ lon + lat),
   mode = "hmc",
-  control = list(iter = 400, chains = 1, seed = 1)
+  control = list(iter = 400, chains = 1, seed = 1, adapt_delta = 0.95)
 )
 summary(fit)
 
@@ -121,7 +127,7 @@ fit2 <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_gp(~ lon + lat, cov = "matern", nu = 1.5),
   mode = "hmc",
-  control = list(iter = 400, chains = 1, seed = 1)
+  control = list(iter = 400, chains = 1, seed = 1, adapt_delta = 0.95)
 )
 }
 

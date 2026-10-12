@@ -310,6 +310,17 @@ test_that("correlated random slopes model runs without error", {
   draws <- as.data.frame(fit$draws)
   param_names <- names(draws)
 
-  # Should have L_chol parameter for the correlation
-  expect_true(any(grepl("L_chol\\[1,1\\]", param_names)))
+  # The correlation of the intercept and the slope is reported
+  expect_true("cor_re[1,intercept:x]" %in% param_names)
+})
+
+test_that("the correlation Cholesky map gives unit rows for any raw value", {
+  raw <- rbind(c(0, 0, 0), c(3, -5, 8), c(-0.4, 1.2, 0.3))
+  L <- tulpaRatio:::cpc_cholesky_draws(raw, 3)
+  for (r in 1:3) {
+    row_sq <- Reduce(`+`, lapply(seq_len(r), function(c) L[[r]][[c]]^2))
+    expect_equal(row_sq, rep(1, 3))
+  }
+  expect_equal(L[[2]][[1]], tanh(raw[, 1]))
+  expect_equal(L[[3]][[2]], tanh(raw[, 3]) * sqrt(1 - tanh(raw[, 2])^2))
 })

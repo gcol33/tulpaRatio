@@ -67,13 +67,16 @@ temporal_rw1("year")
 temporal_rw1("month", cyclic = TRUE)
 
 \donttest{
-# Simple temporal trend
+# Simple temporal trend: a random walk shared by count and effort
 set.seed(123)
+year <- rep(2010:2021, each = 4)
+trend <- cumsum(rnorm(12, sd = 0.25))[year - 2009]
+x <- rnorm(48)
 df <- data.frame(
-  year = rep(2010:2021, each = 4),
-  x = rnorm(48),
-  count = rpois(48, lambda = 20),
-  effort = rgamma(48, shape = 5, rate = 1)
+  year = year,
+  x = x,
+  count = rpois(48, exp(3 + 0.3 * x + trend)),
+  effort = rgamma(48, shape = 5, rate = exp(-trend))
 )
 
 fit <- tratio(
@@ -85,18 +88,26 @@ fit <- tratio(
   control = list(iter = 400, chains = 1, seed = 1)
 )
 
-# Panel data: separate trends per site
+# Panel data: separate trends per site, each walk starting from its
+# own site level
 set.seed(124)
+site <- rep(paste0("site", 1:5), times = 12)
+s <- match(site, paste0("site", 1:5))
+t <- rep(1:12, each = 5)
+walks <- apply(matrix(rnorm(12 * 5, sd = 0.2), 12, 5), 2, cumsum)
+eff <- rnorm(5, sd = 0.5)[s] + walks[cbind(t, s)]
+x <- rnorm(60)
 df_panel <- data.frame(
-  year = rep(2015:2026, each = 5),
-  site = rep(paste0("site", 1:5), times = 12),
-  x = rnorm(60),
-  count = rpois(60, lambda = 15),
-  effort = rgamma(60, shape = 3, rate = 1)
+  year = 2014 + t,
+  site = site,
+  x = x,
+  count = rpois(60, exp(2.5 + 0.3 * x + eff)),
+  effort = rgamma(60, shape = 3, rate = exp(-eff))
 )
 
+# The per-site walks carry the site levels, so no (1 | site) term
 fit2 <- tratio(
-  count | effort ~ x + (1 | site),
+  count | effort ~ x,
   data = df_panel,
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw1("year", group_var = "site"),
@@ -106,11 +117,14 @@ fit2 <- tratio(
 
 # Cyclic for monthly seasonal data
 set.seed(125)
+month <- rep(1:12, times = 4)
+season <- 0.5 * sin(2 * pi * month / 12)
+x <- rnorm(48)
 df_monthly <- data.frame(
-  month = rep(1:12, times = 4),
-  x = rnorm(48),
-  count = rpois(48, lambda = 10),
-  effort = rgamma(48, shape = 2, rate = 1)
+  month = month,
+  x = x,
+  count = rpois(48, exp(2.5 + 0.3 * x + season)),
+  effort = rgamma(48, shape = 2, rate = exp(-season))
 )
 
 fit3 <- tratio(

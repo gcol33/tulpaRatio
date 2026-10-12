@@ -12,13 +12,13 @@ ratiod_zipois(
 )
 }
 \arguments{
-\item{link_num}{Link function for count mean (default: "log")}
+\item{link_num}{Link function for the count mean: "log".}
 
-\item{link_denom}{Link function for denominator mean (default: "log")}
+\item{link_denom}{Link function for the denominator mean: "log".}
 
-\item{link_zi}{Link function for zero-inflation probability (default: "logit")}
+\item{link_zi}{Link function for the zero-inflation probability: "logit".}
 
-\item{denom_family}{Denominator distribution: "gamma" (default), "negbin", or "fixed"}
+\item{denom_family}{Denominator distribution: "gamma".}
 }
 \value{
 A \code{ratiod_family} object with zero-inflation

@@ -44,10 +44,12 @@ NULL
 #' @param priors Prior specification
 #' @param iter Total iterations
 #' @param warmup Warmup iterations
+#' @param chains Number of chains; chain c is seeded with `seed + c - 1`
 #' @param seed Random seed
 #' @param verbose Print progress
 #'
-#' @return A ratiod_fit object with class "ratiod_ess"
+#' @return A `ratiod_fit` whose draws are unpacked to the natural scale
+#'   exactly as an HMC fit's are, with `backend = "ess"`.
 #' @keywords internal
 fit_ess <- function(formula,
                     data,
@@ -60,6 +62,7 @@ fit_ess <- function(formula,
                     priors = NULL,
                     iter = 2000,
                     warmup = 1000,
+                    chains = 1,
                     seed = NULL,
                     verbose = TRUE) {
 
@@ -108,6 +111,11 @@ fit_ess <- function(formula,
   tau_spatial_rate <- sp$tau_spatial_rate
   rho_temporal_ab <- rho_prior_anchors(temporal_info$rho_prior,
                                        priors$rho_temporal)
+
+  if ((hmc_data$n_re_terms %||% 0L) > 1L || isTRUE(hmc_data$has_slopes)) {
+    stop("The ESS backend fits one random intercept. Use `mode = \"hmc\"` ",
+         "for random slopes or several grouping factors.", call. = FALSE)
+  }
 
   # Bundle parameters
   re_params <- list(
@@ -186,159 +194,84 @@ fit_ess <- function(formula,
     zi_params
   )
 
-  # Initialize from zeros
   q_init <- rep(0.0, n_params)
 
   if (verbose) {
     message("Elliptical Slice Sampling")
     message("  Parameters: ", n_params)
-    message("  Iterations: ", iter, " (warmup: ", warmup, ")")
+    message("  Iterations: ", iter, " (warmup: ", warmup, "), chains: ", chains)
   }
 
-  # Fit ESS model
-  fit_raw <- cpp_ess_fit(
-    q_init = q_init,
-    y_num = as.integer(hmc_data$y_num),
-    y_denom = as.integer(hmc_data$y_denom),
-    y_denom_cont = hmc_data$y_denom_cont,
-    X_num = hmc_data$X_num,
-    X_denom = hmc_data$X_denom,
-    model_type_str = model_type,
-    re_params = re_params,
-    spatial_params = spatial_params,
-    temporal_params = temporal_params,
-    prior_params = prior_params,
-    zi_params = zi_params,
-    latent_params = latent_params,
-    st_params = st_params,
-    n_iter = as.integer(iter),
-    n_warmup = as.integer(warmup),
-    seed = as.integer(seed),
-    verbose = verbose
+  runs <- lapply(seq_len(chains), function(c) {
+    cpp_ess_fit(
+      q_init = q_init,
+      y_num = as.integer(hmc_data$y_num),
+      y_denom = as.integer(hmc_data$y_denom),
+      y_denom_cont = hmc_data$y_denom_cont,
+      X_num = hmc_data$X_num,
+      X_denom = hmc_data$X_denom,
+      model_type_str = model_type,
+      re_params = re_params,
+      spatial_params = spatial_params,
+      temporal_params = temporal_params,
+      prior_params = prior_params,
+      zi_params = zi_params,
+      latent_params = latent_params,
+      st_params = st_params,
+      n_iter = as.integer(iter),
+      n_warmup = as.integer(warmup),
+      seed = as.integer(seed + c - 1L),
+      verbose = verbose
+    )
+  })
+
+  # ESS samples the parameter vector of the HMC sampler (one layout,
+  # compute_param_layout()), with random effects in the centred coordinate,
+  # so its draws go through the same unpacking. It has no trajectories: no
+  # divergences, tree depth or energy.
+  per_chain <- function(field) {
+    out <- lapply(runs, function(r) r[[field]])
+    if (chains == 1L) out[[1L]] else out
+  }
+  n_saved <- nrow(runs[[1L]]$samples)
+  fill <- function(value) {
+    out <- rep(list(rep(value, n_saved)), chains)
+    if (chains == 1L) out[[1L]] else out
+  }
+  fit_raw <- list(
+    samples = per_chain("samples"),
+    log_prob = per_chain("log_lik"),
+    accept_prob = fill(1),
+    n_leapfrog = fill(0L),
+    treedepth = fill(0L),
+    divergent = fill(FALSE),
+    epsilon = rep(NA_real_, chains),
+    sampler = "ESS"
   )
 
-  # Build result object
-  result <- structure(list(
-    # Samples
-    draws = fit_raw$samples,
-    log_lik = fit_raw$log_lik,
-
-    # ESS-specific diagnostics
-    n_slice_evals = fit_raw$n_slice_evals,
-    avg_slice_evals = fit_raw$avg_slice_evals,
-
-    # Model information
+  fit <- convert_hmc_to_ratiod_fit_full(
+    fit_raw = fit_raw,
+    hmc_data = hmc_data,
+    spatial_info = spatial_info,
+    temporal_info = temporal_info,
+    zi_info = zi_info,
     formula = formula,
     data = data,
     family = family,
     model_type = model_type,
-    n_obs = hmc_data$N,
-    n_params = fit_raw$n_params,
-    p_num = ncol(hmc_data$X_num),
-    p_denom = ncol(hmc_data$X_denom),
-    param_names = fit_raw$param_names,
-
-    # Sampler settings
     iter = iter,
     warmup = warmup,
-    chains = 1,  # ESS runs single chain
-
-    # Backend info
-    backend = "ess",
-    seed = seed
-  ), class = c("ratiod_ess", "ratiod_fit"))
+    chains = chains,
+    re_param = "centered"
+  )
+  fit$backend <- "ess"
+  fit$seed <- seed
+  fit$diagnostics$avg_slice_evals <- mean(vapply(runs, function(r) r$avg_slice_evals, numeric(1)))
 
   if (verbose) {
     message("ESS complete. Avg slice evaluations per step: ",
-            round(fit_raw$avg_slice_evals, 2))
+            round(fit$diagnostics$avg_slice_evals, 2))
   }
 
-  result
+  fit
 }
-
-
-#' @rdname summary.ratiod_fit
-#' @param x A fit returned by [tratio()]: a `ratiod_fit`, or one of the
-#'   backend subclasses `ratiod_ess`, `ratiod_vi`, `ratiod_sghmc` and
-#'   `ratiod_sgld`, or the summary of one.
-#' @param digits Number of significant digits to print (default 3).
-#'
-#' @export
-print.ratiod_ess <- function(x, digits = 3, ...) {
-  cat("Elliptical Slice Sampling Fit\n")
-  cat("Family:", class(x$family)[1], "\n")
-  cat("Observations:", x$n_obs, "\n")
-  cat("Parameters:", x$n_params, "\n\n")
-
-  cat("Sampling:\n")
-  cat("  Iterations:", x$iter, "(warmup:", x$warmup, ")\n")
-  cat("  Avg slice evals:", round(x$avg_slice_evals, 2), "\n\n")
-
-  # Coefficient summary
-  cat("Posterior means:\n")
-  draws <- x$draws
-  means <- colMeans(draws)
-  sds <- apply(draws, 2, sd)
-
-  coef_summary <- data.frame(
-    parameter = colnames(draws),
-    mean = means,
-    sd = sds
-  )
-
-  # Show first 10 parameters
-  n_show <- min(10, nrow(coef_summary))
-  print(coef_summary[1:n_show, ], digits = digits, row.names = FALSE)
-  if (nrow(coef_summary) > n_show) {
-    cat("... and", nrow(coef_summary) - n_show, "more parameters\n")
-  }
-
-  invisible(x)
-}
-
-
-#' @rdname summary.ratiod_fit
-#' @return An object of class `summary.ratiod_ess`.
-#' @export
-summary.ratiod_ess <- function(object, prob = 0.95, ...) {
-  alpha <- (1 - prob) / 2
-
-  draws <- object$draws
-  q_lower <- apply(draws, 2, quantile, probs = alpha)
-  q_upper <- apply(draws, 2, quantile, probs = 1 - alpha)
-
-  summary_df <- data.frame(
-    parameter = colnames(draws),
-    mean = colMeans(draws),
-    sd = apply(draws, 2, sd),
-    q_lower = q_lower,
-    q_upper = q_upper
-  )
-  names(summary_df)[4:5] <- paste0(c("q", "q"), c(alpha * 100, (1 - alpha) * 100))
-
-  structure(list(
-    summary = summary_df,
-    n_obs = object$n_obs,
-    iter = object$iter,
-    warmup = object$warmup,
-    avg_slice_evals = object$avg_slice_evals,
-    prob = prob
-  ), class = "summary.ratiod_ess")
-}
-
-
-#' @rdname summary.ratiod_fit
-#' @return The input `x`, invisibly.
-#' @export
-print.summary.ratiod_ess <- function(x, digits = 3, ...) {
-  cat("Elliptical Slice Sampling Summary\n")
-  cat("Observations:", x$n_obs, "\n")
-  cat("Iterations:", x$iter, "(warmup:", x$warmup, ")\n")
-  cat("Avg slice evals:", round(x$avg_slice_evals, 2), "\n\n")
-
-  cat("Posterior summary (", x$prob * 100, "% credible intervals):\n", sep = "")
-  print(x$summary, digits = digits, row.names = FALSE)
-
-  invisible(x)
-}
-

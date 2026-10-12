@@ -129,7 +129,7 @@ sim_ratiod <- function(n = 100,
   p_fixed <- 2  # intercept + x1
 
   if (is.null(beta_num)) {
-    if (family_name %in% c("binomial_fixed", "binomial_binomial")) {
+    if (identical(family_name, "binomial_fixed")) {
       beta_num <- c(0, 0.5)  # logit scale
     } else {
       beta_num <- c(2, 0.3)  # log scale
@@ -137,7 +137,7 @@ sim_ratiod <- function(n = 100,
   }
 
   if (is.null(beta_denom)) {
-    if (family_name %in% c("binomial_fixed", "binomial_binomial")) {
+    if (identical(family_name, "binomial_fixed")) {
       beta_denom <- NULL  # Not used for binomial
     } else {
       beta_denom <- c(1.5, 0.2)  # log scale
@@ -169,7 +169,7 @@ sim_ratiod <- function(n = 100,
     # Ensure denominator > 0 for ratio
     y_denom[y_denom == 0] <- 1
 
-  } else if (family_name %in% c("binomial_fixed", "binomial_binomial")) {
+  } else if (identical(family_name, "binomial_fixed")) {
     p <- 1 / (1 + exp(-eta_num))
 
     # Generate trials (denominator)

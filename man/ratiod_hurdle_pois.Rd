@@ -12,13 +12,13 @@ ratiod_hurdle_pois(
 )
 }
 \arguments{
-\item{link_num}{Link function for count mean (default: "log")}
+\item{link_num}{Link function for the count mean: "log".}
 
-\item{link_denom}{Link function for denominator mean (default: "log")}
+\item{link_denom}{Link function for the denominator mean: "log".}
 
-\item{link_hurdle}{Link function for hurdle probability (default: "logit")}
+\item{link_hurdle}{Link function for the hurdle probability: "logit".}
 
-\item{denom_family}{Denominator distribution: "gamma" (default), "negbin", or "fixed"}
+\item{denom_family}{Denominator distribution: "gamma".}
 }
 \value{
 A \code{ratiod_family} object with hurdle structure
@@ -28,6 +28,5 @@ Hurdle model with truncated Poisson for positive counts.
 }
 \examples{
 ratiod_hurdle_pois()
-ratiod_hurdle_pois(denom_family = "negbin")
 
 }

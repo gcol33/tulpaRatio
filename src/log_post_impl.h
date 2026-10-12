@@ -1285,12 +1285,9 @@ T compute_log_post_impl(
         T phi_st_space = T(1.0);
         T phi_st_time = T(1.0);
 
-        // PC prior on tau (exponential on sigma = 1/sqrt(tau))
-        T sigma_st = T(1.0) / safe_sqrt(tau_st);
-        double lambda_st = -std::log(data.st_sigma2_prior_alpha) / data.st_sigma2_prior_U;
-        log_post = log_post + T(std::log(lambda_st)) - T(lambda_st) * sigma_st
-                            - safe_log(T(2.0) * sigma_st);
-        log_post = log_post + log_tau_st;  // Jacobian for log transform
+        // PC prior on sigma = 1/sqrt(tau), as a density of log tau
+        log_post = log_post + ratiod::math::pc_log_prior_log_precision(
+            log_tau_st, data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
 
         // AR1 rho parameter
         if (layout.logit_rho_st_idx >= 0) {

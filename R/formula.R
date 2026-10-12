@@ -741,30 +741,41 @@ clean_slope_names <- function(slope_vars) {
 #' @return Formula with only fixed effects
 #' @keywords internal
 remove_random_effects <- function(f) {
-  rhs_text <- deparse(f[[3]], width.cutoff = 500)
-  rhs_text <- paste(rhs_text, collapse = " ")
-
-  # Remove random effect terms (handles both | and || syntax)
-  re_pattern <- "\\([^|]+\\|\\|?[^)]+\\)"
-  rhs_clean <- gsub(re_pattern, "", rhs_text, perl = TRUE)
-
-  # Clean up leftover + signs (repeat until no more consecutive +)
-  repeat {
-    new_clean <- gsub("\\+\\s*\\+", "+", rhs_clean)
-    if (new_clean == rhs_clean) break
-    rhs_clean <- new_clean
+  fixed <- Filter(Negate(is_random_effect_term), additive_terms(f[[3]]))
+  f[[3]] <- if (length(fixed)) {
+    Reduce(function(a, b) call("+", a, b), fixed)
+  } else {
+    1
   }
+  f
+}
 
-  # Remove leading/trailing + and whitespace
-  rhs_clean <- gsub("^\\s*\\+\\s*", "", rhs_clean)
-  rhs_clean <- gsub("\\s*\\+\\s*$", "", rhs_clean)
-  rhs_clean <- trimws(rhs_clean)
-
-  if (rhs_clean == "" || rhs_clean == "1") {
-    rhs_clean <- "1"
+#' Additive terms of a formula's right-hand side
+#'
+#' Splits an expression on binary `+` into the terms it adds, leaving every
+#' other call (`-`, `:`, `*`, `I()`, `poly()`, ...) whole.
+#'
+#' @param e A language object.
+#' @return A list of language objects.
+#' @keywords internal
+additive_terms <- function(e) {
+  if (is.call(e) && identical(e[[1]], as.name("+")) && length(e) == 3L) {
+    c(additive_terms(e[[2]]), additive_terms(e[[3]]))
+  } else {
+    list(e)
   }
+}
 
-  as.formula(paste(deparse(f[[2]]), "~", rhs_clean), env = environment(f))
+#' Is a formula term a random-effect term
+#'
+#' A parenthesised `|` or `||` call, as in `(1 | g)` or `(1 + x || g)`.
+#'
+#' @param e A language object.
+#' @return Logical.
+#' @keywords internal
+is_random_effect_term <- function(e) {
+  is.call(e) && identical(e[[1]], as.name("(")) && is.call(e[[2]]) &&
+    (identical(e[[2]][[1]], as.name("|")) || identical(e[[2]][[1]], as.name("||")))
 }
 
 #' Build model matrix from fixed effects formula

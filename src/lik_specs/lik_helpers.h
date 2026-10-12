@@ -46,6 +46,21 @@ static inline T safe_log1pexp(const T& x) {
     return log1p(exp(x));
 }
 
+// log(1 - exp(x)) for x < 0, the log mass a zero-truncated distribution
+// keeps. Near x = 0, 1 - exp(x) rounds to zero first; there
+// -expm1(x) = -x (1 + x/2 + x^2/6 + x^3/24 + ...).
+template <typename T>
+static inline T log1m_exp(const T& x) {
+    using std::log;
+    using std::log1p;
+    using std::exp;
+    if (x > -1e-3) {
+        return log(T(0.0) - x)
+            + log1p(T(0.5) * x + T(1.0 / 6.0) * x * x + T(1.0 / 24.0) * x * x * x);
+    }
+    return log1p(T(0.0) - exp(x));
+}
+
 // log(sigmoid(x)) and log(1 - sigmoid(x)).
 template <typename T>
 static inline T log_inv_logit(const T& x) {
@@ -275,9 +290,7 @@ static inline T hurdle_binom_log_pmf(int y, int n, const T& eta, const T& logit_
         return log1m_inv_logit(logit_zi);
     }
     T log_p0  = T(double(n)) * log1m_inv_logit(eta);  // log((1-p)^n)
-    // log(1 - exp(log_p0)) — use log1p(-exp(log_p0)) directly; AD-safe because
-    // log_p0 < 0 strictly when y > 0 and p in (0, 1).
-    T log_norm = log1p(T(0.0) - exp(log_p0));
+    T log_norm = log1m_exp(log_p0);
     return log_inv_logit(logit_zi) + binom_logit_log_pmf(y, n, eta) - log_norm;
 }
 
@@ -352,8 +365,7 @@ static inline T hurdle_poisson_log_pmf(int y, const T& mu, const T& logit_zi) {
     if (y == 0) {
         return log1m_inv_logit(logit_zi);
     }
-    T log_p0  = T(0.0) - mu;  // log(exp(-mu)) = -mu
-    T log_norm = log1p(T(0.0) - exp(log_p0));
+    T log_norm = log1m_exp(T(0.0) - mu);
     return log_inv_logit(logit_zi) + poisson_log_pmf(y, mu) - log_norm;
 }
 
@@ -384,8 +396,7 @@ static inline T hurdle_negbin_log_pmf(int y, const T& mu, const T& phi,
     if (y == 0) {
         return log1m_inv_logit(logit_zi);
     }
-    T log_p0   = phi * log(phi / (phi + mu));
-    T log_norm = log1p(T(0.0) - exp(log_p0));
+    T log_norm = log1m_exp(phi * log(phi / (phi + mu)));
     return log_inv_logit(logit_zi) + negbin_log_pmf(y, mu, phi) - log_norm;
 }
 

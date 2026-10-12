@@ -123,15 +123,21 @@ print(ms)
 spatial_multiscale(~ lon + lat, approx = "hsgp", m = 8)
 
 \donttest{
+# A regional trend plus local variation, shared by count and effort
 set.seed(101)
 n <- 60
+lon <- runif(n, 0, 10)
+lat <- runif(n, 0, 10)
+w <- 0.5 * sin(lon / 3) + 0.5 * cos(lat / 3) + 0.3 * sin(2 * lon) * cos(2 * lat)
+depth <- rnorm(n)
+temp <- rnorm(n)
 df <- data.frame(
-  lon = runif(n, 0, 10),
-  lat = runif(n, 0, 10),
-  depth = rnorm(n),
-  temp = rnorm(n),
-  count = rpois(n, 30),
-  effort = rgamma(n, shape = 5, rate = 1)
+  lon = lon,
+  lat = lat,
+  depth = depth,
+  temp = temp,
+  count = rpois(n, exp(3 + 0.3 * depth - 0.2 * temp + w)),
+  effort = rgamma(n, shape = 5, rate = exp(-w))
 )
 
 # Multi-scale spatial with local and regional components
@@ -142,7 +148,9 @@ fit <- tratio(
   spatial = spatial_multiscale(
     ~ lon + lat,
     range_local = c(0.1, 0.5),
-    range_regional = c(1, 5)
+    range_regional = c(1, 5),
+    approx = "hsgp",
+    m = 6
   ),
   control = list(iter = 400, chains = 1, seed = 1)
 )

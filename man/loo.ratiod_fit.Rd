@@ -21,8 +21,9 @@ importance sampling (PSIS-LOO).
 \details{
 The pointwise log-likelihood is reconstructed from the posterior draws and
 the model (see \code{\link[=ratiod_compare]{ratiod_compare()}}); it works on any fit produced by the
-hmc, ess, sghmc, or vi backend. The score is conditional on the fixed-effect
-(population-level) linear predictor.
+hmc, ess, sghmc, or vi backend, for every family including the zero-inflated,
+one-inflated and hurdle ones. Each observation's likelihood is evaluated at
+the full linear predictor: fixed, random and structured effects.
 }
 \examples{
 \donttest{

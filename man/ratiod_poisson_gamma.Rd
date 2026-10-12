@@ -7,9 +7,9 @@
 ratiod_poisson_gamma(link_num = "log", link_denom = "log")
 }
 \arguments{
-\item{link_num}{Link function for count rate (default: "log")}
+\item{link_num}{Link function for the count rate: "log".}
 
-\item{link_denom}{Link function for effort mean (default: "log")}
+\item{link_denom}{Link function for the effort mean: "log".}
 }
 \value{
 A \code{ratiod_family} object
@@ -34,12 +34,16 @@ print(fam)
 # Simulate CPUE data
 set.seed(123)
 n <- 60
+season <- factor(rep(c("spring", "summer", "fall"), each = n/3))
+vessel <- factor(rep(1:10, each = n/10))
+u <- rnorm(10, sd = 0.5)[vessel]
+depth <- rnorm(n)
 df <- data.frame(
-  catch = rpois(n, lambda = 8),
-  effort_hours = rgamma(n, shape = 4, rate = 1),
-  depth = rnorm(n),
-  season = factor(rep(c("spring", "summer", "fall"), each = n/3)),
-  vessel = factor(rep(1:6, each = n/6))
+  catch = rpois(n, exp(1.5 + 0.3 * depth + 0.4 * (season == "summer") + u)),
+  effort_hours = rgamma(n, shape = 4, rate = exp(-u)),
+  depth = depth,
+  season = season,
+  vessel = vessel
 )
 
 \donttest{

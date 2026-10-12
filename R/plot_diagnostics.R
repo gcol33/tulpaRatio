@@ -935,7 +935,7 @@ diagnostic_summary <- function(fit) {
   )
 
   # Get MCMC diagnostics
-  if (backend %in% c("hmc", "pg")) {
+  if (backend %in% c("hmc", "ess", "pg")) {
     diag <- tryCatch(diagnostics(fit), error = function(e) NULL)
 
     if (!is.null(diag)) {

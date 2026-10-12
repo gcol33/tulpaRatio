@@ -58,11 +58,15 @@ model with temporal specification.
 \donttest{
 # Fit model with multi-scale temporal effects
 set.seed(131)
+year <- 1:40
+# Trend plus a 12-year cycle, shared by count and effort
+eff <- 0.4 * sin(year / 8) + 0.3 * sin(2 * pi * year / 12)
+x <- rnorm(40)
 df <- data.frame(
-  year = 1:40,
-  x = rnorm(40),
-  count = rpois(40, lambda = 22),
-  effort = rgamma(40, shape = 4.5, rate = 1)
+  year = year,
+  x = x,
+  count = rpois(40, exp(3 + 0.3 * x + eff)),
+  effort = rgamma(40, shape = 4.5, rate = exp(-eff))
 )
 
 fit <- tratio(

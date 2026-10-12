@@ -12,14 +12,7 @@ test_that("ratiod_binomial creates valid family", {
 
   expect_s3_class(fam, "ratiod_family")
   expect_equal(fam$numerator$distribution, "binomial")
-  expect_true(fam$denominator_known)
-})
-
-test_that("ratiod_binomial with denominator_known = FALSE", {
-  fam <- ratiod_binomial(denominator_known = FALSE)
-
-  expect_equal(fam$name, "binomial_binomial")
-  expect_false(fam$denominator_known)
+  expect_equal(fam$denominator$distribution, "fixed")
 })
 
 test_that("ratiod_poisson_gamma creates valid family", {
@@ -62,23 +55,7 @@ test_that("ratiod_beta_binomial creates valid family", {
   expect_equal(fam$name, "beta_binomial_fixed")
   expect_equal(fam$numerator$distribution, "beta_binomial")
   expect_equal(fam$numerator$link, "logit")
-  expect_true(fam$denominator_known)
   expect_true(fam$overdispersed)
-})
-
-test_that("ratiod_beta_binomial with denominator_known = FALSE", {
-  fam <- ratiod_beta_binomial(denominator_known = FALSE)
-
-  expect_equal(fam$name, "beta_binomial")
-  expect_false(fam$denominator_known)
-})
-
-test_that("ratiod_beta_binomial accepts valid link functions", {
-  expect_s3_class(ratiod_beta_binomial(link = "logit"), "ratiod_family")
-  expect_s3_class(ratiod_beta_binomial(link = "probit"), "ratiod_family")
-  expect_s3_class(ratiod_beta_binomial(link = "cloglog"), "ratiod_family")
-
-  expect_error(ratiod_beta_binomial(link = "log"), "not supported")
 })
 
 test_that("ratiod_gamma_gamma creates valid family", {
@@ -92,12 +69,27 @@ test_that("ratiod_gamma_gamma creates valid family", {
   expect_equal(fam$denominator$link, "log")
 })
 
-test_that("ratiod_gamma_gamma accepts valid link functions", {
-  expect_s3_class(ratiod_gamma_gamma(link_num = "log"), "ratiod_family")
-  expect_s3_class(ratiod_gamma_gamma(link_num = "identity"), "ratiod_family")
-  expect_s3_class(ratiod_gamma_gamma(link_num = "inverse"), "ratiod_family")
+test_that("a family accepts only the links the samplers fit", {
+  # Every likelihood kernel uses the canonical link, so any other link would
+  # be stored on the family and silently not fitted.
+  expect_error(ratiod_binomial(link = "probit"), "not supported")
+  expect_error(ratiod_beta_binomial(link = "cloglog"), "not supported")
+  expect_error(ratiod_gamma_gamma(link_num = "identity"), "not supported")
+  expect_error(ratiod_lognormal(link_num = "identity"), "not supported")
+  expect_error(ratiod_zibinomial(link_zi = "probit"), "not supported")
+  expect_error(ratiod_hurdle_pois(link_hurdle = "cloglog"), "not supported")
+})
 
-  expect_error(ratiod_gamma_gamma(link_num = "logit"), "not supported")
+test_that("inflated count families fit the denominators they name", {
+  expect_equal(get_hmc_model_type(ratiod_zipois()), "poisson_gamma")
+  expect_equal(get_hmc_model_type(ratiod_zinegbin()), "negbin_negbin")
+  expect_equal(get_hmc_model_type(ratiod_zinegbin(denom_family = "gamma")),
+               "negbin_gamma")
+  expect_equal(get_hmc_model_type(ratiod_hurdle_negbin(denom_family = "gamma")),
+               "negbin_gamma")
+  expect_equal(get_hmc_model_type(ratiod_hurdle_pois()), "poisson_gamma")
+  expect_error(ratiod_zipois(denom_family = "negbin"), "must be one of")
+  expect_error(ratiod_zinegbin(denom_family = "fixed"), "must be one of")
 })
 
 test_that("ratiod_lognormal creates valid family", {
@@ -107,23 +99,6 @@ test_that("ratiod_lognormal creates valid family", {
   expect_equal(fam$name, "lognormal_lognormal")
   expect_equal(fam$numerator$distribution, "lognormal")
   expect_equal(fam$denominator$distribution, "lognormal")
-  expect_false(fam$denom_fixed)
-})
-
-test_that("ratiod_lognormal with denom_fixed = TRUE", {
-  fam <- ratiod_lognormal(denom_fixed = TRUE)
-
-  expect_equal(fam$name, "lognormal_fixed")
-  expect_true(fam$denom_fixed)
-  expect_equal(fam$denominator$distribution, "fixed")
-  expect_null(fam$denominator$link)
-})
-
-test_that("ratiod_lognormal accepts valid link functions", {
-  expect_s3_class(ratiod_lognormal(link_num = "log"), "ratiod_family")
-  expect_s3_class(ratiod_lognormal(link_num = "identity"), "ratiod_family")
-
-  expect_error(ratiod_lognormal(link_num = "logit"), "not supported")
 })
 
 test_that("family print methods work", {

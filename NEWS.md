@@ -42,11 +42,85 @@
 * `latent_factors()` reads a `tratio()` fit's factor scores (#106), and
   `validate_mode()` accepts the backend a fit ran on (`"hmc"`) as well as its
   tier.
+* A `priors = ratiod_priors(...)` argument reaches the samplers: every MCMC
+  backend translates it through one function, passing Normal(0, sd) on fixed
+  effects, Half-Cauchy on random-effect SDs and Gamma on the dispersion, and
+  refusing other families by name instead of fitting under its own defaults
+  as before (#109). A component left unspecified takes the default the
+  samplers already used (`priors_default()` lists them per family), so default
+  fits are unchanged; `prior_predict()` and `sim_ratiod_sbc()` now draw from
+  those same defaults. `ratiod_priors_legacy()` is removed.
+* `summary()` reports every main parameter; it stopped at the twelfth.
+  `print()` on a fit is a five-line description.
+* `ratio_contrast()` compares the levels of a factor, character or logical
+  variable in level order and refuses a numeric covariate.
+* `(1 | a:b)` groups by the interaction of `a` and `b`, as the second term of
+  `(1 | a/b)` does.
 * `tratio()` is quiet by default: `control = list(verbose = TRUE)` prints the
   progress messages and sampler adaptation traces.
 * Help pages: one Title Case style, print/summary/plot methods documented on
   the page of the function returning their class, and every exported topic
   with an example that runs.
+* The HMC entry points run their OpenMP regions on the threads `cores`
+  allows, so concurrent chains no longer each start a full team; a
+  zero-inflated test fit drops from 87 to 1 s (#110).
+* Correlated random slopes take their correlation through canonical partial
+  correlations with an LKJ(2) prior and its Jacobian, and draws unpack with
+  three or more correlated coefficients. Correlated-slope posteriors change
+  (#111).
+* Inline transforms such as `log(x)` and `I(x^2)` combine with random-effect
+  terms: the random part is removed from the formula as a parse tree, not as
+  text (#112).
+* `loo()`, `waic()` and `posterior_predict()` support every zero-inflated,
+  one-inflated, zero-and-one-inflated and hurdle family; the zero-and-one
+  inflated binomial is the extended mixture its density in the sampler uses
+  (#113).
+* Hurdle fits no longer gain mass where a small mean makes P(Y = 0) round to
+  one: the zero-truncation uses a stable log(1 - exp(x)) instead of a
+  `-1e10` sentinel the truncation subtracted (#114).
+* `mode = "ess"` targets the posterior (the block's reference density was
+  counted twice and the slice threshold was stale), runs the requested
+  `chains`, and returns natural-scale draws that `fitted()`, `predict()` and
+  `loo()` read as they read an HMC fit's. Its reference starts at a Laplace
+  approximation and is refitted from warmup draws as a multivariate t, as in
+  generalised elliptical slice sampling; on a random-intercept model its bulk
+  ESS now exceeds HMC's at the same length (#115). ESS refuses random slopes
+  and several grouping factors instead of dropping them.
+* Families accept only the links and denominators the samplers fit; other
+  links, `denominator_known = FALSE`, `denom_fixed = TRUE` and several
+  `denom_family` values used to be stored and silently fitted as the default
+  model. `denominator_known` and `denom_fixed` are removed;
+  `ratiod_zinegbin()` and `ratiod_hurdle_negbin()` gain
+  `denom_family = "gamma"` (#116).
+* Fixed-effect draws are named `num:<term>` and `denom:<term>` in `coef()`,
+  `vcov()` and the printed `summary()` tables (#127); the unused
+  `latent_mean[k]` draws are gone.
+* The Gibbs sampler fits ICAR models only. Its BYM2 sweep shifted the
+  structured field's level against the intercept, off the field's
+  sum-to-zero constraint, so the intercept wandered under its own prior
+  (#119); without that move it does not reach the posterior HMC samples, so
+  a BYM2 model in `mode = "gibbs"` is refused and `mode = "auto"` fits it
+  with HMC (#133). Gibbs fits report natural-scale draws under the HMC names
+  and work with `ratio()`, `fitted()` and `loo()` (#120).
+* The PC prior on the space-time interaction's precision was the density of a
+  variance, which made it improper toward large precision; with little
+  interaction in the data `tau_st` ran to 1e9 (#130). Space-time results
+  change. Non-centred Type IV fits rebuild the interaction from its scale for
+  fitted values, ratios and `loo()` (#131).
+* Collapsed ICAR, BYM2 and GP fields reach the fit for every chain count and
+  entry point; multi-chain collapsed fits lost them, and their fitted values,
+  ratios and `loo()` missed the spatial term (#125).
+* Correlated random slopes report their correlations, `cor_re[t,a:b]`,
+  instead of the sampler's raw coordinates (#122).
+* The pre-sampling gradient check compares against a five-point finite
+  difference. The two-point difference was too coarse for a covariate on a
+  large scale, so the check fired and the fit switched to slow
+  finite-difference gradients (#124).
+* Divergent transitions raise a warning of class `tulpaRatio_divergence`
+  whether or not `verbose` is set (#123), and `print(summary(fit))` flags
+  parameters with R-hat above 1.01 or bulk ESS below 100 per chain (#126).
+* `ratio(newdata = )` works (#121); `print()` lists every grouping factor
+  (#128); trace plots drop overlapping axis labels (#129).
 
 * **`spatial_svc()` samples each NNGP term non-centred by default (#96).** The
   new `parameterization` argument takes `"noncentered"` (default) or

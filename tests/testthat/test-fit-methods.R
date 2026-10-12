@@ -66,3 +66,29 @@ test_that("summary() reports every fixed effect", {
   expect_true(all(sprintf("beta_num[%d]", 1:9) %in% params))
   expect_true(all(sprintf("beta_denom[%d]", 1:9) %in% params))
 })
+
+test_that("coef(), vcov() and summary() cover a zero-inflated binomial fit", {
+  skip_on_cran()
+  set.seed(123)
+  n <- 60
+  detect <- data.frame(detected = ifelse(runif(n) < 0.3, 0, rbinom(n, 10, 0.4)),
+                       trials = 10,
+                       habitat = factor(rep(c("forest", "grassland"), each = n / 2)))
+  fit <- tratio(detected | trials ~ habitat, zi = zi_binomial(~ habitat),
+                data = detect, family = ratiod_zibinomial(),
+                control = list(iter = 200, chains = 1, seed = 1))
+  expect_named(coef(fit), c("num:(Intercept)", "num:habitatgrassland"))
+  expect_equal(dim(vcov(fit)), c(2L, 2L))
+  expect_output(print(summary(fit)), "Zero/one inflation")
+})
+
+test_that("draws_wide(), draws_long() and draws_interval() keep parameter names", {
+  skip_on_cran()
+  sim <- sim_ratiod(n = 60, family = ratiod_poisson_gamma(), seed = 2)
+  fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+                family = ratiod_poisson_gamma(),
+                control = list(iter = 200, chains = 1, seed = 1))
+  expect_true("beta_num[2]" %in% names(draws_wide(fit, beta_num)))
+  expect_true("beta_num[2]" %in% draws_long(fit, beta_num)$.variable)
+  expect_true("beta_num[2]" %in% draws_interval(fit, beta_num)$.variable)
+})

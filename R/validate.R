@@ -206,7 +206,7 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 # term is refused rather than scored on a likelihood missing it.
 #' @keywords internal
 .ratiod_pointwise_eta <- function(fit, draws, hmc_data) {
-  if (identical(fit$backend, "hmc")) {
+  if (has_hmc_layout(fit)) {
     eta <- hmc_eta_draws(hmc_fit_unpack(fit), hmc_fit_design(fit))
     if (length(eta$dropped)) {
       stop("Pointwise log-likelihood needs every term of the linear ",
@@ -214,6 +214,13 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
            " could not be reconstructed.", call. = FALSE)
     }
     return(eta[c("eta_num", "eta_denom")])
+  }
+  if (identical(fit$backend, "gibbs")) {
+    # The sweep records the full linear predictor, spatial field included
+    eta_num <- fit$.internal$eta_num
+    return(list(eta_num = eta_num,
+                eta_denom = fit$.internal$eta_denom %||%
+                  matrix(0, nrow(eta_num), ncol(eta_num))))
   }
   structured <- (hmc_data$n_re_groups %||% 0L) > 0L ||
     !identical(fit$spatial$type %||% "none", "none") ||
@@ -283,11 +290,6 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
          call. = FALSE)
   }
 
-  if (isTRUE(fit$family$zero_inflated) || isTRUE(fit$family$one_inflated)) {
-    stop("Pointwise log-likelihood is not yet implemented for zero-/one-inflated ",
-         "models.", call. = FALSE)
-  }
-
   model_type <- .ratiod_model_type(fit)
   if (!model_type %in% .ratiod_supported_model_types) {
     stop("Pointwise log-likelihood is not implemented for model type '",
@@ -309,66 +311,130 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
   # Observed responses broadcast to [n_draws x n_obs] (constant down each column).
   ymat <- function(y) matrix(as.numeric(y), nrow = S, ncol = N, byrow = TRUE)
 
-  ll <- switch(
+  y_num <- ymat(hmc_data$y_num)
+  ll_num <- switch(
     model_type,
-    binomial = {
-      p <- stats::plogis(lp$eta_num)
-      matrix(stats::dbinom(ymat(hmc_data$y_num), size = ymat(hmc_data$y_denom),
-                           prob = p, log = TRUE), S, N)
-    },
+    binomial = stats::dbinom(y_num, size = ymat(hmc_data$y_denom),
+                             prob = stats::plogis(lp$eta_num), log = TRUE),
     beta_binomial = {
       p <- stats::plogis(lp$eta_num)
-      y <- ymat(hmc_data$y_num); n <- ymat(hmc_data$y_denom)
+      n <- ymat(hmc_data$y_denom)
       alpha <- p * disp$phi          # disp$phi length S -> per-draw (per-row)
       beta  <- (1 - p) * disp$phi
-      lchoose(n, y) + lbeta(y + alpha, n - y + beta) - lbeta(alpha, beta)
+      lchoose(n, y_num) + lbeta(y_num + alpha, n - y_num + beta) - lbeta(alpha, beta)
     },
-    poisson_gamma = {
-      mu_num   <- exp(lp$eta_num)
-      mu_denom <- exp(lp$eta_denom)
-      ll_num <- matrix(stats::dpois(ymat(hmc_data$y_num), lambda = mu_num,
-                                    log = TRUE), S, N)
-      ll_den <- matrix(stats::dgamma(ymat(hmc_data$y_denom_cont), shape = disp$shape,
-                                     rate = disp$shape / mu_denom, log = TRUE), S, N)
-      ll_num + ll_den
-    },
-    negbin_negbin = {
-      mu_num   <- exp(lp$eta_num)
-      mu_denom <- exp(lp$eta_denom)
-      ll_num <- matrix(stats::dnbinom(ymat(hmc_data$y_num), size = disp$phi_num,
-                                      mu = mu_num, log = TRUE), S, N)
-      ll_den <- matrix(stats::dnbinom(ymat(hmc_data$y_denom), size = disp$phi_denom,
-                                      mu = mu_denom, log = TRUE), S, N)
-      ll_num + ll_den
-    },
-    negbin_gamma = {
-      mu_num   <- exp(lp$eta_num)
-      mu_denom <- exp(lp$eta_denom)
-      ll_num <- matrix(stats::dnbinom(ymat(hmc_data$y_num), size = disp$phi_num,
-                                      mu = mu_num, log = TRUE), S, N)
-      ll_den <- matrix(stats::dgamma(ymat(hmc_data$y_denom_cont), shape = disp$phi_denom,
-                                     rate = disp$phi_denom / mu_denom, log = TRUE), S, N)
-      ll_num + ll_den
-    },
-    gamma_gamma = {
-      mu_num   <- exp(lp$eta_num)
-      mu_denom <- exp(lp$eta_denom)
-      ll_num <- matrix(stats::dgamma(ymat(hmc_data$y_num_cont), shape = disp$shape_num,
-                                     rate = disp$shape_num / mu_num, log = TRUE), S, N)
-      ll_den <- matrix(stats::dgamma(ymat(hmc_data$y_denom_cont), shape = disp$shape_denom,
-                                     rate = disp$shape_denom / mu_denom, log = TRUE), S, N)
-      ll_num + ll_den
-    },
-    lognormal = {
-      ll_num <- matrix(stats::dlnorm(ymat(hmc_data$y_num_cont), meanlog = lp$eta_num,
-                                     sdlog = disp$sigma_num, log = TRUE), S, N)
-      ll_den <- matrix(stats::dlnorm(ymat(hmc_data$y_denom_cont), meanlog = lp$eta_denom,
-                                     sdlog = disp$sigma_denom, log = TRUE), S, N)
-      ll_num + ll_den
-    }
+    poisson_gamma = stats::dpois(y_num, lambda = exp(lp$eta_num), log = TRUE),
+    negbin_negbin = ,
+    negbin_gamma = stats::dnbinom(y_num, size = disp$phi_num,
+                                  mu = exp(lp$eta_num), log = TRUE),
+    gamma_gamma = stats::dgamma(ymat(hmc_data$y_num_cont), shape = disp$shape_num,
+                                rate = disp$shape_num / exp(lp$eta_num), log = TRUE),
+    lognormal = stats::dlnorm(ymat(hmc_data$y_num_cont), meanlog = lp$eta_num,
+                              sdlog = disp$sigma_num, log = TRUE)
+  )
+  zi_type <- fit$zi$type %||% "none"
+  if (!identical(zi_type, "none")) {
+    ll_num <- .ratiod_inflated_num_loglik(fit, draws, lp$eta_num, disp,
+                                          hmc_data, zi_type)
+  }
+
+  ll_den <- switch(
+    model_type,
+    binomial = ,
+    beta_binomial = 0,
+    poisson_gamma = stats::dgamma(ymat(hmc_data$y_denom_cont), shape = disp$shape,
+                                  rate = disp$shape / exp(lp$eta_denom), log = TRUE),
+    negbin_negbin = stats::dnbinom(ymat(hmc_data$y_denom), size = disp$phi_denom,
+                                   mu = exp(lp$eta_denom), log = TRUE),
+    negbin_gamma = stats::dgamma(ymat(hmc_data$y_denom_cont), shape = disp$phi_denom,
+                                 rate = disp$phi_denom / exp(lp$eta_denom), log = TRUE),
+    gamma_gamma = stats::dgamma(ymat(hmc_data$y_denom_cont), shape = disp$shape_denom,
+                                rate = disp$shape_denom / exp(lp$eta_denom), log = TRUE),
+    lognormal = stats::dlnorm(ymat(hmc_data$y_denom_cont), meanlog = lp$eta_denom,
+                              sdlog = disp$sigma_denom, log = TRUE)
   )
 
-  ll
+  matrix(ll_num + ll_den, S, N)
+}
+
+# Draws x observations linear predictor of an inflation component: the
+# `prefix[j]` coefficient draws, in index order, times the design `X`.
+#' @keywords internal
+.ratiod_inflation_linpred <- function(draws, prefix, X) {
+  cols <- grep(paste0("^", prefix, "\\[[0-9]+\\]$"), colnames(draws))
+  idx <- as.integer(sub(paste0("^", prefix, "\\[([0-9]+)\\]$"), "\\1",
+                        colnames(draws)[cols]))
+  draws[, cols[order(idx)], drop = FALSE] %*% t(X)
+}
+
+# Numerator log-likelihood of a zero-inflated, one-inflated, zero-and-one-
+# inflated or hurdle family, [n_draws x n_obs], as src/hmc_zi.h writes it:
+# zi_* mix a structural zero (probability logistic(X_zi beta_zi)) with the
+# count; hurdle_* send y = 0 to 1 - theta (theta = logistic(X_zi beta_zi))
+# and positive counts to theta times the zero-truncated count; oi_binomial
+# mixes a structural y = n with probability logistic(X_oi beta_oi); zoib draws
+# a structural zero with pi_0, otherwise a structural y = n with pi_1,
+# otherwise the binomial, which can itself give 0 or n.
+#' @keywords internal
+.ratiod_inflated_num_loglik <- function(fit, draws, eta_num, disp, hmc_data, zi_type) {
+  S <- nrow(eta_num)
+  N <- ncol(eta_num)
+  ymat <- function(y) matrix(as.numeric(y), nrow = S, ncol = N, byrow = TRUE)
+  linpred <- function(prefix, X) .ratiod_inflation_linpred(draws, prefix, X)
+  log_pos <- function(x) stats::plogis(x, log.p = TRUE)
+  log_neg <- function(x) stats::plogis(x, lower.tail = FALSE, log.p = TRUE)
+  log_add <- function(a, b) pmax(a, b) + log1p(exp(-abs(a - b)))
+
+  y <- ymat(hmc_data$y_num)
+  zero <- y == 0
+  n <- ymat(hmc_data$y_denom)
+  logit_zi <- if (!is.null(fit$zi$X_zi) && ncol(fit$zi$X_zi) > 0L) {
+    linpred("beta_zi", fit$zi$X_zi)
+  }
+
+  if (zi_type %in% c("zi_poisson", "zi_negbin", "hurdle_poisson", "hurdle_negbin")) {
+    mu <- exp(eta_num)
+    if (zi_type %in% c("zi_poisson", "hurdle_poisson")) {
+      lp_y <- stats::dpois(y, mu, log = TRUE)
+      lp_0 <- -mu
+    } else {
+      size <- matrix(disp$phi_num, S, N)
+      lp_y <- stats::dnbinom(y, size = size, mu = mu, log = TRUE)
+      lp_0 <- stats::dnbinom(0, size = size, mu = mu, log = TRUE)
+    }
+    if (startsWith(zi_type, "zi_")) {
+      return(ifelse(zero, log_add(log_pos(logit_zi), log_neg(logit_zi) + lp_0),
+                    log_neg(logit_zi) + lp_y))
+    }
+    return(ifelse(zero, log_neg(logit_zi),
+                  log_pos(logit_zi) + lp_y - log(-expm1(lp_0))))
+  }
+
+  p <- stats::plogis(eta_num)
+  lp_y <- stats::dbinom(y, size = n, prob = p, log = TRUE)
+  lp_0 <- n * log1p(-p)
+  lp_n <- n * log(p)
+  switch(
+    zi_type,
+    zi_binomial = ifelse(zero, log_add(log_pos(logit_zi), log_neg(logit_zi) + lp_0),
+                         log_neg(logit_zi) + lp_y),
+    hurdle_binomial = ifelse(zero, log_neg(logit_zi),
+                             log_pos(logit_zi) + lp_y - log(-expm1(lp_0))),
+    oi_binomial = {
+      logit_oi <- linpred("beta_oi", fit$zi$X_oi)
+      ifelse(y == n, log_add(log_pos(logit_oi), log_neg(logit_oi) + lp_n),
+             log_neg(logit_oi) + lp_y)
+    },
+    zoib = {
+      logit_oi <- linpred("beta_oi", fit$zi$X_oi)
+      both <- log_neg(logit_zi) + log_neg(logit_oi)
+      ifelse(zero, log_add(log_pos(logit_zi), both + lp_0),
+             ifelse(y == n,
+                    log_neg(logit_zi) + log_add(log_pos(logit_oi), log_neg(logit_oi) + lp_n),
+                    both + lp_y))
+    },
+    stop(sprintf("Unknown inflation type '%s'", zi_type), call. = FALSE)
+  )
 }
 
 #' Leave-One-Out Cross-Validation
@@ -380,8 +446,9 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 #' @details
 #' The pointwise log-likelihood is reconstructed from the posterior draws and
 #' the model (see [ratiod_compare()]); it works on any fit produced by the
-#' hmc, ess, sghmc, or vi backend. The score is conditional on the fixed-effect
-#' (population-level) linear predictor.
+#' hmc, ess, sghmc, or vi backend, for every family including the zero-inflated,
+#' one-inflated and hurdle ones. Each observation's likelihood is evaluated at
+#' the full linear predictor: fixed, random and structured effects.
 #'
 #' @param x A `ratiod_fit` object
 #' @param ... Additional arguments passed to loo::loo
@@ -429,7 +496,10 @@ loo.ratiod_fit <- function(x, ...) {
 #' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
+#' # waic() warns when an observation's p_waic exceeds 0.4; loo() is then
+#' # the estimate to report
 #' waic(fit)
+#' loo(fit)
 #' }
 #'
 #' @exportS3Method loo::waic

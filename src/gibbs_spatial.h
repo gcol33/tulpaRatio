@@ -869,7 +869,6 @@ inline GibbsResult run_gibbs_bym2(
     double sigma_scale = 0.1;
     double rho_scale = 0.3;
     double level_scale = 0.2;
-    double phi_level_scale = 0.2;
     double sigma_joint_scale = 0.2;
     double rho_joint_scale = 0.2;
 
@@ -881,7 +880,6 @@ inline GibbsResult run_gibbs_bym2(
     int sigma_accept_cnt = 0, sigma_total_cnt = 0;
     int rho_accept_cnt = 0, rho_total_cnt = 0;
     int level_accept_cnt = 0, level_total_cnt = 0;
-    int phi_level_accept_cnt = 0, phi_level_total_cnt = 0;
     int sigma_joint_accept_cnt = 0, sigma_joint_total_cnt = 0;
     int rho_joint_accept_cnt = 0, rho_joint_total_cnt = 0;
 
@@ -966,35 +964,6 @@ inline GibbsResult run_gibbs_bym2(
             if (phi_off != 0.0) {
                 for (int s = 0; s < S; s++) phi[s] += phi_off;
             }
-        }
-
-        // ---- 1b. Move the structured component's level against the intercept ----
-        // A uniform shift phi -> phi - c leaves phi'Qphi exactly unchanged (Q's
-        // null space is the constant vector), so at eta held fixed this move has
-        // no likelihood term and no prior term for phi itself -- only the
-        // intercept's own N(0, sigma_beta^2) resists it. Theta already has this
-        // move in step 2b; without the analogous move here, the field's level
-        // only explored the intercept through the site-by-site test above, one
-        // small accepted step at a time.
-        if (constrain) {
-            const double c = phi_level_scale * rnorm(rng);
-            const double shift = sigma_s * scale_factor * c;
-
-            const double prec_beta = 1.0 / (d.sigma_beta * d.sigma_beta);
-            const double b_num = beta_num[d.icept_num];
-            double log_ratio = -0.5 * prec_beta * (shift * shift + 2.0 * b_num * shift);
-            if (d.icept_denom >= 0) {
-                const double b_den = beta_denom[d.icept_denom];
-                log_ratio -= 0.5 * prec_beta * (shift * shift + 2.0 * b_den * shift);
-            }
-
-            if (std::log(runif(rng)) < log_ratio) {
-                for (int s = 0; s < S; s++) phi[s] -= c;
-                beta_num[d.icept_num] += shift;
-                if (d.icept_denom >= 0) beta_denom[d.icept_denom] += shift;
-                phi_level_accept_cnt++;
-            }
-            phi_level_total_cnt++;
         }
 
         // ---- 2. Update theta (iid unstructured) via MH ----
@@ -1269,7 +1238,6 @@ inline GibbsResult run_gibbs_bym2(
             adapt(sigma_scale, sigma_accept_cnt, sigma_total_cnt);
             adapt(rho_scale, rho_accept_cnt, rho_total_cnt);
             adapt(level_scale, level_accept_cnt, level_total_cnt);
-            adapt(phi_level_scale, phi_level_accept_cnt, phi_level_total_cnt);
             adapt(sigma_joint_scale, sigma_joint_accept_cnt, sigma_joint_total_cnt);
             adapt(rho_joint_scale, rho_joint_accept_cnt, rho_joint_total_cnt);
             if (has_disp_num || has_disp_denom)

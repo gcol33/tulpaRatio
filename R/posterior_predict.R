@@ -42,11 +42,16 @@ posterior_predict.ratiod_fit <- function(object, ndraws = NULL, ...) {
   num_dist <- family$numerator$distribution
   denom_dist <- family$denominator$distribution
 
-  if (grepl("zero_inflated|hurdle|one_inflated", num_dist)) {
-    stop("Posterior predictive draws are not implemented for the ",
-         num_dist, " family: the replicate needs the inflation component's ",
-         "own linear predictor, which the mean draws do not carry.",
-         call. = FALSE)
+  zi_type <- object$zi$type %||% "none"
+  if (!identical(zi_type, "none")) {
+    num_dist <- inflation_base_distribution(zi_type)
+    draws_mat <- as.matrix(object$draws)
+    logit_zi <- if (!is.null(object$zi$X_zi) && ncol(object$zi$X_zi) > 0L) {
+      .ratiod_inflation_linpred(draws_mat, "beta_zi", object$zi$X_zi)
+    }
+    logit_oi <- if (zi_type %in% c("oi_binomial", "zoib")) {
+      .ratiod_inflation_linpred(draws_mat, "beta_oi", object$zi$X_oi)
+    }
   }
 
   fitted_vals <- compute_fitted_values(object)
@@ -77,6 +82,11 @@ posterior_predict.ratiod_fit <- function(object, ndraws = NULL, ...) {
   for (k in seq_along(idx)) {
     s <- idx[k]
     y_num_rep[k, ] <- pp_rdist(num_dist, mu_num[s, ], disp_num[s], trials)
+    if (!identical(zi_type, "none")) {
+      y_num_rep[k, ] <- pp_inflate(zi_type, y_num_rep[k, ], mu_num[s, ],
+                                   disp_num[s], trials, logit_zi[s, ],
+                                   if (!is.null(logit_oi)) logit_oi[s, ])
+    }
     y_denom_rep[k, ] <- if (denom_fixed) {
       observed$y_denom
     } else {
@@ -90,6 +100,65 @@ posterior_predict.ratiod_fit <- function(object, ndraws = NULL, ...) {
     y_num = observed$y_num,
     y_denom = observed$y_denom,
     draw_ids = idx
+  )
+}
+
+
+#' Count or binomial distribution under an inflation component
+#' @keywords internal
+inflation_base_distribution <- function(zi_type) {
+  switch(zi_type,
+         zi_poisson = , hurdle_poisson = "poisson",
+         zi_negbin = , hurdle_negbin = "neg_binomial_2",
+         zi_binomial = , hurdle_binomial = , oi_binomial = , zoib = "binomial",
+         stop(sprintf("Unknown inflation type '%s'", zi_type), call. = FALSE))
+}
+
+#' Replicate draws under an inflation component
+#'
+#' Applies the inflation of `src/hmc_zi.h` to draws `y` from the count or
+#' binomial distribution: structural zeros (zi), a zero hurdle whose positive
+#' outcomes come from the zero-truncated distribution, structural ones at the
+#' trial count (oi), or both (zoib, whose binomial draws can also be 0 or the
+#' trial count).
+#'
+#' @keywords internal
+pp_inflate <- function(zi_type, y, mu, disp, trials, logit_zi, logit_oi) {
+  N <- length(y)
+  base <- inflation_base_distribution(zi_type)
+  cdf <- function(q) switch(base,
+    poisson = stats::ppois(q, mu),
+    neg_binomial_2 = stats::pnbinom(q, size = disp, mu = mu),
+    binomial = stats::pbinom(q, trials, mu))
+  quant <- function(u) switch(base,
+    poisson = stats::qpois(u, mu),
+    neg_binomial_2 = stats::qnbinom(u, size = disp, mu = mu),
+    binomial = stats::qbinom(u, trials, mu))
+  between <- function(lo, hi) {
+    a <- cdf(lo)
+    quant(a + stats::runif(N) * (cdf(hi) - a))
+  }
+  switch(
+    zi_type,
+    zi_poisson = , zi_negbin = , zi_binomial = {
+      y[stats::runif(N) < stats::plogis(logit_zi)] <- 0
+      y
+    },
+    hurdle_poisson = , hurdle_negbin = , hurdle_binomial = {
+      positive <- stats::runif(N) < stats::plogis(logit_zi)
+      upper <- if (identical(base, "binomial")) trials else Inf
+      ifelse(positive, between(0, upper), 0)
+    },
+    oi_binomial = {
+      one <- stats::runif(N) < stats::plogis(logit_oi)
+      y[one] <- trials[one]
+      y
+    },
+    zoib = {
+      zero <- stats::runif(N) < stats::plogis(logit_zi)
+      one <- !zero & stats::runif(N) < stats::plogis(logit_oi)
+      ifelse(zero, 0, ifelse(one, trials, y))
+    }
   )
 }
 

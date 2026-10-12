@@ -2,12 +2,12 @@
 % Please edit documentation in R/ratio.R
 \name{compute_fitted_pg}
 \alias{compute_fitted_pg}
-\title{Compute fitted values for PG backend}
+\title{Compute fitted values for the PG and Gibbs backends}
 \usage{
 compute_fitted_pg(object)
 }
 \description{
-The Gibbs sweep records the linear predictor it sampled, so the fitted
+Their sweeps record the linear predictor they sampled, so the fitted
 values are that predictor on the response scale of the family.
 }
 \keyword{internal}

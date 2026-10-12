@@ -5,6 +5,7 @@
 #include "hmc_sampler.h"
 #include <tulpa/walnuts.h>
 #include "omp_chain_team.h"
+#include "omp_thread_scope.h"
 #include "tls_workspace.h"
 #include "linalg_fast.h"
 #include <RcppEigen.h>
@@ -1564,12 +1565,10 @@ void compute_gradient_analytical(
             grad_logit_zi_i = -zi_prob;  // d/d(logit_theta) log(1-theta) = -theta
           } else {
             // P(Y=y|Y>0) * theta = theta * TruncBinomial(y|n,p)
-            double p0_binom = std::pow(1.0 - p, n_trials);
-            double normalizer = 1.0 - p0_binom;
-            if (normalizer < 1e-12) normalizer = 1e-12;
-            // Gradient from truncated binomial
+            // Gradient from truncated binomial:
             // d(log(1-(1-p)^n))/d(eta) = n*p*(1-p)^n / (1-(1-p)^n)
-            double grad_normalizer = n_trials * p * p0_binom / normalizer;
+            double grad_normalizer = n_trials * p *
+                ratiod_zi::zero_odds(n_trials * std::log1p(-p));
             resid_num = (y_num_i - n_trials * p) - grad_normalizer;
             grad_logit_zi_i = 1.0 - zi_prob;  // d/d(logit_theta) log(theta) = 1-theta
           }
@@ -1700,20 +1699,9 @@ void compute_gradient_analytical(
             grad_phi_num_i = 0.0;
           } else {
             // P(Y=y|Y>0) * theta = theta * TruncNB(y|mu,phi)
-            double p0_nb = std::pow(phi_num / (phi_num + mu_num), phi_num);
-            double log_normalizer = std::log(1.0 - p0_nb);
-            double denom_num = mu_num + phi_num;
-            // Gradient from truncated NB: NB residual MINUS normalizer correction
-            // LL = log NB(y) - log(1-p0), so d(LL)/d(eta) = NB_resid - d(log(1-p0))/d(mu)*mu
-            // d(log(1-p0))/d(mu) = phi*p0 / ((phi+mu)*(1-p0))
-            resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num
-                        - phi_num * p0_nb * mu_num / ((phi_num + mu_num) * (1.0 - p0_nb));
+            ratiod_zi::hurdle_negbin_positive_grads(y_num_i, mu_num, phi_num,
+                                                   resid_num, grad_phi_num_i);
             grad_logit_zi_i = 1.0 - zi_prob;  // d/d(logit_theta) log(theta) = 1-theta
-            grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                             + std::log(phi_num / denom_num)
-                             + (mu_num - y_num_i) / denom_num;
-            // Truncation correction for phi gradient
-            grad_phi_num_i += p0_nb * (std::log(phi_num / (phi_num + mu_num)) + mu_num / (phi_num + mu_num)) / (1.0 - p0_nb);
           }
         } else {
           // Standard NegBin (no ZI)
@@ -1767,8 +1755,7 @@ void compute_gradient_analytical(
           } else {
             // Truncated Poisson: d(LL)/d(eta) = y - mu - mu*exp(-mu)/(1-exp(-mu))
             // LL = log Poi(y) - log(1-exp(-mu)), correction is SUBTRACTED
-            double exp_neg_mu = std::exp(-mu_num);
-            resid_num = y_num_i - mu_num - mu_num * exp_neg_mu / (1.0 - exp_neg_mu);
+            resid_num = y_num_i - mu_num - mu_num * ratiod_zi::zero_odds(-mu_num);
             grad_logit_zi_i = 1.0 - zi_prob;
             grad_phi_denom_i = grad_phi_gamma;
           }
@@ -1823,16 +1810,9 @@ void compute_gradient_analytical(
             grad_logit_zi_i = -zi_prob;  // d/d(logit_theta) log(1-theta)
             grad_phi_num_i = 0.0;
           } else {
-            double p0_nb = std::pow(phi_num / (phi_num + mu_num), phi_num);
-            double denom_num = mu_num + phi_num;
-            resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num
-                        - phi_num * p0_nb * mu_num / ((phi_num + mu_num) * (1.0 - p0_nb));
+            ratiod_zi::hurdle_negbin_positive_grads(y_num_i, mu_num, phi_num,
+                                                   resid_num, grad_phi_num_i);
             grad_logit_zi_i = 1.0 - zi_prob;  // d/d(logit_theta) log(theta)
-            grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                             + std::log(phi_num / denom_num)
-                             + (mu_num - y_num_i) / denom_num;
-            // Truncation correction for phi gradient
-            grad_phi_num_i += p0_nb * (std::log(phi_num / (phi_num + mu_num)) + mu_num / (phi_num + mu_num)) / (1.0 - p0_nb);
           }
           grad_phi_denom_i = grad_phi_gamma;
         } else {
@@ -2036,14 +2016,15 @@ void compute_gradient_analytical(
           double p_i = 1.0 / (1.0 + std::exp(-eta_num));
           int n_trials = data.y_denom[i];
           int y_i = data.y_num[i];
+          // The density's own binomial inflation terms (log_post_impl.h)
           if (data.zi_type == ratiod_zi::ZIType::ZI_BINOMIAL) {
-            ll_i = ratiod_zi::zi_binomial_lpmf_logit(y_i, n_trials, p_i, logit_zi);
+            ll_i = ratiod::math::log_lik_zi_binomial(y_i, n_trials, p_i, logit_zi);
           } else if (data.zi_type == ratiod_zi::ZIType::HURDLE_BINOMIAL) {
-            ll_i = ratiod_zi::hurdle_binomial_lpmf_logit(y_i, n_trials, p_i, logit_zi);
+            ll_i = ratiod::math::log_lik_hurdle_binomial(y_i, n_trials, p_i, logit_zi);
           } else if (data.zi_type == ratiod_zi::ZIType::OI_BINOMIAL) {
-            ll_i = ratiod_zi::oi_binomial_lpmf_logit(y_i, n_trials, p_i, logit_oi);
+            ll_i = ratiod::math::log_lik_oi_binomial(y_i, n_trials, p_i, logit_oi);
           } else if (data.zi_type == ratiod_zi::ZIType::ZOIB) {
-            ll_i = ratiod_zi::zoib_lpmf_logit(y_i, n_trials, p_i, logit_zi, logit_oi);
+            ll_i = ratiod::math::log_lik_zoib(y_i, n_trials, p_i, logit_zi, logit_oi);
           } else {
             ll_i = log_lik_binomial(y_i, n_trials, eta_num);
           }
@@ -2219,9 +2200,39 @@ void compute_gradient_analytical(
 static GradientMode g_gradient_mode = GradientMode::AUTO;
 
 // =====================================================================
-// Numerical gradient (fallback for complex models)
+// Numerical gradients
 // =====================================================================
 
+// Finite-difference gradient of `f` at `params`, step h = 1e-5. The
+// two-point central difference has truncation error h^2 f^(3)/6; the
+// five-point stencil (f(x-2h) - 8 f(x-h) + 8 f(x+h) - f(x+2h)) / 12h has
+// h^4 f^(5)/30, which stays below the gradient check's tolerance when a
+// covariate on a large scale makes the higher derivatives along its
+// coefficient large.
+template <typename LogPost>
+void finite_difference_gradient(LogPost&& f, const std::vector<double>& params,
+                                std::vector<double>& grad, bool five_point) {
+  const int n = static_cast<int>(params.size());
+  const double h = 1e-5;
+  grad.resize(n);
+  std::vector<double> p = params;
+  for (int i = 0; i < n; i++) {
+    const double x = params[i];
+    p[i] = x + h; const double f1p = f(p);
+    p[i] = x - h; const double f1m = f(p);
+    if (five_point) {
+      p[i] = x + 2.0 * h; const double f2p = f(p);
+      p[i] = x - 2.0 * h; const double f2m = f(p);
+      grad[i] = (f2m - 8.0 * f1m + 8.0 * f1p - f2p) / (12.0 * h);
+    } else {
+      grad[i] = (f1p - f1m) / (2.0 * h);
+    }
+    p[i] = x;
+  }
+}
+
+// Gradient of compute_log_post (the density the hand-coded gradients
+// differentiate), the sampler's gradient in mode 'N'.
 void compute_gradient_numerical(
     const std::vector<double>& params,
     const ModelData& data,
@@ -2229,65 +2240,31 @@ void compute_gradient_numerical(
     std::vector<double>& grad,
     double* log_post_out = nullptr
 ) {
-  int n = params.size();
-  grad.resize(n);
-
-  // Compute log_post at central point if requested (cheap: one extra eval)
-  if (log_post_out) {
-    *log_post_out = compute_log_post(params, data, layout);
-  }
-
-  double h = 1e-5;
-
-  for (int i = 0; i < n; i++) {
-    std::vector<double> params_plus = params;
-    std::vector<double> params_minus = params;
-
-    params_plus[i] = params[i] + h;
-    params_minus[i] = params[i] - h;
-
-    double f_plus = compute_log_post(params_plus, data, layout);
-    double f_minus = compute_log_post(params_minus, data, layout);
-
-    grad[i] = (f_plus - f_minus) / (2.0 * h);
-  }
+  if (log_post_out) *log_post_out = compute_log_post(params, data, layout);
+  finite_difference_gradient(
+    [&](const std::vector<double>& q) { return compute_log_post(q, data, layout); },
+    params, grad, false);
 }
 
-// =====================================================================
-// Numerical gradient using compute_log_post_impl<double>
-// Used for verifying A_r/A modes which use compute_log_post_impl<T>.
-// This ensures the numerical reference matches the same function that
-// the autodiff mode differentiates (important when parameterization
-// differs from H-mode, e.g. non-centered RE).
-// =====================================================================
-
-void compute_gradient_numerical_impl(
+// Five-point reference gradient for the gradient checks: of
+// compute_log_post_impl<double> when `impl`, the density the autodiff modes
+// differentiate (its parameterization can differ from compute_log_post's,
+// e.g. non-centred random effects), else of compute_log_post.
+void reference_gradient(
     const std::vector<double>& params,
     const ModelData& data,
     const ParamLayout& layout,
     std::vector<double>& grad,
-    double* log_post_out = nullptr
+    bool impl
 ) {
-  int n = params.size();
-  grad.resize(n);
-
-  if (log_post_out) {
-    *log_post_out = ratiod::compute_log_post_impl(params, data, layout);
-  }
-
-  double h = 1e-5;
-
-  for (int i = 0; i < n; i++) {
-    std::vector<double> params_plus = params;
-    std::vector<double> params_minus = params;
-
-    params_plus[i] = params[i] + h;
-    params_minus[i] = params[i] - h;
-
-    double f_plus = ratiod::compute_log_post_impl(params_plus, data, layout);
-    double f_minus = ratiod::compute_log_post_impl(params_minus, data, layout);
-
-    grad[i] = (f_plus - f_minus) / (2.0 * h);
+  if (impl) {
+    finite_difference_gradient(
+      [&](const std::vector<double>& q) { return ratiod::compute_log_post_impl(q, data, layout); },
+      params, grad, true);
+  } else {
+    finite_difference_gradient(
+      [&](const std::vector<double>& q) { return compute_log_post(q, data, layout); },
+      params, grad, true);
   }
 }
 
@@ -2304,7 +2281,7 @@ bool verify_gradient(
 ) {
   std::vector<double> grad_analytical, grad_numerical;
   compute_gradient_analytical(params, data, layout, grad_analytical);
-  compute_gradient_numerical(params, data, layout, grad_numerical);
+  reference_gradient(params, data, layout, grad_numerical, false);
 
   double max_diff = 0.0;
   int worst_idx = -1;
@@ -2377,7 +2354,8 @@ bool verify_gradient_runtime(
     const std::vector<double>& params,
     const ModelData& data,
     const ParamLayout& layout,
-    double tol = 1e-4
+    double tol,
+    std::string& report
 ) {
   std::vector<double> grad_active, grad_numerical;
   compute_gradient(params, data, layout, grad_active, nullptr);
@@ -2389,9 +2367,9 @@ bool verify_gradient_runtime(
   if (g_gradient_mode == GradientMode::AUTODIFF_ARENA ||
       g_gradient_mode == GradientMode::AUTODIFF_FORWARD ||
       g_gradient_mode == GradientMode::AUTODIFF_TAPE) {
-    compute_gradient_numerical_impl(params, data, layout, grad_numerical);
+    reference_gradient(params, data, layout, grad_numerical, true);
   } else {
-    compute_gradient_numerical(params, data, layout, grad_numerical);
+    reference_gradient(params, data, layout, grad_numerical, false);
   }
 
   double max_diff = 0.0;
@@ -2408,15 +2386,13 @@ bool verify_gradient_runtime(
   }
 
   if (max_diff > tol) {
-    // Use REprintf for immediate output, then Rcpp::warning for R-level notice
-    REprintf("[tulpaRatio] WARNING: gradient mismatch detected at param %d!\n"
-             "  max |active - numerical| / scale = %.6e (tol = %.1e)\n"
-             "  active[%d] = %.8e, numerical[%d] = %.8e\n"
-             "  This indicates a bug in the specialized gradient function.\n"
-             "  Falling back to numerical gradients for safety.\n",
-             worst_idx, max_diff, tol,
-             worst_idx, grad_active[worst_idx],
-             worst_idx, grad_numerical[worst_idx]);
+    char buf[200];
+    std::snprintf(buf, sizeof(buf),
+                  "parameter %d: gradient %.8e, finite difference %.8e "
+                  "(relative difference %.2e)",
+                  worst_idx + 1, grad_active[worst_idx], grad_numerical[worst_idx],
+                  max_diff);
+    report = buf;
     return false;
   }
   return true;
@@ -2433,14 +2409,15 @@ void verify_gradient_or_fallback(const std::vector<double>& q_init,
   if (g_gradient_mode == GradientMode::NUMERICAL) return;
 
   const std::vector<double> probe = offset_structured_blocks(q_init, layout);
-  if (verify_gradient_runtime(probe, data, layout, 1e-4)) return;
+  std::string report;
+  if (verify_gradient_runtime(probe, data, layout, 1e-4, report)) return;
 
   g_gradient_mode = GradientMode::NUMERICAL;
   Rcpp::warning(
-    "Gradient mismatch detected: active gradient function disagrees with "
-    "numerical gradients (max rel diff > 1e-4). Falling back to numerical "
-    "gradients (mode='N'). This is slower but correct. Please report this "
-    "as a bug at https://github.com/gcol33/tulpaRatio/issues"
+    "The model's gradient disagrees with its finite difference at " + report +
+    "; sampling with finite-difference gradients (gradient_mode = \"N\"), "
+    "which is slow. Please report this at "
+    "https://github.com/gcol33/tulpaRatio/issues"
   );
 }
 
@@ -6711,26 +6688,9 @@ void compute_gradient_spatiotemporal_handcoded(
         temporal_rho_prior_grad(data, layout, rho_ar1, grad.data());
     }
 
-    // ST interaction prior on tau_st (PC prior: exponential on sigma_st)
-    {
-        double sigma_st = 1.0 / std::sqrt(tau_st);
-        double lambda = -std::log(data.st_sigma2_prior_alpha) / data.st_sigma2_prior_U;
-        // d log_prior / d log_tau = d/d(tau) * tau
-        // log_prior = log(lambda) - lambda*sigma - log(2*sigma) + log_tau (Jacobian)
-        // sigma = 1/sqrt(tau), d sigma/d tau = -0.5 * tau^{-3/2}
-        // d log_prior / d tau = (lambda/(2*sigma*tau) + 1/(2*sigma^2*tau))* (-sigma/tau ... )
-        // Simpler: work through chain rule
-        // d/d(log_tau) = [lambda * 0.5 * sigma - 0.5] * (-1) + 1
-        // = 0.5 * (1 - lambda * sigma) + 1 - 0.5
-        // = 1.0 - 0.5 * lambda * sigma
-        // Actually, from log_post code:
-        // log p = log(lambda) - lambda*sigma - log(2*sigma) + log_tau
-        // d/d(log_tau) = lambda * (-d sigma/d log_tau) - 1/sigma * (-d sigma/d log_tau) + 1
-        // d sigma/d log_tau = d sigma/d tau * tau = -0.5 * tau^{-3/2} * tau = -0.5/sqrt(tau) = -0.5*sigma
-        // So: d/d(log_tau) = lambda * 0.5 * sigma + (1/sigma) * 0.5 * sigma + 1
-        //                  = 0.5 * lambda * sigma + 0.5 + 1
-        grad[layout.log_tau_st_idx] = 0.5 * lambda * sigma_st + 0.5 + 1.0;
-    }
+    // ST interaction prior on tau_st (PC prior on sigma_st)
+    grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(
+        std::log(tau_st), data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
     // tau_st2 removed — single tau for all ST types
 
     // ST interaction ranges: uniform inside the bounds, so each carries only
@@ -7559,9 +7519,8 @@ void compute_gradient_composite(
     // margin's correlation, and for HSGP-ST a PC on sigma and a LogNormal(0, 1)
     // on the lengthscale. The field's own contribution to each arrives below.
     if (has_st) {
-        double sigma_st = 1.0 / std::sqrt(tau_st);
-        double lambda = -std::log(data.st_sigma2_prior_alpha) / data.st_sigma2_prior_U;
-        grad[layout.log_tau_st_idx] = 0.5 * lambda * sigma_st + 0.5 + 1.0;
+        grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(
+            std::log(tau_st), data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
         if (layout.is_st_gp) {
             // Uniform inside the bounds: each range carries only its log
             // Jacobian, the same term the density adds.
@@ -11178,6 +11137,52 @@ std::vector<HMCResult> run_hmc_parallel_chains(
 //   zi_params: zero-inflation (type, X_zi, prior_sd)
 //   latent_params: latent factors
 //   st_params: spatiotemporal interaction
+// The chains' results as the list R reads: one chain's vectors directly, or
+// a list per field with one entry per chain. The collapsed fields (the inner
+// Laplace modes of a collapsed GP, ICAR or BYM2 field) follow the same shape,
+// so each chain's draws stay paired with its own field.
+Rcpp::List hmc_results_list(const std::vector<ratiod_hmc::HMCResult>& results, int L) {
+  const int n_chains = static_cast<int>(results.size());
+  std::string sampler_name = (L == 0) ? "NUTS" : "HMC";
+  for (const auto& r : results) {
+    if (!r.sampler.empty()) sampler_name = r.sampler;
+  }
+  using ratiod_hmc::HMCResult;
+  auto field = [&](auto get) -> SEXP {
+    if (n_chains == 1) return Rcpp::wrap(get(results[0]));
+    Rcpp::List out(n_chains);
+    for (int c = 0; c < n_chains; c++) out[c] = get(results[c]);
+    return out;
+  };
+  Rcpp::NumericVector epsilon(n_chains);
+  for (int c = 0; c < n_chains; c++) epsilon[c] = results[c].epsilon;
+
+  Rcpp::List ret = Rcpp::List::create(
+    Rcpp::Named("samples") = field([](const HMCResult& r) { return r.samples; }),
+    Rcpp::Named("log_prob") = field([](const HMCResult& r) { return r.log_prob; }),
+    Rcpp::Named("energy") = field([](const HMCResult& r) { return r.energy; }),
+    Rcpp::Named("accept_prob") = field([](const HMCResult& r) { return r.accept_prob; }),
+    Rcpp::Named("n_leapfrog") = field([](const HMCResult& r) { return r.n_leapfrog; }),
+    Rcpp::Named("treedepth") = field([](const HMCResult& r) { return r.treedepth; }),
+    Rcpp::Named("divergent") = field([](const HMCResult& r) { return r.divergent; }),
+    Rcpp::Named("epsilon") = n_chains == 1 ? Rcpp::wrap(epsilon[0]) : Rcpp::wrap(epsilon),
+    Rcpp::Named("n_warmup") = results[0].n_warmup,
+    Rcpp::Named("n_sample") = results[0].n_sample,
+    Rcpp::Named("n_chains") = n_chains,
+    Rcpp::Named("sampler") = sampler_name
+  );
+  if (results[0].n_gp_collapsed > 0) {
+    ret["gp_w_star"] = field([](const HMCResult& r) { return r.gp_w_star; });
+  }
+  if (results[0].n_icar_collapsed > 0) {
+    ret["icar_phi_star"] = field([](const HMCResult& r) { return r.icar_phi_star; });
+    if (results[0].bym2_theta_star.nrow() > 0) {
+      ret["bym2_theta_star"] = field([](const HMCResult& r) { return r.bym2_theta_star; });
+    }
+  }
+  return ret;
+}
+
 // [[Rcpp::export]]
 Rcpp::List cpp_hmc_fit(
     Rcpp::NumericVector q_init,
@@ -11440,8 +11445,12 @@ Rcpp::List cpp_hmc_fit(
   data.tau_spatial_shape = tau_spatial_shape;
   data.tau_spatial_rate = tau_spatial_rate;
 
-  // Parallelization
+  // Parallelization. The OpenMP regions inside a gradient read the
+  // nthreads-var, which the chain team's workers inherit, so it is scoped to
+  // this fit's within-chain budget; left at the process default every
+  // gradient evaluation would start a team as wide as the machine.
   data.n_threads = n_threads;
+  ratiod_omp::ScopedThreadCount omp_scope(n_threads);
   // Across-chain team bound. n_cores == 0 means "size the team to the chain
   // count"; a positive value (the R backend passes the core budget) keeps the
   // multi-chain team the same size across fits.
@@ -11470,88 +11479,20 @@ Rcpp::List cpp_hmc_fit(
   require_autodiff_supported(data, compute_param_layout(data));
 
   // Run sampler
+  std::vector<HMCResult> results;
   if (n_chains == 1) {
     ParamLayout layout = compute_param_layout(data);
-    HMCResult result = run_hmc_chain(
-      q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth, metric_type, adapt_delta, walnuts_ptr
-    );
-
-    Rcpp::List ret = Rcpp::List::create(
-      Rcpp::Named("samples") = result.samples,
-      Rcpp::Named("log_prob") = result.log_prob,
-      Rcpp::Named("energy") = result.energy,
-      Rcpp::Named("accept_prob") = result.accept_prob,
-      Rcpp::Named("n_leapfrog") = result.n_leapfrog,
-      Rcpp::Named("treedepth") = result.treedepth,
-      Rcpp::Named("divergent") = result.divergent,
-      Rcpp::Named("epsilon") = result.epsilon,
-      Rcpp::Named("n_warmup") = result.n_warmup,
-      Rcpp::Named("n_sample") = result.n_sample,
-      Rcpp::Named("n_chains") = 1,
-      Rcpp::Named("sampler") = result.sampler.empty()
-        ? ((L == 0) ? std::string("NUTS") : std::string("HMC"))
-        : result.sampler
-    );
-    if (result.n_gp_collapsed > 0) {
-      ret["gp_w_star"] = result.gp_w_star;
-    }
-    if (result.n_icar_collapsed > 0) {
-      ret["icar_phi_star"] = result.icar_phi_star;
-      if (result.bym2_theta_star.nrow() > 0) {
-        ret["bym2_theta_star"] = result.bym2_theta_star;
-      }
-    }
-    return ret;
+    results.push_back(run_hmc_chain(
+      q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth,
+      metric_type, adapt_delta, walnuts_ptr
+    ));
   } else {
-    // Multiple chains
-    std::vector<HMCResult> results = run_hmc_parallel_chains(
-      q0, data, n_iter, n_warmup, L, n_chains, seed, verbose, max_treedepth, metric_type, adapt_delta, walnuts_ptr
-    );
-
-    // Combine results
-    int n_sample = results[0].n_sample;
-    int n_params = results[0].samples.ncol();
-
-    Rcpp::List samples_list(n_chains);
-    Rcpp::List log_prob_list(n_chains);
-    Rcpp::List energy_list(n_chains);
-    Rcpp::List accept_prob_list(n_chains);
-    Rcpp::List n_leapfrog_list(n_chains);
-    Rcpp::List treedepth_list(n_chains);
-    Rcpp::List divergent_list(n_chains);
-    Rcpp::NumericVector epsilon_vec(n_chains);
-
-    // Determine sampler name: if any chain switched, report it
-    std::string sampler_name = (L == 0) ? "NUTS" : "HMC";
-    for (int c = 0; c < n_chains; c++) {
-      samples_list[c] = results[c].samples;
-      log_prob_list[c] = results[c].log_prob;
-      energy_list[c] = results[c].energy;
-      accept_prob_list[c] = results[c].accept_prob;
-      n_leapfrog_list[c] = results[c].n_leapfrog;
-      treedepth_list[c] = results[c].treedepth;
-      divergent_list[c] = results[c].divergent;
-      epsilon_vec[c] = results[c].epsilon;
-      if (!results[c].sampler.empty()) {
-        sampler_name = results[c].sampler;
-      }
-    }
-
-    return Rcpp::List::create(
-      Rcpp::Named("samples") = samples_list,
-      Rcpp::Named("log_prob") = log_prob_list,
-      Rcpp::Named("energy") = energy_list,
-      Rcpp::Named("accept_prob") = accept_prob_list,
-      Rcpp::Named("n_leapfrog") = n_leapfrog_list,
-      Rcpp::Named("treedepth") = treedepth_list,
-      Rcpp::Named("divergent") = divergent_list,
-      Rcpp::Named("epsilon") = epsilon_vec,
-      Rcpp::Named("n_warmup") = n_warmup,
-      Rcpp::Named("n_sample") = n_sample,
-      Rcpp::Named("n_chains") = n_chains,
-      Rcpp::Named("sampler") = sampler_name
+    results = run_hmc_parallel_chains(
+      q0, data, n_iter, n_warmup, L, n_chains, seed, verbose, max_treedepth,
+      metric_type, adapt_delta, walnuts_ptr
     );
   }
+  return hmc_results_list(results, L);
 }
 
 // [[Rcpp::export]]
@@ -12016,8 +11957,12 @@ Rcpp::List cpp_hmc_fit_gp(
   apply_tvc_params(data, tvc_params);
   apply_svc_params(data, svc_params);
 
-  // Parallelization
+  // Parallelization. The OpenMP regions inside a gradient read the
+  // nthreads-var, which the chain team's workers inherit, so it is scoped to
+  // this fit's within-chain budget; left at the process default every
+  // gradient evaluation would start a team as wide as the machine.
   data.n_threads = n_threads;
+  ratiod_omp::ScopedThreadCount omp_scope(n_threads);
 
   // Final memory barrier before HMC execution
   std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -12028,79 +11973,20 @@ Rcpp::List cpp_hmc_fit_gp(
   require_autodiff_supported(data, compute_param_layout(data));
 
   // Run sampler
+  std::vector<HMCResult> results;
   if (n_chains == 1) {
     ParamLayout layout = compute_param_layout(data);
-    HMCResult result = run_hmc_chain(
+    results.push_back(run_hmc_chain(
       q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth,
       metric_type, adapt_delta, nullptr
-    );
-
-    return Rcpp::List::create(
-      Rcpp::Named("samples") = result.samples,
-      Rcpp::Named("log_prob") = result.log_prob,
-      Rcpp::Named("energy") = result.energy,
-      Rcpp::Named("accept_prob") = result.accept_prob,
-      Rcpp::Named("n_leapfrog") = result.n_leapfrog,
-      Rcpp::Named("treedepth") = result.treedepth,
-      Rcpp::Named("divergent") = result.divergent,
-      Rcpp::Named("epsilon") = result.epsilon,
-      Rcpp::Named("n_warmup") = result.n_warmup,
-      Rcpp::Named("n_sample") = result.n_sample,
-      Rcpp::Named("n_chains") = 1,
-      Rcpp::Named("sampler") = result.sampler.empty()
-        ? ((L == 0) ? std::string("NUTS") : std::string("HMC"))
-        : result.sampler
-    );
+    ));
   } else {
-    // Multiple chains
-    std::vector<HMCResult> results = run_hmc_parallel_chains(
+    results = run_hmc_parallel_chains(
       q0, data, n_iter, n_warmup, L, n_chains, seed, verbose, max_treedepth,
       metric_type, adapt_delta, nullptr
     );
-
-    // Combine results
-    int n_sample = results[0].n_sample;
-    int n_params = results[0].samples.ncol();
-
-    Rcpp::List samples_list(n_chains);
-    Rcpp::List log_prob_list(n_chains);
-    Rcpp::List energy_list(n_chains);
-    Rcpp::List accept_prob_list(n_chains);
-    Rcpp::List n_leapfrog_list(n_chains);
-    Rcpp::List treedepth_list(n_chains);
-    Rcpp::List divergent_list(n_chains);
-    Rcpp::NumericVector epsilon_vec(n_chains);
-
-    std::string sampler_name = (L == 0) ? "NUTS" : "HMC";
-    for (int c = 0; c < n_chains; c++) {
-      samples_list[c] = results[c].samples;
-      log_prob_list[c] = results[c].log_prob;
-      energy_list[c] = results[c].energy;
-      accept_prob_list[c] = results[c].accept_prob;
-      n_leapfrog_list[c] = results[c].n_leapfrog;
-      treedepth_list[c] = results[c].treedepth;
-      divergent_list[c] = results[c].divergent;
-      epsilon_vec[c] = results[c].epsilon;
-      if (!results[c].sampler.empty()) {
-        sampler_name = results[c].sampler;
-      }
-    }
-
-    return Rcpp::List::create(
-      Rcpp::Named("samples") = samples_list,
-      Rcpp::Named("log_prob") = log_prob_list,
-      Rcpp::Named("energy") = energy_list,
-      Rcpp::Named("accept_prob") = accept_prob_list,
-      Rcpp::Named("n_leapfrog") = n_leapfrog_list,
-      Rcpp::Named("treedepth") = treedepth_list,
-      Rcpp::Named("divergent") = divergent_list,
-      Rcpp::Named("epsilon") = epsilon_vec,
-      Rcpp::Named("n_warmup") = n_warmup,
-      Rcpp::Named("n_sample") = n_sample,
-      Rcpp::Named("n_chains") = n_chains,
-      Rcpp::Named("sampler") = sampler_name
-    );
   }
+  return hmc_results_list(results, L);
 }
 
 // [[Rcpp::export]]

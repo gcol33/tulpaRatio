@@ -35,26 +35,12 @@ test_that("ICAR tau recovers its Gamma(shape, rate) prior with zero-trials data"
   car <- spatial_car(s$adj, level = "group", group_var = "site")
   dr <- gibbs_recovery_fit(s, car, list())
 
-  qs <- quantile(exp(dr[, "log_tau"]), c(0.25, 0.5, 0.75))
+  qs <- quantile(dr[, "tau_spatial"], c(0.25, 0.5, 0.75))
   target <- qgamma(c(0.25, 0.5, 0.75), shape = 1.0, rate = 0.01)
   expect_equal(unname(qs), target, tolerance = 0.25)
 })
 
-test_that("BYM2 sigma_total and rho recover their priors with zero-trials data", {
-  skip_on_cran()
-  s <- gibbs_recovery_setup()
-  bym <- spatial_bym2(s$adj, level = "group", group_var = "site")
-  dr <- gibbs_recovery_fit(s, bym, list())
-
-  sigma_qs <- quantile(exp(dr[, "log_sigma_total"]), c(0.25, 0.5, 0.75))
-  sigma_target <- 2.5 * tan(pi * c(0.25, 0.5, 0.75) / 2)  # Half-Cauchy(0, 2.5) quantiles
-  expect_equal(unname(sigma_qs), sigma_target, tolerance = 0.25)
-
-  rho_qs <- quantile(plogis(dr[, "logit_rho"]), c(0.25, 0.5, 0.75))
-  expect_equal(unname(rho_qs), c(0.25, 0.5, 0.75), tolerance = 0.25)
-})
-
-test_that("the intercept's posterior sd matches its own prior under ICAR and BYM2", {
+test_that("the intercept's posterior sd matches its own prior under ICAR", {
   # A tight prior makes any uncorrected drift from the spatial field into the
   # intercept visible immediately: the drift the field injects per sweep does
   # not shrink when the prior does, so an sd ratio far from 1 here is a wrong
@@ -63,10 +49,6 @@ test_that("the intercept's posterior sd matches its own prior under ICAR and BYM
   skip_on_cran()
   s <- gibbs_recovery_setup()
   car <- spatial_car(s$adj, level = "group", group_var = "site")
-  bym <- spatial_bym2(s$adj, level = "group", group_var = "site")
-
-  for (spatial in list(car, bym)) {
-    dr <- gibbs_recovery_fit(s, spatial, list(sigma_beta = 0.5))
-    expect_equal(sd(dr[, "beta_num[1]"]), 0.5, tolerance = 0.3)
-  }
+  dr <- gibbs_recovery_fit(s, car, ratiod_priors(beta = prior_normal(0, 0.5)))
+  expect_equal(sd(dr[, "beta_num[1]"]), 0.5, tolerance = 0.3)
 })

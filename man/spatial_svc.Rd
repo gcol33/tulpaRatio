@@ -127,7 +127,7 @@ print(svc_spec)
 \donttest{
 # Generate synthetic spatial data
 set.seed(202)
-n <- 40
+n <- 30
 df <- data.frame(
   lon = runif(n, 0, 10),
   lat = runif(n, 0, 10),
@@ -143,7 +143,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   spatial = spatial_svc(~ lon + lat, terms = 1),
-  control = list(iter = 400, chains = 1, seed = 1)
+  control = list(iter = 200, chains = 1, seed = 1)
 )
 summary(fit)
 

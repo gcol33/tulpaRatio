@@ -570,16 +570,22 @@ is_connected <- function(adjacency) {
 #' print(gp)
 #'
 #' \donttest{
-#' # Generate synthetic spatial data
+#' # Generate synthetic spatial data with a smooth field w shared by
+#' # count and effort
 #' set.seed(789)
-#' n <- 50
+#' n <- 40
+#' lon <- runif(n, 0, 10)
+#' lat <- runif(n, 0, 10)
+#' w <- 0.6 * sin(lon / 2) + 0.6 * cos(lat / 2)
+#' depth <- rnorm(n)
+#' temp <- rnorm(n)
 #' df <- data.frame(
-#'   lon = runif(n, 0, 10),
-#'   lat = runif(n, 0, 10),
-#'   depth = rnorm(n),
-#'   temp = rnorm(n),
-#'   count = rpois(n, 25),
-#'   effort = rgamma(n, shape = 4, rate = 1)
+#'   lon = lon,
+#'   lat = lat,
+#'   depth = depth,
+#'   temp = temp,
+#'   count = rpois(n, exp(3 + 0.3 * depth - 0.2 * temp + w)),
+#'   effort = rgamma(n, shape = 4, rate = exp(-w))
 #' )
 #'
 #' # Continuous spatial effect with exponential covariance
@@ -589,7 +595,7 @@ is_connected <- function(adjacency) {
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_gp(~ lon + lat),
 #'   mode = "hmc",
-#'   control = list(iter = 400, chains = 1, seed = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1, adapt_delta = 0.95)
 #' )
 #' summary(fit)
 #'
@@ -600,7 +606,7 @@ is_connected <- function(adjacency) {
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_gp(~ lon + lat, cov = "matern", nu = 1.5),
 #'   mode = "hmc",
-#'   control = list(iter = 400, chains = 1, seed = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1, adapt_delta = 0.95)
 #' )
 #' }
 #'
@@ -771,12 +777,16 @@ print.ratiod_gp <- function(x, ...) {
 #' # Generate synthetic spatial data
 #' set.seed(42)
 #' n <- 100
+#' lon <- runif(n, 0, 10)
+#' lat <- runif(n, 0, 10)
+#' w <- 0.6 * sin(lon / 2) + 0.6 * cos(lat / 2)
+#' x <- rnorm(n)
 #' df <- data.frame(
-#'   lon = runif(n, 0, 10),
-#'   lat = runif(n, 0, 10),
-#'   x = rnorm(n),
-#'   count = rpois(n, 25),
-#'   effort = rgamma(n, shape = 4, rate = 1)
+#'   lon = lon,
+#'   lat = lat,
+#'   x = x,
+#'   count = rpois(n, exp(3 + 0.3 * x + w)),
+#'   effort = rgamma(n, shape = 4, rate = exp(-w))
 #' )
 #'
 #' # Fast spatial effect with HSGP (much faster than spatial_gp)
@@ -786,7 +796,7 @@ print.ratiod_gp <- function(x, ...) {
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_hsgp(~ lon + lat, m = 6),
 #'   mode = "hmc",
-#'   control = list(iter = 500, warmup = 250, chains = 2)
+#'   control = list(iter = 500, warmup = 250, chains = 2, seed = 1)
 #' )
 #' summary(fit)
 #' }
@@ -996,15 +1006,21 @@ validate_hsgp <- function(spatial, data) {
 #' spatial_multiscale(~ lon + lat, approx = "hsgp", m = 8)
 #'
 #' \donttest{
+#' # A regional trend plus local variation, shared by count and effort
 #' set.seed(101)
 #' n <- 60
+#' lon <- runif(n, 0, 10)
+#' lat <- runif(n, 0, 10)
+#' w <- 0.5 * sin(lon / 3) + 0.5 * cos(lat / 3) + 0.3 * sin(2 * lon) * cos(2 * lat)
+#' depth <- rnorm(n)
+#' temp <- rnorm(n)
 #' df <- data.frame(
-#'   lon = runif(n, 0, 10),
-#'   lat = runif(n, 0, 10),
-#'   depth = rnorm(n),
-#'   temp = rnorm(n),
-#'   count = rpois(n, 30),
-#'   effort = rgamma(n, shape = 5, rate = 1)
+#'   lon = lon,
+#'   lat = lat,
+#'   depth = depth,
+#'   temp = temp,
+#'   count = rpois(n, exp(3 + 0.3 * depth - 0.2 * temp + w)),
+#'   effort = rgamma(n, shape = 5, rate = exp(-w))
 #' )
 #'
 #' # Multi-scale spatial with local and regional components
@@ -1015,7 +1031,9 @@ validate_hsgp <- function(spatial, data) {
 #'   spatial = spatial_multiscale(
 #'     ~ lon + lat,
 #'     range_local = c(0.1, 0.5),
-#'     range_regional = c(1, 5)
+#'     range_regional = c(1, 5),
+#'     approx = "hsgp",
+#'     m = 6
 #'   ),
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
@@ -1362,7 +1380,7 @@ svc_default_range <- function() c(0.3, 30)
 #' \donttest{
 #' # Generate synthetic spatial data
 #' set.seed(202)
-#' n <- 40
+#' n <- 30
 #' df <- data.frame(
 #'   lon = runif(n, 0, 10),
 #'   lat = runif(n, 0, 10),
@@ -1378,7 +1396,7 @@ svc_default_range <- function() c(0.3, 30)
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_svc(~ lon + lat, terms = 1),
-#'   control = list(iter = 400, chains = 1, seed = 1)
+#'   control = list(iter = 200, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #'
@@ -1852,13 +1870,20 @@ compute_nngp_neighbors <- function(coords, k) {
 #' \donttest{
 #' # Generate synthetic spatial data
 #' set.seed(303)
-#' n <- 40
+#' n <- 30
+#' lon <- runif(n, 0, 10)
+#' lat <- runif(n, 0, 10)
+#' depth <- rnorm(n)
+#' # Spatially varying intercept w0 and depth slope w1, shared by count and
+#' # effort
+#' w0 <- 0.5 * sin(lon / 2) + 0.5 * cos(lat / 2)
+#' w1 <- 0.4 * cos(lon / 3)
 #' df <- data.frame(
-#'   lon = runif(n, 0, 10),
-#'   lat = runif(n, 0, 10),
-#'   depth = rnorm(n),
-#'   count = rpois(n, 20),
-#'   effort = rgamma(n, shape = 4, rate = 1)
+#'   lon = lon,
+#'   lat = lat,
+#'   depth = depth,
+#'   count = rpois(n, exp(3 + 0.3 * depth + w0 + w1 * depth)),
+#'   effort = rgamma(n, shape = 4, rate = exp(-(w0 + w1 * depth)))
 #' )
 #'
 #' # Fit model with SVC
@@ -2194,17 +2219,21 @@ validate_spatial <- function(spatial, data) {
 #' \donttest{
 #' # Generate synthetic spatial data with confounding
 #' set.seed(404)
-#' n <- 50
+#' n <- 40
 #' lon <- runif(n, 0, 10)
 #' lat <- runif(n, 0, 10)
+#' # Smooth field w shared by count and effort
+#' w <- 0.6 * sin(lon / 2) + 0.6 * cos(lat / 2)
 #' # Make depth and temp spatially correlated
+#' depth <- lon/5 + rnorm(n, 0, 0.5)  # Correlated with lon
+#' temp <- lat/5 + rnorm(n, 0, 0.5)   # Correlated with lat
 #' df <- data.frame(
 #'   lon = lon,
 #'   lat = lat,
-#'   depth = lon/5 + rnorm(n, 0, 0.5),  # Correlated with lon
-#'   temp = lat/5 + rnorm(n, 0, 0.5),   # Correlated with lat
-#'   count = rpois(n, 25),
-#'   effort = rgamma(n, shape = 4, rate = 1)
+#'   depth = depth,
+#'   temp = temp,
+#'   count = rpois(n, exp(2.5 + 0.3 * depth - 0.2 * temp + w)),
+#'   effort = rgamma(n, shape = 4, rate = exp(-w))
 #' )
 #'
 #' # Standard GP (may have spatial confounding)

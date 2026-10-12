@@ -4,21 +4,18 @@
 \alias{ratiod_beta_binomial}
 \title{Beta-Binomial Family for Overdispersed Proportions}
 \usage{
-ratiod_beta_binomial(link = "logit", denominator_known = TRUE)
+ratiod_beta_binomial(link = "logit")
 }
 \arguments{
-\item{link}{Link function for probability (default: "logit")}
-
-\item{denominator_known}{Logical; if TRUE, denominator is treated as
-fixed and known. If FALSE, denominator is also modelled.}
+\item{link}{Link function for the success probability: "logit".}
 }
 \value{
 A \code{ratiod_family} object
 }
 \description{
 Two-process model where the numerator follows a beta-binomial distribution,
-allowing for overdispersion in binomial data. The denominator is the number
-of trials, which can be fixed or modelled.
+allowing for overdispersion in binomial data. The denominator is the known
+number of trials.
 
 Use cases:
 \itemize{

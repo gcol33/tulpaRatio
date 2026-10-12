@@ -66,16 +66,25 @@ struct ESSResult {
 // Gaussian Prior specification
 // ============================================================================
 
-// Specifies which parameters have Gaussian priors for ESS
+// The reference of one ESS block over the parameters in param_indices:
+// N(mean, Sigma), or a multivariate t with `dof` degrees of freedom and
+// scale matrix Sigma when dof > 0. Sigma is scale^2 I, diag(sd^2), L L^T,
+// or (R R^T)^{-1} given the Cholesky factor R of the precision.
 struct GaussianPrior {
-    std::vector<int> param_indices;  // Indices of parameters with this prior
-    Eigen::VectorXd mean;            // Prior mean
-    Eigen::MatrixXd precision;       // Prior precision (inverse covariance)
-    Eigen::MatrixXd chol_cov;        // Cholesky of covariance (lower triangular)
-    bool is_identity_cov;            // If true, use efficient identity sampling
-    double scale;                    // For identity: prior is N(0, scale^2 * I)
+    std::vector<int> param_indices;  // Indices of parameters in the block
+    Eigen::VectorXd mean;            // Reference mean
+    Eigen::MatrixXd chol_cov;        // Dense case: lower Cholesky factor L
+    Eigen::MatrixXd chol_prec;       // Precision case: lower Cholesky factor R
+    Eigen::VectorXd sd;              // Diagonal case: standard deviations
+    bool is_identity_cov;            // Sigma = scale^2 I
+    bool is_diag;                    // Sigma = diag(sd^2)
+    bool is_precision;               // Sigma^{-1} = R R^T
+    double scale;
+    double dof;                      // 0: Gaussian reference
 
-    GaussianPrior() : is_identity_cov(true), scale(1.0) {}
+    GaussianPrior()
+        : is_identity_cov(true), is_diag(false), is_precision(false),
+          scale(1.0), dof(0.0) {}
 };
 
 // ============================================================================
@@ -92,23 +101,215 @@ inline Eigen::VectorXd sample_std_normal(int n, std::mt19937& rng) {
 }
 
 // ============================================================================
-// Helper: Sample from Gaussian prior
+// Reference: draw and log-density
 // ============================================================================
 
-inline Eigen::VectorXd sample_from_prior(
-    const GaussianPrior& prior,
-    std::mt19937& rng
-) {
-    int n = prior.param_indices.size();
-    Eigen::VectorXd z = sample_std_normal(n, rng);
-
-    if (prior.is_identity_cov) {
-        // N(mean, scale^2 * I)
-        return prior.mean + prior.scale * z;
-    } else {
-        // N(mean, Sigma) where Sigma = L * L^T
-        return prior.mean + prior.chol_cov * z;
+// Sigma^{1/2} z for z ~ N(0, I): a zero-mean draw from N(0, Sigma).
+inline Eigen::VectorXd reference_draw(const GaussianPrior& prior,
+                                      const Eigen::VectorXd& z) {
+    if (prior.is_identity_cov) return prior.scale * z;
+    if (prior.is_diag) return prior.sd.cwiseProduct(z);
+    if (prior.is_precision) {
+        return prior.chol_prec.transpose().triangularView<Eigen::Upper>().solve(z);
     }
+    return prior.chol_cov * z;
+}
+
+// (x - mean)^T Sigma^{-1} (x - mean)
+inline double reference_mahalanobis_sq(const GaussianPrior& prior,
+                                       const Eigen::VectorXd& x) {
+    const Eigen::VectorXd d = x - prior.mean;
+    if (prior.is_identity_cov) return d.squaredNorm() / (prior.scale * prior.scale);
+    if (prior.is_diag) return d.cwiseQuotient(prior.sd).squaredNorm();
+    if (prior.is_precision) return (prior.chol_prec.transpose() * d).squaredNorm();
+    return prior.chol_cov.triangularView<Eigen::Lower>().solve(d).squaredNorm();
+}
+
+// Log-density of the reference up to its constant.
+inline double reference_log_density(const GaussianPrior& prior,
+                                    const Eigen::VectorXd& x) {
+    const double q = reference_mahalanobis_sq(prior, x);
+    if (prior.dof <= 0.0) return -0.5 * q;
+    const double d = static_cast<double>(x.size());
+    return -0.5 * (prior.dof + d) * std::log1p(q / prior.dof);
+}
+
+// A t reference is the scale mixture N(mean, s Sigma), s ~ InvGamma(nu/2,
+// nu/2). Generalised ESS (Nishihara, Murray and Adams 2014) draws s from its
+// conditional given the current state, InvGamma((nu + d)/2, (nu + q)/2),
+// then takes the ellipse from N(mean, s Sigma); the slice function, the
+// target over the t density, does not depend on s. Returns sqrt(s), 1 for a
+// Gaussian reference.
+inline double reference_ellipse_scale(const GaussianPrior& prior,
+                                      const Eigen::VectorXd& f,
+                                      std::mt19937& rng) {
+    if (prior.dof <= 0.0) return 1.0;
+    const double d = static_cast<double>(f.size());
+    const double q = reference_mahalanobis_sq(prior, f);
+    std::gamma_distribution<double> g(0.5 * (prior.dof + d), 1.0);
+    return std::sqrt(0.5 * (prior.dof + q) / g(rng));
+}
+
+// Degrees of freedom of the adapted reference. Heavy tails mean a state far
+// from the fitted mean draws a wide ellipse, so a reference fitted to warmup
+// draws that had not yet spread along a ridge does not hold the chain
+// inside the region it was fitted to; four keeps its variance finite.
+constexpr double ESS_REFERENCE_DOF = 4.0;
+
+// Blocks up to this size get a dense adapted covariance; larger ones a
+// diagonal one, which keeps the O(d^2) reference evaluation and the O(d^3)
+// factorisation small beside the likelihood.
+constexpr int ESS_DENSE_REFERENCE_MAX = 200;
+
+// Running mean and covariance of a block over warmup draws (Welford).
+struct ReferenceWelford {
+    int n = 0;
+    Eigen::VectorXd mean;
+    Eigen::MatrixXd m2;
+
+    void reset(int d) {
+        n = 0;
+        mean = Eigen::VectorXd::Zero(d);
+        m2 = Eigen::MatrixXd::Zero(d, d);
+    }
+    void add(const Eigen::VectorXd& x) {
+        n++;
+        const Eigen::VectorXd delta = x - mean;
+        mean += delta / n;
+        m2.noalias() += delta * (x - mean).transpose();
+    }
+};
+
+// The reference fitted to the warmup draws: their mean, and their covariance
+// shrunk toward a small diagonal as the HMC mass matrix is
+// (shrink_warmup_cov).
+inline GaussianPrior adapted_reference(const std::vector<int>& indices,
+                                       const ReferenceWelford& w) {
+    const int d = static_cast<int>(indices.size());
+    GaussianPrior prior;
+    prior.param_indices = indices;
+    prior.mean = w.mean;
+    prior.is_identity_cov = false;
+    prior.dof = ESS_REFERENCE_DOF;
+    Eigen::MatrixXd cov = w.m2 / (w.n - 1.0);
+    for (int i = 0; i < d; i++) {
+        for (int j = 0; j < d; j++) {
+            cov(i, j) = ratiod_hmc::shrink_warmup_cov(cov(i, j), w.n, i == j);
+        }
+    }
+    if (d <= ESS_DENSE_REFERENCE_MAX) {
+        Eigen::LLT<Eigen::MatrixXd> llt(cov);
+        if (llt.info() == Eigen::Success) {
+            prior.chol_cov = llt.matrixL();
+            return prior;
+        }
+    }
+    prior.is_diag = true;
+    prior.sd = cov.diagonal().cwiseSqrt();
+    return prior;
+}
+
+// ============================================================================
+// Laplace reference
+// ============================================================================
+
+double compute_log_post_double(
+    const std::vector<double>& params,
+    const ModelData& data,
+    const ParamLayout& layout
+);
+
+// Gradient of the log-posterior restricted to the parameters in idx.
+inline Eigen::VectorXd block_gradient(const std::vector<double>& params,
+                                      const std::vector<int>& idx,
+                                      const ModelData& data,
+                                      const ParamLayout& layout) {
+    std::vector<double> grad(params.size(), 0.0);
+    ratiod_hmc::compute_gradient(params, data, layout, grad, nullptr);
+    Eigen::VectorXd g(idx.size());
+    for (size_t i = 0; i < idx.size(); i++) g(i) = grad[idx[i]];
+    return g;
+}
+
+// Negative Hessian of the log-posterior over the parameters in idx, by
+// central differences of the gradient, symmetrised.
+inline Eigen::MatrixXd block_neg_hessian(std::vector<double> params,
+                                         const std::vector<int>& idx,
+                                         const ModelData& data,
+                                         const ParamLayout& layout) {
+    const int d = static_cast<int>(idx.size());
+    Eigen::MatrixXd H(d, d);
+    for (int j = 0; j < d; j++) {
+        const double x0 = params[idx[j]];
+        const double h = 1e-4 * std::max(1.0, std::abs(x0));
+        params[idx[j]] = x0 + h;
+        const Eigen::VectorXd g_plus = block_gradient(params, idx, data, layout);
+        params[idx[j]] = x0 - h;
+        const Eigen::VectorXd g_minus = block_gradient(params, idx, data, layout);
+        params[idx[j]] = x0;
+        H.col(j) = (g_minus - g_plus) / (2.0 * h);
+    }
+    return 0.5 * (H + H.transpose());
+}
+
+// Laplace approximation of the block idx with every other parameter held at
+// its value in params: damped Newton to the conditional mode, then the
+// curvature there as the precision. Given the variance parameters the
+// random effects and coefficients of these models have a log-concave
+// conditional posterior, so the mode exists. Its covariance carries the
+// directions the data leave to the prior (a level shared by an intercept
+// and every random effect) from the start, before any draw has moved along
+// them. Returns false, leaving `out` untouched, when the block is too large
+// for a dense factor or the curvature is not positive definite.
+inline bool laplace_reference(std::vector<double> params,
+                              const std::vector<int>& idx,
+                              const ModelData& data,
+                              const ParamLayout& layout,
+                              GaussianPrior& out) {
+    const int d = static_cast<int>(idx.size());
+    if (d == 0 || d > ESS_DENSE_REFERENCE_MAX) return false;
+    double lp = compute_log_post_double(params, data, layout);
+    if (!std::isfinite(lp)) return false;
+    const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(d, d);
+
+    for (int it = 0; it < 50; it++) {
+        const Eigen::VectorXd g = block_gradient(params, idx, data, layout);
+        const Eigen::MatrixXd A = block_neg_hessian(params, idx, data, layout);
+        if (!g.allFinite() || !A.allFinite()) return false;
+        Eigen::LLT<Eigen::MatrixXd> llt(A);
+        double damp = 1e-6 * std::max(1.0, A.diagonal().cwiseAbs().maxCoeff());
+        while (llt.info() != Eigen::Success) {
+            if (damp > 1e12) return false;
+            llt.compute(A + damp * I);
+            damp *= 10.0;
+        }
+        const Eigen::VectorXd step = llt.solve(g);
+        std::vector<double> trial = params;
+        double t = 1.0;
+        bool moved = false;
+        for (int k = 0; k < 30 && !moved; k++, t *= 0.5) {
+            for (int i = 0; i < d; i++) trial[idx[i]] = params[idx[i]] + t * step(i);
+            const double lp_trial = compute_log_post_double(trial, data, layout);
+            if (std::isfinite(lp_trial) && lp_trial >= lp) {
+                params = trial;
+                lp = lp_trial;
+                moved = true;
+            }
+        }
+        if (!moved || t * step.cwiseAbs().maxCoeff() < 1e-8) break;
+    }
+
+    Eigen::LLT<Eigen::MatrixXd> llt(block_neg_hessian(params, idx, data, layout));
+    if (llt.info() != Eigen::Success) return false;
+    out = GaussianPrior();
+    out.param_indices = idx;
+    out.mean.resize(d);
+    for (int i = 0; i < d; i++) out.mean(i) = params[idx[i]];
+    out.is_identity_cov = false;
+    out.is_precision = true;
+    out.chol_prec = llt.matrixL();
+    out.dof = ESS_REFERENCE_DOF;
+    return true;
 }
 
 // ============================================================================
@@ -119,7 +320,7 @@ inline Eigen::VectorXd sample_from_prior(
 // Returns new parameter values for the block
 //
 // Algorithm:
-// 1. Draw nu ~ N(0, Sigma) from the prior
+// 1. Draw nu ~ N(0, s Sigma) from the reference, sqrt(s) = nu_scale
 // 2. Set threshold: log_y = log_lik(f) + log(u), u ~ Uniform(0,1)
 // 3. Draw initial angle: theta ~ Uniform(0, 2*pi)
 // 4. Set bracket: [theta_min, theta_max] = [theta - 2*pi, theta]
@@ -134,19 +335,15 @@ Eigen::VectorXd ess_step(
     const GaussianPrior& prior,         // Gaussian prior for this block
     LogLikFn log_lik_fn,                // Function: f -> log_likelihood
     double current_log_lik,             // Current log-likelihood
+    double nu_scale,                    // sqrt(s), see reference_ellipse_scale()
     std::mt19937& rng,
     int& n_evals                        // Output: number of likelihood evaluations
 ) {
     std::uniform_real_distribution<double> unif(0.0, 1.0);
 
-    // Step 1: Draw nu from prior (centered at 0)
+    // Step 1: Draw nu from the reference (centered at 0)
     int n = f.size();
-    Eigen::VectorXd nu = sample_std_normal(n, rng);
-    if (prior.is_identity_cov) {
-        nu *= prior.scale;
-    } else {
-        nu = prior.chol_cov * nu;
-    }
+    const Eigen::VectorXd nu = nu_scale * reference_draw(prior, sample_std_normal(n, rng));
 
     // Step 2: Set threshold
     double log_u = std::log(unif(rng));
@@ -530,6 +727,57 @@ inline ESSResult run_ess_sampler(
     int total_ess_evals = 0;
     int total_ess_steps = 0;
 
+    // The Gaussian blocks start as one block under its Laplace reference,
+    // and the chain starts at that block's conditional mode.
+    {
+        std::vector<int> gaussian_indices;
+        for (const auto& prior : gaussian_priors) {
+            gaussian_indices.insert(gaussian_indices.end(), prior.param_indices.begin(),
+                                    prior.param_indices.end());
+        }
+        GaussianPrior laplace;
+        if (laplace_reference(params, gaussian_indices, data, layout, laplace)) {
+            for (size_t i = 0; i < gaussian_indices.size(); i++) {
+                params[gaussian_indices[i]] = laplace.mean(i);
+            }
+            current_log_post = compute_log_post_double(params, data, layout);
+            gaussian_priors.assign(1, laplace);
+        }
+    }
+
+    // Warmup fits the reference to the posterior from there. At the end of
+    // each adaptation window every parameter is merged into one block whose reference is the mean
+    // and covariance of that window's draws, which carries the correlation
+    // between blocks (an intercept and its random effects, the effects and
+    // their scale) that separate updates mix along slowly. Every coordinate
+    // is unconstrained and the reference is divided out of the slice, so
+    // the variance parameters can join the ellipse; their random-walk
+    // updates continue alongside. Windows double in length, as Stan's
+    // metric windows do, from a tenth of warmup (at least 50 iterations).
+    // Each window fits only its own draws, made
+    // after the previous reference moved the chain closer to the posterior;
+    // the last ends before warmup does, so the reference is fixed while
+    // draws are saved.
+    std::vector<int> joint_indices;
+    for (const auto& prior : gaussian_priors) {
+        joint_indices.insert(joint_indices.end(), prior.param_indices.begin(),
+                             prior.param_indices.end());
+    }
+    joint_indices.insert(joint_indices.end(), non_gaussian.begin(), non_gaussian.end());
+    const int joint_dim = static_cast<int>(joint_indices.size());
+    std::vector<int> window_ends;
+    if (joint_dim > 0) {
+        const int last = (9 * config.n_warmup) / 10;
+        int len = std::max(50, config.n_warmup / 10);
+        for (int end = len; end + 2 * len <= last; len *= 2, end += len) {
+            window_ends.push_back(end);
+        }
+        if (last >= 25) window_ends.push_back(last);
+    }
+    size_t next_window = 0;
+    ReferenceWelford welford;
+    welford.reset(joint_dim);
+
     for (int iter = 0; iter < config.n_iter; iter++) {
         // Check for user interrupt
         if (iter % 100 == 0) {
@@ -547,22 +795,25 @@ inline ESSResult run_ess_sampler(
                 f(i) = params[prior.param_indices[i]];
             }
 
-            // Lambda to compute log-likelihood given block values
+            // The ellipse is drawn from this block's Gaussian reference, so the
+            // slice is taken on everything else: the log-posterior less the
+            // reference's own log-density (up to its constant). The reference
+            // need not be the model's prior for the block; dividing it out
+            // leaves the posterior as the target either way.
             auto log_lik_fn = [&](const Eigen::VectorXd& f_new) -> double {
-                // Temporarily update params
                 std::vector<double> params_temp = params;
                 for (int i = 0; i < block_size; i++) {
                     params_temp[prior.param_indices[i]] = f_new(i);
                 }
-                // Return log-posterior (which includes prior)
-                // For ESS, we need log-likelihood only (prior is handled by the algorithm)
-                // But since we use N(0, scale) prior, this is absorbed into ellipse
-                return compute_log_post_double(params_temp, data, layout);
+                return compute_log_post_double(params_temp, data, layout)
+                       - reference_log_density(prior, f_new);
             };
 
-            // Perform ESS step
+            // Perform ESS step, the threshold read at the current state
             int n_evals = 0;
-            Eigen::VectorXd f_new = ess_step(f, prior, log_lik_fn, current_log_post, rng, n_evals);
+            const double nu_scale = reference_ellipse_scale(prior, f, rng);
+            Eigen::VectorXd f_new = ess_step(f, prior, log_lik_fn, log_lik_fn(f),
+                                             nu_scale, rng, n_evals);
 
             // Update params
             for (int i = 0; i < block_size; i++) {
@@ -593,6 +844,20 @@ inline ESSResult run_ess_sampler(
         // Adapt RWMH proposals during warmup
         if (iter < config.n_warmup && config.adapt_during_warmup) {
             adaptive.adapt(iter);
+        }
+
+        // Adapt the ESS reference
+        if (next_window < window_ends.size()) {
+            Eigen::VectorXd x(joint_dim);
+            for (int i = 0; i < joint_dim; i++) x(i) = params[joint_indices[i]];
+            welford.add(x);
+            if (iter + 1 == window_ends[next_window]) {
+                if (welford.n >= 10) {
+                    gaussian_priors.assign(1, adapted_reference(joint_indices, welford));
+                }
+                welford.reset(joint_dim);
+                next_window++;
+            }
         }
 
         // ----------------------------------------------------------------

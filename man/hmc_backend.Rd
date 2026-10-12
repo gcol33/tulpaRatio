@@ -4,15 +4,14 @@
 \alias{hmc_backend}
 \title{HMC/NUTS Backend for ratio Models}
 \description{
-Custom Hamiltonian Monte Carlo with NUTS (No-U-Turn Sampler) backend.
-Provides full MCMC inference for all tulpaRatio families without external
-dependencies like Stan.
+Hamiltonian Monte Carlo with the No-U-Turn Sampler (NUTS), the backend
+that fits every tulpaRatio family and structure.
 }
 \details{
 This backend implements:
 \itemize{
-\item Numerical gradients (stable across all model types)
-\item Fixed trajectory HMC with dual averaging step size adaptation
+\item Hand-coded and automatic-differentiation gradients of the log-posterior
+\item NUTS with dual-averaging step size and windowed metric adaptation
 \item OpenMP parallelization (within-chain for likelihood, across-chain for multi-chain)
 \item ICAR and BYM2 spatial random effects
 \item RW1/RW2/AR1 temporal random effects
@@ -42,8 +41,6 @@ This backend implements:
 
 \strong{When to use:}
 \itemize{
-\item When Stan is not available or too slow to compile
-\item For portable, self-contained Bayesian inference
 \item When you need full MCMC (not just approximations)
 \item For parallel multi-chain sampling
 }

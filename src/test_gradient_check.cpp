@@ -316,6 +316,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   const bool denom_is_count = (family == "negbin_negbin");
   const ZIType zi_type = ratiod_zi::parse_zi_type(zi);
   const bool has_zi = (zi_type != ZIType::NONE);
+  const bool has_oi = (zi_type == ZIType::OI_BINOMIAL || zi_type == ZIType::ZOIB);
 
   // icar_ms / icar_st / bym2_ms / bym2_st reach the multi-feature gradient
   // paths, which carry the spatial field alongside another structure and are
@@ -487,6 +488,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     }
   }
   if (has_zi) data.X_zi_flat.resize(static_cast<size_t>(n_obs) * 2);
+  if (has_oi) data.X_oi_flat.resize(static_cast<size_t>(n_obs) * 2);
   std::uniform_real_distribution<double> runif(0.0, 1.0);
   for (int i = 0; i < n_obs; i++) {
     const double x = rnorm(rng);
@@ -511,6 +513,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
         std::gamma_distribution<double> rgamma(2.0, std::exp(0.4 + 0.2 * z) / 2.0);
         data.y_denom_cont[i] = std::max(1e-3, rgamma(rng));
       }
+    }
+    if (has_oi) {
+      data.X_oi_flat[static_cast<size_t>(i) * 2 + 0] = 1.0;
+      data.X_oi_flat[static_cast<size_t>(i) * 2 + 1] = x;
     }
     if (has_zi) {
       data.X_zi_flat[static_cast<size_t>(i) * 2 + 0] = 1.0;
@@ -1049,7 +1055,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   data.zi_type = zi_type;
   data.p_zi = has_zi ? 2 : 0;
   data.zi_prior_sd = 1.0;
-  data.p_oi = 0;
+  data.p_oi = has_oi ? 2 : 0;
   data.oi_prior_sd = 1.0;
 
   if (want_rsr) restrict_to_numerator_design(data);

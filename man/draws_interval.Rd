@@ -46,12 +46,15 @@ parameter per interval width.
 \donttest{
 # Generate synthetic data
 set.seed(444)
-n <- 40
+n <- 48
+site <- rep(letters[1:12], each = 4)
+u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+depth <- rnorm(n)
 df <- data.frame(
-  count = rpois(n, lambda = 18),
-  effort = rgamma(n, shape = 9, rate = 1),
-  depth = rnorm(n),
-  site = sample(letters[1:3], n, replace = TRUE)
+  count = rpois(n, exp(3 + 0.3 * depth + u)),
+  effort = rgamma(n, shape = 9, rate = exp(-u)),
+  depth = depth,
+  site = site
 )
 
 # Fit model

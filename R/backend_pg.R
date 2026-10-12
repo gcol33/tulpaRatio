@@ -19,7 +19,6 @@
 #' **When to use this backend:**
 #' - Binomial family models with moderate to large data
 
-#' - When Stan sampling is too slow
 #' - When you need fast approximate inference
 #'
 #' @references

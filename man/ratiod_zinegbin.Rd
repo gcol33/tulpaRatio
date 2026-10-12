@@ -12,13 +12,14 @@ ratiod_zinegbin(
 )
 }
 \arguments{
-\item{link_num}{Link function for count mean (default: "log")}
+\item{link_num}{Link function for the count mean: "log".}
 
-\item{link_denom}{Link function for denominator mean (default: "log")}
+\item{link_denom}{Link function for the denominator mean: "log".}
 
-\item{link_zi}{Link function for zero-inflation probability (default: "logit")}
+\item{link_zi}{Link function for the zero-inflation probability: "logit".}
 
-\item{denom_family}{Denominator distribution: "negbin" (default) or "fixed"}
+\item{denom_family}{Denominator distribution: "negbin" (default) or
+"gamma" for continuous effort.}
 }
 \value{
 A \code{ratiod_family} object with zero-inflation
@@ -53,11 +54,15 @@ print(fam)
 set.seed(123)
 n <- 60
 zi_prob <- 0.3
+habitat <- factor(rep(c("forest", "grassland"), each = n/2))
+site <- factor(rep(1:10, each = n/10))
+u <- rnorm(10, sd = 0.5)[site]
 df <- data.frame(
-  count = ifelse(runif(n) < zi_prob, 0, rnbinom(n, size = 3, mu = 8)),
-  total = rnbinom(n, size = 5, mu = 50),
-  habitat = factor(rep(c("forest", "grassland"), each = n/2)),
-  site = factor(rep(1:10, each = n/10))
+  count = ifelse(runif(n) < zi_prob, 0,
+                 rnbinom(n, size = 3, mu = exp(2 + 0.5 * (habitat == "grassland") + u))),
+  total = rnbinom(n, size = 5, mu = 50 * exp(u)),
+  habitat = habitat,
+  site = site
 )
 
 \donttest{

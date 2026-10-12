@@ -7,7 +7,7 @@ NULL
 #' @description
 #' Compute posterior distributions of ratios from a fitted ratio model.
 #' Ratios are derived quantities: E\[numerator\] / E\[denominator\], computed
-#' in Stan's generated quantities block with full uncertainty propagation.
+#' from each posterior draw, so they carry the full posterior uncertainty.
 #'
 #' @param object A `ratiod_fit` object
 #' @param newdata Optional data frame for prediction. If NULL, uses
@@ -26,14 +26,17 @@ NULL
 #' fam <- ratiod_poisson_gamma()
 #'
 #' \donttest{
-#' # Generate synthetic data
+#' # Generate synthetic data: a site effect shared by count and effort
 #' set.seed(123)
-#' n <- 50
+#' n <- 60
+#' site <- rep(letters[1:6], each = 10)
+#' u <- rnorm(6, sd = 0.5)[match(site, letters[1:6])]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   count = rpois(n, lambda = 20),
-#'   effort = rgamma(n, shape = 10, rate = 1),
-#'   depth = rnorm(n),
-#'   site = sample(letters[1:5], n, replace = TRUE)
+#'   count = rpois(n, exp(3 + 0.3 * depth + u)),
+#'   effort = rgamma(n, shape = 10, rate = exp(-u)),
+#'   depth = depth,
+#'   site = site
 #' )
 #'
 #' # Fit model
@@ -69,7 +72,7 @@ ratio.ratiod_fit <- function(object, newdata = NULL, type = c("response", "log",
   type <- match.arg(type)
 
   # Handle newdata via predict()
- if (!is.null(newdata)) {
+  if (!is.null(newdata)) {
     pred <- predict(object, newdata = newdata, component = "ratio", summary = FALSE)
     ratio_draws <- pred$ratio
   } else {
@@ -92,8 +95,9 @@ ratio.ratiod_fit <- function(object, newdata = NULL, type = c("response", "log",
   # Aggregate by group if requested. The group value is a geometric mean of
   # ratios, which is defined on the natural scale, so aggregation happens
   # before the requested transform is applied to the result.
+  obs_data <- newdata %||% object$data
   if (!is.null(by)) {
-    ratio_draws <- aggregate_by_group(ratio_draws, object$data, by)
+    ratio_draws <- aggregate_by_group(ratio_draws, obs_data, by)
   }
 
   # Transform to requested scale
@@ -114,9 +118,9 @@ ratio.ratiod_fit <- function(object, newdata = NULL, type = c("response", "log",
       draws = ratio_draws,
       type = type,
       by = by,
-      n_obs = if (is.null(by)) nrow(object$data) else length(unique(object$data[[by]])),
+      n_obs = ncol(ratio_draws),
       n_draws = nrow(ratio_draws),
-      data = object$data
+      data = obs_data
     ),
     class = "ratiod_ratio"
   )
@@ -484,9 +488,9 @@ fitted.ratiod_fit <- function(object, component = c("all", "numerator", "denomin
 compute_fitted_values <- function(object) {
   backend <- object$backend
 
-  if (backend == "hmc") {
+  if (has_hmc_layout(object)) {
     return(compute_fitted_hmc(object))
-  } else if (backend == "pg") {
+  } else if (backend %in% c("pg", "gibbs")) {
     return(compute_fitted_pg(object))
   } else if (backend == "laplace") {
     return(compute_fitted_laplace(object))
@@ -517,9 +521,9 @@ compute_fitted_hmc <- function(object) {
 }
 
 
-#' Compute fitted values for PG backend
+#' Compute fitted values for the PG and Gibbs backends
 #'
-#' The Gibbs sweep records the linear predictor it sampled, so the fitted
+#' Their sweeps record the linear predictor they sampled, so the fitted
 #' values are that predictor on the response scale of the family.
 #'
 #' @keywords internal
@@ -527,7 +531,7 @@ compute_fitted_pg <- function(object) {
   internal <- object$.internal
   eta_num <- internal$eta_num %||% internal$eta
   if (is.null(eta_num)) {
-    stop("This Polya-Gamma fit stores no linear predictor, so fitted values ",
+    stop("This fit stores no linear predictor, so fitted values ",
          "cannot be computed from it.", call. = FALSE)
   }
   eta_denom <- internal$eta_denom %||% matrix(0, nrow(eta_num), ncol(eta_num))
@@ -615,15 +619,21 @@ compute_fitted_laplace <- function(object) {
 #'
 #' @examples
 #' \donttest{
+#' # A smooth spatial field w shared by count and effort
 #' set.seed(321)
 #' n <- 60
+#' x <- runif(n)
+#' y <- runif(n)
+#' w <- 0.6 * sin(2 * pi * x) + 0.6 * cos(2 * pi * y)
+#' depth <- rnorm(n)
+#' season <- factor(sample(c("summer", "winter"), n, replace = TRUE))
 #' df <- data.frame(
-#'   count = rpois(n, lambda = 18),
-#'   effort = rgamma(n, shape = 9, rate = 1),
-#'   depth = rnorm(n),
-#'   season = factor(sample(c("summer", "winter"), n, replace = TRUE)),
-#'   x = runif(n),
-#'   y = runif(n)
+#'   count = rpois(n, exp(2.5 + 0.3 * depth + 0.4 * (season == "winter") + w)),
+#'   effort = rgamma(n, shape = 9, rate = exp(-w)),
+#'   depth = depth,
+#'   season = season,
+#'   x = x,
+#'   y = y
 #' )
 #' fit <- tratio(
 #'   count | effort ~ depth + season,
@@ -675,7 +685,7 @@ predict.ratiod_fit <- function(object, newdata, type = c("response", "link"),
 
   # Dispatch to appropriate backend
 
-  if (backend == "hmc") {
+  if (has_hmc_layout(object)) {
     pred_result <- predict_hmc(object, newdata, type, re_formula, allow_new_levels,
                                coords.0, include_spatial, return_spatial)
   } else if (backend == "pg") {
@@ -1678,12 +1688,15 @@ print.ratiod_prediction <- function(x, n = 10, ...) {
 #' \donttest{
 #' # Generate synthetic data
 #' set.seed(111)
-#' n <- 45
+#' n <- 48
+#' site <- rep(letters[1:12], each = 4)
+#' u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   count = rpois(n, lambda = 22),
-#'   effort = rgamma(n, shape = 11, rate = 1),
-#'   depth = rnorm(n),
-#'   site = sample(letters[1:4], n, replace = TRUE)
+#'   count = rpois(n, exp(3 + 0.3 * depth + u)),
+#'   effort = rgamma(n, shape = 11, rate = exp(-u)),
+#'   depth = depth,
+#'   site = site
 #' )
 #'
 #' # Fit model
@@ -1765,12 +1778,15 @@ as_draws.ratiod_fit <- function(x, ...) {
 #' \donttest{
 #' # Generate synthetic data
 #' set.seed(222)
-#' n <- 50
+#' n <- 48
+#' site <- rep(letters[1:12], each = 4)
+#' u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   count = rpois(n, lambda = 20),
-#'   effort = rgamma(n, shape = 10, rate = 1),
-#'   depth = rnorm(n),
-#'   site = sample(letters[1:5], n, replace = TRUE)
+#'   count = rpois(n, exp(3 + 0.3 * depth + u)),
+#'   effort = rgamma(n, shape = 10, rate = exp(-u)),
+#'   depth = depth,
+#'   site = site
 #' )
 #'
 #' # Fit model
@@ -1842,7 +1858,8 @@ draws_wide.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
     .chain = rep(seq_len(n_chains), each = n_per_chain),
     .iteration = rep(seq_len(n_per_chain), times = n_chains),
     .draw = seq_len(n_total),
-    draws
+    draws,
+    check.names = FALSE
   )
 
   # Subsample if requested
@@ -1875,12 +1892,15 @@ draws_wide.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #' \donttest{
 #' # Generate synthetic data
 #' set.seed(333)
-#' n <- 55
+#' n <- 48
+#' site <- rep(letters[1:12], each = 4)
+#' u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   count = rpois(n, lambda = 24),
-#'   effort = rgamma(n, shape = 12, rate = 1),
-#'   depth = rnorm(n),
-#'   site = sample(letters[1:4], n, replace = TRUE)
+#'   count = rpois(n, exp(3 + 0.3 * depth + u)),
+#'   effort = rgamma(n, shape = 12, rate = exp(-u)),
+#'   depth = depth,
+#'   site = site
 #' )
 #'
 #' # Fit model
@@ -1962,12 +1982,15 @@ draws_long.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #' \donttest{
 #' # Generate synthetic data
 #' set.seed(444)
-#' n <- 40
+#' n <- 48
+#' site <- rep(letters[1:12], each = 4)
+#' u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   count = rpois(n, lambda = 18),
-#'   effort = rgamma(n, shape = 9, rate = 1),
-#'   depth = rnorm(n),
-#'   site = sample(letters[1:3], n, replace = TRUE)
+#'   count = rpois(n, exp(3 + 0.3 * depth + u)),
+#'   effort = rgamma(n, shape = 9, rate = exp(-u)),
+#'   depth = depth,
+#'   site = site
 #' )
 #'
 #' # Fit model

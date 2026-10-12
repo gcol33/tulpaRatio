@@ -30,6 +30,92 @@ inline T re_tanh(const T& x) {
     return T(2.0) * inv_logit(T(2.0) * x) - T(1.0);
 }
 
+// Cholesky factor of a K x K correlation matrix from its K(K-1)/2
+// unconstrained coordinates, row-major over the strictly lower triangle, through
+// canonical partial correlations (Lewandowski, Kurowicka & Joe 2009; the map
+// Stan uses). With z = tanh(raw) and rem the squared length row r has left,
+//   L[r,c] = z_rc * sqrt(rem_c),  rem_{c+1} = rem_c * (1 - z_rc^2),
+//   L[r,r] = sqrt(rem_r),
+// every row has unit length for every raw value, so the space has no boundary.
+// Writes L (row-major, K x K) and returns log|d offdiag(L) / d raw|.
+template <typename T>
+inline T cpc_cholesky(const T* raw, int K, T* L) {
+    T log_jac = T(0.0);
+    for (int i = 0; i < K * K; i++) L[i] = T(0.0);
+    L[0] = T(1.0);
+    int idx = 0;
+    for (int r = 1; r < K; r++) {
+        T rem = T(1.0);
+        for (int c = 0; c < r; c++) {
+            const T z = re_tanh(raw[idx++]);
+            const T one_m_z2 = T(1.0) - z * z;
+            L[r * K + c] = z * safe_sqrt(rem);
+            log_jac = log_jac + safe_log(one_m_z2) + T(0.5) * safe_log(rem);
+            rem = rem * one_m_z2;
+        }
+        L[r * K + r] = safe_sqrt(rem);
+    }
+    return log_jac;
+}
+
+// LKJ(eta) density of the correlation matrix L L', written on L
+// (Stan's lkj_corr_cholesky): sum over rows r >= 1 of
+// (K - r - 1 + 2 (eta - 1)) log L[r,r], rows 0-based.
+template <typename T>
+inline T lkj_corr_cholesky_log(const T* L, int K, double eta) {
+    T lp = T(0.0);
+    for (int r = 1; r < K; r++) {
+        lp = lp + T(K - r - 1 + 2.0 * (eta - 1.0)) * safe_log(L[r * K + r]);
+    }
+    return lp;
+}
+
+// d/d raw of lkj_corr_cholesky_log + the cpc_cholesky Jacobian. In row r both
+// are sums of log(1 - z_rc^2): the Jacobian counts each once plus a half for
+// every later entry in the row, and log L[r,r] = 0.5 * sum_c log(1 - z_rc^2),
+// so d/d raw_rc = -2 z_rc * (1 + 0.5 * (r - 1 - c) + 0.5 * coef_r).
+inline void cpc_lkj_prior_grad(const double* raw, int K, double eta, double* g_raw) {
+    int idx = 0;
+    for (int r = 1; r < K; r++) {
+        const double coef_r = K - r - 1 + 2.0 * (eta - 1.0);
+        for (int c = 0; c < r; c++) {
+            const double z = std::tanh(raw[idx]);
+            g_raw[idx] = -2.0 * z * (1.0 + 0.5 * (r - 1 - c) + 0.5 * coef_r);
+            idx++;
+        }
+    }
+}
+
+// Reverse pass of cpc_cholesky: from gL = d f / d L (row-major, lower triangle
+// including the diagonal) to g_raw = d f / d raw, accumulated. With
+// s_c = sqrt(rem_c), dL[r,c]/dz_rj = s_c for j = c and -L[r,c] z_j / (1 - z_j^2)
+// for j < c, and the diagonal depends on every z of its row the second way.
+inline void cpc_cholesky_backward(const double* raw, int K, const double* L,
+                                  const double* gL, double* g_raw) {
+    int idx = 0;
+    for (int r = 1; r < K; r++) {
+        // tail_j = sum over the entries after j in row r (diagonal included)
+        // of gL * L, accumulated from the diagonal backwards.
+        double tail = gL[r * K + r] * L[r * K + r];
+        double rem = 1.0;
+        std::vector<double> s(r), z(r);
+        for (int c = 0; c < r; c++) {
+            z[c] = std::tanh(raw[idx + c]);
+            s[c] = std::sqrt(rem);
+            rem *= 1.0 - z[c] * z[c];
+        }
+        for (int c = r - 1; c >= 0; c--) {
+            const double one_m_z2 = 1.0 - z[c] * z[c];
+            g_raw[idx + c] += gL[r * K + c] * s[c] * one_m_z2 - z[c] * tail;
+            tail += gL[r * K + c] * L[r * K + c];
+        }
+        idx += r;
+    }
+}
+
+// Shape of the LKJ prior on a correlated term's correlation matrix.
+constexpr double RE_LKJ_ETA = 2.0;
+
 // Effective random effects, laid out per term as [group * n_coefs + coef].
 template <typename T>
 using ReEffects = std::vector<std::vector<T> >;
@@ -82,45 +168,19 @@ T re_log_prior(const std::vector<T>& params,
             log_prior = log_prior + log_prior_half_cauchy(log_sigma, data.sigma_re_scale);
         }
 
-        // Correlated slopes: Sigma = diag(sigma) L L' diag(sigma), with L lower
-        // triangular of unit row norm. Off-diagonals come through tanh so the
-        // sampler sees an unconstrained space with no boundary to explode at.
+        // Correlated slopes: Sigma = diag(sigma) L L' diag(sigma), L the
+        // Cholesky factor of an LKJ(2) correlation matrix, sampled on its
+        // canonical partial correlations (cpc_cholesky).
         std::vector<T> L_flat;
         if (correlated) {
             const int chol_start = layout.chol_re_start_multi[t];
+            const int n_chol = n_coefs * (n_coefs - 1) / 2;
+            std::vector<T> raw(params.begin() + chol_start,
+                               params.begin() + chol_start + n_chol);
             L_flat.assign(static_cast<size_t>(n_coefs) * n_coefs, T(0.0));
-            int chol_idx = 0;
-            for (int r = 0; r < n_coefs; r++) {
-                T row_sum_sq = T(0.0);
-                for (int c = 0; c < r; c++) {
-                    const T l_rc = re_tanh(params[chol_start + chol_idx]);
-                    L_flat[r * n_coefs + c] = l_rc;
-                    row_sum_sq = row_sum_sq + l_rc * l_rc;
-                    // log|d(tanh)/d(raw)| = log(1 - tanh^2)
-                    log_prior = log_prior
-                        + safe_log(safe_max(T(1.0) - l_rc * l_rc, T(1e-300)));
-                    chol_idx++;
-                }
-                const T diag_sq = T(1.0) - row_sum_sq;
-                if (get_value(diag_sq) < 1e-10) {
-                    ok = false;
-                    return log_prior;
-                }
-                L_flat[r * n_coefs + r] = safe_sqrt(diag_sq);
-            }
-
-            // LKJ(eta) on the implied correlation matrix, then the Jacobian from
-            // the Cholesky factor to that correlation matrix.
-            const double eta_lkj = 2.0;
-            for (int k = 0; k < n_coefs; k++) {
-                log_prior = log_prior
-                    + T((eta_lkj - 1.0 + (n_coefs - k - 1) / 2.0) * 2.0)
-                    * safe_log(L_flat[k * n_coefs + k]);
-            }
-            for (int k = 1; k < n_coefs; k++) {
-                log_prior = log_prior
-                    + T(n_coefs - k) * safe_log(L_flat[k * n_coefs + k]);
-            }
+            // Two statements: the LKJ term reads the factor cpc_cholesky() writes.
+            log_prior = log_prior + cpc_cholesky(raw.data(), n_coefs, L_flat.data());
+            log_prior = log_prior + lkj_corr_cholesky_log(L_flat.data(), n_coefs, RE_LKJ_ETA);
         }
 
         const int re_start = (n_terms > 1 || layout.has_re_slopes)

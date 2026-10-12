@@ -51,21 +51,24 @@ A \code{ratiod_ratio} object containing posterior draws or summaries.
 \description{
 Compute posterior distributions of ratios from a fitted ratio model.
 Ratios are derived quantities: E[numerator] / E[denominator], computed
-in Stan's generated quantities block with full uncertainty propagation.
+from each posterior draw, so they carry the full posterior uncertainty.
 }
 \examples{
 # Create a simple family
 fam <- ratiod_poisson_gamma()
 
 \donttest{
-# Generate synthetic data
+# Generate synthetic data: a site effect shared by count and effort
 set.seed(123)
-n <- 50
+n <- 60
+site <- rep(letters[1:6], each = 10)
+u <- rnorm(6, sd = 0.5)[match(site, letters[1:6])]
+depth <- rnorm(n)
 df <- data.frame(
-  count = rpois(n, lambda = 20),
-  effort = rgamma(n, shape = 10, rate = 1),
-  depth = rnorm(n),
-  site = sample(letters[1:5], n, replace = TRUE)
+  count = rpois(n, exp(3 + 0.3 * depth + u)),
+  effort = rgamma(n, shape = 10, rate = exp(-u)),
+  depth = depth,
+  site = site
 )
 
 # Fit model

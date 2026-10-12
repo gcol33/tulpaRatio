@@ -196,13 +196,19 @@ from the posterior of the joint model. The ratio is never modelled directly.
 }
 \examples{
 # Quick example: create model object (no fitting)
+# A site effect u shared by catch and effort
 set.seed(123)
+n <- 60
+site <- factor(rep(1:10, each = 6))
+u <- rnorm(10, sd = 0.5)[site]
+depth <- rnorm(n)
+season <- factor(sample(c("spring", "summer"), n, replace = TRUE))
 df <- data.frame(
-  catch = rpois(50, 10),
-  effort = rgamma(50, 2, 0.5),
-  depth = rnorm(50),
-  season = factor(sample(c("spring", "summer"), 50, replace = TRUE)),
-  site = factor(sample(1:5, 50, replace = TRUE))
+  catch = rpois(n, exp(1.5 + 0.3 * depth + 0.4 * (season == "summer") + u)),
+  effort = rgamma(n, shape = 2, rate = 0.5 * exp(-u)),
+  depth = depth,
+  season = season,
+  site = site
 )
 
 \donttest{

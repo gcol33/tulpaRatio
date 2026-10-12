@@ -1,14 +1,13 @@
 #' HMC/NUTS Backend for ratio Models
 #'
 #' @description
-#' Custom Hamiltonian Monte Carlo with NUTS (No-U-Turn Sampler) backend.
-#' Provides full MCMC inference for all tulpaRatio families without external
-#' dependencies like Stan.
+#' Hamiltonian Monte Carlo with the No-U-Turn Sampler (NUTS), the backend
+#' that fits every tulpaRatio family and structure.
 #'
 #' @details
 #' This backend implements:
-#' - Numerical gradients (stable across all model types)
-#' - Fixed trajectory HMC with dual averaging step size adaptation
+#' - Hand-coded and automatic-differentiation gradients of the log-posterior
+#' - NUTS with dual-averaging step size and windowed metric adaptation
 #' - OpenMP parallelization (within-chain for likelihood, across-chain for multi-chain)
 #' - ICAR and BYM2 spatial random effects
 #' - RW1/RW2/AR1 temporal random effects
@@ -30,8 +29,6 @@
 #' - `hurdle_negbin()` - Hurdle negative binomial
 #'
 #' **When to use:**
-#' - When Stan is not available or too slow to compile
-#' - For portable, self-contained Bayesian inference
 #' - When you need full MCMC (not just approximations)
 #' - For parallel multi-chain sampling
 #'
@@ -962,14 +959,15 @@ fit_hmc <- function(formula,
     }
   }
 
-  # Post-fit warnings
-  if (verbose && L == 0) {
-    # NUTS diagnostics
+  # Divergences bias the draws whether or not progress is printed
+  if (L == 0) {
     n_div <- fit_raw$n_divergent %||%
       sum(unlist(lapply(fit_raw$divergent, function(x) sum(x))))
     if (n_div > 0) {
-      warning(n_div, " divergent transition(s) after warmup.",
-              " Increase max_treedepth or reparameterize.", call. = FALSE)
+      warning(warningCondition(
+        paste0(n_div, " divergent transition(s) after warmup; raise ",
+               "`adapt_delta` or reparameterise."),
+        class = "tulpaRatio_divergence"))
     }
   }
 
@@ -1004,25 +1002,34 @@ fit_hmc <- function(formula,
 #' Get HMC model type string
 #' @keywords internal
 get_hmc_model_type <- function(family) {
-  # Check family name first for families that share numerator distribution
-  if (identical(family$name, "negbin_gamma")) return("negbin_gamma")
-
-  dist <- family$numerator$distribution
-  if (dist == "binomial") return("binomial")
-  if (dist %in% c("negbin", "negative_binomial", "neg_binomial_2")) return("negbin_negbin")
-  if (dist == "poisson") return("poisson_gamma")
-  if (dist == "gamma") return("gamma_gamma")
-  if (dist == "lognormal") return("lognormal")
-  if (dist == "beta_binomial") return("beta_binomial")
-
-  # ZI/Hurdle/OI/ZOIB variants map to their base model types
-  if (dist %in% c("zero_inflated_binomial", "hurdle_binomial",
-                  "one_inflated_binomial", "zero_one_inflated_binomial")) return("binomial")
-  if (dist %in% c("zero_inflated_poisson", "hurdle_poisson")) return("poisson_gamma")
-  if (dist %in% c("zero_inflated_neg_binomial", "hurdle_neg_binomial")) return("negbin_negbin")
-
-  stop("Unsupported family for HMC backend: ", dist)
+  num <- family$numerator$base_distribution %||% family$numerator$distribution
+  num <- switch(num,
+    negbin = , negative_binomial = "neg_binomial_2",
+    zero_inflated_binomial = , hurdle_binomial = , one_inflated_binomial = ,
+    zero_one_inflated_binomial = "binomial",
+    num
+  )
+  den <- family$denominator$distribution
+  key <- paste(num, den)
+  type <- hmc_model_types[[key]]
+  if (is.null(type)) {
+    stop(sprintf("No sampler fits a %s numerator with a %s denominator.",
+                 num, den), call. = FALSE)
+  }
+  type
 }
+
+# Numerator and denominator distribution pairs the samplers fit, each with
+# its own likelihood.
+hmc_model_types <- list(
+  "binomial fixed" = "binomial",
+  "beta_binomial fixed" = "beta_binomial",
+  "poisson gamma" = "poisson_gamma",
+  "neg_binomial_2 neg_binomial_2" = "negbin_negbin",
+  "neg_binomial_2 gamma" = "negbin_gamma",
+  "gamma gamma" = "gamma_gamma",
+  "lognormal lognormal" = "lognormal"
+)
 
 
 #' Prepare data for HMC sampler
@@ -2178,20 +2185,27 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
   }
 
   # Fields the inner Laplace optimization of a collapsed parameterization
-  # leaves behind (NULL otherwise)
-  gp_w_star <- fit_raw$gp_w_star
-  icar_phi_star <- fit_raw$icar_phi_star
-  bym2_theta_star <- fit_raw$bym2_theta_star
+  # leaves behind (NULL otherwise): one matrix per chain, stacked as the
+  # samples are
+  star <- function(name, chain = NULL) {
+    x <- fit_raw[[name]]
+    if (is.null(x) || chains == 1) return(x)
+    if (is.null(chain)) do.call(rbind, x) else x[[chain]]
+  }
+  gp_w_star <- star("gp_w_star")
+  icar_phi_star <- star("icar_phi_star")
+  bym2_theta_star <- star("bym2_theta_star")
 
-  unpack <- function(samples) {
+  unpack <- function(samples, chain = NULL) {
     hmc_unpack_draws(
       samples = samples, layout = layout, hmc_data = hmc_data,
       spatial_info = spatial_info, temporal_info = temporal_info,
       model_type = model_type, re_param = re_param,
       latent_info = latent_info, st_info = spatiotemporal_info,
       ms_temporal_info = ms_temporal_info,
-      gp_w_star = gp_w_star, icar_phi_star = icar_phi_star,
-      bym2_theta_star = bym2_theta_star
+      gp_w_star = star("gp_w_star", chain),
+      icar_phi_star = star("icar_phi_star", chain),
+      bym2_theta_star = star("bym2_theta_star", chain)
     )
   }
 
@@ -2222,7 +2236,7 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
   # One matrix of named draws per chain
   if (chains > 1) {
     samples_list <- lapply(seq_len(chains), function(c) {
-      chain_draws <- hmc_draws_list(unpack(fit_raw$samples[[c]]))
+      chain_draws <- hmc_draws_list(unpack(fit_raw$samples[[c]], c))
       chain_mat <- do.call(cbind, chain_draws)
       colnames(chain_mat) <- names(chain_draws)
       chain_mat

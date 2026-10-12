@@ -7,9 +7,9 @@
 ratiod_zibinomial(link_num = "logit", link_zi = "logit")
 }
 \arguments{
-\item{link_num}{Link function for success probability (default: "logit")}
+\item{link_num}{Link function for the success probability: "logit".}
 
-\item{link_zi}{Link function for zero-inflation probability (default: "logit")}
+\item{link_zi}{Link function for the zero-inflation probability: "logit".}
 }
 \value{
 A \code{ratiod_family} object with zero-inflation

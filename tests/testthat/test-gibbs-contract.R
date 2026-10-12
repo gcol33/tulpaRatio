@@ -50,7 +50,7 @@ test_that("Gibbs draws are a named 2-D matrix including the spatial field", {
 
   expect_length(dim(dr), 2L)
   expect_false(is.null(colnames(dr)))
-  expect_true(all(c("beta_num[1]", "beta_num[2]", "log_tau") %in% colnames(dr)))
+  expect_true(all(c("beta_num[1]", "beta_num[2]", "tau_spatial") %in% colnames(dr)))
   # The spatial field is part of the posterior, not a side channel, and is
   # named as every other backend names it.
   expect_true(any(grepl("^phi_spatial\\[", colnames(dr))))
@@ -140,31 +140,49 @@ test_that("the intercept mixes under a spatial field", {
   # Measured on this fit: 76 before the field was identified against the
   # intercept, 212 after (#13).
   expect_gt(intercept_ess(spatial_car(d$adj, level = "group", group_var = "site"), 1000, 500), 120)
-
-  # BYM2's phi update used to fold the field's level into the intercept
-  # unconditionally, with no acceptance test weighing the intercept's own
-  # prior. That gave a fast-looking ESS (178 at 1000/500) but the level was
-  # not drawn from the posterior: dev_notes/gibbs_prior_recovery.R caught the
-  # intercept's variance inflated by ~2000x under a tight prior. Weighing the
-  # move against the intercept's prior (#15) removes the bias but costs
-  # iterations on this weakly-identified direction -- rhat is 1.16 at 1000/500
-  # and 1.01 at 2000/1000, so the bar here needs double the warmup ICAR clears
-  # it with.
-  expect_gt(intercept_ess(spatial_bym2(d$adj, level = "group", group_var = "site"), 2000, 1000), 300)
 })
 
-test_that("single-chain and BYM2 fits keep the contract", {
+test_that("a single-chain fit keeps the contract", {
   skip_on_cran()
   d <- gibbs_test_data()
 
   one <- gibbs_fit(d, chains = 1)
   expect_identical(as.integer(one$chains), 1L)
   expect_false(is.null(colnames(as.matrix(one$draws))))
+})
 
-  bym2 <- gibbs_fit(d, chains = 2,
-                    spatial = spatial_bym2(d$adj, level = "group",
-                                           group_var = "spatial_site"))
-  expect_identical(as.integer(bym2$chains), 2L)
-  expect_false(is.null(colnames(as.matrix(bym2$draws))))
-  expect_true("logit_rho" %in% colnames(as.matrix(bym2$draws)))
+test_that("Gibbs agrees with HMC on an ICAR model", {
+  skip_on_cran()
+  skip_if_not_installed("posterior")
+  d <- gibbs_field_data()
+  car <- spatial_car(d$adj, level = "group", group_var = "site")
+  fit_mode <- function(mode) {
+    tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
+           spatial = car, mode = mode,
+           control = list(iter = 2000, warmup = 1000, chains = 4, seed = 99))
+  }
+  g <- as.matrix(fit_mode("gibbs")$draws)
+  h <- as.matrix(fit_mode("hmc")$draws)
+  for (nm in c("beta_num[1]", "beta_num[2]", "tau_spatial")) {
+    expect_lt(abs(mean(g[, nm]) - mean(h[, nm])) / sd(h[, nm]), 0.25, label = nm)
+  }
+})
+
+test_that("a BYM2 field is refused by Gibbs and fitted by HMC in auto mode", {
+  # The component-wise BYM2 sweep does not reach the posterior HMC samples:
+  # on gibbs_field_data() its sigma settles near 0.9 where HMC's is near 8,
+  # and the intercept's R-hat stays at 1.6 after 40000 iterations.
+  d <- gibbs_test_data()
+  bym <- spatial_bym2(d$adj, level = "group", group_var = "spatial_site")
+  expect_error(
+    tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
+           spatial = bym, mode = "gibbs",
+           control = list(iter = 20, chains = 1, seed = 1)),
+    "BYM2"
+  )
+  selection <- tulpaRatio:::select_inference_mode(
+    mode = "auto", family = ratiod_binomial(), n_obs = nrow(d$df),
+    structures = list(spatial = bym)
+  )
+  expect_equal(selection$backend, "hmc")
 })

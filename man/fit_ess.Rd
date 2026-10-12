@@ -16,6 +16,7 @@ fit_ess(
   priors = NULL,
   iter = 2000,
   warmup = 1000,
+  chains = 1,
   seed = NULL,
   verbose = TRUE
 )
@@ -43,12 +44,15 @@ fit_ess(
 
 \item{warmup}{Warmup iterations}
 
+\item{chains}{Number of chains; chain c is seeded with \code{seed + c - 1}}
+
 \item{seed}{Random seed}
 
 \item{verbose}{Print progress}
 }
 \value{
-A ratiod_fit object with class "ratiod_ess"
+A \code{ratiod_fit} whose draws are unpacked to the natural scale
+exactly as an HMC fit's are, with \code{backend = "ess"}.
 }
 \description{
 Fit ratio model using Elliptical Slice Sampling

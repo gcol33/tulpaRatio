@@ -66,17 +66,21 @@ print(rsr)
 \donttest{
 # Generate synthetic spatial data with confounding
 set.seed(404)
-n <- 50
+n <- 40
 lon <- runif(n, 0, 10)
 lat <- runif(n, 0, 10)
+# Smooth field w shared by count and effort
+w <- 0.6 * sin(lon / 2) + 0.6 * cos(lat / 2)
 # Make depth and temp spatially correlated
+depth <- lon/5 + rnorm(n, 0, 0.5)  # Correlated with lon
+temp <- lat/5 + rnorm(n, 0, 0.5)   # Correlated with lat
 df <- data.frame(
   lon = lon,
   lat = lat,
-  depth = lon/5 + rnorm(n, 0, 0.5),  # Correlated with lon
-  temp = lat/5 + rnorm(n, 0, 0.5),   # Correlated with lat
-  count = rpois(n, 25),
-  effort = rgamma(n, shape = 4, rate = 1)
+  depth = depth,
+  temp = temp,
+  count = rpois(n, exp(2.5 + 0.3 * depth - 0.2 * temp + w)),
+  effort = rgamma(n, shape = 4, rate = exp(-w))
 )
 
 # Standard GP (may have spatial confounding)

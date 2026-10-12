@@ -7,9 +7,9 @@
 ratiod_oibinomial(link_num = "logit", link_oi = "logit")
 }
 \arguments{
-\item{link_num}{Link function for success probability (default: "logit")}
+\item{link_num}{Link function for the success probability: "logit".}
 
-\item{link_oi}{Link function for one-inflation probability (default: "logit")}
+\item{link_oi}{Link function for the one-inflation probability: "logit".}
 }
 \value{
 A \code{ratiod_family} object with one-inflation

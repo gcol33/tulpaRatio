@@ -17,6 +17,7 @@
 #include <cmath>
 #include <vector>
 #include "hmc_sampler.h"
+#include "hmc_re.h"
 
 namespace ratiod_hmc {
 
@@ -130,51 +131,10 @@ inline bool re_blocks_prior_grad(
       }
 
       if (is_correlated && n_coefs > 1) {
-        // Build Cholesky factor L with tanh parameterization
-        // Must match compute_log_post: L[i,j] = tanh(raw[idx])
+        // Cholesky factor of the correlation matrix, on the map the density uses
         int chol_start = layout.chol_re_start_multi[t];
         std::vector<double> L_flat(n_coefs * n_coefs, 0.0);
-
-        int chol_idx = 0;
-        for (int i = 0; i < n_coefs; i++) {
-          double row_sum_sq = 0.0;
-          for (int j = 0; j < i; j++) {
-            double raw_ij = params[chol_start + chol_idx];
-            L_flat[i * n_coefs + j] = std::tanh(raw_ij);
-            row_sum_sq += L_flat[i * n_coefs + j] * L_flat[i * n_coefs + j];
-            chol_idx++;
-          }
-          double diag_sq = 1.0 - row_sum_sq;
-          if (diag_sq < 1e-10) {
-            // Safety guard (shouldn't trigger with tanh)
-            return false;
-          }
-          L_flat[i * n_coefs + i] = std::sqrt(diag_sq);
-        }
-
-        // LKJ(eta=2) prior gradient w.r.t. Cholesky elements
-        // LKJ contribution: sum_k (eta - 1 + (n-k-1)/2) * 2 * log(L[k,k])
-        // Jacobian contribution: sum_{k>0} (n - k) * log(L[k,k])
-        double eta = 2.0;
-        int n_chol = n_coefs * (n_coefs - 1) / 2;
-        std::vector<double> grad_chol(n_chol, 0.0);
-
-        // Gradient of LKJ + Jacobian w.r.t. L[i,j] (off-diagonal)
-        // d(log L[k,k])/d(L[i,j]) = -L[i,j] / L[i,i]^2 if i = k
-        for (int k = 1; k < n_coefs; k++) {
-          double L_kk = L_flat[k * n_coefs + k];
-          double coef_lkj = (eta - 1.0 + (n_coefs - k - 1) / 2.0) * 2.0;
-          double coef_jac = (n_coefs - k);
-          double coef_total = coef_lkj + coef_jac;
-
-          // d/d(L[k,j]) for j < k
-          int chol_base = k * (k - 1) / 2;
-          for (int j = 0; j < k; j++) {
-            double L_kj = L_flat[k * n_coefs + j];
-            // d(log L[k,k])/d(L[k,j]) = -L[k,j] / (L[k,k]^2)
-            grad_chol[chol_base + j] += coef_total * (-L_kj / (L_kk * L_kk));
-          }
-        }
+        ratiod_re::cpc_cholesky(&params[chol_start], n_coefs, L_flat.data());
 
         // ---- Non-centered parameterization ----
         // Params store z ~ N(0,1). Compute re = diag(sigma) * L * z for observation loop.
@@ -212,20 +172,10 @@ inline bool re_blocks_prior_grad(
         // In non-centered, the log-det of Jacobian (re = diag(sigma)*L*z)
         // cancels with the |Sigma|^{-1/2} normalization, so no -n_groups term.
 
-        // Cholesky: write LKJ prior gradient only (with tanh chain rule)
-        // No centered prior contribution in non-centered parameterization
-        {
-          int cidx = 0;
-          for (int i = 1; i < n_coefs; i++) {
-            for (int j = 0; j < i; j++) {
-              double raw_val = params[chol_start + cidx];
-              double l_val = std::tanh(raw_val);
-              double sech2 = 1.0 - l_val * l_val;
-              grad[chol_start + cidx] = grad_chol[cidx] * sech2 - 2.0 * l_val;
-              cidx++;
-            }
-          }
-        }
+        // Cholesky coordinates: the LKJ prior and the map's Jacobian. No
+        // centered prior contribution in non-centered parameterization.
+        ratiod_re::cpc_lkj_prior_grad(&params[chol_start], n_coefs,
+                                      ratiod_re::RE_LKJ_ETA, &grad[chol_start]);
       } else {
         // Uncorrelated term within a mixed model (fallback)
         for (int c = 0; c < n_coefs; c++) {
@@ -438,34 +388,24 @@ inline void re_blocks_writeback(
           grad[log_sigma_idx] += sigma_lik_grad;
         }
 
-        // 3. Cholesky gradient from likelihood:
-        //    dLL/dL[i,j] = sigma[i] * (S_ij - S_ii * L[i,j] / L[i,i])
-        //    where S_ik = sum_g dLL/dre[g,i] * z[g,k]
-        //    Then apply tanh chain rule: grad_raw += grad_L * sech^2
+        // 3. Cholesky gradient from likelihood: re[g,i] = sigma[i] sum_k
+        //    L[i,k] z[g,k], so dLL/dL[i,k] = sigma[i] sum_g dLL/dre[g,i] z[g,k],
+        //    carried back to the unconstrained coordinates through the map.
         int chol_start = layout.chol_re_start_multi[t];
+        std::vector<double> gL(n_coefs * n_coefs, 0.0);
         for (int ii = 1; ii < n_coefs; ii++) {
-          double L_ii = L_flat[ii * n_coefs + ii];
-          // Compute S_i_k for k = 0..ii
-          std::vector<double> S_i(ii + 1, 0.0);
           for (int k = 0; k <= ii; k++) {
+            double S_ik = 0.0;
             for (int g = 0; g < n_groups; g++) {
-              S_i[k] += ws.lik[t][g * n_coefs + ii] *
-                        params[re_start_t + g * n_coefs + k];  // z[g,k]
+              S_ik += ws.lik[t][g * n_coefs + ii] *
+                      params[re_start_t + g * n_coefs + k];  // z[g,k]
             }
-          }
-
-          int chol_base = ii * (ii - 1) / 2;
-          for (int j = 0; j < ii; j++) {
-            double L_ij = L_flat[ii * n_coefs + j];
-            double grad_L_ij = sigmas[ii] * (S_i[j] - S_i[ii] * L_ij / L_ii);
-
-            // Apply tanh chain rule and ADD to existing chol gradient
-            double raw_val = params[chol_start + chol_base + j];
-            double l_val = std::tanh(raw_val);
-            double sech2 = 1.0 - l_val * l_val;
-            grad[chol_start + chol_base + j] += grad_L_ij * sech2;
+            gL[ii * n_coefs + k] = sigmas[ii] * S_ik;
           }
         }
+        ratiod_re::cpc_cholesky_backward(&params[chol_start], n_coefs,
+                                         L_flat.data(), gL.data(),
+                                         &grad[chol_start]);
 
       } else if (data.re_parameterization == 1) {
         // Uncorrelated non-centered: apply chain rule re = sigma * z

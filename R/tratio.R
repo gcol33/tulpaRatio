@@ -145,13 +145,19 @@
 #'
 #' @examples
 #' # Quick example: create model object (no fitting)
+#' # A site effect u shared by catch and effort
 #' set.seed(123)
+#' n <- 60
+#' site <- factor(rep(1:10, each = 6))
+#' u <- rnorm(10, sd = 0.5)[site]
+#' depth <- rnorm(n)
+#' season <- factor(sample(c("spring", "summer"), n, replace = TRUE))
 #' df <- data.frame(
-#'   catch = rpois(50, 10),
-#'   effort = rgamma(50, 2, 0.5),
-#'   depth = rnorm(50),
-#'   season = factor(sample(c("spring", "summer"), 50, replace = TRUE)),
-#'   site = factor(sample(1:5, 50, replace = TRUE))
+#'   catch = rpois(n, exp(1.5 + 0.3 * depth + 0.4 * (season == "summer") + u)),
+#'   effort = rgamma(n, shape = 2, rate = 0.5 * exp(-u)),
+#'   depth = depth,
+#'   season = season,
+#'   site = site
 #' )
 #'
 #' \donttest{
@@ -623,6 +629,7 @@ tratio <- function(formula,
       priors = priors,
       iter = iter,
       warmup = warmup,
+      chains = chains,
       seed = seed,
       verbose = verbose
     )
@@ -861,10 +868,13 @@ print.ratiod_fit <- function(x, ...) {
   }
 
   structure_line <- sprintf("Observations: %d", nrow(x$data))
-  n_re <- x$.internal$hmc_data$n_re_groups %||% 0L
-  if (length(n_re) > 0 && n_re > 0) {
-    structure_line <- sprintf("%s; random effect groups: %d (%s)",
-                              structure_line, n_re, x$formula$shared$type)
+  re_terms <- x$.internal$hmc_data$re_terms
+  if (length(re_terms) > 0) {
+    groups <- vapply(re_terms, function(t) {
+      sprintf("%s (%d)", paste(t$group_var, collapse = ":"), as.integer(t$n_groups))
+    }, character(1))
+    structure_line <- sprintf("%s; random effects: %s", structure_line,
+                              paste(groups, collapse = ", "))
   }
   spatial_type <- detect_spatial_type(x)
   if (!is.null(spatial_type)) {
@@ -937,7 +947,7 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
   }
 
   # Add diagnostics for MCMC backends
-  if (backend %in% c("hmc", "pg", "sghmc", "sgld", "ess")) {
+  if (backend %in% c("hmc", "pg", "gibbs", "sghmc", "sgld", "ess")) {
     diag <- tryCatch(
       diagnostics(object),
       error = function(e) NULL
@@ -950,7 +960,10 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
 
   # Select main parameters (exclude high-dimensional)
   main_pars <- select_main_params(summ$parameter)
-  out$coefficients <- summ[summ$parameter %in% main_pars, ]
+  coefs <- summ[summ$parameter %in% main_pars, ]
+  terms <- fixed_effect_terms(object)
+  coefs$term <- unname(terms[coefs$parameter])
+  out$coefficients <- coefs
   rownames(out$coefficients) <- NULL
   out
 }
@@ -973,7 +986,41 @@ print.summary.ratiod_fit <- function(x, ...) {
   }
   print_param_summary(x$coefficients, x$family, x$ci_names, fixed = x$fixed)
   print_diagnostics_summary(x$run)
+  print_convergence_flags(x$coefficients, x$run$chains %||% 1)
   invisible(x)
+}
+
+
+#' Report parameters that fail the convergence thresholds
+#'
+#' R-hat above 1.01 or a bulk effective sample size below 100 per chain, the
+#' thresholds of Vehtari et al. (2021).
+#'
+#' @param coefs Summary table with `rhat` and `ess_bulk` columns.
+#' @param chains Number of chains.
+#' @keywords internal
+print_convergence_flags <- function(coefs, chains) {
+  if (!all(c("rhat", "ess_bulk") %in% names(coefs))) return(invisible(NULL))
+  if ("term" %in% names(coefs)) {
+    coefs$parameter <- ifelse(is.na(coefs$term), coefs$parameter, coefs$term)
+  }
+  bad_rhat <- which(coefs$rhat > 1.01)
+  low_ess <- which(coefs$ess_bulk < 100 * chains)
+  if (length(bad_rhat)) {
+    worst <- bad_rhat[which.max(coefs$rhat[bad_rhat])]
+    cat(sprintf("  R-hat > 1.01 for %d parameter(s), largest %.3f (%s).\n",
+                length(bad_rhat), coefs$rhat[worst], coefs$parameter[worst]))
+  }
+  if (length(low_ess)) {
+    worst <- low_ess[which.min(coefs$ess_bulk[low_ess])]
+    cat(sprintf("  Bulk ESS < %d for %d parameter(s), smallest %.0f (%s).\n",
+                100L * chains, length(low_ess), coefs$ess_bulk[worst],
+                coefs$parameter[worst]))
+  }
+  if (length(bad_rhat) || length(low_ess)) {
+    cat("  Run longer chains or reparameterise before using these estimates.\n")
+  }
+  invisible(NULL)
 }
 
 
@@ -989,6 +1036,7 @@ coef.summary.ratiod_fit <- function(object, ...) {
 coef.ratiod_fit <- function(object, ...) {
   colMeans(fixed_effect_draws(object))
 }
+
 
 
 #' @rdname summary.ratiod_fit
@@ -1012,25 +1060,36 @@ formula.ratiod_fit <- function(x, ...) {
 }
 
 
-#' Fixed-effect draws named by design column
+#' Design terms of the fixed-effect draws
 #'
-#' The `beta_num[j]` and `beta_denom[j]` draw columns, named by the design
-#' columns they multiply: `num:` and `denom:` prefixes on the column names.
+#' Maps each `beta_num[j]` and `beta_denom[j]` draw column to the design
+#' column it multiplies, `num:` or `denom:` prefixed.
+#'
+#' @return A character vector of term labels named by draw column.
+#' @keywords internal
+fixed_effect_terms <- function(object) {
+  draw_names <- colnames(object$draws)
+  pieces <- list(c("beta_num", "num", "numerator"),
+                 c("beta_denom", "denom", "denominator"))
+  out <- lapply(pieces, function(pc) {
+    X <- object$formula[[pc[3]]]$X
+    if (is.null(X) || ncol(X) == 0L) return(character(0))
+    idx <- paste0(pc[1], "[", seq_len(ncol(X)), "]")
+    keep <- idx %in% draw_names
+    stats::setNames(paste0(pc[2], ":", colnames(X))[keep], idx[keep])
+  })
+  unlist(out)
+}
+
+
+#' Fixed-effect draws named by design term
 #'
 #' @keywords internal
 fixed_effect_draws <- function(object) {
-  draws <- as.matrix(object$draws)
-  pieces <- list(c("beta_num", "num", "numerator"),
-                 c("beta_denom", "denom", "denominator"))
-  cols <- lapply(pieces, function(pc) {
-    X <- object$formula[[pc[3]]]$X
-    idx <- paste0(pc[1], "[", seq_len(ncol(X %||% matrix(nrow = 0, ncol = 0))), "]")
-    idx <- idx[idx %in% colnames(draws)]
-    m <- draws[, idx, drop = FALSE]
-    colnames(m) <- paste0(pc[2], ":", colnames(X)[seq_along(idx)])
-    m
-  })
-  do.call(cbind, cols)
+  terms <- fixed_effect_terms(object)
+  m <- as.matrix(object$draws)[, names(terms), drop = FALSE]
+  colnames(m) <- unname(terms)
+  m
 }
 
 
@@ -1093,6 +1152,12 @@ print_param_summary <- function(summ, family_name, ci_names, fixed = character(0
   names(summ)[names(summ) == "q_lower"] <- ci_names[1]
   names(summ)[names(summ) == "q_upper"] <- ci_names[3]
 
+  # Fixed effects print under their design term; selection reads `key`
+  summ$key <- summ$parameter
+  if ("term" %in% names(summ)) {
+    summ$parameter <- ifelse(is.na(summ$term), summ$parameter, summ$term)
+  }
+
   # Select columns for display
   display_cols <- c("parameter", "mean", "sd", ci_names[1], ci_names[3])
   if ("rhat" %in% names(summ)) {
@@ -1100,7 +1165,7 @@ print_param_summary <- function(summ, family_name, ci_names, fixed = character(0
   }
 
   # Fixed effects numerator
-  beta_num <- summ[grepl("^beta_num", summ$parameter), ]
+  beta_num <- summ[grepl("^beta_num", summ$key), ]
   if (nrow(beta_num) > 0) {
     cat("Fixed effects (numerator):\n")
     print(beta_num[, display_cols, drop = FALSE], row.names = FALSE)
@@ -1108,7 +1173,7 @@ print_param_summary <- function(summ, family_name, ci_names, fixed = character(0
   }
 
   # Fixed effects denominator
-  beta_denom <- summ[grepl("^beta_denom", summ$parameter), ]
+  beta_denom <- summ[grepl("^beta_denom", summ$key), ]
   if (nrow(beta_denom) > 0) {
     cat("Fixed effects (denominator):\n")
     print(beta_denom[, display_cols, drop = FALSE], row.names = FALSE)
@@ -1116,8 +1181,8 @@ print_param_summary <- function(summ, family_name, ci_names, fixed = character(0
   }
 
   # Fixed effects (binomial - single process)
-  beta_single <- summ[grepl("^\\(Intercept\\)|^beta\\[", summ$parameter) |
-                        summ$parameter %in% fixed, ]
+  beta_single <- summ[grepl("^\\(Intercept\\)|^beta\\[", summ$key) |
+                        summ$key %in% fixed, ]
   if (nrow(beta_single) > 0 && nrow(beta_num) == 0) {
     cat("Fixed effects:\n")
     print(beta_single[, display_cols, drop = FALSE], row.names = FALSE)
@@ -1125,10 +1190,29 @@ print_param_summary <- function(summ, family_name, ci_names, fixed = character(0
   }
 
   # Variance components
-  var_pars <- summ[grepl("^(sigma|phi_num|phi_denom|tau|shape|rho)", summ$parameter), ]
+  var_pars <- summ[grepl("^(sigma|cor_re|phi_num|phi_denom|tau|shape|rho)", summ$key), ]
   if (nrow(var_pars) > 0) {
     cat("Variance components:\n")
     print(var_pars[, display_cols, drop = FALSE], row.names = FALSE)
+    cat("\n")
+  }
+
+  # Zero- and one-inflation coefficients
+  infl <- summ[grepl("^beta_(zi|oi)", summ$key), ]
+  if (nrow(infl) > 0) {
+    cat("Zero/one inflation:\n")
+    print(infl[, display_cols, drop = FALSE], row.names = FALSE)
+    cat("\n")
+  }
+
+  # Every row the sections above did not take
+  shown <- c(beta_num$key, beta_denom$key,
+             if (nrow(beta_num) == 0) beta_single$key,
+             var_pars$key, infl$key)
+  rest <- summ[!summ$key %in% shown, ]
+  if (nrow(rest) > 0) {
+    cat("Other parameters:\n")
+    print(rest[, display_cols, drop = FALSE], row.names = FALSE)
     cat("\n")
   }
 }
@@ -1138,64 +1222,39 @@ print_param_summary <- function(summ, family_name, ci_names, fixed = character(0
 #' @keywords internal
 print_diagnostics_summary <- function(object) {
   backend <- object$backend %||% "unknown"
+  diag <- object$diagnostics
 
   cat("Diagnostics:\n")
 
-  if (backend == "hmc") {
-    # HMC-specific diagnostics
-    diag <- object$diagnostics
+  if (backend == "hmc" && !is.null(diag)) {
+    n_div <- diag$n_divergent %||% 0
+    cat("  Divergences:", n_div, "\n")
+    avg_accept <- diag$avg_accept_prob %||% NA
+    if (!is.na(avg_accept)) cat("  Avg. acceptance:", round(avg_accept, 3), "\n")
+  }
+  if (backend == "ess" && !is.null(diag$avg_slice_evals)) {
+    cat("  Avg. slice evaluations:", round(diag$avg_slice_evals, 2), "\n")
+  }
 
-    if (!is.null(diag)) {
-      n_div <- diag$n_divergent %||% 0
-      avg_accept <- diag$avg_accept_prob %||% NA
-
-      cat("  Divergences:", n_div, "\n")
-      if (!is.na(avg_accept)) {
-        cat("  Avg. acceptance:", round(avg_accept, 3), "\n")
-      }
-
-      if (n_div > 0) {
-        cat("  Warning: Divergent transitions detected.\n")
-        cat("  Consider: reparameterization or increasing adapt_delta.\n")
-      }
-    }
-
+  if (backend %in% c("hmc", "ess", "gibbs", "pg", "sghmc", "sgld")) {
     cat("  Chains:", object$chains %||% 1, "\n")
     cat("  Iterations:", object$iter %||% NA, "\n")
     cat("  Warmup:", object$warmup %||% NA, "\n")
+    if ((object$thin %||% 1) > 1) cat("  Thin:", object$thin, "\n")
+  }
 
-  } else if (backend == "pg") {
-    # Polya-Gamma diagnostics
-    cat("  Iterations:", object$iter %||% NA, "\n")
-    cat("  Warmup:", object$warmup %||% NA, "\n")
-    cat("  Thin:", object$thin %||% 1, "\n")
+  if (backend %in% c("sghmc", "sgld")) {
+    cat("  Batch size:", object$batch_size %||% NA, "\n")
+  }
 
-  } else if (backend == "laplace") {
-    # Laplace diagnostics
+  if (backend == "laplace") {
     result <- object$laplace_result %||% object$.internal
     if (!is.null(result)) {
-      converged <- result$converged %||% NA
+      cat("  Converged:", result$converged %||% NA, "\n")
       log_marg <- result$log_marginal %||% NA
-
-      cat("  Converged:", converged, "\n")
-      if (!is.na(log_marg)) {
-        cat("  Log marginal:", round(log_marg, 2), "\n")
-      }
+      if (!is.na(log_marg)) cat("  Log marginal:", round(log_marg, 2), "\n")
     }
     cat("  Posterior samples:", object$n_save %||% NA, "\n")
-    cat("  Note: Laplace provides approximate inference.\n")
-
-  } else if (backend %in% c("sghmc", "sgld")) {
-    # Stochastic gradient MCMC diagnostics
-    cat("  Iterations:", object$iter %||% NA, "\n")
-    cat("  Warmup:", object$warmup %||% NA, "\n")
-    cat("  Batch size:", object$batch_size %||% NA, "\n")
-    if (backend == "sghmc") {
-      cat("  Method: Stochastic Gradient HMC (Chen et al., 2014)\n")
-    } else {
-      cat("  Method: Stochastic Gradient Langevin Dynamics (Welling & Teh, 2011)\n")
-    }
-    cat("  Note: Uses minibatch gradients for scalability.\n")
   }
 }
 
@@ -1233,11 +1292,15 @@ as.data.frame.ratiod_fit <- function(x, ...) {
 #' @examples
 #' # Create simple dataset
 #' set.seed(456)
+#' n <- 48
+#' site <- factor(rep(1:6, each = 8))
+#' u <- rnorm(6, sd = 0.5)[site]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   count = rpois(40, 8),
-#'   effort = rgamma(40, 2, 0.5),
-#'   depth = rnorm(40),
-#'   site = factor(sample(1:4, 40, replace = TRUE))
+#'   count = rpois(n, exp(2 + 0.3 * depth + u)),
+#'   effort = rgamma(n, shape = 2, rate = 0.5 * exp(-u)),
+#'   depth = depth,
+#'   site = site
 #' )
 #'
 #' \donttest{
@@ -1245,7 +1308,7 @@ as.data.frame.ratiod_fit <- function(x, ...) {
 #'   count | effort ~ depth + (1|site),
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 2)
+#'   control = list(iter = 400, chains = 2, seed = 1)
 #' )
 #' plot(fit)
 #' plot(fit, pars = "beta_num", type = "both")
@@ -1300,8 +1363,8 @@ get_draws_array <- function(fit) {
   backend <- fit$backend %||% "unknown"
   chains <- fit$chains %||% 1
 
-  if (backend == "hmc" && chains > 1) {
-    # Multi-chain HMC: need to reconstruct chain structure
+  if (has_hmc_layout(fit) && chains > 1) {
+    # Multi-chain: need to reconstruct chain structure
     # The raw samples per chain are stored in .internal or we split evenly
     draws <- fit$draws
     n_total <- nrow(draws)
@@ -1378,7 +1441,8 @@ grep_params <- function(pars, all_pars) {
 #' @keywords internal
 plot_with_bayesplot <- function(draws_array, type, n_chains) {
   if (type == "trace") {
-    print(bayesplot::mcmc_trace(draws_array))
+    print(bayesplot::mcmc_trace(draws_array) +
+            ggplot2::guides(x = ggplot2::guide_axis(check.overlap = TRUE)))
   } else if (type == "dens") {
     if (n_chains > 1) {
       print(bayesplot::mcmc_dens_overlay(draws_array))

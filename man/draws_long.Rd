@@ -30,12 +30,15 @@ with the parameter in \code{.variable} and its value in \code{.value}.
 \donttest{
 # Generate synthetic data
 set.seed(333)
-n <- 55
+n <- 48
+site <- rep(letters[1:12], each = 4)
+u <- rnorm(12, sd = 0.5)[match(site, letters[1:12])]
+depth <- rnorm(n)
 df <- data.frame(
-  count = rpois(n, lambda = 24),
-  effort = rgamma(n, shape = 12, rate = 1),
-  depth = rnorm(n),
-  site = sample(letters[1:4], n, replace = TRUE)
+  count = rpois(n, exp(3 + 0.3 * depth + u)),
+  effort = rgamma(n, shape = 12, rate = exp(-u)),
+  depth = depth,
+  site = site
 )
 
 # Fit model

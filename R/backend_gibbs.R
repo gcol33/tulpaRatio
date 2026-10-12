@@ -1,7 +1,7 @@
 #' Gibbs Sampling Backend for Spatial Models
 #'
 #' @description
-#' Component-wise Gibbs sampler for ICAR and BYM2 spatial models. Uses univariate
+#' Component-wise Gibbs sampler for ICAR spatial models. Uses univariate
 #' MH updates for spatial effects with the ICAR conditional prior as proposal,
 #' conjugate Gamma update for spatial precision, and block MH for fixed effects.
 #'
@@ -18,7 +18,6 @@
 #'
 #' **Supported spatial structures:**
 #' - ICAR (intrinsic CAR) via `spatial_car()`
-#' - BYM2 via `spatial_bym2()`
 #'
 #' @name gibbs_backend
 #' @keywords internal
@@ -75,7 +74,7 @@ fit_gibbs <- function(formula,
   }
 
   if (!is.null(spatial$type) && !spatial$type %in% c("icar", "car", "bym2")) {
-    stop(sprintf("Gibbs backend supports ICAR and BYM2 spatial only, got '%s'.",
+    stop(sprintf("Gibbs backend supports ICAR spatial only, got '%s'.",
                  spatial$type), call. = FALSE)
   }
 
@@ -261,10 +260,18 @@ fit_gibbs <- function(formula,
     draws_mat[, beta_denom_cols, drop = FALSE] %*% t(X_denom) + phi_by_obs
   }
 
+  model_type <- get_hmc_model_type(family)
+  draws_full <- gibbs_natural_draws(draws_full, model_type)
+  samples_list <- lapply(samples_list, gibbs_natural_draws, model_type = model_type)
+  ratio_draws <- hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
+                                    model_type)$ratio
+  colnames(ratio_draws) <- paste0("ratio[", seq_len(N), "]")
+
   # Build ratiod_fit
   fit <- list(
     draws = draws_full,
     samples = samples_list,
+    ratio_draws = ratio_draws,
     formula = formula,
     data = data,
     family = family,
@@ -292,6 +299,40 @@ fit_gibbs <- function(formula,
 
   class(fit) <- "ratiod_fit"
   return(fit)
+}
+
+
+#' Gibbs draws on the natural scale
+#'
+#' The sampler works on log precisions, log scales and a logit mixing weight;
+#' the fit reports them under the names the HMC backend gives the same
+#' parameters.
+#'
+#' @param draws Draw matrix with the sampler's column names.
+#' @param model_type Model type string of the family.
+#' @return The draw matrix with transformed, renamed columns.
+#' @keywords internal
+gibbs_natural_draws <- function(draws, model_type) {
+  disp <- MODEL_DISPERSION_NAMES[[model_type]]
+  map <- list(
+    log_phi_num = c(disp[["num"]] %||% NA, "exp"),
+    log_disp_num = c(disp[["num"]] %||% NA, "exp"),
+    log_phi_denom = c(if ("denom" %in% names(disp)) disp[["denom"]] else NA, "exp"),
+    log_disp_denom = c(if ("denom" %in% names(disp)) disp[["denom"]] else NA, "exp"),
+    log_tau = c("tau_spatial", "exp"),
+    log_sigma_total = c("sigma_spatial", "exp"),
+    logit_rho = c("rho_spatial", "plogis")
+  )
+  cn <- colnames(draws)
+  for (raw in intersect(names(map), cn)) {
+    target <- map[[raw]]
+    if (is.na(target[1])) next
+    j <- match(raw, cn)
+    draws[, j] <- if (target[2] == "exp") exp(draws[, j]) else stats::plogis(draws[, j])
+    cn[j] <- target[1]
+  }
+  colnames(draws) <- cn
+  draws
 }
 
 

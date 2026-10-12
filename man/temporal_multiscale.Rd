@@ -91,11 +91,16 @@ temporal_multiscale("year", trend = "rw2", seasonal = NULL, short_term = "none")
 \donttest{
 # Decompose into trend + seasonal + short-term
 set.seed(129)
+month_id <- 1:48
+# Trend, 12-month cycle and AR(1) noise, shared by count and effort
+eff <- 0.4 * sin(month_id / 15) + 0.4 * sin(2 * pi * month_id / 12) +
+  as.numeric(arima.sim(list(ar = 0.6), 48, sd = 0.15))
+x <- rnorm(48)
 df <- data.frame(
-  month_id = 1:48,
-  x = rnorm(48),
-  count = rpois(48, lambda = 20),
-  effort = rgamma(48, shape = 4, rate = 1)
+  month_id = month_id,
+  x = x,
+  count = rpois(48, exp(3 + 0.3 * x + eff)),
+  effort = rgamma(48, shape = 4, rate = exp(-eff))
 )
 
 fit <- tratio(
@@ -108,7 +113,7 @@ fit <- tratio(
     seasonal = 12,
     short_term = "ar1"
   ),
-  control = list(iter = 400, chains = 1, seed = 1)
+  control = list(iter = 1000, chains = 1, seed = 1)
 )
 
 # Extract and plot components

@@ -384,8 +384,11 @@ layout_st_block <- function(cur, st_info) {
   is_gp <- st_info$type %in% c("separable", "nonsep_gp")
   is_hsgp <- isTRUE(st_info$spatial_is_hsgp)
 
+  # Non-centred Type IV stores z with delta = z / sqrt(tau)
+  noncentered <- identical(st_info$type, "IV") &&
+    identical(st_info$parameterization, "noncentered")
   out <- list(type = st_info$type, is_gp = is_gp, is_hsgp = is_hsgp,
-              log_tau = cur$one())
+              noncentered = noncentered, log_tau = cur$one())
   out$logit_rho <- if (st_has_rho(st_info)) cur$one() else integer(0)
   if (is_gp) {
     out$log_phi_space <- cur$one()
@@ -521,6 +524,36 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
 }
 
 
+#' Correlation Cholesky factor per draw
+#'
+#' The map the sampler's density reads (`cpc_cholesky()` in `src/hmc_re.h`):
+#' row-major canonical partial correlations `z = tanh(raw)`, with
+#' `L[r, c] = z * sqrt(rem)` and `rem` shrinking by `1 - z^2` along the row.
+#'
+#' @param raw Draws by K(K-1)/2 matrix of unconstrained coordinates.
+#' @param K Number of correlated coefficients.
+#' @return A list of rows, each a list of K draw vectors `L[[r]][[c]]`.
+#' @keywords internal
+cpc_cholesky_draws <- function(raw, K) {
+  raw <- as.matrix(raw)
+  S <- nrow(raw)
+  L <- lapply(seq_len(K), function(r) lapply(seq_len(K), function(c) numeric(S)))
+  L[[1]][[1]] <- rep(1, S)
+  idx <- 0L
+  for (r in seq_len(K)[-1]) {
+    rem <- rep(1, S)
+    for (c in seq_len(r - 1L)) {
+      idx <- idx + 1L
+      z <- tanh(raw[, idx])
+      L[[r]][[c]] <- z * sqrt(rem)
+      rem <- rem * (1 - z^2)
+    }
+    L[[r]][[r]] <- sqrt(rem)
+  }
+  L
+}
+
+
 #' @keywords internal
 unpack_re <- function(samples, lay, re_param) {
   if (identical(lay$kind, "none")) return(NULL)
@@ -540,15 +573,26 @@ unpack_re <- function(samples, lay, re_param) {
       coefs[[c]] <- samples[, cols, drop = FALSE]
     }
 
+    L <- if (term$correlated && n_coefs > 1L && length(chol_raw) >= 1L) {
+      cpc_cholesky_draws(do.call(cbind, chol_raw), n_coefs)
+    }
+    # Correlation R = L L^T, below the diagonal: cor[[k]] for the pair
+    # cor_pairs[k, ] = (r, c), r > c
+    cor_pairs <- if (!is.null(L)) which(lower.tri(diag(n_coefs)), arr.ind = TRUE)
+    cor <- lapply(seq_len(NROW(cor_pairs)), function(k) {
+      r <- cor_pairs[k, 1]; c <- cor_pairs[k, 2]
+      Reduce(`+`, lapply(seq_len(c), function(j) L[[r]][[j]] * L[[c]][[j]]))
+    })
+
     if (noncentered) {
-      if (n_coefs == 2L && term$correlated && length(chol_raw) >= 1L) {
-        # re = diag(sigma) L z, L = [[1, 0], [L21, sqrt(1 - L21^2)]]
-        L21 <- tanh(chol_raw[[1]])
-        L22 <- sqrt(pmax(0, 1 - L21^2))
-        z1 <- coefs[[1]]
-        z2 <- coefs[[2]]
-        coefs[[1]] <- z1 * sigma[[1]]
-        coefs[[2]] <- (z1 * L21 + z2 * L22) * sigma[[2]]
+      if (!is.null(L)) {
+        # re = diag(sigma) L z, L the correlation Cholesky factor
+        z <- coefs
+        for (c in seq_len(n_coefs)) {
+          Lz <- 0
+          for (k in seq_len(c)) Lz <- Lz + L[[c]][[k]] * z[[k]]
+          coefs[[c]] <- Lz * sigma[[c]]
+        }
       } else {
         for (c in seq_len(n_coefs)) {
           coefs[[c]] <- coefs[[c]] * sigma[[c]]
@@ -559,6 +603,8 @@ unpack_re <- function(samples, lay, re_param) {
     list(
       sigma = sigma,
       chol = chol_raw,
+      cor = cor,
+      cor_pairs = cor_pairs,
       coefs = coefs,
       n_coefs = n_coefs,
       n_groups = n_groups,
@@ -916,6 +962,7 @@ unpack_st <- function(samples, lay) {
     out$lengthscale_hsgp <- exp(samples[, lay$log_lengthscale_hsgp])
   }
   out$field <- block_draws(samples, lay$delta)
+  if (isTRUE(lay$noncentered)) out$field <- out$field / sqrt(out$tau)
   out
 }
 
@@ -979,9 +1026,22 @@ hmc_eta_design <- function(X_num, X_denom, re_group = NULL,
 }
 
 
+#' Whether a fit's draws use the HMC parameter layout
+#'
+#' The HMC and ESS samplers share one parameter vector, so their fits are
+#' unpacked, predicted from and scored the same way.
+#'
+#' @param object A `ratiod_fit`
+#' @return `TRUE` or `FALSE`
+#' @keywords internal
+has_hmc_layout <- function(object) {
+  isTRUE(object$backend %in% c("hmc", "ess")) && !is.null(object$.internal$layout)
+}
+
+
 #' Unpack the posterior draws of a fitted object
 #'
-#' @param object A `ratiod_fit` from the HMC backend
+#' @param object A `ratiod_fit` from the HMC or ESS backend
 #' @return Output of `hmc_unpack_draws()`
 #' @keywords internal
 hmc_fit_unpack <- function(object) {

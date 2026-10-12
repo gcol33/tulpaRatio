@@ -25,11 +25,11 @@ test_that("select_main_params excludes high-dimensional parameters", {
   expect_false("theta[1]" %in% result)
 })
 
-test_that("select_main_params limits to 12 parameters", {
-  all_pars <- paste0("param", 1:20)
+test_that("select_main_params keeps every low-dimensional parameter", {
+  all_pars <- c(paste0("param", 1:20), "re[1]", "spatial[2]")
   result <- tulpaRatio:::select_main_params(all_pars)
 
-  expect_true(length(result) <= 12)
+  expect_identical(result, paste0("param", 1:20))
 })
 
 test_that("select_main_params handles empty input", {

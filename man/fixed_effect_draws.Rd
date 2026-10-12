@@ -2,12 +2,11 @@
 % Please edit documentation in R/tratio.R
 \name{fixed_effect_draws}
 \alias{fixed_effect_draws}
-\title{Fixed-effect draws named by design column}
+\title{Fixed-effect draws named by design term}
 \usage{
 fixed_effect_draws(object)
 }
 \description{
-The \code{beta_num[j]} and \code{beta_denom[j]} draw columns, named by the design
-columns they multiply: \verb{num:} and \verb{denom:} prefixes on the column names.
+Fixed-effect draws named by design term
 }
 \keyword{internal}

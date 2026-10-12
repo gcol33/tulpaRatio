@@ -145,10 +145,10 @@ test_that("a GP main effect carries a correlated random slope", {
                    verbose = FALSE)
   )
   dr <- expect_draws_in_support(fit)
-  # The slope block reached the sampler: its own scale, its Cholesky factor and
+  # The slope block reached the sampler: its own scale, its correlation and
   # a per-group slope are all reported.
   expect_true(any(colnames(dr) == "sigma_re[1,x]"))
-  expect_true(any(startsWith(colnames(dr), "L_chol[")))
+  expect_true(any(startsWith(colnames(dr), "cor_re[")))
   expect_true(any(colnames(dr) == "re[1,1,x]"))
 })
 
@@ -167,7 +167,7 @@ test_that("a GP main effect carries an uncorrelated random slope", {
   )
   dr <- expect_draws_in_support(fit)
   expect_true(any(colnames(dr) == "sigma_re[1,x]"))
-  expect_false(any(startsWith(colnames(dr), "L_chol[")))
+  expect_false(any(startsWith(colnames(dr), "cor_re[")))
 })
 
 

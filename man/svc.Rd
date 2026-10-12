@@ -52,13 +52,20 @@ from a fitted ratio model with SVC specification.
 \donttest{
 # Generate synthetic spatial data
 set.seed(303)
-n <- 40
+n <- 30
+lon <- runif(n, 0, 10)
+lat <- runif(n, 0, 10)
+depth <- rnorm(n)
+# Spatially varying intercept w0 and depth slope w1, shared by count and
+# effort
+w0 <- 0.5 * sin(lon / 2) + 0.5 * cos(lat / 2)
+w1 <- 0.4 * cos(lon / 3)
 df <- data.frame(
-  lon = runif(n, 0, 10),
-  lat = runif(n, 0, 10),
-  depth = rnorm(n),
-  count = rpois(n, 20),
-  effort = rgamma(n, shape = 4, rate = 1)
+  lon = lon,
+  lat = lat,
+  depth = depth,
+  count = rpois(n, exp(3 + 0.3 * depth + w0 + w1 * depth)),
+  effort = rgamma(n, shape = 4, rate = exp(-(w0 + w1 * depth)))
 )
 
 # Fit model with SVC

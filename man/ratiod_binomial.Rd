@@ -4,21 +4,17 @@
 \alias{ratiod_binomial}
 \title{Binomial Family for Trial-Based Ratios}
 \usage{
-ratiod_binomial(link = "logit", denominator_known = TRUE)
+ratiod_binomial(link = "logit")
 }
 \arguments{
-\item{link}{Link function for probability (default: "logit")}
-
-\item{denominator_known}{Logical; if TRUE, denominator is treated as
-fixed and known. If FALSE, denominator is also modelled.}
+\item{link}{Link function for the success probability: "logit".}
 }
 \value{
 A \code{ratiod_family} object
 }
 \description{
-Trial-based model where the numerator represents successes out of
-denominator trials. The denominator can be treated as known (fixed)
-or modelled with its own process.
+Trial-based model where the numerator represents successes out of a
+known number of trials, the denominator.
 
 Use cases:
 \itemize{

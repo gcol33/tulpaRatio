@@ -24,7 +24,6 @@ that make the full conditionals Gaussian.
 \strong{When to use this backend:}
 \itemize{
 \item Binomial family models with moderate to large data
-\item When Stan sampling is too slow
 \item When you need fast approximate inference
 }
 }

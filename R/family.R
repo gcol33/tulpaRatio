@@ -22,8 +22,8 @@ NULL
 #' - Events / opportunities (both counts)
 #' - Any ratio where numerator and denominator are overdispersed counts
 #'
-#' @param link_num Link function for numerator (default: "log")
-#' @param link_denom Link function for denominator (default: "log")
+#' @param link_num Link function for the numerator mean: "log".
+#' @param link_denom Link function for the denominator mean: "log".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -69,7 +69,6 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
         distribution = "neg_binomial_2",
         link = link_denom
       ),
-      stan_model = "ratiod_negbin",
       description = "Negative binomial numerator, negative binomial denominator"
     ),
     class = c("ratiod_family", "list")
@@ -79,18 +78,15 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
 #' Binomial Family for Trial-Based Ratios
 #'
 #' @description
-#' Trial-based model where the numerator represents successes out of
-#' denominator trials. The denominator can be treated as known (fixed)
-#' or modelled with its own process.
+#' Trial-based model where the numerator represents successes out of a
+#' known number of trials, the denominator.
 #'
 #' Use cases:
 #' - Detection / availability (occupancy-style)
 #' - Successes / trials (hierarchical binomial)
 #' - Proportions with known denominators
 #'
-#' @param link Link function for probability (default: "logit")
-#' @param denominator_known Logical; if TRUE, denominator is treated as
-#'   fixed and known. If FALSE, denominator is also modelled.
+#' @param link Link function for the success probability: "logit".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -121,27 +117,21 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
 #' }
 #'
 #' @export
-ratiod_binomial <- function(link = "logit", denominator_known = TRUE) {
-  validate_link(link, c("logit", "probit", "cloglog"))
+ratiod_binomial <- function(link = "logit") {
+  validate_link(link, "logit")
 
   structure(
     list(
-      name = if (denominator_known) "binomial_fixed" else "binomial_binomial",
+      name = "binomial_fixed",
       numerator = list(
         distribution = "binomial",
         link = link
       ),
       denominator = list(
-        distribution = if (denominator_known) "fixed" else "binomial",
-        link = if (denominator_known) NULL else link
+        distribution = "fixed",
+        link = NULL
       ),
-      denominator_known = denominator_known,
-      stan_model = if (denominator_known) "ratiod_binomial" else "ratiod_binomial_binomial",
-      description = if (denominator_known) {
-        "Binomial numerator with fixed denominator"
-      } else {
-        "Binomial numerator, binomial denominator"
-      }
+      description = "Binomial numerator with fixed denominator"
     ),
     class = c("ratiod_family", "list")
   )
@@ -159,8 +149,8 @@ ratiod_binomial <- function(link = "logit", denominator_known = TRUE) {
 #' - Observations per hour
 #' - Events per continuous exposure
 #'
-#' @param link_num Link function for count rate (default: "log")
-#' @param link_denom Link function for effort mean (default: "log")
+#' @param link_num Link function for the count rate: "log".
+#' @param link_denom Link function for the effort mean: "log".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -172,12 +162,16 @@ ratiod_binomial <- function(link = "logit", denominator_known = TRUE) {
 #' # Simulate CPUE data
 #' set.seed(123)
 #' n <- 60
+#' season <- factor(rep(c("spring", "summer", "fall"), each = n/3))
+#' vessel <- factor(rep(1:10, each = n/10))
+#' u <- rnorm(10, sd = 0.5)[vessel]
+#' depth <- rnorm(n)
 #' df <- data.frame(
-#'   catch = rpois(n, lambda = 8),
-#'   effort_hours = rgamma(n, shape = 4, rate = 1),
-#'   depth = rnorm(n),
-#'   season = factor(rep(c("spring", "summer", "fall"), each = n/3)),
-#'   vessel = factor(rep(1:6, each = n/6))
+#'   catch = rpois(n, exp(1.5 + 0.3 * depth + 0.4 * (season == "summer") + u)),
+#'   effort_hours = rgamma(n, shape = 4, rate = exp(-u)),
+#'   depth = depth,
+#'   season = season,
+#'   vessel = vessel
 #' )
 #'
 #' \donttest{
@@ -207,7 +201,6 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
         distribution = "gamma",
         link = link_denom
       ),
-      stan_model = "ratiod_poisson_gamma",
       description = "Poisson numerator, Gamma denominator (CPUE-type)"
     ),
     class = c("ratiod_family", "list")
@@ -228,8 +221,8 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
 #' - Overdispersed observations per continuous exposure
 #' - Any ratio of overdispersed counts over continuous positive effort
 #'
-#' @param link_num Link function for count rate (default: "log")
-#' @param link_denom Link function for effort mean (default: "log")
+#' @param link_num Link function for the count rate: "log".
+#' @param link_denom Link function for the effort mean: "log".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -287,10 +280,10 @@ ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
 #' @param allowed Character vector of allowed links
 #' @keywords internal
 validate_link <- function(link, allowed) {
-  if (!link %in% allowed) {
+  if (!(length(link) == 1L && link %in% allowed)) {
     stop(
-      sprintf("Link function '%s' not supported. Use one of: %s",
-              link, paste(allowed, collapse = ", ")),
+      sprintf("Link function '%s' is not supported here; the samplers fit: %s.",
+              paste(link, collapse = ", "), paste(allowed, collapse = ", ")),
       call. = FALSE
     )
   }
@@ -300,17 +293,15 @@ validate_link <- function(link, allowed) {
 #'
 #' @description
 #' Two-process model where the numerator follows a beta-binomial distribution,
-#' allowing for overdispersion in binomial data. The denominator is the number
-#' of trials, which can be fixed or modelled.
+#' allowing for overdispersion in binomial data. The denominator is the known
+#' number of trials.
 #'
 #' Use cases:
 #' - Overdispersed proportions (e.g., infection rates across sites)
 #' - Hierarchical binomial with extra-binomial variation
 #' - Proportions with correlation within clusters
 #'
-#' @param link Link function for probability (default: "logit")
-#' @param denominator_known Logical; if TRUE, denominator is treated as
-#'   fixed and known. If FALSE, denominator is also modelled.
+#' @param link Link function for the success probability: "logit".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -352,27 +343,22 @@ validate_link <- function(link, allowed) {
 #' }
 #'
 #' @export
-ratiod_beta_binomial <- function(link = "logit", denominator_known = TRUE) {
-  validate_link(link, c("logit", "probit", "cloglog"))
+ratiod_beta_binomial <- function(link = "logit") {
+  validate_link(link, "logit")
 
   structure(
     list(
-      name = if (denominator_known) "beta_binomial_fixed" else "beta_binomial",
+      name = "beta_binomial_fixed",
       numerator = list(
         distribution = "beta_binomial",
         link = link
       ),
       denominator = list(
-        distribution = if (denominator_known) "fixed" else "beta_binomial",
-        link = if (denominator_known) NULL else link
+        distribution = "fixed",
+        link = NULL
       ),
-      denominator_known = denominator_known,
       overdispersed = TRUE,
-      description = if (denominator_known) {
-        "Beta-binomial numerator with fixed denominator (overdispersed proportions)"
-      } else {
-        "Beta-binomial numerator and denominator"
-      }
+      description = "Beta-binomial numerator with fixed denominator (overdispersed proportions)"
     ),
     class = c("ratiod_family", "list")
   )
@@ -391,8 +377,8 @@ ratiod_beta_binomial <- function(link = "logit", denominator_known = TRUE) {
 #' - Concentration ratios (analyte / reference)
 #' - Duration ratios (time in activity / total time)
 #'
-#' @param link_num Link function for numerator mean (default: "log")
-#' @param link_denom Link function for denominator mean (default: "log")
+#' @param link_num Link function for the numerator mean: "log".
+#' @param link_denom Link function for the denominator mean: "log".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -432,8 +418,8 @@ ratiod_beta_binomial <- function(link = "logit", denominator_known = TRUE) {
 #'
 #' @export
 ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, c("log", "identity", "inverse"))
-  validate_link(link_denom, c("log", "identity", "inverse"))
+  validate_link(link_num, "log")
+  validate_link(link_denom, "log")
 
   structure(
     list(
@@ -465,10 +451,8 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 #' - Economic ratios (costs, prices)
 #' - Body condition indices
 #'
-#' @param link_num Link function for numerator (default: "log")
-#' @param link_denom Link function for denominator (default: "log")
-#' @param denom_fixed Logical; if TRUE, denominator is treated as fixed
-#'   (only numerator is modelled as log-normal). Default FALSE.
+#' @param link_num Link function for the numerator median: "log".
+#' @param link_denom Link function for the denominator median: "log".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -509,31 +493,22 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 #' }
 #'
 #' @export
-ratiod_lognormal <- function(link_num = "log", link_denom = "log",
-                            denom_fixed = FALSE) {
-  validate_link(link_num, c("log", "identity"))
-
-  if (!denom_fixed) {
-    validate_link(link_denom, c("log", "identity"))
-  }
+ratiod_lognormal <- function(link_num = "log", link_denom = "log") {
+  validate_link(link_num, "log")
+  validate_link(link_denom, "log")
 
   structure(
     list(
-      name = if (denom_fixed) "lognormal_fixed" else "lognormal_lognormal",
+      name = "lognormal_lognormal",
       numerator = list(
         distribution = "lognormal",
         link = link_num
       ),
       denominator = list(
-        distribution = if (denom_fixed) "fixed" else "lognormal",
-        link = if (denom_fixed) NULL else link_denom
+        distribution = "lognormal",
+        link = link_denom
       ),
-      denom_fixed = denom_fixed,
-      description = if (denom_fixed) {
-        "Log-normal numerator with fixed denominator"
-      } else {
-        "Log-normal numerator and denominator (multiplicative processes)"
-      }
+      description = "Log-normal numerator and denominator (multiplicative processes)"
     ),
     class = c("ratiod_family", "list")
   )

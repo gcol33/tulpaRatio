@@ -7,9 +7,9 @@
 ratiod_negbin_gamma(link_num = "log", link_denom = "log")
 }
 \arguments{
-\item{link_num}{Link function for count rate (default: "log")}
+\item{link_num}{Link function for the count rate: "log".}
 
-\item{link_denom}{Link function for effort mean (default: "log")}
+\item{link_denom}{Link function for the effort mean: "log".}
 }
 \value{
 A \code{ratiod_family} object

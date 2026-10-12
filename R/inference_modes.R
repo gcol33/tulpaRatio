@@ -242,6 +242,23 @@ unrestricted_spatial_support <- function(spatial, structures) {
 }
 
 
+#' Spatial support rule for the Gibbs sampler
+#'
+#' @description
+#' The component-wise sampler fits an intrinsic CAR field. Its BYM2 sweep
+#' does not converge to the posterior HMC samples, so a BYM2 field is refused.
+#'
+#' @inheritParams laplace_spatial_support
+#' @return `TRUE`, or a phrase naming the restriction
+#' @keywords internal
+gibbs_spatial_support <- function(spatial, structures) {
+  if (identical(tolower(spatial$type %||% ""), "bym2")) {
+    return("a BYM2 field (`spatial_bym2()`) is not implemented")
+  }
+  unrestricted_spatial_support(spatial, structures)
+}
+
+
 #' Spatial support rule for the Polya-Gamma sampler
 #'
 #' @description
@@ -283,7 +300,7 @@ BACKEND_STRUCTURE_SUPPORT <- list(
     spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   gibbs = list(
-    spatial = unrestricted_spatial_support, temporal = tvc_temporal_support,
+    spatial = gibbs_spatial_support, temporal = tvc_temporal_support,
     spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   pg = list(
@@ -501,11 +518,11 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
     ))
   }
 
-  # Gibbs for ICAR spatial models
-  # Gibbs is ~18x faster than HMC for ICAR because it updates phi
-  # component-wise, avoiding HMC's curse of dimensionality
+  # Gibbs for ICAR spatial models: it updates the field site by site, about
+  # ten times faster than HMC on the package's ICAR test models with the
+  # same posterior
   is_gibbs_spatial <- has_spatial && !is.null(spatial_type) &&
-                      spatial_type %in% c("icar", "car", "bym2")
+                      spatial_type %in% c("icar", "car")
   if (is_gibbs_spatial && backend_fits_structures("gibbs", structures)) {
     # Check family is supported by Gibbs
     gibbs_families <- c("poisson_gamma", "negbin_negbin", "binomial",
@@ -520,7 +537,7 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
         backend = "gibbs",
         tier = 1L,
         tier_name = "Exact",
-        reason = sprintf("ICAR/BYM2 spatial model (Gibbs %s)", spatial_type)
+        reason = sprintf("ICAR spatial model (Gibbs %s)", spatial_type)
       ))
     }
   }
