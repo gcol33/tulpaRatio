@@ -453,3 +453,25 @@ test_that("cpp_get_max_threads returns positive integer", {
   expect_true(is.numeric(n_threads))
   expect_true(n_threads >= 1)
 })
+
+test_that("a non-finite energy counts as a divergence, not as acceptance", {
+  # std::min(1, exp(-NaN)) is 1, so a leaf whose step left the support used to
+  # report perfect acceptance: dual averaging grew the step size to its cap
+  # and the chain froze (364 of 500 draws divergent on this fixture at
+  # iter = 1000, against 0 at iter = 400).
+  skip_on_cran()
+  G <- 12
+  set.seed(5)
+  n <- 48
+  site <- rep(letters[1:G], length.out = n)
+  u <- rnorm(G, sd = 0.5)[match(site, letters[1:G])]
+  depth <- rnorm(n)
+  df <- data.frame(count = rpois(n, exp(3 + 0.3 * depth + u)),
+                   effort = rgamma(n, shape = 10, rate = exp(-u)),
+                   depth = depth, site = site)
+  fit <- tratio(count | effort ~ depth + (1 | site), data = df,
+                family = ratiod_poisson_gamma(), mode = "hmc",
+                control = list(iter = 1000, chains = 1, seed = 1))
+  expect_equal(sum(fit$diagnostics$divergent), 0)
+  expect_lt(fit$epsilon, 1)
+})

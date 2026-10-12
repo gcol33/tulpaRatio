@@ -8939,6 +8939,35 @@ LeapfrogResultWithGrad leapfrog_step_with_grad(
   return result;
 }
 
+// One leapfrog leaf of a NUTS tree. A non-finite energy error means the step
+// left the posterior's support: the leaf is divergent, has weight zero and
+// contributes zero to the acceptance statistic. The finiteness test must come
+// before any comparison, since std::min(1.0, NaN) returns 1.0 and would report
+// perfect acceptance to the step size adaptation.
+// Metropolis acceptance probability min(1, exp(-delta_H)) of an energy
+// error, zero when the error is not finite.
+static inline double metropolis_accept_prob(double delta_H) {
+  if (!std::isfinite(delta_H)) return 0.0;
+  return delta_H <= 0.0 ? 1.0 : std::exp(-delta_H);
+}
+
+struct LeafEnergy {
+  bool divergent;
+  double accept_stat;
+  double log_weight;  // relative to H0
+};
+
+static inline LeafEnergy leaf_energy(bool lf_divergent, double H_new, double H0,
+                                     double delta_max) {
+  const double delta_H = H_new - H0;
+  if (!std::isfinite(delta_H)) {
+    return {true, 0.0, -std::numeric_limits<double>::infinity()};
+  }
+  return {lf_divergent || delta_H > delta_max,
+          metropolis_accept_prob(delta_H),
+          -delta_H};
+}
+
 NUTSTreeResult build_tree(const NUTSNode& node, int direction, int depth,
                           double epsilon, const std::vector<double>& inv_mass,
                           bool use_mass, double H0, double delta_max,
@@ -8955,7 +8984,7 @@ NUTSTreeResult build_tree(const NUTSNode& node, int direction, int depth,
     );
 
     double H_new = nuts_compute_hamiltonian(lf.log_prob, lf.p, inv_mass, n);
-    double delta_H = H_new - H0;
+    const LeafEnergy leaf = leaf_energy(lf.divergent, H_new, H0, delta_max);
 
     result.left.q = lf.q;
     result.left.p = lf.p;
@@ -8968,19 +8997,12 @@ NUTSTreeResult build_tree(const NUTSNode& node, int direction, int depth,
     result.log_prob_proposal = lf.log_prob;
 
     // Multinomial weight: log(weight) = -H_new (proportional to exp(-H))
-    result.sum_log_weight = -H_new;
+    result.sum_log_weight = leaf.log_weight - H0;
 
-    // Divergence check
-    result.divergent = lf.divergent || (delta_H > delta_max);
+    result.divergent = leaf.divergent;
     result.stop = result.divergent;
-
-    // Valid if not divergent
     result.n_valid = result.divergent ? 0 : 1;
-
-    // Acceptance statistic: min(1, exp(-delta_H))
-    double accept_stat = std::min(1.0, std::exp(-delta_H));
-    if (!std::isfinite(accept_stat)) accept_stat = 0.0;
-    result.sum_accept_prob = accept_stat;
+    result.sum_accept_prob = leaf.accept_stat;
     result.n_leapfrog = 1;
 
     return result;
@@ -9239,7 +9261,7 @@ TreeStats build_tree_fast(
     double H_new = nuts_compute_hamiltonian_fast(
       lf.log_prob, ws.p_at(input_slot), mass, n
     );
-    double delta_H = H_new - H0;
+    const LeafEnergy leaf = leaf_energy(lf.divergent, H_new, H0, delta_max);
 
     // Both endpoints are the same slot (single node)
     stats.left_slot = input_slot;
@@ -9248,17 +9270,12 @@ TreeStats build_tree_fast(
     stats.log_prob_proposal = lf.log_prob;
 
     // Multinomial weight: log(weight) = H0 - H_new (relative, Stan-style)
-    stats.sum_log_weight = H0 - H_new;
+    stats.sum_log_weight = leaf.log_weight;
 
-    // Divergence check
-    stats.divergent = lf.divergent || (delta_H > delta_max);
+    stats.divergent = leaf.divergent;
     stats.stop = stats.divergent;
     stats.n_valid = stats.divergent ? 0 : 1;
-
-    // Acceptance statistic
-    double accept_stat = std::min(1.0, std::exp(-delta_H));
-    if (!std::isfinite(accept_stat)) accept_stat = 0.0;
-    stats.sum_accept_prob = accept_stat;
+    stats.sum_accept_prob = leaf.accept_stat;
     stats.n_leapfrog = 1;
 
     // Generalized U-turn: track rho, p_sharp, p at this leaf
@@ -10802,8 +10819,7 @@ HMCResultCpp run_hmc_chain_cpp(
       iter_energy = H_current;
 
       // Metropolis accept/reject
-      alpha = std::min(1.0, std::exp(H_current - H_prop));
-      if (!std::isfinite(alpha)) alpha = 0.0;
+      alpha = metropolis_accept_prob(H_prop - H_current);
 
       std::uniform_real_distribution<double> unif01(0.0, 1.0);
       bool accepted = (unif01(rng) < alpha) && !divergent;

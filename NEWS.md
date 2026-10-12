@@ -119,6 +119,10 @@
 * Divergent transitions raise a warning of class `tulpaRatio_divergence`
   whether or not `verbose` is set (#123), and `print(summary(fit))` flags
   parameters with R-hat above 1.01 or bulk ESS below 100 per chain (#126).
+* A NUTS leaf whose step leaves the posterior's support counts as a
+  divergence with acceptance zero; `std::min(1, exp(-NaN))` had reported it as
+  perfect acceptance, so the step size adaptation could grow epsilon to its
+  cap and freeze a chain, most often under longer warmups (#137).
 * `ratio(newdata = )` works (#121); `print()` lists every grouping factor
   (#128); trace plots drop overlapping axis labels (#129).
 
