@@ -245,16 +245,14 @@ unrestricted_spatial_support <- function(spatial, structures) {
 #' Spatial support rule for the Gibbs sampler
 #'
 #' @description
-#' The component-wise sampler fits an intrinsic CAR field. Its BYM2 sweep
-#' does not converge to the posterior HMC samples, so a BYM2 field is refused.
+#' The sampler fits an intrinsic CAR field site by site, and a BYM2 field as
+#' one block with its fixed effects and hyperparameters. A restricted field
+#' names itself.
 #'
 #' @inheritParams laplace_spatial_support
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 gibbs_spatial_support <- function(spatial, structures) {
-  if (identical(tolower(spatial$type %||% ""), "bym2")) {
-    return("a BYM2 field (`spatial_bym2()`) is not implemented")
-  }
   unrestricted_spatial_support(spatial, structures)
 }
 
@@ -387,6 +385,54 @@ assert_backend_fits_structures <- function(backend, structures) {
 }
 
 
+#' Backends that fit every likelihood
+#'
+#' @description
+#' These samplers evaluate the package's one log posterior, which carries
+#' every model type and maps each linear predictor through its link. The
+#' Gibbs, Polya-Gamma and Laplace samplers carry likelihoods of their own,
+#' written for the original model types under the canonical links, as do the
+#' collapsed spatial fields, whose marginal is a Laplace approximation under
+#' those likelihoods.
+#'
+#' @keywords internal
+LIKELIHOOD_BACKENDS <- c("hmc", "ess", "sghmc", "sgld", "vi")
+
+
+#' Stop unless the backend fits the family's likelihood
+#'
+#' @inheritParams unsupported_structures
+#' @param family Model family object
+#' @return `invisible(TRUE)`, or an error naming the restriction
+#' @keywords internal
+assert_backend_fits_likelihood <- function(backend, family, structures = list()) {
+  model_type <- get_hmc_model_type(family)
+  if (family_handcoded(family, model_type)) return(invisible(TRUE))
+
+  links <- family_links(family, model_type)
+  odd_links <- unique(setdiff(unlist(links[c("num", "denom", "zi", "oi")]),
+                              LINKS_CANONICAL))
+  what <- if (!model_type %in% HANDCODED_MODEL_TYPES) {
+    sprintf("the %s likelihood", model_type)
+  } else {
+    sprintf("the %s link", paste(odd_links, collapse = ", "))
+  }
+  if (!backend %in% LIKELIHOOD_BACKENDS) {
+    stop(sprintf(paste0(
+      "The %s backend fits the canonical links of its own likelihoods only, ",
+      "and this family needs %s. Use `mode = \"hmc\"`."),
+      backend, what), call. = FALSE)
+  }
+  if (identical(structures$spatial$parameterization, "collapsed")) {
+    stop(sprintf(paste0(
+      "A collapsed spatial field is marginalized under the canonical links ",
+      "of the original likelihoods only, and this family needs %s. Sample ",
+      "the field with another `parameterization`."), what), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+
 # ==============================================================================
 # Mode Selection Logic
 # ==============================================================================
@@ -491,6 +537,10 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
   has_latent <- !is.null(structures$latent)
   spatial_type <- if (has_spatial) structures$spatial$type else NULL
 
+  # The samplers with likelihoods of their own fit those likelihoods under
+  # the canonical links only
+  handcoded <- family_handcoded(family, get_hmc_model_type(family))
+
   # Decision logic
   reason_parts <- character(0)
 
@@ -508,7 +558,7 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
     reason_parts <- c(reason_parts, "spatial model with large n")
   }
 
-  if (use_structured && backend_fits_structures("laplace", structures)) {
+  if (use_structured && handcoded && backend_fits_structures("laplace", structures)) {
     return(list(
       mode = "structured",
       backend = "laplace",
@@ -518,12 +568,12 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
     ))
   }
 
-  # Gibbs for ICAR spatial models: it updates the field site by site, about
-  # ten times faster than HMC on the package's ICAR test models with the
-  # same posterior
+  # Gibbs for ICAR and BYM2 spatial models: it updates an ICAR field site by
+  # site and a BYM2 field as one block, faster than HMC on the package's areal
+  # test models with the same posterior
   is_gibbs_spatial <- has_spatial && !is.null(spatial_type) &&
-                      spatial_type %in% c("icar", "car")
-  if (is_gibbs_spatial && backend_fits_structures("gibbs", structures)) {
+                      spatial_type %in% c("icar", "car", "bym2")
+  if (is_gibbs_spatial && handcoded && backend_fits_structures("gibbs", structures)) {
     # Check family is supported by Gibbs
     gibbs_families <- c("poisson_gamma", "negbin_negbin", "binomial",
                         "negbin_gamma", "poisson", "neg_binomial_2",

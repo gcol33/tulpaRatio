@@ -397,38 +397,19 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
 #' Compute BYM2 scaling factor
 #'
 #' @description
-#' Compute the scaling factor for BYM2 following Riebler et al. (2016).
-#' This makes the spatial fraction parameter interpretable.
+#' The multiplier of the structured component in the BYM2 field,
+#' `sigma * (sqrt(rho) * scale_factor * phi + sqrt(1 - rho) * theta)`:
+#' `1 / sqrt(s)`, with `s` the geometric mean of the marginal variances
+#' `diag(Q^+)` of the ICAR field (Riebler et al. 2016), so that `sigma` and
+#' `rho` mean the same on every graph. It is tulpa's computation; on a
+#' disconnected graph it is the scale of the largest component.
 #'
 #' @param adjacency Adjacency matrix
 #'
 #' @return Scaling factor (scalar)
 #' @keywords internal
 compute_bym2_scale <- function(adjacency) {
-  # Build precision matrix Q for ICAR
-  n <- nrow(adjacency)
-  adj <- as.matrix(adjacency)
-  diag(adj) <- 0
-
-  # Number of neighbors for each area
-  n_neighbors <- rowSums(adj)
-
-  # ICAR precision matrix: Q_ii = n_neighbors[i], Q_ij = -1 if neighbors
-  Q <- diag(n_neighbors) - adj
-
-  # Compute generalized inverse (Q is rank-deficient)
-  # Use eigendecomposition
-  eig <- eigen(Q, symmetric = TRUE)
-
-  # Remove the zero eigenvalue (rank deficiency)
-  non_zero <- abs(eig$values) > 1e-10
-  lambda <- eig$values[non_zero]
-
-  # Geometric mean of non-zero eigenvalues
-  # This is the scaling factor following INLA convention
-  scale <- exp(mean(log(lambda)))
-
-  scale
+  tulpa::spatial_bym2(as.matrix(adjacency), level = "obs")$scale_factor
 }
 
 #' @rdname ratiod_spatial

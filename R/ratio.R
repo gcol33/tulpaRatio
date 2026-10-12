@@ -511,13 +511,22 @@ fit_model_type <- function(object) {
 }
 
 
+#' Links of a fitted object
+#' @keywords internal
+fit_links <- function(object) {
+  family_links(object$family, fit_model_type(object))
+}
+
+
 #' Compute fitted values for HMC backend
 #' @keywords internal
 compute_fitted_hmc <- function(object) {
   unpacked <- hmc_fit_unpack(object)
   eta <- hmc_eta_draws(unpacked, hmc_fit_design(object))
   warn_dropped_structures(eta$dropped)
-  hmc_response_draws(eta, fit_model_type(object))
+  hmc_response_draws(eta, fit_links(object),
+                     exposure = hmc_exposure(object$.internal$hmc_data,
+                                             fit_model_type(object)))
 }
 
 
@@ -536,7 +545,7 @@ compute_fitted_pg <- function(object) {
   }
   eta_denom <- internal$eta_denom %||% matrix(0, nrow(eta_num), ncol(eta_num))
   hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
-                     fit_model_type(object))
+                     fit_links(object))
 }
 
 
@@ -576,7 +585,7 @@ laplace_eta_draws <- function(object) {
 #' Compute fitted values for Laplace backend
 #' @keywords internal
 compute_fitted_laplace <- function(object) {
-  hmc_response_draws(laplace_eta_draws(object), fit_model_type(object))
+  hmc_response_draws(laplace_eta_draws(object), fit_links(object))
 }
 
 
@@ -784,6 +793,14 @@ build_prediction_data <- function(object, newdata, re_formula, allow_new_levels)
   include_re <- !isTRUE(is.na(re_formula)) && !identical(re_formula, ~ 0)
   re_design <- prediction_re_design(object, newdata, include_re, allow_new_levels)
 
+  # A known exposure, when the new data carry the denominator column: the rate
+  # needs none, the numerator mean does
+  exposure <- NULL
+  if (fit_links(object)$exposure) {
+    var <- formula$denominator$response_var
+    if (!is.null(var) && var %in% names(newdata)) exposure <- as.numeric(newdata[[var]])
+  }
+
   list(
     X_num = X_num,
     X_denom = X_denom,
@@ -791,7 +808,8 @@ build_prediction_data <- function(object, newdata, re_formula, allow_new_levels)
     re_group_matrix = re_design$re_group_matrix,
     slope_matrices = re_design$slope_matrices,
     N = nrow(newdata),
-    include_re = include_re
+    include_re = include_re,
+    exposure = exposure
   )
 }
 
@@ -1523,7 +1541,7 @@ predict_laplace <- function(object, newdata, type, re_formula, allow_new_levels,
   }
 
   pred_draws <- hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
-                                   fit_model_type(object), type)
+                                   fit_links(object), type)
   list(draws = pred_draws, w_samples = NULL)
 }
 
@@ -1614,7 +1632,7 @@ compute_predictions_hmc <- function(object, pred_data, type, w_pred = NULL,
     eta$eta_num <- eta$eta_num + w_pred
     if (isTRUE(w_shared)) eta$eta_denom <- eta$eta_denom + w_pred
   }
-  hmc_response_draws(eta, fit_model_type(object), type)
+  hmc_response_draws(eta, fit_links(object), type, exposure = pred_data$exposure)
 }
 
 

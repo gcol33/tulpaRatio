@@ -7,9 +7,9 @@
 ratiod_gamma_gamma(link_num = "log", link_denom = "log")
 }
 \arguments{
-\item{link_num}{Link function for the numerator mean: "log".}
+\item{link_num}{Link function for the numerator mean: "log" (default), "identity" or "inverse".}
 
-\item{link_denom}{Link function for the denominator mean: "log".}
+\item{link_denom}{Link function for the denominator mean: "log" (default), "identity" or "inverse".}
 }
 \value{
 A \code{ratiod_family} object

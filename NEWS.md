@@ -1,5 +1,50 @@
 # tulpaRatio 1.7.3
 
+* The BYM2 field has one scale on every backend (#140): the structured
+  component is multiplied by tulpa's Riebler et al. (2016) scale, `1 /
+  sqrt(s)` with `s` the geometric mean of the ICAR marginal variances. The
+  HMC-family backends computed their own factor from eigenvalues and the Gibbs,
+  Polya-Gamma and Laplace backends multiplied by the eigenvalues' geometric
+  mean itself, so `sigma` and `rho` were different parameters on each: on a
+  5 x 5 grid HMC reported sigma 8.1 and Gibbs 0.89 for the same field.
+
+* The Gibbs sampler fits BYM2 again (#133). The fixed effects and both field
+  components move as one Gaussian-approximation block, and (sigma, rho) jointly
+  with them (Knorr-Held and Rue 2002); on the 25-site test field Gibbs and HMC
+  now agree on every hyperparameter to within 0.1 posterior SD. Auto mode sends
+  BYM2 models to Gibbs, as it does ICAR ones.
+
+* `spatiotemporal(parameterization = "noncentered")` reaches the GP
+  interaction types (#132): `z ~ N(0, I)` through the nearest-neighbour GP
+  autoregression, `delta_i = m_i + sqrt(d_i) z_i`, sampled with the arena
+  gradient. Stored draws are the interaction itself. The centred coordinate
+  stays the default: on an 8 x 4 grid it mixed as well or better and ran
+  faster, for an interaction SD of 0.5 and of 0.05 alike.
+
+* Families take the links their likelihoods now implement (#117): `"probit"`
+  and `"cloglog"` beside `"logit"` for a success, zero-inflation,
+  one-inflation or hurdle probability, and `"identity"` and `"inverse"` beside
+  `"log"` for a gamma mean. One inverse-link helper carries every link through
+  the log posterior, and a model with a non-canonical link takes the arena
+  gradient of it. `fitted()`, `predict()`, `ratio()`, `loo()`/`waic()`,
+  `posterior_predict()` and `prior_predict()` apply the family's links. The
+  Gibbs, Polya-Gamma and Laplace samplers and the collapsed spatial fields keep
+  the canonical links and name the restriction.
+
+* A known exposure (#118): `ratiod_zipois()`, `ratiod_zinegbin()` and the
+  hurdle families take `denom_family = "fixed"`, and `ratiod_lognormal()`
+  `denom_fixed = TRUE`. The exposure scales the numerator mean, has no
+  coefficients, and the ratio is the rate. `ratiod_zipois()` and
+  `ratiod_hurdle_pois()` also take `denom_family = "negbin"`, a Poisson
+  numerator over a negative binomial denominator.
+
+* ESS, SGHMC and SGLD no longer fit every family outside binomial,
+  negbin-negbin and Poisson-gamma with the negbin-negbin likelihood, and VI no
+  longer refuses them; a gamma-gamma or log-normal model with a GP field no
+  longer reads its continuous numerator out of bounds (#139). Every sampler
+  entry point reads the model type, links and responses through one builder
+  and names its parameters off the shared layout.
+
 * `latent_factors()` and `spatiotemporal_effects()` are tulpa's verbs,
   re-exported, instead of tulpaRatio copies that masked tulpa's on attach
   (#100). The spatiotemporal summary and long formats now label region `s` and

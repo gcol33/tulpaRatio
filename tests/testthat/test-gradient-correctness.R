@@ -113,7 +113,9 @@ ST_IV_AR1_FIELDS <- c("st4_ar1", "st4_ar1_nc")
 # composite, so both callers of that branch are checked; that pairing is also
 # what caught compute_gradient_latent_handcoded being selected for a model
 # carrying an interaction it never writes (gcol33/tulpaRatio#71).
-ST_GP_FIELDS <- c("stgp", "stgp_matern", "stgp_gneiting", "stgp_latent")
+ST_GP_FIELDS <- c("stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
+                  # The non-centred GP interaction, separable and Gneiting
+                  "stgp_nc", "stgp_gneiting_nc")
 # The kernels resolve_gradient_fn can select that make_model() could not build a
 # model for at all: the GP, the multi-scale GP, the SVC pair, the temporal GP,
 # multi-scale temporal and latent factors (gcol33/tulpaRatio#45). Under the
@@ -681,7 +683,10 @@ test_that("proper CAR refuses an autodiff gradient mode at the front door", {
   }
   # The analytic density carries the prior, so H (and its AUTO fallback) must
   # still fit without a gradient-mismatch warning.
-  expect_warning(fit_h <- fit_with("H"), NA)
+  # A 30-iteration fit may diverge on some platform; that warning class is
+  # not the one this test is about
+  expect_no_warning(
+    fit_h <- suppressWarnings(fit_with("H"), classes = "tulpaRatio_divergence"))
   expect_identical(fit_h$backend, "hmc")
 })
 
@@ -725,7 +730,10 @@ test_that("a collapsed field refuses an autodiff gradient mode at the front door
   # not fall back to a gradient-mismatch warning (gcol33/tulpaRatio#27): the
   # inner Laplace mode-finding has to see the temporal offset the same way
   # the log posterior does.
-  expect_warning(fit_h <- fit_with("H"), NA)
+  # A 30-iteration fit may diverge on some platform; that warning class is
+  # not the one this test is about
+  expect_no_warning(
+    fit_h <- suppressWarnings(fit_with("H"), classes = "tulpaRatio_divergence"))
   expect_identical(fit_h$backend, "hmc")
 })
 

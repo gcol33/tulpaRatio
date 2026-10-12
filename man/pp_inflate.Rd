@@ -4,7 +4,7 @@
 \alias{pp_inflate}
 \title{Replicate draws under an inflation component}
 \usage{
-pp_inflate(zi_type, y, mu, disp, trials, logit_zi, logit_oi)
+pp_inflate(zi_type, y, mu, disp, trials, pi_zi, pi_oi)
 }
 \description{
 Applies the inflation of \code{src/hmc_zi.h} to draws \code{y} from the count or

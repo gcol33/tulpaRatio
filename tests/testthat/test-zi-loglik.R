@@ -1,25 +1,32 @@
 # The pointwise likelihood of every inflation type is a probability mass
-# function: summed over the support it is one.
+# function: summed over the support it is one, under every probability link.
 
-pmf_sum <- function(zi_type, n_trials, support, eta = 0.3, logit_zi = -0.4,
-                    logit_oi = 0.5, phi = 4) {
+pmf_sum <- function(zi_type, n_trials, support, eta = 0.3, eta_zi = -0.4,
+                    eta_oi = 0.5, phi = 4, link = "logit") {
   N <- length(support)
   fit <- list(zi = list(type = zi_type, X_zi = matrix(1, N, 1),
                         X_oi = matrix(1, N, 1)))
-  draws <- matrix(c(logit_zi, logit_oi), 1, 2,
+  draws <- matrix(c(eta_zi, eta_oi), 1, 2,
                   dimnames = list(NULL, c("beta_zi[1]", "beta_oi[1]")))
   hmc_data <- list(y_num = support, y_denom = rep(n_trials, N))
+  binomial <- grepl("binomial|zoib", zi_type)
+  mu <- if (binomial) tulpaRatio:::pp_linkinv(link)(eta) else exp(eta)
   ll <- tulpaRatio:::.ratiod_inflated_num_loglik(
-    fit, draws, matrix(eta, 1, N), list(phi_num = phi), hmc_data, zi_type)
+    fit, draws, matrix(mu, 1, N), list(phi_num = phi), hmc_data, zi_type,
+    links = list(zi = link, oi = link))
   sum(exp(ll))
 }
 
 test_that("every inflated pmf sums to one", {
-  for (type in c("zi_binomial", "hurdle_binomial", "oi_binomial", "zoib")) {
-    expect_equal(pmf_sum(type, 6, 0:6), 1, tolerance = 1e-12, info = type)
-  }
-  for (type in c("zi_poisson", "hurdle_poisson", "zi_negbin", "hurdle_negbin")) {
-    expect_equal(pmf_sum(type, 0, 0:400), 1, tolerance = 1e-10, info = type)
+  for (link in c("logit", "probit", "cloglog")) {
+    for (type in c("zi_binomial", "hurdle_binomial", "oi_binomial", "zoib")) {
+      expect_equal(pmf_sum(type, 6, 0:6, link = link), 1, tolerance = 1e-12,
+                   info = paste(type, link))
+    }
+    for (type in c("zi_poisson", "hurdle_poisson", "zi_negbin", "hurdle_negbin")) {
+      expect_equal(pmf_sum(type, 0, 0:400, link = link), 1, tolerance = 1e-10,
+                   info = paste(type, link))
+    }
   }
 })
 

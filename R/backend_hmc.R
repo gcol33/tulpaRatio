@@ -224,7 +224,7 @@ fit_hmc <- function(formula,
   # Initialize parameters
   q_init <- initialize_hmc_params_full(
     hmc_data, model_type, spatial_info, temporal_info, zi_info, latent_info, svc_info,
-    spatiotemporal_info
+    spatiotemporal_info, links = family_links(family, model_type)
   )
 
   if (verbose) {
@@ -572,11 +572,12 @@ fit_hmc <- function(formula,
       q_init = q_init,
       y_num = as.integer(hmc_data$y_num),
       y_denom = as.integer(hmc_data$y_denom),
+      y_num_cont = as.numeric(hmc_data$y_num_cont),
       y_denom_cont = hmc_data$y_denom_cont,
       X_num = hmc_data$X_num,
       X_denom = hmc_data$X_denom,
       re_params = re_params,
-      model_type_str = model_type,
+      family = family_params(family, model_type),
       # Bundled parameter lists
       gp_params = gp_params,
       ms_gp_params = ms_gp_params,
@@ -700,6 +701,7 @@ fit_hmc <- function(formula,
       (temporal_type_v %in% TEMPORAL_TYPES_SINGLE &&
        !isTRUE(temporal_info$precision_structure$cyclic))
     specs_eligible <- use_specs_path &&
+      family_handcoded(family, model_type) &&
       zi_supported &&
       re_supported &&
       spatial_supported &&
@@ -932,7 +934,7 @@ fit_hmc <- function(formula,
         y_denom_cont = hmc_data$y_denom_cont,
         X_num = hmc_data$X_num,
         X_denom = hmc_data$X_denom,
-        model_type_str = model_type,
+        family = family_params(family, model_type),
         re_params = re_params,
         spatial_params = spatial_params,
         temporal_params = temporal_params,
@@ -1025,10 +1027,37 @@ hmc_model_types <- list(
   "binomial fixed" = "binomial",
   "beta_binomial fixed" = "beta_binomial",
   "poisson gamma" = "poisson_gamma",
+  "poisson neg_binomial_2" = "poisson_negbin",
+  "poisson fixed" = "poisson_fixed",
   "neg_binomial_2 neg_binomial_2" = "negbin_negbin",
   "neg_binomial_2 gamma" = "negbin_gamma",
+  "neg_binomial_2 fixed" = "negbin_fixed",
   "gamma gamma" = "gamma_gamma",
-  "lognormal lognormal" = "lognormal"
+  "lognormal lognormal" = "lognormal",
+  "lognormal fixed" = "lognormal_fixed"
+)
+
+
+#' What the numerator and denominator responses of each model type are
+#'
+#' `count` an integer response, `positive` a positive continuous one,
+#' `trials` the trial counts of a binomial numerator, `exposure` a known
+#' positive exposure that scales the numerator mean. The data preparation and
+#' the response transforms read this table.
+#'
+#' @keywords internal
+MODEL_TYPE_RESPONSES <- list(
+  binomial        = c(num = "count",    denom = "trials"),
+  beta_binomial   = c(num = "count",    denom = "trials"),
+  negbin_negbin   = c(num = "count",    denom = "count"),
+  poisson_negbin  = c(num = "count",    denom = "count"),
+  poisson_gamma   = c(num = "count",    denom = "positive"),
+  negbin_gamma    = c(num = "count",    denom = "positive"),
+  gamma_gamma     = c(num = "positive", denom = "positive"),
+  lognormal       = c(num = "positive", denom = "positive"),
+  poisson_fixed   = c(num = "count",    denom = "exposure"),
+  negbin_fixed    = c(num = "count",    denom = "exposure"),
+  lognormal_fixed = c(num = "positive", denom = "exposure")
 )
 
 
@@ -1043,9 +1072,10 @@ prepare_hmc_data <- function(formula, data, family, model_type) {
   X_num <- formula$numerator$X
   X_denom <- formula$denominator$X
 
-  # Ensure X_denom exists
-  # For binomial/beta_binomial, denominator is fixed trials - no beta_denom needed
-  if (model_type %in% c("binomial", "beta_binomial")) {
+  # A denominator that is data (trials or a known exposure) has no
+  # coefficients
+  responses <- MODEL_TYPE_RESPONSES[[model_type]]
+  if (responses[["denom"]] %in% c("trials", "exposure")) {
     X_denom <- matrix(numeric(0), nrow = nrow(data), ncol = 0)
   } else if (is.null(X_denom) || ncol(X_denom) == 0) {
     X_denom <- matrix(1, nrow = nrow(data), ncol = 1)
@@ -1055,76 +1085,44 @@ prepare_hmc_data <- function(formula, data, family, model_type) {
   # Random effects
   re_info <- extract_re_for_hmc(formula)
 
-  # Prepare response based on model type
-  # Initialize y_num_cont (used for continuous families)
-  y_num_cont <- rep(0.0, length(y_num))
+  # Responses, by what each one is for this model type. The sampler reads
+  # integer responses from y_num / y_denom and continuous ones from
+  # y_num_cont / y_denom_cont; the slot a type does not read holds a
+  # placeholder.
+  N_obs <- length(y_num)
+  positive <- function(y, what) {
+    y <- as.numeric(y)
+    n_bad <- sum(y <= 0)
+    if (n_bad > 0) {
+      warning(sprintf("%d %s value(s) <= 0 (the density needs y > 0). Clamping to 1e-6.",
+                      n_bad, what), call. = FALSE)
+      y[y <= 0] <- 1e-6
+    }
+    y
+  }
 
-  if (model_type == "binomial") {
+  if (identical(responses[["num"]], "count")) {
+    y_num_cont <- rep(0.0, N_obs)
     y_num <- as.integer(y_num)
+  } else {
+    y_num_cont <- positive(y_num, "numerator")
+    y_num <- rep(0L, N_obs)
+  }
+
+  denom_kind <- responses[["denom"]]
+  if (denom_kind %in% c("count", "trials")) {
     y_denom <- as.integer(y_denom)
-    y_denom_cont <- rep(0.0, length(y_num))
-  } else if (model_type == "negbin_negbin") {
-    y_num <- as.integer(y_num)
-    y_denom <- as.integer(y_denom)
-    y_denom_cont <- rep(0.0, length(y_num))
-  } else if (model_type == "poisson_gamma") {
-    y_num <- as.integer(y_num)
-    y_denom_int <- rep(1L, length(y_num))
+    y_denom_cont <- rep(0.0, N_obs)
+  } else if (identical(denom_kind, "exposure")) {
     y_denom_cont <- as.numeric(y_denom)
-    # Gamma distribution requires y > 0; clamp zeros with warning
-    n_zero <- sum(y_denom_cont <= 0)
-    if (n_zero > 0) {
-      warning(sprintf(
-        "%d denominator value(s) <= 0 (Gamma requires y > 0). Clamping to 1e-6.",
-        n_zero), call. = FALSE)
-      y_denom_cont[y_denom_cont <= 0] <- 1e-6
+    if (anyNA(y_denom_cont) || any(y_denom_cont <= 0)) {
+      stop("A known exposure must be positive; it enters the numerator mean ",
+           "as a factor.", call. = FALSE)
     }
-    y_denom <- y_denom_int
-  } else if (model_type == "negbin_gamma") {
-    y_num <- as.integer(y_num)
-    y_denom_int <- rep(1L, length(y_num))
-    y_denom_cont <- as.numeric(y_denom)
-    n_zero <- sum(y_denom_cont <= 0)
-    if (n_zero > 0) {
-      warning(sprintf(
-        "%d denominator value(s) <= 0 (Gamma requires y > 0). Clamping to 1e-6.",
-        n_zero), call. = FALSE)
-      y_denom_cont[y_denom_cont <= 0] <- 1e-6
-    }
-    y_denom <- y_denom_int
-  } else if (model_type == "gamma_gamma") {
-    # Gamma-Gamma: both continuous
-    y_num_cont <- as.numeric(y_num)
-    y_denom_cont <- as.numeric(y_denom)
-    n_zero <- sum(y_num_cont <= 0) + sum(y_denom_cont <= 0)
-    if (n_zero > 0) {
-      warning(sprintf(
-        "%d value(s) <= 0 (Gamma requires y > 0). Clamping to 1e-6.",
-        n_zero), call. = FALSE)
-      y_num_cont[y_num_cont <= 0] <- 1e-6
-      y_denom_cont[y_denom_cont <= 0] <- 1e-6
-    }
-    y_num <- rep(0L, length(y_num))    # Dummy integer for C++ struct
-    y_denom <- rep(0L, length(y_num_cont))
-  } else if (model_type == "lognormal") {
-    # Lognormal: both continuous
-    y_num_cont <- as.numeric(y_num)
-    y_denom_cont <- as.numeric(y_denom)
-    n_zero <- sum(y_num_cont <= 0) + sum(y_denom_cont <= 0)
-    if (n_zero > 0) {
-      warning(sprintf(
-        "%d value(s) <= 0 (Lognormal requires y > 0). Clamping to 1e-6.",
-        n_zero), call. = FALSE)
-      y_num_cont[y_num_cont <= 0] <- 1e-6
-      y_denom_cont[y_denom_cont <= 0] <- 1e-6
-    }
-    y_num <- rep(0L, length(y_num))    # Dummy integer for C++ struct
-    y_denom <- rep(0L, length(y_num_cont))
-  } else if (model_type == "beta_binomial") {
-    # Beta-binomial: integer counts
-    y_num <- as.integer(y_num)
-    y_denom <- as.integer(y_denom)
-    y_denom_cont <- rep(0.0, length(y_num))
+    y_denom <- rep(1L, N_obs)
+  } else {
+    y_denom_cont <- positive(y_denom, "denominator")
+    y_denom <- rep(1L, N_obs)
   }
 
   # Build slope design matrices for random effects with slopes
@@ -1379,20 +1377,11 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
     adj_row_ptr[i + 1] <- adj_row_ptr[i] + n_neighbors[i]
   }
 
-  # BYM2 scale factor (from eigenvalues of precision matrix)
+  # BYM2 scale factor: the one the specification carries, which every
+  # backend multiplies into the structured component
   bym2_scale <- 1.0
   if (spatial_type == "bym2") {
-    # Compute scale factor for BYM2
-    # This makes the structured component have unit generalized variance
-    Q <- diag(n_neighbors) - adj
-    # Remove rank deficiency for eigenvalue computation
-    Q_scaled <- Q + 0.001 * diag(n_units)
-    eig <- eigen(Q_scaled, symmetric = TRUE, only.values = TRUE)
-    # Scale factor is based on geometric mean of non-zero eigenvalues
-    nonzero_eig <- eig$values[eig$values > 0.01]
-    if (length(nonzero_eig) > 0) {
-      bym2_scale <- 1 / sqrt(exp(mean(log(nonzero_eig))))
-    }
+    bym2_scale <- spatial$scale_factor %||% compute_bym2_scale(adj)
   }
 
   # Precision mass matrix: compute Q_inv and L_Q for ICAR/BYM2
@@ -1698,60 +1687,6 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
 }
 
 
-#' Initialize parameters for HMC with spatial and temporal
-#' @keywords internal
-initialize_hmc_params_spatial_temporal <- function(hmc_data, model_type,
-                                                   spatial_info, temporal_info) {
-  n_params <- hmc_data$p_num + hmc_data$p_denom
-
-  # Random effects
-  if (hmc_data$n_re_groups > 0) {
-    n_params <- n_params + 1 + hmc_data$n_re_groups
-  }
-
-  # Overdispersion
-  if (model_type == "negbin_negbin") {
-    n_params <- n_params + 2
-  } else if (model_type == "poisson_gamma") {
-    n_params <- n_params + 1
-  } else if (model_type == "negbin_gamma") {
-    n_params <- n_params + 2
-  }
-
-  # Spatial
-  if (spatial_info$type == "icar") {
-    icar_param_init <- spatial_info$parameterization %||% "standard"
-    if (icar_param_init == "collapsed") {
-      n_params <- n_params + 1  # log_tau only
-    } else {
-      n_params <- n_params + 1 + spatial_info$n_units  # log_tau + phi
-    }
-  } else if (spatial_info$type == "car_proper") {
-    n_params <- n_params + 2 + spatial_info$n_units  # log_tau + logit_rho + phi
-  } else if (spatial_info$type == "bym2") {
-    bym2_param_init <- spatial_info$parameterization %||% "standard"
-    if (bym2_param_init == "collapsed") {
-      n_params <- n_params + 2  # log_sigma_total + logit_rho only
-    } else {
-      # log_sigma_total + logit_rho + phi_scaled + theta
-      n_params <- n_params + 2 + 2 * spatial_info$n_units
-    }
-  }
-
-  # Temporal
-  if (temporal_info$type != "none") {
-    # log_tau_temporal + temporal effects
-    n_params <- n_params + 1 + temporal_info$n_temporal_params
-    # AR1 also has rho parameter
-    if (temporal_info$type == "ar1") {
-      n_params <- n_params + 1  # logit_rho_ar1
-    }
-  }
-
-  rep(0.0, n_params)
-}
-
-
 #' Check if HMC backend can be used
 #' @keywords internal
 can_use_hmc_backend <- function(family) {
@@ -1847,69 +1782,50 @@ prepare_zi_for_hmc <- function(zi, data, N, family = NULL) {
 initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
                                         temporal_info, zi_info, latent_info = NULL,
                                         svc_info = NULL,
-                                        spatiotemporal_info = NULL) {
+                                        spatiotemporal_info = NULL,
+                                        links = family_links(NULL, model_type)) {
   # Start building parameter vector with data-driven initialization
   q_init <- numeric(0)
   idx <- 1
 
-  # Fixed effects: initialize intercept based on data for better starting point
-  # For log-link families (gamma, lognormal, poisson, negbin), set intercept to log(mean(y))
-  # This prevents huge gradients from starting at mu=1 when data has mean >> 1
+  # Fixed effects: each intercept starts at the link of its response's mean,
+  # so the sampler does not begin at a mean of one when the data's is far
+  # from it. Over trial counts that mean is the success proportion, over a
+  # known exposure the rate.
+  responses <- MODEL_TYPE_RESPONSES[[model_type]]
+  start_mean <- function(y, scale = NULL) {
+    keep <- is.finite(y) & y > 0
+    if (!any(keep)) return(NA_real_)
+    if (is.null(scale)) mean(y[keep]) else sum(y[keep]) / sum(scale[keep])
+  }
+  y_num_obs <- if (identical(responses[["num"]], "count")) hmc_data$y_num else hmc_data$y_num_cont
+  num_mean <- switch(responses[["denom"]],
+    trials = {
+      p_hat <- sum(hmc_data$y_num) / max(1, sum(hmc_data$y_denom))
+      max(0.01, min(0.99, p_hat))
+    },
+    exposure = start_mean(y_num_obs, hmc_data$y_denom_cont),
+    start_mean(y_num_obs)
+  )
+  denom_mean <- switch(responses[["denom"]],
+    count = start_mean(hmc_data$y_denom),
+    positive = start_mean(hmc_data$y_denom_cont),
+    NA_real_
+  )
 
-  # Numerator fixed effects
   p_num <- hmc_data$p_num
   if (p_num > 0) {
     beta_num_init <- rep(0.0, p_num)
-    # Data-driven intercept for continuous families (log link)
-    if (model_type %in% c("gamma_gamma", "lognormal", "poisson_gamma", "negbin_negbin", "negbin_gamma")) {
-      if (!is.null(hmc_data$y_num_cont) && any(hmc_data$y_num_cont > 0)) {
-        # Use y_num_cont for continuous families
-        y_mean <- mean(hmc_data$y_num_cont[hmc_data$y_num_cont > 0])
-        if (is.finite(y_mean) && y_mean > 0) {
-          beta_num_init[1] <- log(y_mean)
-        }
-      } else if (!is.null(hmc_data$y_num) && any(hmc_data$y_num > 0)) {
-        # Use y_num for count families
-        y_mean <- mean(hmc_data$y_num[hmc_data$y_num > 0])
-        if (is.finite(y_mean) && y_mean > 0) {
-          beta_num_init[1] <- log(y_mean)
-        }
-      }
-    } else if (model_type %in% c("binomial", "beta_binomial")) {
-      # Binomial/beta-binomial: logit link, initialize to logit(p_hat)
-      if (!is.null(hmc_data$y_num) && !is.null(hmc_data$y_denom) &&
-          any(hmc_data$y_denom > 0)) {
-        # p_hat = sum(successes) / sum(trials)
-        total_successes <- sum(hmc_data$y_num)
-        total_trials <- sum(hmc_data$y_denom)
-        if (total_trials > 0) {
-          p_hat <- total_successes / total_trials
-          # Bound away from 0 and 1 to avoid infinite logit
-          p_hat <- max(0.01, min(0.99, p_hat))
-          beta_num_init[1] <- qlogis(p_hat)  # logit(p_hat)
-        }
-      }
-    }
+    start <- pp_linkfun(links$num)(num_mean)
+    if (is.finite(start)) beta_num_init[1] <- start
     q_init <- c(q_init, beta_num_init)
   }
 
-  # Denominator fixed effects
   p_denom <- hmc_data$p_denom
   if (p_denom > 0) {
     beta_denom_init <- rep(0.0, p_denom)
-    if (model_type %in% c("gamma_gamma", "lognormal", "poisson_gamma", "negbin_negbin", "negbin_gamma")) {
-      if (!is.null(hmc_data$y_denom_cont) && any(hmc_data$y_denom_cont > 0)) {
-        y_mean <- mean(hmc_data$y_denom_cont[hmc_data$y_denom_cont > 0])
-        if (is.finite(y_mean) && y_mean > 0) {
-          beta_denom_init[1] <- log(y_mean)
-        }
-      } else if (!is.null(hmc_data$y_denom) && any(hmc_data$y_denom > 0)) {
-        y_mean <- mean(hmc_data$y_denom[hmc_data$y_denom > 0])
-        if (is.finite(y_mean) && y_mean > 0) {
-          beta_denom_init[1] <- log(y_mean)
-        }
-      }
-    }
+    start <- pp_linkfun(links$denom %||% "log")(denom_mean)
+    if (is.finite(start)) beta_denom_init[1] <- start
     q_init <- c(q_init, beta_denom_init)
   }
 
@@ -1934,21 +1850,16 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
     q_init <- c(q_init, rep(0.0, 1 + hmc_data$n_re_groups))
   }
 
-  # Overdispersion / shape / sigma parameters
-  # Initialize log(phi) = log(2) ~ 0.69 for moderate overdispersion/shape
-  if (model_type == "negbin_negbin") {
-    q_init <- c(q_init, log(2), log(2))  # log_phi_num, log_phi_denom
-  } else if (model_type == "poisson_gamma") {
-    q_init <- c(q_init, log(2))  # log_shape
-  } else if (model_type == "negbin_gamma") {
-    q_init <- c(q_init, log(2), log(2))  # log_phi_num (NB), log_phi_denom (Gamma shape)
-  } else if (model_type == "gamma_gamma") {
-    q_init <- c(q_init, log(2), log(2))  # log_shape_num, log_shape_denom
-  } else if (model_type == "lognormal") {
-    q_init <- c(q_init, log(0.5), log(0.5))  # log_sigma_num, log_sigma_denom
-  } else if (model_type == "beta_binomial") {
-    q_init <- c(q_init, log(10))  # log_phi (precision)
-  }
+  # Overdispersion / shape / sigma parameters, numerator then denominator, on
+  # the log scale: a moderate overdispersion or shape of 2, a log-scale SD of
+  # 0.5, a beta-binomial precision of 10
+  dispersion <- MODEL_DISPERSION_NAMES[[model_type]]
+  dispersion <- dispersion[intersect(c("num", "denom"), names(dispersion))]
+  dispersion_start <- c(phi_num = log(2), phi_denom = log(2), shape = log(2),
+                        shape_num = log(2), shape_denom = log(2),
+                        sigma_num = log(0.5), sigma_denom = log(0.5),
+                        phi = log(10))
+  q_init <- c(q_init, unname(dispersion_start[dispersion]))
 
   # Spatial
   if (spatial_info$type == "icar") {
@@ -2226,7 +2137,8 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
   eta <- hmc_eta_draws(unpacked, design)
   warn_dropped_structures(eta$dropped)
 
-  ratio_draws <- hmc_response_draws(eta, model_type)$ratio
+  ratio_draws <- hmc_response_draws(eta, family_links(family, model_type),
+                                    exposure = hmc_exposure(hmc_data, model_type))$ratio
   colnames(ratio_draws) <- paste0("ratio[", seq_len(ncol(ratio_draws)), "]")
 
   # Diagnostics

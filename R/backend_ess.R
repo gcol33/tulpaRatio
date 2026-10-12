@@ -183,22 +183,11 @@ fit_ess <- function(formula,
     type = "none"
   )
 
-  # Compute number of parameters
-  n_params <- cpp_ess_get_n_params(
-    hmc_data$X_num,
-    hmc_data$X_denom,
-    model_type,
-    re_params,
-    spatial_params,
-    temporal_params,
-    zi_params
-  )
-
-  q_init <- rep(0.0, n_params)
+  # The sampler starts every chain at zero on the layout it computes
+  q_init <- numeric(0)
 
   if (verbose) {
     message("Elliptical Slice Sampling")
-    message("  Parameters: ", n_params)
     message("  Iterations: ", iter, " (warmup: ", warmup, "), chains: ", chains)
   }
 
@@ -207,10 +196,11 @@ fit_ess <- function(formula,
       q_init = q_init,
       y_num = as.integer(hmc_data$y_num),
       y_denom = as.integer(hmc_data$y_denom),
+      y_num_cont = as.numeric(hmc_data$y_num_cont),
       y_denom_cont = hmc_data$y_denom_cont,
       X_num = hmc_data$X_num,
       X_denom = hmc_data$X_denom,
-      model_type_str = model_type,
+      family = family_params(family, model_type),
       re_params = re_params,
       spatial_params = spatial_params,
       temporal_params = temporal_params,

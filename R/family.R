@@ -86,7 +86,7 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
 #' - Successes / trials (hierarchical binomial)
 #' - Proportions with known denominators
 #'
-#' @param link Link function for the success probability: "logit".
+#' @param link Link function for the success probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -118,7 +118,7 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
 #'
 #' @export
 ratiod_binomial <- function(link = "logit") {
-  validate_link(link, "logit")
+  validate_link(link, LINKS_PROBABILITY)
 
   structure(
     list(
@@ -150,7 +150,7 @@ ratiod_binomial <- function(link = "logit") {
 #' - Events per continuous exposure
 #'
 #' @param link_num Link function for the count rate: "log".
-#' @param link_denom Link function for the effort mean: "log".
+#' @param link_denom Link function for the effort mean: "log" (default), "identity" or "inverse".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -187,8 +187,8 @@ ratiod_binomial <- function(link = "logit") {
 #'
 #' @export
 ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, c("log"))
-  validate_link(link_denom, c("log"))
+  validate_link(link_num, "log")
+  validate_link(link_denom, LINKS_GAMMA)
 
   structure(
     list(
@@ -222,7 +222,7 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
 #' - Any ratio of overdispersed counts over continuous positive effort
 #'
 #' @param link_num Link function for the count rate: "log".
-#' @param link_denom Link function for the effort mean: "log".
+#' @param link_denom Link function for the effort mean: "log" (default), "identity" or "inverse".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -254,8 +254,8 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
 #'
 #' @export
 ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, c("log"))
-  validate_link(link_denom, c("log"))
+  validate_link(link_num, "log")
+  validate_link(link_denom, LINKS_GAMMA)
 
   structure(
     list(
@@ -273,6 +273,94 @@ ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
     class = c("ratiod_family", "list")
   )
 }
+
+#' Links of probabilities and of gamma means
+#'
+#' A success, zero-inflation, one-inflation or hurdle probability takes any
+#' link of `LINKS_PROBABILITY`; a gamma mean any link of `LINKS_GAMMA`. Count
+#' means and the log-normal location take the log link.
+#'
+#' @keywords internal
+LINKS_PROBABILITY <- c("logit", "probit", "cloglog")
+
+#' @rdname LINKS_PROBABILITY
+#' @keywords internal
+LINKS_GAMMA <- c("log", "identity", "inverse")
+
+#' Canonical links: the link of each domain the Gibbs, Polya-Gamma and
+#' Laplace samplers and the collapsed fields are written for
+#' @rdname LINKS_PROBABILITY
+#' @keywords internal
+LINKS_CANONICAL <- c("log", "logit")
+
+
+#' Links of a fitted family
+#'
+#' @param family A `ratiod_family` object
+#' @param model_type Model type string
+#' @return A list with the links of the numerator (`num`), the denominator
+#'   (`denom`, `NULL` for a fixed denominator) and the zero- or hurdle (`zi`)
+#'   and one-inflation (`oi`) probabilities, plus `probability`, whether the
+#'   numerator link maps to a success probability, and `exposure`, whether the
+#'   denominator is a known exposure
+#' @keywords internal
+family_links <- function(family, model_type) {
+  probability <- model_type %in% c("binomial", "beta_binomial")
+  exposure <- identical(MODEL_TYPE_RESPONSES[[model_type]][["denom"]], "exposure")
+  num <- family$numerator
+  list(
+    probability = probability,
+    exposure = exposure,
+    num = num$link %||% if (probability) "logit" else "log",
+    denom = if (probability || exposure) NULL else family$denominator$link %||% "log",
+    zi = num$link_zi %||% num$link_hurdle %||% "logit",
+    oi = num$link_oi %||% "logit"
+  )
+}
+
+
+#' Whether every link of a family is canonical
+#'
+#' @inheritParams family_links
+#' @return `TRUE` or `FALSE`
+#' @keywords internal
+family_canonical_links <- function(family, model_type) {
+  links <- family_links(family, model_type)
+  all(unlist(links[c("num", "denom", "zi", "oi")]) %in% LINKS_CANONICAL)
+}
+
+
+#' Model types the Gibbs, Polya-Gamma and Laplace samplers and the collapsed
+#' fields carry likelihoods for
+#' @keywords internal
+HANDCODED_MODEL_TYPES <- c("binomial", "beta_binomial", "negbin_negbin",
+                           "poisson_gamma", "negbin_gamma", "gamma_gamma",
+                           "lognormal")
+
+
+#' Whether a family's likelihood is one the hand-written samplers carry
+#'
+#' Its model type has a hand-coded likelihood and every link is canonical.
+#'
+#' @inheritParams family_links
+#' @return `TRUE` or `FALSE`
+#' @keywords internal
+family_handcoded <- function(family, model_type) {
+  model_type %in% HANDCODED_MODEL_TYPES && family_canonical_links(family, model_type)
+}
+
+
+#' Model type and links of a family, as the samplers read them
+#'
+#' @inheritParams family_links
+#' @return The list every sampler entry point takes as `family`
+#' @keywords internal
+family_params <- function(family, model_type) {
+  links <- family_links(family, model_type)
+  list(model_type = model_type, link_num = links$num, link_denom = links$denom,
+       link_zi = links$zi, link_oi = links$oi)
+}
+
 
 #' Validate link function
 #'
@@ -301,7 +389,7 @@ validate_link <- function(link, allowed) {
 #' - Hierarchical binomial with extra-binomial variation
 #' - Proportions with correlation within clusters
 #'
-#' @param link Link function for the success probability: "logit".
+#' @param link Link function for the success probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -344,7 +432,7 @@ validate_link <- function(link, allowed) {
 #'
 #' @export
 ratiod_beta_binomial <- function(link = "logit") {
-  validate_link(link, "logit")
+  validate_link(link, LINKS_PROBABILITY)
 
   structure(
     list(
@@ -377,8 +465,8 @@ ratiod_beta_binomial <- function(link = "logit") {
 #' - Concentration ratios (analyte / reference)
 #' - Duration ratios (time in activity / total time)
 #'
-#' @param link_num Link function for the numerator mean: "log".
-#' @param link_denom Link function for the denominator mean: "log".
+#' @param link_num Link function for the numerator mean: "log" (default), "identity" or "inverse".
+#' @param link_denom Link function for the denominator mean: "log" (default), "identity" or "inverse".
 #'
 #' @return A `ratiod_family` object
 #'
@@ -418,8 +506,8 @@ ratiod_beta_binomial <- function(link = "logit") {
 #'
 #' @export
 ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, "log")
-  validate_link(link_denom, "log")
+  validate_link(link_num, LINKS_GAMMA)
+  validate_link(link_denom, LINKS_GAMMA)
 
   structure(
     list(
@@ -453,6 +541,9 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 #'
 #' @param link_num Link function for the numerator median: "log".
 #' @param link_denom Link function for the denominator median: "log".
+#' @param denom_fixed If `TRUE`, the denominator is a known exposure rather
+#'   than a modelled response: the numerator's median is the exposure times
+#'   `exp(eta)`, and the ratio is `exp(eta)`.
 #'
 #' @return A `ratiod_family` object
 #'
@@ -493,22 +584,27 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 #' }
 #'
 #' @export
-ratiod_lognormal <- function(link_num = "log", link_denom = "log") {
+ratiod_lognormal <- function(link_num = "log", link_denom = "log",
+                             denom_fixed = FALSE) {
   validate_link(link_num, "log")
-  validate_link(link_denom, "log")
+  if (!denom_fixed) validate_link(link_denom, "log")
 
   structure(
     list(
-      name = "lognormal_lognormal",
+      name = if (denom_fixed) "lognormal_fixed" else "lognormal_lognormal",
       numerator = list(
         distribution = "lognormal",
         link = link_num
       ),
       denominator = list(
-        distribution = "lognormal",
-        link = link_denom
+        distribution = if (denom_fixed) "fixed" else "lognormal",
+        link = if (denom_fixed) NULL else link_denom
       ),
-      description = "Log-normal numerator and denominator (multiplicative processes)"
+      description = if (denom_fixed) {
+        "Log-normal numerator over a known exposure"
+      } else {
+        "Log-normal numerator and denominator (multiplicative processes)"
+      }
     ),
     class = c("ratiod_family", "list")
   )

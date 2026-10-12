@@ -12,6 +12,7 @@
 #include "autodiff.h"
 #include "autodiff_fwd.h"
 #include "autodiff_arena.h"
+#include "link_function.h"
 
 namespace ratiod {
 namespace math {
@@ -335,6 +336,56 @@ template<typename T>
 inline typename std::enable_if<is_arena_var<T>::value, double>::type
 get_value(const T& x) {
     return x.val();
+}
+
+// ============================================================================
+// A unary function of x given its value f and derivative df, on every type
+// ============================================================================
+
+template<typename T>
+inline typename std::enable_if<!is_autodiff<T>::value, T>::type
+lift_unary(const T&, double f, double) {
+    return f;
+}
+
+template<typename T>
+inline typename std::enable_if<is_ad_var<T>::value, T>::type
+lift_unary(const T& x, double f, double df) {
+    return ad::unary(x, f, df);
+}
+
+template<typename T>
+inline typename std::enable_if<is_fwd_dual<T>::value, T>::type
+lift_unary(const T& x, double f, double df) {
+    return fwd::unary(x, f, df);
+}
+
+template<typename T>
+inline typename std::enable_if<is_arena_var<T>::value, T>::type
+lift_unary(const T& x, double f, double df) {
+    return arena::unary(x, f, df);
+}
+
+// ============================================================================
+// Inverse links of the linear predictors
+// ============================================================================
+
+// The logit of the probability the link maps eta to. Under the logit link
+// that is eta itself, and the expression stays the one the canonical model
+// has always differentiated.
+template<typename T>
+inline T prob_logit(const T& eta, ratiod_link::LinkType link) {
+    if (link == ratiod_link::LinkType::LOGIT) return eta;
+    const ratiod_link::ValueDeriv vd = ratiod_link::prob_logit_vd(get_value(eta), link);
+    return lift_unary(eta, vd.value, vd.deriv);
+}
+
+// The mean the link maps eta to.
+template<typename T>
+inline T link_mean(const T& eta, ratiod_link::LinkType link) {
+    if (link == ratiod_link::LinkType::LOG) return safe_exp(eta);
+    const ratiod_link::ValueDeriv vd = ratiod_link::link_mean_vd(get_value(eta), link);
+    return lift_unary(eta, vd.value, vd.deriv);
 }
 
 // ============================================================================

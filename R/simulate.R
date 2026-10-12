@@ -109,6 +109,8 @@ sim_ratiod <- function(n = 100,
   if (!is.null(seed)) set.seed(seed)
 
   family_name <- family$name
+  linkinv_num <- pp_linkinv(family$numerator$link %||% "log")
+  linkinv_denom <- pp_linkinv(family$denominator$link %||% "log")
 
   # Generate group assignments
   if (!is.null(n_per_group)) {
@@ -160,8 +162,8 @@ sim_ratiod <- function(n = 100,
 
   # Generate responses based on family
   if (family_name == "negbin_negbin") {
-    mu_num <- exp(eta_num)
-    mu_denom <- exp(eta_denom)
+    mu_num <- linkinv_num(eta_num)
+    mu_denom <- linkinv_denom(eta_denom)
 
     y_num <- rnbinom(n, size = phi_num, mu = mu_num)
     y_denom <- rnbinom(n, size = phi_denom, mu = mu_denom)
@@ -170,7 +172,7 @@ sim_ratiod <- function(n = 100,
     y_denom[y_denom == 0] <- 1
 
   } else if (identical(family_name, "binomial_fixed")) {
-    p <- 1 / (1 + exp(-eta_num))
+    p <- linkinv_num(eta_num)
 
     # Generate trials (denominator)
     if (family_name == "binomial_fixed") {
@@ -182,8 +184,8 @@ sim_ratiod <- function(n = 100,
     y_num <- rbinom(n, size = y_denom, prob = p)
 
   } else if (family_name == "poisson_gamma") {
-    mu_num <- exp(eta_num)
-    mu_denom <- exp(eta_denom)
+    mu_num <- linkinv_num(eta_num)
+    mu_denom <- linkinv_denom(eta_denom)
 
     y_num <- rpois(n, mu_num)
 
@@ -192,8 +194,8 @@ sim_ratiod <- function(n = 100,
     y_denom[y_denom < 0.01] <- 0.01  # Avoid division by zero
 
   } else if (family_name == "negbin_gamma") {
-    mu_num <- exp(eta_num)
-    mu_denom <- exp(eta_denom)
+    mu_num <- linkinv_num(eta_num)
+    mu_denom <- linkinv_denom(eta_denom)
 
     y_num <- rnbinom(n, size = phi_num, mu = mu_num)
 
@@ -202,8 +204,8 @@ sim_ratiod <- function(n = 100,
     y_denom[y_denom < 0.01] <- 0.01  # Avoid division by zero
 
   } else if (family_name == "gamma_gamma") {
-    mu_num <- exp(eta_num)
-    mu_denom <- exp(eta_denom)
+    mu_num <- linkinv_num(eta_num)
+    mu_denom <- linkinv_denom(eta_denom)
 
     y_num <- rgamma(n, shape = phi_num, rate = phi_num / mu_num)
     y_denom <- rgamma(n, shape = phi_denom, rate = phi_denom / mu_denom)

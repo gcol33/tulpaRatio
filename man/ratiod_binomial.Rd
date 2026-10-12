@@ -7,7 +7,7 @@
 ratiod_binomial(link = "logit")
 }
 \arguments{
-\item{link}{Link function for the success probability: "logit".}
+\item{link}{Link function for the success probability: "logit" (default), "probit" or "cloglog".}
 }
 \value{
 A \code{ratiod_family} object

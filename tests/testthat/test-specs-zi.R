@@ -146,7 +146,15 @@ fit_one_zi <- function(spec, use_specs, seed_val) {
   )
   if (!is.null(spec$zi)) args$zi <- spec$zi
   fit <- do.call(tulpaRatio::tratio, args)
-  colMeans(fit$draws)
+  dr <- as.matrix(fit$draws)
+  list(mean = colMeans(dr),
+       mcse = apply(dr, 2, function(v) posterior::mcse_mean(matrix(v, ncol = 1))))
+}
+
+# Largest z-score between two fits' posterior means, each difference scaled
+# by the two Monte Carlo standard errors
+max_mean_z <- function(a, b) {
+  max(abs(a$mean - b$mean) / sqrt(a$mcse^2 + b$mcse^2 + 1e-12))
 }
 
 parity_variants_b1c <- c("zi_binomial", "hurdle_binomial",
@@ -160,14 +168,12 @@ for (v in parity_variants_b1c) {
     test_that(sprintf("B1c spec path matches legacy for %s within MC noise", vv), {
       skip_on_cran()
       spec <- simulate_zi_for_variant(vv)
-      legacy42 <- fit_one_zi(spec, FALSE, 42L)
-      specs42  <- fit_one_zi(spec, TRUE,  42L)
-      legacy43 <- fit_one_zi(spec, FALSE, 43L)
+      legacy <- fit_one_zi(spec, FALSE, 42L)
+      specs  <- fit_one_zi(spec, TRUE,  43L)
 
-      expect_named(specs42, names(legacy42))
-      cross  <- max(abs(legacy42 - specs42))
-      within <- max(abs(legacy42 - legacy43))
-      expect_lt(cross, max(4 * within, 5e-3))
+      expect_named(specs$mean, names(legacy$mean))
+      # Two samplers of one posterior differ by Monte Carlo error alone
+      expect_lt(max_mean_z(legacy, specs), 4.5)
     })
   })
 }
@@ -178,7 +184,7 @@ for (v in smoke_variants_b1c) {
     test_that(sprintf("B1c spec path runs end-to-end for %s", vv), {
       skip_on_cran()
       spec <- simulate_zi_for_variant(vv)
-      specs42 <- fit_one_zi(spec, TRUE, 42L)
+      specs42 <- fit_one_zi(spec, TRUE, 42L)$mean
       expect_true(all(is.finite(specs42)))
       expect_true(length(specs42) >= 4L)  # at least betas + zi/oi
     })

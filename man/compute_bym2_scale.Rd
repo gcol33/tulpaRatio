@@ -13,7 +13,11 @@ compute_bym2_scale(adjacency)
 Scaling factor (scalar)
 }
 \description{
-Compute the scaling factor for BYM2 following Riebler et al. (2016).
-This makes the spatial fraction parameter interpretable.
+The multiplier of the structured component in the BYM2 field,
+\code{sigma * (sqrt(rho) * scale_factor * phi + sqrt(1 - rho) * theta)}:
+\code{1 / sqrt(s)}, with \code{s} the geometric mean of the marginal variances
+\verb{diag(Q^+)} of the ICAR field (Riebler et al. 2016), so that \code{sigma} and
+\code{rho} mean the same on every graph. It is tulpa's computation; on a
+disconnected graph it is the scale of the largest component.
 }
 \keyword{internal}

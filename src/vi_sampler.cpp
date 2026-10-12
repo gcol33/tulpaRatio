@@ -102,10 +102,11 @@ Rcpp::List cpp_vi_fit(
     Rcpp::NumericVector q_init,
     Rcpp::IntegerVector y_num,
     Rcpp::IntegerVector y_denom,
+    Rcpp::NumericVector y_num_cont,
     Rcpp::NumericVector y_denom_cont,
     Rcpp::NumericMatrix X_num,
     Rcpp::NumericMatrix X_denom,
-    std::string model_type_str,
+    Rcpp::List family,
     Rcpp::List re_params,
     Rcpp::List spatial_params,
     Rcpp::List temporal_params,
@@ -123,45 +124,10 @@ Rcpp::List cpp_vi_fit(
   VIConfig config = parse_vi_config(vi_options);
   config.verbose = verbose;
 
-  // Build ModelData (same as HMC)
   ModelData data;
-
-  // Response data
-  data.N = y_num.size();
-  data.y_num.resize(data.N);
-  data.y_denom.resize(data.N);
-  data.y_denom_cont.resize(data.N);
-  for (int i = 0; i < data.N; i++) {
-    data.y_num[i] = y_num[i];
-    data.y_denom[i] = y_denom[i];
-    data.y_denom_cont[i] = y_denom_cont[i];
-  }
-
-  // Design matrices
-  data.p_num = X_num.ncol();
-  data.p_denom = X_denom.ncol();
-  data.X_num_flat.resize(data.N * data.p_num);
-  data.X_denom_flat.resize(data.N * data.p_denom);
-
-  for (int i = 0; i < data.N; i++) {
-    for (int j = 0; j < data.p_num; j++) {
-      data.X_num_flat[i * data.p_num + j] = X_num(i, j);
-    }
-    for (int j = 0; j < data.p_denom; j++) {
-      data.X_denom_flat[i * data.p_denom + j] = X_denom(i, j);
-    }
-  }
-
-  // Model type
-  if (model_type_str == "binomial") {
-    data.model_type = ModelType::BINOMIAL;
-  } else if (model_type_str == "negbin_negbin") {
-    data.model_type = ModelType::NEGBIN_NEGBIN;
-  } else if (model_type_str == "poisson_gamma") {
-    data.model_type = ModelType::POISSON_GAMMA;
-  } else {
-    Rcpp::stop("Unknown model type: " + model_type_str);
-  }
+  apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
+                      X_num, X_denom);
+  apply_family_params(data, family);
 
   // Random effects
   Rcpp::IntegerVector re_group = re_params["group"];
@@ -327,12 +293,12 @@ Rcpp::List cpp_vi_fit(
 
   // Compute parameter layout
   ParamLayout layout = compute_param_layout(data);
-  int D = q_init.size();
+  const int D = layout.total_params;
 
-  // Initial values
-  Eigen::VectorXd init_mu(D);
-  for (int i = 0; i < D; ++i) {
-    init_mu(i) = q_init[i];
+  // Initial values: q_init when it matches the layout, zeros otherwise
+  Eigen::VectorXd init_mu = Eigen::VectorXd::Zero(D);
+  if (q_init.size() == D) {
+    for (int i = 0; i < D; ++i) init_mu(i) = q_init[i];
   }
 
   // Set gradient mode to forward autodiff (fastest general-purpose)
@@ -342,83 +308,8 @@ Rcpp::List cpp_vi_fit(
   VIResult result = fit_vi(data, layout, D, config, &init_mu);
 
   // Return results as R list
-  return vi_result_to_list(result);
+  Rcpp::List out = vi_result_to_list(result);
+  out["param_names"] = layout_param_names(data, layout);
+  return out;
 }
 
-// [[Rcpp::export]]
-int cpp_vi_get_n_params(
-    Rcpp::NumericMatrix X_num,
-    Rcpp::NumericMatrix X_denom,
-    std::string model_type_str,
-    Rcpp::List re_params,
-    Rcpp::List spatial_params,
-    Rcpp::List temporal_params,
-    Rcpp::List zi_params
-) {
-  // This is a helper to compute parameter count without running VI
-  // Mirrors the logic in compute_param_layout
-
-  int n_params = 0;
-
-  // Fixed effects
-  n_params += X_num.ncol();
-  n_params += X_denom.ncol();
-
-  // Random effects
-  int n_re_groups = Rcpp::as<int>(re_params["n_groups"]);
-  if (n_re_groups > 0) {
-    n_params += 1;  // log_sigma_re
-    n_params += n_re_groups;  // RE values
-  }
-
-  // Overdispersion
-  if (model_type_str == "negbin_negbin") {
-    n_params += 2;  // log_phi_num, log_phi_denom
-  } else if (model_type_str == "poisson_gamma") {
-    n_params += 1;  // log_shape
-  }
-
-  // Spatial
-  std::string spatial_type = Rcpp::as<std::string>(spatial_params["type"]);
-  int n_spatial = Rcpp::as<int>(spatial_params["n_units"]);
-  if (spatial_type == "icar") {
-    n_params += 1;  // log_tau
-    n_params += n_spatial;
-  } else if (spatial_type == "bym2") {
-    n_params += 2;  // log_sigma, logit_rho
-    n_params += 2 * n_spatial;  // phi + theta
-  }
-
-  // Temporal
-  std::string temporal_type = Rcpp::as<std::string>(temporal_params["type"]);
-  int n_temporal = Rcpp::as<int>(temporal_params["n_params"]);
-  if (temporal_type != "none" && n_temporal > 0) {
-    n_params += 1;  // log_tau
-    n_params += n_temporal;
-    if (temporal_type == "ar1") {
-      n_params += 1;  // logit_rho
-    }
-  }
-
-  // Zero-inflation
-  std::string zi_type = Rcpp::as<std::string>(zi_params["type"]);
-  if (ratiod_zi::parse_zi_type(zi_type) != ratiod_zi::ZIType::NONE) {
-    // Use explicit p_zi from R (not X_zi.ncol()) because OI-only models
-    // pass a 1-column placeholder X_zi but p_zi=0
-    SEXP p_zi_sexp = zi_params["p_zi"];
-    if (!Rf_isNull(p_zi_sexp)) {
-      n_params += Rcpp::as<int>(p_zi_sexp);
-    } else {
-      Rcpp::NumericMatrix X_zi = zi_params["X"];
-      n_params += X_zi.ncol();
-    }
-  }
-
-  // One-inflation (for OI-binomial and ZOIB)
-  SEXP p_oi_sexp = zi_params["p_oi"];
-  if (!Rf_isNull(p_oi_sexp)) {
-    n_params += Rcpp::as<int>(p_oi_sexp);
-  }
-
-  return n_params;
-}

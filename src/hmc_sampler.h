@@ -15,6 +15,7 @@
 #include "hmc_temporal.h"
 #include "hmc_temporal_gp.h"
 #include "hmc_zi.h"
+#include "link_function.h"
 #include "hmc_svc.h"
 #include "hmc_gp.h"
 #include "hmc_svc_field.h"
@@ -37,6 +38,7 @@ using ratiod_temporal::TemporalData;
 using ratiod_temporal_gp::TemporalGPData;
 using ratiod_temporal_gp::TemporalCovType;
 using ratiod_zi::ZIType;
+using ratiod_link::LinkType;
 using ratiod_gp::GPData;
 using ratiod_gp::MultiscaleGPData;
 using ratiod_gp::CovType;
@@ -49,7 +51,35 @@ using ratiod_spatiotemporal::NonsepType;
 // Model configuration
 // =====================================================================
 
-enum class ModelType { BINOMIAL, NEGBIN_NEGBIN, POISSON_GAMMA, NEGBIN_GAMMA, GAMMA_GAMMA, LOGNORMAL, BETA_BINOMIAL };
+enum class ModelType { BINOMIAL, NEGBIN_NEGBIN, POISSON_GAMMA, NEGBIN_GAMMA, GAMMA_GAMMA, LOGNORMAL, BETA_BINOMIAL,
+                       POISSON_FIXED, NEGBIN_FIXED, LOGNORMAL_FIXED, POISSON_NEGBIN };
+
+// What the parameter layout and the gradient dispatch read off a model type.
+// A known exposure (the *_FIXED types) is data: it scales the numerator mean
+// and carries no coefficients of its own.
+struct ModelTypeInfo {
+  bool phi_num;          // numerator dispersion, shape or log-scale SD
+  bool phi_denom;        // denominator dispersion or shape
+  bool fixed_exposure;   // the denominator is a known exposure
+  bool handcoded;        // the hand-coded gradients and collapsed fields carry it
+};
+
+inline ModelTypeInfo model_type_info(ModelType t) {
+  switch (t) {
+    case ModelType::BINOMIAL:        return {false, false, false, true};
+    case ModelType::BETA_BINOMIAL:   return {true,  false, false, true};
+    case ModelType::NEGBIN_NEGBIN:   return {true,  true,  false, true};
+    case ModelType::POISSON_GAMMA:   return {false, true,  false, true};
+    case ModelType::NEGBIN_GAMMA:    return {true,  true,  false, true};
+    case ModelType::GAMMA_GAMMA:     return {true,  true,  false, true};
+    case ModelType::LOGNORMAL:       return {true,  true,  false, true};
+    case ModelType::POISSON_FIXED:   return {false, false, true,  false};
+    case ModelType::NEGBIN_FIXED:    return {true,  false, true,  false};
+    case ModelType::LOGNORMAL_FIXED: return {true,  false, true,  false};
+    case ModelType::POISSON_NEGBIN:  return {false, true,  false, false};
+  }
+  return {false, false, false, false};
+}
 enum class SpatialType { NONE, ICAR, BYM2, GP, MULTISCALE_GP, HSGP, CAR_PROPER };
 
 // Gradient computation methods
@@ -350,6 +380,15 @@ struct ModelData {
   // Model type
   ModelType model_type = ModelType::BINOMIAL;
 
+  // Links of the numerator mean (or success probability), the denominator
+  // mean, and the zero- (or hurdle) and one-inflation probabilities. LOG and
+  // LOGIT are the canonical links of their domains, and the inverse-link
+  // helpers read either one as the canonical link of the domain they serve.
+  LinkType link_num = LinkType::LOG;
+  LinkType link_denom = LinkType::LOG;
+  LinkType link_zi = LinkType::LOGIT;
+  LinkType link_oi = LinkType::LOGIT;
+
   // Parallelization
   int n_threads = 1;
   // Across-chain core budget. Bounds the multi-chain OpenMP team size so the
@@ -506,6 +545,42 @@ struct ParamLayout {
 
 ParamLayout compute_param_layout(const ModelData& data);
 int get_n_params(const ModelData& data);
+
+// The model type and links every backend entry point reads from one list,
+// the one family_params() builds in R. An unknown model type or link stops.
+ModelType parse_model_type(const std::string& model_type_str);
+void apply_family_params(ModelData& data, Rcpp::List family);
+
+// The responses and design matrices, one row per observation.
+void apply_response_data(ModelData& data,
+                         const Rcpp::IntegerVector& y_num,
+                         const Rcpp::IntegerVector& y_denom,
+                         const Rcpp::NumericVector& y_num_cont,
+                         const Rcpp::NumericVector& y_denom_cont,
+                         const Rcpp::NumericMatrix& X_num,
+                         const Rcpp::NumericMatrix& X_denom);
+
+// Names of the parameter vector, in layout order, for the blocks the ESS,
+// SGHMC, SGLD and VI samplers carry. Stops on a block it does not name.
+Rcpp::CharacterVector layout_param_names(const ModelData& data,
+                                         const ParamLayout& layout);
+
+// Whether every link is the canonical one, the links the hand-coded
+// gradients and the collapsed marginals are written for.
+inline bool canonical_links(const ModelData& data) {
+  auto canonical = [](LinkType l) {
+    return l == LinkType::LOG || l == LinkType::LOGIT;
+  };
+  return canonical(data.link_num) && canonical(data.link_denom) &&
+         canonical(data.link_zi) && canonical(data.link_oi);
+}
+
+// Whether the hand-coded gradients carry the model's likelihood: its model
+// type and every link. Any other model is differentiated by the arena
+// gradient of the templated log posterior.
+inline bool handcoded_likelihood(const ModelData& data) {
+  return model_type_info(data.model_type).handcoded && canonical_links(data);
+}
 
 // =====================================================================
 // Log-posterior computation (with OpenMP parallelization)

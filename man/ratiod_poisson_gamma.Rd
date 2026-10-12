@@ -9,7 +9,7 @@ ratiod_poisson_gamma(link_num = "log", link_denom = "log")
 \arguments{
 \item{link_num}{Link function for the count rate: "log".}
 
-\item{link_denom}{Link function for the effort mean: "log".}
+\item{link_denom}{Link function for the effort mean: "log" (default), "identity" or "inverse".}
 }
 \value{
 A \code{ratiod_family} object

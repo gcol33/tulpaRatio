@@ -43,26 +43,34 @@ layout_cursor <- function() {
 }
 
 
+#' Draw names for the dispersion parameters of each model type
+#'
+#' A model type with a `num` entry carries a numerator dispersion parameter,
+#' one with a `denom` entry a denominator one; the parameter layout reads both
+#' off this table.
+#'
+#' @keywords internal
+MODEL_DISPERSION_NAMES <- list(
+  negbin_negbin   = c(num = "phi_num", denom = "phi_denom"),
+  negbin_gamma    = c(num = "phi_num", denom = "phi_denom"),
+  poisson_gamma   = c(denom = "shape"),
+  poisson_negbin  = c(denom = "phi_denom"),
+  negbin_fixed    = c(num = "phi_num"),
+  gamma_gamma     = c(num = "shape_num", denom = "shape_denom"),
+  lognormal       = c(num = "sigma_num", denom = "sigma_denom"),
+  lognormal_fixed = c(num = "sigma_num"),
+  beta_binomial   = c(num = "phi")
+)
+
 #' Model types carrying a numerator dispersion parameter
 #' @keywords internal
-MODEL_TYPES_PHI_NUM <- c("negbin_negbin", "negbin_gamma", "gamma_gamma",
-                         "lognormal", "beta_binomial")
+MODEL_TYPES_PHI_NUM <- names(Filter(function(x) "num" %in% names(x),
+                                    MODEL_DISPERSION_NAMES))
 
 #' Model types carrying a denominator dispersion parameter
 #' @keywords internal
-MODEL_TYPES_PHI_DENOM <- c("negbin_negbin", "poisson_gamma", "negbin_gamma",
-                           "gamma_gamma", "lognormal")
-
-#' Draw names for the dispersion parameters of each model type
-#' @keywords internal
-MODEL_DISPERSION_NAMES <- list(
-  negbin_negbin = c(num = "phi_num", denom = "phi_denom"),
-  negbin_gamma  = c(num = "phi_num", denom = "phi_denom"),
-  poisson_gamma = c(denom = "shape"),
-  gamma_gamma   = c(num = "shape_num", denom = "shape_denom"),
-  lognormal     = c(num = "sigma_num", denom = "sigma_denom"),
-  beta_binomial = c(num = "phi")
-)
+MODEL_TYPES_PHI_DENOM <- names(Filter(function(x) "denom" %in% names(x),
+                                      MODEL_DISPERSION_NAMES))
 
 #' Temporal types the sampler allocates a temporal block for
 #' @keywords internal
@@ -1383,46 +1391,72 @@ hmc_eta_draws <- function(unpacked, design) {
 }
 
 
-#' Response scale of a model type
-#'
-#' The numerator link is logistic for the binomial families and log for the
-#' count and continuous ones; the denominator of a binomial model is its trials,
-#' which are data.
-#'
-#' @keywords internal
-model_type_link <- function(model_type) {
-  if (model_type %in% c("binomial", "beta_binomial")) "logit" else "log"
-}
-
-
 #' Transform linear predictors to the response scale
 #'
+#' The numerator of a binomial family is a success probability and its
+#' denominator the trials, which are data; the ratio is the probability. A
+#' family over a known exposure has a rate for its ratio. Every other family
+#' maps both predictors to means through their links.
+#'
 #' @param eta A list with `eta_num` and `eta_denom`
-#' @param model_type Model type string
-#' @param type `"response"` or `"link"`
+#' @param links Links of the fitted family, from `family_links()`
+#' @param type `"response"` or `"link"`. On the link scale the ratio of a
+#'   binomial family is the predictor of the probability, that of a family
+#'   over a known exposure the predictor of the rate, and that of any other
+#'   family the log ratio of the means.
+#' @param exposure The known exposure of each observation, for a family over
+#'   one: the numerator mean is the rate times the exposure. `NULL` when it is
+#'   unknown, which leaves the numerator and denominator `NA`.
 #'
 #' @keywords internal
-hmc_response_draws <- function(eta, model_type, type = "response") {
+hmc_response_draws <- function(eta, links, type = "response", exposure = NULL) {
   eta_num <- eta$eta_num
   eta_denom <- eta$eta_denom
-  logit_link <- identical(model_type_link(model_type), "logit")
 
+  if (links$exposure) {
+    if (identical(type, "link")) {
+      return(list(numerator = eta_num, denominator = eta_denom, ratio = eta_num))
+    }
+    rate <- pp_linkinv(links$num)(eta_num)
+    exposure <- matrix(if (is.null(exposure)) NA_real_ else exposure,
+                       nrow(rate), ncol(rate), byrow = TRUE)
+    return(list(numerator = rate * exposure, denominator = exposure, ratio = rate))
+  }
+
+  if (links$probability) {
+    if (identical(type, "link")) {
+      return(list(numerator = eta_num, denominator = eta_denom, ratio = eta_num))
+    }
+    mu_num <- pp_linkinv(links$num)(eta_num)
+    mu_denom <- matrix(1, nrow(eta_num), ncol(eta_num))
+    return(list(numerator = mu_num, denominator = mu_denom, ratio = mu_num))
+  }
+
+  log_links <- identical(links$num, "log") && identical(links$denom, "log")
   if (identical(type, "link")) {
-    ratio <- if (logit_link) eta_num else eta_num - eta_denom
+    ratio <- if (log_links) {
+      eta_num - eta_denom
+    } else {
+      log(pp_linkinv(links$num)(eta_num)) - log(pp_linkinv(links$denom)(eta_denom))
+    }
     return(list(numerator = eta_num, denominator = eta_denom, ratio = ratio))
   }
 
-  if (logit_link) {
-    mu_num <- inv_logit(eta_num)
-    mu_denom <- matrix(1, nrow(eta_num), ncol(eta_num))
-    ratio <- mu_num
-  } else {
-    mu_num <- exp(eta_num)
-    mu_denom <- exp(eta_denom)
-    ratio <- mu_num / mu_denom
-  }
+  mu_num <- pp_linkinv(links$num)(eta_num)
+  mu_denom <- pp_linkinv(links$denom)(eta_denom)
+  list(numerator = mu_num, denominator = mu_denom, ratio = mu_num / mu_denom)
+}
 
-  list(numerator = mu_num, denominator = mu_denom, ratio = ratio)
+
+#' Known exposure of a fit's observations
+#'
+#' @param hmc_data Data list from `prepare_hmc_data()`
+#' @param model_type Model type string
+#' @return The exposure, for a model type over a known one; `NULL` otherwise
+#' @keywords internal
+hmc_exposure <- function(hmc_data, model_type) {
+  if (!identical(MODEL_TYPE_RESPONSES[[model_type]][["denom"]], "exposure")) return(NULL)
+  hmc_data$y_denom_cont
 }
 
 

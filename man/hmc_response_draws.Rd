@@ -4,16 +4,26 @@
 \alias{hmc_response_draws}
 \title{Transform linear predictors to the response scale}
 \usage{
-hmc_response_draws(eta, model_type, type = "response")
+hmc_response_draws(eta, links, type = "response", exposure = NULL)
 }
 \arguments{
 \item{eta}{A list with \code{eta_num} and \code{eta_denom}}
 
-\item{model_type}{Model type string}
+\item{links}{Links of the fitted family, from \code{family_links()}}
 
-\item{type}{\code{"response"} or \code{"link"}}
+\item{type}{\code{"response"} or \code{"link"}. On the link scale the ratio of a
+binomial family is the predictor of the probability, that of a family
+over a known exposure the predictor of the rate, and that of any other
+family the log ratio of the means.}
+
+\item{exposure}{The known exposure of each observation, for a family over
+one: the numerator mean is the rate times the exposure. \code{NULL} when it is
+unknown, which leaves the numerator and denominator \code{NA}.}
 }
 \description{
-Transform linear predictors to the response scale
+The numerator of a binomial family is a success probability and its
+denominator the trials, which are data; the ratio is the probability. A
+family over a known exposure has a rate for its ratio. Every other family
+maps both predictors to means through their links.
 }
 \keyword{internal}

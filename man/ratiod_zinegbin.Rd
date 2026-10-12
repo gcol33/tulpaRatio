@@ -14,12 +14,15 @@ ratiod_zinegbin(
 \arguments{
 \item{link_num}{Link function for the count mean: "log".}
 
-\item{link_denom}{Link function for the denominator mean: "log".}
+\item{link_denom}{Link function for the denominator mean: "log" (default);
+a gamma denominator also takes "identity" or "inverse".}
 
-\item{link_zi}{Link function for the zero-inflation probability: "logit".}
+\item{link_zi}{Link function for the zero-inflation probability: "logit" (default), "probit" or "cloglog".}
 
-\item{denom_family}{Denominator distribution: "negbin" (default) or
-"gamma" for continuous effort.}
+\item{denom_family}{Denominator distribution: "negbin" (default),
+"gamma" for continuous effort, or "fixed" for a known exposure. A known
+exposure is data: it scales the count mean, which is then the rate times
+the exposure, and the ratio is the rate.}
 }
 \value{
 A \code{ratiod_family} object with zero-inflation

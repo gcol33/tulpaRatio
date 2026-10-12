@@ -137,6 +137,7 @@ const char* const KNOWN_FIELDS[] = {
   "st4_ar1_nc", "st2", "st2_rw2", "st2_ar1", "st3", "icar_st_nc", "st2_nc",
   "st2_rw2_nc", "st2_ar1_nc", "st2_cyclic", "st2_cyclic_nc", "st3_nc",
   "stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
+  "stgp_nc", "stgp_gneiting_nc",
   "icar_collapsed", "bym2_collapsed",
   "icar_collapsed_rw1", "bym2_collapsed_rw1",
   "hsgp",
@@ -312,9 +313,13 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   std::uniform_int_distribution<int> rtrials(10, 50);
 
   const bool is_binomial = (family == "binomial");
-  // NEGBIN_NEGBIN is the only family whose denominator is itself a count; the
-  // other two carry a continuous Gamma denominator.
-  const bool denom_is_count = (family == "negbin_negbin");
+  // The negative binomial denominators are counts; a known exposure is data
+  // and carries no coefficients; the other families carry a continuous Gamma
+  // denominator.
+  const bool denom_is_count = (family == "negbin_negbin" || family == "poisson_negbin");
+  const bool fixed_exposure = (family == "poisson_fixed" || family == "negbin_fixed" ||
+                               family == "lognormal_fixed");
+  const bool num_is_continuous = (family == "lognormal_fixed");
   const ZIType zi_type = ratiod_zi::parse_zi_type(zi);
   const bool has_zi = (zi_type != ZIType::NONE);
   const bool has_oi = (zi_type == ZIType::OI_BINOMIAL || zi_type == ZIType::ZOIB);
@@ -365,6 +370,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // two callers of that branch, both arbitrated.
   const bool want_stgp = (field == "stgp" || field == "stgp_matern" ||
                           field == "stgp_gneiting" || field == "stgp_latent" ||
+                          field == "stgp_nc" || field == "stgp_gneiting_nc" ||
                           field == "gp_stgp");
   // icar_collapsed_rw1 / bym2_collapsed_rw1 pair a collapsed spatial field
   // with a companion temporal RW1 term -- the combination the specialized
@@ -458,12 +464,9 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                         field == "gp_crossed" || want_re_slopes);
 
   data.N = n_obs;
-  data.model_type = is_binomial          ? ModelType::BINOMIAL
-                  : denom_is_count       ? ModelType::NEGBIN_NEGBIN
-                  : family == "negbin_gamma" ? ModelType::NEGBIN_GAMMA
-                                         : ModelType::POISSON_GAMMA;
+  data.model_type = parse_model_type(family);
   data.p_num = 2;
-  data.p_denom = is_binomial ? 0 : 2;
+  data.p_denom = (is_binomial || fixed_exposure) ? 0 : 2;
   data.n_threads = 1;
   data.n_cores = 1;
 
@@ -482,7 +485,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // carry a placeholder of 1, matching what the backend passes down, and the
   // lgamma/lchoose precompute reads it unconditionally.
   data.y_denom.assign(n_obs, 1);
-  if (!is_binomial) {
+  if (num_is_continuous) data.y_num_cont.resize(n_obs);
+  if (fixed_exposure) {
+    data.y_denom_cont.resize(n_obs);
+  } else if (!is_binomial) {
     data.X_denom_flat.resize(static_cast<size_t>(n_obs) * 2);
     if (denom_is_count) {
       data.y_denom.assign(n_obs, 0);
@@ -503,6 +509,16 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       std::binomial_distribution<int> rbinom(trials, p);
       data.y_denom[i] = trials;
       data.y_num[i] = rbinom(rng);
+    } else if (fixed_exposure) {
+      const double exposure = 0.5 + 2.5 * runif(rng);
+      data.y_denom_cont[i] = exposure;
+      if (num_is_continuous) {
+        data.y_num_cont[i] = exposure * std::exp(0.5 + 0.3 * x + 0.4 * rnorm(rng));
+        data.y_num[i] = 0;
+      } else {
+        std::poisson_distribution<int> rpois(exposure * std::exp(0.5 + 0.3 * x));
+        data.y_num[i] = rpois(rng);
+      }
     } else {
       const double z = rnorm(rng);
       data.X_denom_flat[static_cast<size_t>(i) * 2 + 0] = 1.0;
@@ -990,7 +1006,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // carries.
   if (want_stgp) {
     auto& st = data.spatiotemporal_data;
-    st.type = (field == "stgp_gneiting")
+    st.type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc")
                   ? ratiod_spatiotemporal::STType::NONSEP_GP
                   : ratiod_spatiotemporal::STType::SEPARABLE;
     st.shared = true;
@@ -1047,13 +1063,15 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     st.cov_space = (field == "stgp_matern") ? ratiod_svc::CovType::MATERN
                                             : ratiod_svc::CovType::EXPONENTIAL;
     st.cov_time = st.cov_space;
-    st.nonsep_type = (field == "stgp_gneiting")
+    st.nonsep_type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc")
                          ? ratiod_spatiotemporal::NonsepType::GNEITING
                          : ratiod_spatiotemporal::NonsepType::PRODUCT;
 
     data.has_spatiotemporal = true;
     data.st_is_hsgp = false;
-    data.st_parameterization = 0;
+    // The *_nc fields sample z, delta the NNGP autoregression run from it
+    data.st_parameterization =
+        (field.size() > 3 && field.compare(field.size() - 3, 3, "_nc") == 0) ? 1 : 0;
   }
 
   data.zi_type = zi_type;
@@ -1153,9 +1171,23 @@ Rcpp::List cpp_gradient_check(std::string field,
                               bool temporal_shared = true,
                               std::string zi = "none",
                               bool near_unit_rho = false,
-                              int n_threads = 1) {
+                              int n_threads = 1,
+                              std::string link_num = "",
+                              std::string link_denom = "",
+                              std::string link_inflation = "") {
   ModelData data = make_model(field, n_obs, n_units, n_times, seed,
                               family, temporal_shared, zi);
+  // A non-canonical link replaces the canonical one of its predictor; the
+  // inflation link serves the zero- and one-inflation probabilities alike.
+  auto set_link = [](const std::string& name, LinkType& out) {
+    if (!name.empty() && !ratiod_link::parse_link(name, out)) {
+      Rcpp::stop("cpp_gradient_check: unknown link '" + name + "'");
+    }
+  };
+  set_link(link_num, data.link_num);
+  set_link(link_denom, data.link_denom);
+  set_link(link_inflation, data.link_zi);
+  set_link(link_inflation, data.link_oi);
   // The observation loop is the one part of the density that runs in parallel,
   // and only in the double instantiation. make_model() builds a single-threaded
   // model, so a caller that wants that arm reached has to ask for it.
@@ -1174,6 +1206,13 @@ Rcpp::List cpp_gradient_check(std::string field,
   const char* impl_gap = ratiod::log_post_impl_gap(data, layout);
 
   std::vector<double> params = draw_params(data, layout, n_params, seed);
+
+  // An identity or inverse link has a mean only where eta > 0, so the
+  // denominator predictor is moved well inside that half-line.
+  if ((data.link_denom == LinkType::IDENTITY || data.link_denom == LinkType::INVERSE) &&
+      data.p_denom > 0) {
+    params[layout.beta_denom_start] = 5.0;
+  }
 
   // Every AR1 correlation is drawn centred on rho = 0, so nothing in the
   // sweep reaches the edge of its range. near_unit_rho places each sampled
@@ -1450,6 +1489,46 @@ double cpp_msgp_nc_coordinate_spread(int n_obs = 400,
       params_c[layout.gp_local_start + i] = field.local[i];
       params_c[layout.gp_regional_start + i] = field.regional[i];
     }
+    const double diff = lp_nc - compute_log_post(params_c, data_c, layout);
+    lo = std::min(lo, diff);
+    hi = std::max(hi, diff);
+  }
+  return hi - lo;
+}
+
+// The two coordinates of the GP space-time interaction describe one
+// posterior, by the same argument as cpp_msgp_nc_coordinate_spread: at fixed
+// hyperparameters the non-centred density at z minus the centred density at
+// delta(z) is log|d delta / dz|, a function of the hyperparameters alone, so
+// it is the same number for every z. Returns its spread across draws of z.
+// [[Rcpp::export]]
+double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
+                                      int n_draws = 5,
+                                      unsigned int seed = 42) {
+  const std::string centred_field = field.substr(0, field.size() - 3);
+  ModelData data_nc = make_model(field, 400, 25, 10, seed);
+  ModelData data_c = make_model(centred_field, 400, 25, 10, seed);
+  ParamLayout layout = compute_param_layout(data_nc);
+  const int n_params = get_n_params(data_nc);
+  const int ST = data_nc.spatiotemporal_data.n_params;
+
+  std::vector<double> params_nc = draw_params(data_nc, layout, n_params, seed);
+  std::mt19937 rng(seed + 3000u);
+  std::normal_distribution<double> rnorm(0.0, 1.0);
+
+  double lo = R_PosInf, hi = R_NegInf;
+  for (int d = 0; d < n_draws; d++) {
+    for (int k = 0; k < ST; k++) params_nc[layout.st_delta_start + k] = rnorm(rng);
+    const double lp_nc = compute_log_post(params_nc, data_nc, layout);
+
+    std::vector<double> params_c = params_nc;
+    const bool ok = ratiod_spatiotemporal::st_gp_nc_forward(
+        &params_nc[layout.st_delta_start],
+        std::exp(-params_nc[layout.log_tau_st_idx]),
+        std::exp(params_nc[layout.log_phi_st_space_idx]),
+        std::exp(params_nc[layout.log_phi_st_time_idx]),
+        data_nc.spatiotemporal_data, &params_c[layout.st_delta_start]);
+    if (!ok) Rcpp::stop("cpp_st_gp_nc_coordinate_spread: the NNGP scan failed");
     const double diff = lp_nc - compute_log_post(params_c, data_c, layout);
     lo = std::min(lo, diff);
     hi = std::max(hi, diff);

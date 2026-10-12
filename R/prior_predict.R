@@ -40,9 +40,45 @@ pp_linkinv <- function(link) {
     link,
     log     = exp,
     identity = function(eta) eta,
+    inverse = function(eta) 1 / eta,
     logit   = stats::plogis,
     probit  = stats::pnorm,
     cloglog = function(eta) -expm1(-exp(eta)),
+    stop(sprintf("Unsupported link '%s'", link), call. = FALSE)
+  )
+}
+
+#' Link function by name
+#'
+#' @param link Link name
+#' @return A function mapping a mean (or probability) to the linear predictor
+#' @keywords internal
+pp_linkfun <- function(link) {
+  switch(
+    link,
+    log      = log,
+    identity = function(mu) mu,
+    inverse  = function(mu) 1 / mu,
+    logit    = stats::qlogis,
+    probit   = stats::qnorm,
+    cloglog  = function(mu) log(-log1p(-mu)),
+    stop(sprintf("Unsupported link '%s'", link), call. = FALSE)
+  )
+}
+
+#' Log probability and log complement under a probability link
+#'
+#' @param eta Linear predictor
+#' @param link Link name, one of `LINKS_PROBABILITY`
+#' @param lower `TRUE` for log p, `FALSE` for log(1 - p)
+#' @return Array the shape of `eta`
+#' @keywords internal
+pp_log_prob <- function(eta, link, lower = TRUE) {
+  switch(
+    link,
+    logit   = stats::plogis(eta, lower.tail = lower, log.p = TRUE),
+    probit  = stats::pnorm(eta, lower.tail = lower, log.p = TRUE),
+    cloglog = if (lower) log(-expm1(-exp(eta))) else -exp(eta),
     stop(sprintf("Unsupported link '%s'", link), call. = FALSE)
   )
 }
@@ -244,6 +280,19 @@ prior_predict <- function(formula, family, data, priors = NULL, n = 100) {
     }
   }
 
+  # A fixed denominator is data: the trial counts for the binomial arms, a
+  # known exposure (the observed column) otherwise, which scales the
+  # numerator mean
+  fixed_denom <- NULL
+  exposure <- NULL
+  if (denom_fixed) {
+    fixed_denom <- if (!is.null(trials)) trials else {
+      dv <- parsed$denominator$response_var
+      if (dv %in% names(data)) as.numeric(data[[dv]]) else rep(NA_real_, N)
+    }
+    if (is.null(trials)) exposure <- fixed_denom
+  }
+
   p_num <- ncol(X_num)
   p_denom <- if (denom_fixed) 0L else ncol(X_denom)
 
@@ -276,15 +325,10 @@ prior_predict <- function(formula, family, data, priors = NULL, n = 100) {
     sigma_s <- re_n$sigma
 
     mu_num[s, ] <- num_linkinv(eta_num)
+    if (!is.null(exposure)) mu_num[s, ] <- mu_num[s, ] * exposure
     y_num[s, ] <- pp_rdist(num_dist, mu_num[s, ], phi_num[s], trials)
 
     if (denom_fixed) {
-      # The denominator is data: the trial counts for the binomial arms, and
-      # the observed column otherwise.
-      fixed_denom <- if (!is.null(trials)) trials else {
-        dv <- parsed$denominator$response_var
-        if (dv %in% names(data)) as.numeric(data[[dv]]) else rep(NA_real_, N)
-      }
       mu_denom[s, ] <- fixed_denom
       y_denom[s, ] <- fixed_denom
     } else {
@@ -305,10 +349,10 @@ prior_predict <- function(formula, family, data, priors = NULL, n = 100) {
   sigma <- matrix(unlist(sigma_draws), nrow = n, byrow = TRUE,
                   dimnames = list(NULL, sigma_names))
 
-  # For a fixed-denominator family the modelled quantity is a probability and
-  # the denominator is the trial count, so the reported ratio is that
-  # probability -- the same convention fitted() uses on such a fit.
-  ratio <- if (denom_fixed) mu_num else mu_num / mu_denom
+  # Over trial counts the modelled quantity is a probability, and the
+  # reported ratio is that probability, the convention fitted() uses; over a
+  # known exposure it is the rate, the numerator mean over the exposure.
+  ratio <- if (!is.null(trials)) mu_num else mu_num / mu_denom
 
   structure(
     list(

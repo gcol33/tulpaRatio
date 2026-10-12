@@ -174,17 +174,11 @@ fit_sghmc <- function(formula,
     type = "none"
   )
 
-  # Initialize from zeros
-  n_params <- ncol(hmc_data$X_num) + ncol(hmc_data$X_denom)
-  if (hmc_data$n_re_groups > 0) n_params <- n_params + 1 + hmc_data$n_re_groups
-  if (model_type == "negbin_negbin" || model_type == "negbin_gamma") n_params <- n_params + 2
-  if (model_type == "poisson_gamma") n_params <- n_params + 1
-
-  q_init <- rep(0.0, n_params)
+  # The sampler starts at zero on the layout it computes
+  q_init <- numeric(0)
 
   if (verbose) {
     message("Stochastic Gradient HMC")
-    message("  Parameters: ", n_params)
     message("  Observations: ", N)
     message("  Batch size: ", batch_size, " (", round(100 * batch_size / N, 1), "%)")
     message("  Iterations: ", iter, " (warmup: ", warmup, ")")
@@ -195,10 +189,11 @@ fit_sghmc <- function(formula,
     q_init = q_init,
     y_num = as.integer(hmc_data$y_num),
     y_denom = as.integer(hmc_data$y_denom),
+    y_num_cont = as.numeric(hmc_data$y_num_cont),
     y_denom_cont = hmc_data$y_denom_cont,
     X_num = hmc_data$X_num,
     X_denom = hmc_data$X_denom,
-    model_type_str = model_type,
+    family = family_params(family, model_type),
     re_params = re_params,
     spatial_params = spatial_params,
     temporal_params = temporal_params,
@@ -393,17 +388,11 @@ fit_sgld <- function(formula,
 
   st_params <- list(has_spatiotemporal = FALSE, type = "none")
 
-  # Initialize
-  n_params <- ncol(hmc_data$X_num) + ncol(hmc_data$X_denom)
-  if (hmc_data$n_re_groups > 0) n_params <- n_params + 1 + hmc_data$n_re_groups
-  if (model_type == "negbin_negbin" || model_type == "negbin_gamma") n_params <- n_params + 2
-  if (model_type == "poisson_gamma") n_params <- n_params + 1
-
-  q_init <- rep(0.0, n_params)
+  # The sampler starts at zero on the layout it computes
+  q_init <- numeric(0)
 
   if (verbose) {
     message("Stochastic Gradient Langevin Dynamics")
-    message("  Parameters: ", n_params)
     message("  Observations: ", N)
     message("  Batch size: ", batch_size, " (", round(100 * batch_size / N, 1), "%)")
     message("  Iterations: ", iter, " (warmup: ", warmup, ")")
@@ -417,10 +406,11 @@ fit_sgld <- function(formula,
     q_init = q_init,
     y_num = as.integer(hmc_data$y_num),
     y_denom = as.integer(hmc_data$y_denom),
+    y_num_cont = as.numeric(hmc_data$y_num_cont),
     y_denom_cont = hmc_data$y_denom_cont,
     X_num = hmc_data$X_num,
     X_denom = hmc_data$X_denom,
-    model_type_str = model_type,
+    family = family_params(family, model_type),
     re_params = re_params,
     spatial_params = spatial_params,
     temporal_params = temporal_params,

@@ -14,11 +14,13 @@ ratiod_zipois(
 \arguments{
 \item{link_num}{Link function for the count mean: "log".}
 
-\item{link_denom}{Link function for the denominator mean: "log".}
+\item{link_denom}{Link function for the denominator mean: "log" (default);
+a gamma denominator also takes "identity" or "inverse".}
 
-\item{link_zi}{Link function for the zero-inflation probability: "logit".}
+\item{link_zi}{Link function for the zero-inflation probability: "logit" (default), "probit" or "cloglog".}
 
-\item{denom_family}{Denominator distribution: "gamma".}
+\item{denom_family}{Denominator distribution: "gamma" (default),
+"negbin" for a count denominator, or "fixed" for a known exposure.}
 }
 \value{
 A \code{ratiod_family} object with zero-inflation

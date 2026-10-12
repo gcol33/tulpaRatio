@@ -1320,10 +1320,34 @@ T compute_log_post_impl(
         const T* z_or_delta = &params[layout.st_delta_start];
 
         // NC reparameterization: store z, reconstruct delta
-        const bool st_use_nc = ratiod_spatiotemporal::st_noncentered(
+        const bool st_use_nc = ratiod_spatiotemporal::st_noncentered_gmrf(
+            data.st_parameterization, data.st_is_hsgp, st_data);
+        const bool st_use_nc_gp = ratiod_spatiotemporal::st_noncentered_gp(
             data.st_parameterization, data.st_is_hsgp, st_data);
 
-        if (st_use_nc) {
+        if (st_use_nc_gp) {
+            // The GP interaction from z ~ N(0, I) through the NNGP
+            // autoregression: the field's density is N(0, I) on z, and the
+            // soft sum-to-zero with the normalizer of the subspace it leaves
+            // stays on delta, as in the centred coordinate.
+            st_delta_nc.resize(ST);
+            if (!ratiod_spatiotemporal::st_gp_nc_forward(
+                    z_or_delta, T(1.0) / tau_st, phi_st_space, phi_st_time,
+                    st_data, st_delta_nc.data())) {
+                return T(-std::numeric_limits<double>::infinity());
+            }
+            st_delta = st_delta_nc.data();
+
+            T z_sq = T(0.0);
+            for (int k = 0; k < ST; k++) z_sq = z_sq + z_or_delta[k] * z_or_delta[k];
+            log_post = log_post - T(0.5) * z_sq - T(0.5 * ST * std::log(2.0 * M_PI));
+
+            log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
+                st_delta, S, T_st, true, true
+            );
+            log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
+                st_data)) * safe_log(tau_st);
+        } else if (st_use_nc) {
             // Forward transform: delta = z / sqrt(tau_st)
             T inv_scale = T(1.0) / safe_sqrt(tau_st);
             st_delta_nc.resize(ST);
@@ -1646,12 +1670,19 @@ T compute_log_post_impl(
                 logit_oi = logit_oi + data.X_oi_flat[i * data.p_oi + j] * beta_oi[j];
             }
         }
+        // The inflation kernels take their probabilities on the logit scale
+        logit_zi = prob_logit(logit_zi, data.link_zi);
+        logit_oi = prob_logit(logit_oi, data.link_oi);
+
+        // An identity or inverse link can map eta outside the positive
+        // half-line, where a mean has no density
+        const T neg_inf = T(-std::numeric_limits<double>::infinity());
 
         // Compute likelihood based on model type
         T ll_i = T(0.0);
 
         if (data.model_type == ModelType::BINOMIAL) {
-            T p = inv_logit(eta_num);
+            T p = inv_logit(prob_logit(eta_num, data.link_num));
             int y = data.y_num[i];
             int n = data.y_denom[i];
 
@@ -1674,8 +1705,8 @@ T compute_log_post_impl(
             // route through ratiod_zi::zi_log_likelihood so a count-response
             // ZI/hurdle term cannot be carried by one and dropped by the
             // other.
-            T mu_num = safe_exp(eta_num);
-            T mu_denom = safe_exp(eta_denom);
+            T mu_num = link_mean(eta_num, data.link_num);
+            T mu_denom = link_mean(eta_denom, data.link_denom);
             if (layout.has_zi) {
                 ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                     logit_zi, data.zi_type);
@@ -1685,8 +1716,9 @@ T compute_log_post_impl(
             ll_i = ll_i + log_lik_negbin(data.y_denom[i], mu_denom, phi_denom);
 
         } else if (data.model_type == ModelType::POISSON_GAMMA) {
-            T mu_num = safe_exp(eta_num);
-            T mu_denom = safe_exp(eta_denom);
+            T mu_num = link_mean(eta_num, data.link_num);
+            T mu_denom = link_mean(eta_denom, data.link_denom);
+            if (get_value(mu_denom) <= 0.0) return neg_inf;
             if (layout.has_zi) {
                 ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                     logit_zi, data.zi_type);
@@ -1696,8 +1728,9 @@ T compute_log_post_impl(
             ll_i = ll_i + log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom);
 
         } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
-            T mu_num = safe_exp(eta_num);
-            T mu_denom = safe_exp(eta_denom);
+            T mu_num = link_mean(eta_num, data.link_num);
+            T mu_denom = link_mean(eta_denom, data.link_denom);
+            if (get_value(mu_denom) <= 0.0) return neg_inf;
             if (layout.has_zi) {
                 ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                     logit_zi, data.zi_type);
@@ -1709,8 +1742,9 @@ T compute_log_post_impl(
         } else if (data.model_type == ModelType::GAMMA_GAMMA) {
             // Gamma-Gamma: both responses are continuous Gamma
             // phi_num = shape_num, phi_denom = shape_denom
-            T mu_num = safe_exp(eta_num);
-            T mu_denom = safe_exp(eta_denom);
+            T mu_num = link_mean(eta_num, data.link_num);
+            T mu_denom = link_mean(eta_denom, data.link_denom);
+            if (get_value(mu_num) <= 0.0 || get_value(mu_denom) <= 0.0) return neg_inf;
             ll_i = log_lik_gamma_gamma(data.y_num_cont[i], data.y_denom_cont[i],
                                        mu_num, mu_denom, phi_num, phi_denom);
 
@@ -1723,10 +1757,40 @@ T compute_log_post_impl(
         } else if (data.model_type == ModelType::BETA_BINOMIAL) {
             // Beta-Binomial: overdispersed binomial
             // phi_num = precision parameter (alpha + beta)
-            T p = inv_logit(eta_num);
+            T p = inv_logit(prob_logit(eta_num, data.link_num));
             int y = data.y_num[i];
             int n = data.y_denom[i];
             ll_i = log_lik_beta_binomial(y, n, p, phi_num);
+
+        } else if (data.model_type == ModelType::POISSON_FIXED ||
+                   data.model_type == ModelType::NEGBIN_FIXED) {
+            // A known exposure E scales the mean: mu = E * linkinv(eta), the
+            // rate being linkinv(eta)
+            T mu_num = link_mean(eta_num, data.link_num) * data.y_denom_cont[i];
+            if (layout.has_zi) {
+                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
+                                                    logit_zi, data.zi_type);
+            } else if (data.model_type == ModelType::POISSON_FIXED) {
+                ll_i = log_lik_poisson(data.y_num[i], mu_num);
+            } else {
+                ll_i = log_lik_negbin(data.y_num[i], mu_num, phi_num);
+            }
+
+        } else if (data.model_type == ModelType::LOGNORMAL_FIXED) {
+            // log y ~ N(log E + eta, sigma): the median is E exp(eta)
+            ll_i = log_lik_lognormal(data.y_num_cont[i],
+                                     eta_num + std::log(data.y_denom_cont[i]), phi_num);
+
+        } else if (data.model_type == ModelType::POISSON_NEGBIN) {
+            T mu_num = link_mean(eta_num, data.link_num);
+            T mu_denom = link_mean(eta_denom, data.link_denom);
+            if (layout.has_zi) {
+                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
+                                                    logit_zi, data.zi_type);
+            } else {
+                ll_i = log_lik_poisson(data.y_num[i], mu_num);
+            }
+            ll_i = ll_i + log_lik_negbin(data.y_denom[i], mu_denom, phi_denom);
         }
 
         return ll_i;

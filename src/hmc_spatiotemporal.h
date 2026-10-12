@@ -620,6 +620,25 @@ inline bool st_gp_nngp_scan(const Scalar* w, const Scalar& sigma2,
   return true;
 }
 
+// The GP interaction from its non-centred coordinate: the NNGP autoregression
+// run forward from z ~ N(0, I), delta_i = m_i(delta) + sqrt(d_i) z_i in the
+// neighbour ordering. Each step reads only neighbours earlier in the ordering,
+// which the scan has already written. The map is triangular with diagonal
+// sqrt(d_i), so its Jacobian cancels the NNGP density and the field's density
+// is N(0, I) on z. False where the scan cannot factor a neighbour block.
+template<typename Scalar>
+inline bool st_gp_nc_forward(const Scalar* z, const Scalar& sigma2,
+                             const Scalar& phi_space, const Scalar& phi_time,
+                             const SpatiotemporalData& st, Scalar* delta) {
+  return st_gp_nngp_scan<Scalar>(
+      delta, sigma2, phi_space, phi_time, st,
+      [&](int /*i*/, int obs_idx, const int* /*nb*/, int /*n_nb*/,
+          const Scalar* /*L*/, const Scalar* /*c_vec*/, const Scalar* /*alpha*/,
+          const Scalar& cond_mean, const Scalar& cond_var, bool /*floored*/) {
+        delta[obs_idx] = cond_mean + safe_sqrt(cond_var) * z[obs_idx];
+      });
+}
+
 // Log-density of the interaction field under the NNGP approximation.
 template<typename Scalar>
 inline Scalar st_gp_nngp_log_lik(
@@ -716,7 +735,23 @@ inline bool st_noncentered(int parameterization, bool is_hsgp,
                            const SpatiotemporalData& st) {
   if (parameterization != 1 || is_hsgp) return false;
   return st.type == STType::TYPE_I || st.type == STType::TYPE_II ||
-         st.type == STType::TYPE_III || st.type == STType::TYPE_IV;
+         st.type == STType::TYPE_III || st.type == STType::TYPE_IV ||
+         st.type == STType::SEPARABLE || st.type == STType::NONSEP_GP;
+}
+
+// The two non-centred coordinates: a Knorr-Held GMRF samples z with
+// delta = z / sqrt(tau), a GP interaction z with delta the NNGP
+// autoregression run forward from z (st_gp_nc_forward).
+inline bool st_noncentered_gp(int parameterization, bool is_hsgp,
+                              const SpatiotemporalData& st) {
+  return st_noncentered(parameterization, is_hsgp, st) &&
+         (st.type == STType::SEPARABLE || st.type == STType::NONSEP_GP);
+}
+
+inline bool st_noncentered_gmrf(int parameterization, bool is_hsgp,
+                                const SpatiotemporalData& st) {
+  return st_noncentered(parameterization, is_hsgp, st) &&
+         !st_noncentered_gp(parameterization, is_hsgp, st);
 }
 
 // out[s,t] = (Q_t x[s,:])_t for every unit s: the time margin's precision

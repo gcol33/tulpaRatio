@@ -4,12 +4,16 @@
 \alias{ratiod_lognormal}
 \title{Log-Normal Family for Multiplicative Processes}
 \usage{
-ratiod_lognormal(link_num = "log", link_denom = "log")
+ratiod_lognormal(link_num = "log", link_denom = "log", denom_fixed = FALSE)
 }
 \arguments{
 \item{link_num}{Link function for the numerator median: "log".}
 
 \item{link_denom}{Link function for the denominator median: "log".}
+
+\item{denom_fixed}{If \code{TRUE}, the denominator is a known exposure rather
+than a modelled response: the numerator's median is the exposure times
+\code{exp(eta)}, and the ratio is \code{exp(eta)}.}
 }
 \value{
 A \code{ratiod_family} object

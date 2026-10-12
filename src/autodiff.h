@@ -527,6 +527,21 @@ inline Var log1p(const Var& a) {
   return result;
 }
 
+// A unary function whose value f and derivative df at a the caller computed
+inline Var unary(const Var& a, double f, double df) {
+  Tape* tape = a.tape;
+  Var result(tape, f);
+
+  size_t a_idx = a.idx;
+  size_t r_idx = result.idx;
+
+  tape->nodes[r_idx].backward = [a_idx, r_idx, df](Tape* t) {
+    t->nodes[a_idx].adjoint += t->nodes[r_idx].adjoint * df;
+  };
+
+  return result;
+}
+
 // ---------------------------------------------------------------------
 // Utility: Vector of Var
 // ---------------------------------------------------------------------

@@ -257,22 +257,12 @@ ParamLayout compute_param_layout(const ModelData& data) {
     layout.re_start = layout.re_end = -1;
   }
 
-  // Overdispersion / shape / sigma parameters
-  // NEGBIN_NEGBIN: phi_num (overdispersion for num), phi_denom (overdispersion for denom)
-  // POISSON_GAMMA: phi_denom (shape for gamma denom)
-  // GAMMA_GAMMA: phi_num (shape for num), phi_denom (shape for denom)
-  // LOGNORMAL: phi_num (sigma for num), phi_denom (sigma for denom)
-  // BETA_BINOMIAL: phi_num (precision parameter)
-  layout.has_phi_num = (data.model_type == ModelType::NEGBIN_NEGBIN ||
-                        data.model_type == ModelType::NEGBIN_GAMMA ||
-                        data.model_type == ModelType::GAMMA_GAMMA ||
-                        data.model_type == ModelType::LOGNORMAL ||
-                        data.model_type == ModelType::BETA_BINOMIAL);
-  layout.has_phi_denom = (data.model_type == ModelType::NEGBIN_NEGBIN ||
-                          data.model_type == ModelType::POISSON_GAMMA ||
-                          data.model_type == ModelType::NEGBIN_GAMMA ||
-                          data.model_type == ModelType::GAMMA_GAMMA ||
-                          data.model_type == ModelType::LOGNORMAL);
+  // Overdispersion / shape / sigma parameters: a negative binomial
+  // overdispersion, a gamma shape, a log-normal SD or a beta-binomial
+  // precision, as model_type_info() lists them
+  const ModelTypeInfo type_info = model_type_info(data.model_type);
+  layout.has_phi_num = type_info.phi_num;
+  layout.has_phi_denom = type_info.phi_denom;
 
   if (layout.has_phi_num) {
     layout.log_phi_num_idx = idx++;
@@ -654,6 +644,127 @@ ParamLayout compute_param_layout(const ModelData& data) {
 
   layout.total_params = idx;
   return layout;
+}
+
+ModelType parse_model_type(const std::string& model_type_str) {
+  if (model_type_str == "binomial")      return ModelType::BINOMIAL;
+  if (model_type_str == "negbin_negbin") return ModelType::NEGBIN_NEGBIN;
+  if (model_type_str == "poisson_gamma") return ModelType::POISSON_GAMMA;
+  if (model_type_str == "negbin_gamma")  return ModelType::NEGBIN_GAMMA;
+  if (model_type_str == "gamma_gamma")   return ModelType::GAMMA_GAMMA;
+  if (model_type_str == "lognormal")     return ModelType::LOGNORMAL;
+  if (model_type_str == "beta_binomial") return ModelType::BETA_BINOMIAL;
+  if (model_type_str == "poisson_fixed") return ModelType::POISSON_FIXED;
+  if (model_type_str == "negbin_fixed")  return ModelType::NEGBIN_FIXED;
+  if (model_type_str == "lognormal_fixed") return ModelType::LOGNORMAL_FIXED;
+  if (model_type_str == "poisson_negbin") return ModelType::POISSON_NEGBIN;
+  Rcpp::stop("Unknown model type: " + model_type_str);
+}
+
+void apply_family_params(ModelData& data, Rcpp::List family) {
+  data.model_type = parse_model_type(Rcpp::as<std::string>(family["model_type"]));
+  const bool prob_num = data.model_type == ModelType::BINOMIAL ||
+                        data.model_type == ModelType::BETA_BINOMIAL;
+  data.link_num = prob_num ? LinkType::LOGIT : LinkType::LOG;
+  data.link_denom = LinkType::LOG;
+  data.link_zi = LinkType::LOGIT;
+  data.link_oi = LinkType::LOGIT;
+
+  auto read_link = [&family](const char* name, LinkType& out) {
+    if (!family.containsElementNamed(name)) return;
+    SEXP value = family[name];
+    if (Rf_isNull(value)) return;
+    const std::string link = Rcpp::as<std::string>(value);
+    if (!ratiod_link::parse_link(link, out)) {
+      Rcpp::stop(std::string("Unknown link '") + link + "' for " + name);
+    }
+  };
+  read_link("link_num", data.link_num);
+  read_link("link_denom", data.link_denom);
+  read_link("link_zi", data.link_zi);
+  read_link("link_oi", data.link_oi);
+}
+
+void apply_response_data(ModelData& data,
+                         const Rcpp::IntegerVector& y_num,
+                         const Rcpp::IntegerVector& y_denom,
+                         const Rcpp::NumericVector& y_num_cont,
+                         const Rcpp::NumericVector& y_denom_cont,
+                         const Rcpp::NumericMatrix& X_num,
+                         const Rcpp::NumericMatrix& X_denom) {
+  const int N = y_num.size();
+  if (y_denom.size() != N || y_num_cont.size() != N ||
+      y_denom_cont.size() != N || X_num.nrow() != N || X_denom.nrow() != N) {
+    Rcpp::stop("Each response and design matrix needs one entry per observation.");
+  }
+  data.N = N;
+  data.p_num = X_num.ncol();
+  data.p_denom = X_denom.ncol();
+  data.y_num.assign(y_num.begin(), y_num.end());
+  data.y_denom.assign(y_denom.begin(), y_denom.end());
+  data.y_num_cont.assign(y_num_cont.begin(), y_num_cont.end());
+  data.y_denom_cont.assign(y_denom_cont.begin(), y_denom_cont.end());
+
+  // Row-major, so one observation's covariates are contiguous
+  data.X_num_flat.resize(static_cast<size_t>(N) * data.p_num);
+  data.X_denom_flat.resize(static_cast<size_t>(N) * data.p_denom);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < data.p_num; j++) {
+      data.X_num_flat[i * data.p_num + j] = X_num(i, j);
+    }
+    for (int j = 0; j < data.p_denom; j++) {
+      data.X_denom_flat[i * data.p_denom + j] = X_denom(i, j);
+    }
+  }
+}
+
+Rcpp::CharacterVector layout_param_names(const ModelData& data,
+                                         const ParamLayout& layout) {
+  if (layout.is_gp || layout.is_multiscale_gp || layout.is_hsgp ||
+      layout.has_svc || layout.has_tvc || layout.has_latent ||
+      layout.has_spatiotemporal || layout.has_multiscale_temporal ||
+      layout.has_re_slopes || data.n_re_terms > 1) {
+    Rcpp::stop("layout_param_names() names the blocks of the ESS, SGHMC, "
+               "SGLD and VI samplers only");
+  }
+  std::vector<std::string> names;
+  names.reserve(layout.total_params);
+  auto indexed = [&names](const char* stem, int n) {
+    for (int k = 0; k < n; k++) {
+      names.push_back(std::string(stem) + "[" + std::to_string(k + 1) + "]");
+    }
+  };
+
+  indexed("beta_num", data.p_num);
+  indexed("beta_denom", data.p_denom);
+  if (layout.has_re) {
+    names.push_back("log_sigma_re");
+    indexed("re", data.n_re_groups);
+  }
+  if (layout.has_phi_num) names.push_back("log_phi_num");
+  if (layout.has_phi_denom) names.push_back("log_phi_denom");
+  if (layout.has_spatial) {
+    names.push_back("log_tau_spatial");
+    indexed("phi_spatial", data.n_spatial_units);
+    if (layout.is_bym2) {
+      names.push_back("log_sigma_bym2");
+      names.push_back("logit_rho_bym2");
+      indexed("theta_bym2", data.n_spatial_units);
+    }
+  }
+  if (layout.has_temporal) {
+    names.push_back("log_tau_temporal");
+    indexed("phi_temporal", data.n_temporal_params);
+    if (layout.is_ar1) names.push_back("logit_rho_ar1");
+  }
+  if (layout.has_zi) indexed("beta_zi", data.p_zi);
+  if (layout.has_oi) indexed("beta_oi", data.p_oi);
+
+  if (static_cast<int>(names.size()) != layout.total_params) {
+    Rcpp::stop("layout_param_names(): named " + std::to_string(names.size()) +
+               " of " + std::to_string(layout.total_params) + " parameters");
+  }
+  return Rcpp::wrap(names);
 }
 
 int get_n_params(const ModelData& data) {
@@ -6648,7 +6759,7 @@ void compute_gradient_spatiotemporal_handcoded(
     }
 
     // NC reparameterization: params store z, reconstruct delta
-    const bool st_use_nc = ratiod_spatiotemporal::st_noncentered(
+    const bool st_use_nc = ratiod_spatiotemporal::st_noncentered_gmrf(
         data.st_parameterization, data.st_is_hsgp, st);
     const double* z_or_delta = &params[layout.st_delta_start];
     RATIOD_TLS_WORKSPACE(std::vector<double>, st_delta_buf);
@@ -7273,7 +7384,7 @@ void compute_gradient_composite(
             phi_st_space = std::exp(params[layout.log_phi_st_space_idx]);
             phi_st_time = std::exp(params[layout.log_phi_st_time_idx]);
         }
-        st_use_nc = ratiod_spatiotemporal::st_noncentered(
+        st_use_nc = ratiod_spatiotemporal::st_noncentered_gmrf(
             data.st_parameterization, data.st_is_hsgp, st);
         z_or_delta_st = &params[layout.st_delta_start];
         if (st_use_nc) {
@@ -8265,6 +8376,20 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
     // observations, which no hand-coded gradient carries; the arena gradient
     // differentiates the log posterior that does.
     if (data.has_rsr)
+        return &compute_gradient_arena;
+
+    // The hand-coded gradients are written for the canonical links of the
+    // original model types. Any other likelihood is the one the templated
+    // log posterior carries, which the arena gradient differentiates.
+    if (!handcoded_likelihood(data))
+        return &compute_gradient_arena;
+
+    // The non-centred GP interaction reaches delta through the NNGP
+    // autoregression, which the arena gradient differentiates.
+    if (layout.has_spatiotemporal &&
+        ratiod_spatiotemporal::st_noncentered_gp(data.st_parameterization,
+                                                 data.st_is_hsgp,
+                                                 data.spatiotemporal_data))
         return &compute_gradient_arena;
 
     // AUTO or HANDCODED: use fastest available (H > A_r > A > N)
@@ -10916,6 +11041,18 @@ HMCResultCpp run_hmc_chain_cpp(
                   &row[layout.svc_w_start]);
               ratiod_svc::svc_center_terms(&row[layout.svc_w_start], data.svc_data);
           }
+          if (layout.has_spatiotemporal &&
+              ratiod_spatiotemporal::st_noncentered_gp(data.st_parameterization,
+                                                       data.st_is_hsgp,
+                                                       data.spatiotemporal_data)) {
+              const double sigma2_st_store = std::exp(-q[layout.log_tau_st_idx]);
+              const double phi_space_store = std::exp(q[layout.log_phi_st_space_idx]);
+              const double phi_time_store = std::exp(q[layout.log_phi_st_time_idx]);
+              (void)ratiod_spatiotemporal::st_gp_nc_forward(
+                  &q[layout.st_delta_start], sigma2_st_store, phi_space_store,
+                  phi_time_store, data.spatiotemporal_data,
+                  &row[layout.st_delta_start]);
+          }
           if (msgp_nc(data, layout)) {
               MultiscaleGPView msgp_store;
               msgp_store.read(q, data, layout);
@@ -11209,7 +11346,7 @@ Rcpp::List cpp_hmc_fit(
     Rcpp::NumericVector y_denom_cont,
     Rcpp::NumericMatrix X_num,
     Rcpp::NumericMatrix X_denom,
-    std::string model_type_str,
+    Rcpp::List family,
     Rcpp::List re_params,
     Rcpp::List spatial_params,
     Rcpp::List temporal_params,
@@ -11326,52 +11463,13 @@ Rcpp::List cpp_hmc_fit(
   // =========================================================================
   ModelData data;
 
-  // Copy response data
-  data.y_num = std::vector<int>(y_num.begin(), y_num.end());
-  data.y_denom = std::vector<int>(y_denom.begin(), y_denom.end());
-  data.y_num_cont = std::vector<double>(y_num_cont.begin(), y_num_cont.end());
-  data.y_denom_cont = std::vector<double>(y_denom_cont.begin(), y_denom_cont.end());
-
-  // Flatten design matrices for cache efficiency
-  data.p_num = X_num.ncol();
-  data.p_denom = X_denom.ncol();
-  data.N = y_num.size();
-
-  data.X_num_flat.resize(data.N * data.p_num);
-  for (int i = 0; i < data.N; i++) {
-    for (int j = 0; j < data.p_num; j++) {
-      data.X_num_flat[i * data.p_num + j] = X_num(i, j);
-    }
-  }
-
-  data.X_denom_flat.resize(data.N * data.p_denom);
-  for (int i = 0; i < data.N; i++) {
-    for (int j = 0; j < data.p_denom; j++) {
-      data.X_denom_flat[i * data.p_denom + j] = X_denom(i, j);
-    }
-  }
+  apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
+                      X_num, X_denom);
 
   // Random effects
   apply_re_params(data, re_params);
 
-  // Model type
-  if (model_type_str == "binomial") {
-    data.model_type = ModelType::BINOMIAL;
-  } else if (model_type_str == "negbin_negbin") {
-    data.model_type = ModelType::NEGBIN_NEGBIN;
-  } else if (model_type_str == "poisson_gamma") {
-    data.model_type = ModelType::POISSON_GAMMA;
-  } else if (model_type_str == "negbin_gamma") {
-    data.model_type = ModelType::NEGBIN_GAMMA;
-  } else if (model_type_str == "gamma_gamma") {
-    data.model_type = ModelType::GAMMA_GAMMA;
-  } else if (model_type_str == "lognormal") {
-    data.model_type = ModelType::LOGNORMAL;
-  } else if (model_type_str == "beta_binomial") {
-    data.model_type = ModelType::BETA_BINOMIAL;
-  } else {
-    data.model_type = ModelType::POISSON_GAMMA;  // fallback
-  }
+  apply_family_params(data, family);
 
   // Spatial structure
   if (spatial_type_str == "icar") {
@@ -11532,11 +11630,12 @@ Rcpp::List cpp_hmc_fit_gp(
     Rcpp::NumericVector q_init,
     Rcpp::IntegerVector y_num,
     Rcpp::IntegerVector y_denom,
+    Rcpp::NumericVector y_num_cont,
     Rcpp::NumericVector y_denom_cont,
     Rcpp::NumericMatrix X_num,
     Rcpp::NumericMatrix X_denom,
     Rcpp::List re_params,
-    std::string model_type_str,
+    Rcpp::List family,
     Rcpp::List gp_params,
     Rcpp::List ms_gp_params,
     Rcpp::List ms_temporal_params,
@@ -11657,29 +11756,8 @@ Rcpp::List cpp_hmc_fit_gp(
   // Set up model data
   ModelData data;
 
-  // Copy response data
-  data.y_num = std::vector<int>(y_num.begin(), y_num.end());
-  data.y_denom = std::vector<int>(y_denom.begin(), y_denom.end());
-  data.y_denom_cont = std::vector<double>(y_denom_cont.begin(), y_denom_cont.end());
-  data.N = y_num.size();
-
-  // Flatten design matrices
-  data.p_num = X_num.ncol();
-  data.p_denom = X_denom.ncol();
-
-  data.X_num_flat.resize(data.N * data.p_num);
-  for (int i = 0; i < data.N; i++) {
-    for (int j = 0; j < data.p_num; j++) {
-      data.X_num_flat[i * data.p_num + j] = X_num(i, j);
-    }
-  }
-
-  data.X_denom_flat.resize(data.N * data.p_denom);
-  for (int i = 0; i < data.N; i++) {
-    for (int j = 0; j < data.p_denom; j++) {
-      data.X_denom_flat[i * data.p_denom + j] = X_denom(i, j);
-    }
-  }
+  apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
+                      X_num, X_denom);
 
   // Random effects. The same bundle cpp_hmc_fit reads, through the same
   // builder: random slopes and crossed / nested terms are laid out by
@@ -11687,24 +11765,7 @@ Rcpp::List cpp_hmc_fit_gp(
   // same structure.
   apply_re_params(data, re_params);
 
-  // Model type
-  if (model_type_str == "binomial") {
-    data.model_type = ModelType::BINOMIAL;
-  } else if (model_type_str == "negbin_negbin") {
-    data.model_type = ModelType::NEGBIN_NEGBIN;
-  } else if (model_type_str == "poisson_gamma") {
-    data.model_type = ModelType::POISSON_GAMMA;
-  } else if (model_type_str == "negbin_gamma") {
-    data.model_type = ModelType::NEGBIN_GAMMA;
-  } else if (model_type_str == "gamma_gamma") {
-    data.model_type = ModelType::GAMMA_GAMMA;
-  } else if (model_type_str == "lognormal") {
-    data.model_type = ModelType::LOGNORMAL;
-  } else if (model_type_str == "beta_binomial") {
-    data.model_type = ModelType::BETA_BINOMIAL;
-  } else {
-    data.model_type = ModelType::POISSON_GAMMA;  // fallback
-  }
+  apply_family_params(data, family);
 
   // Covariance type
   ratiod_gp::CovType cov_type;
@@ -12016,11 +12077,12 @@ Rcpp::List cpp_hmc_fit_gp_v2(Rcpp::List args) {
   Rcpp::NumericVector q_init = Rcpp::as<Rcpp::NumericVector>(args["q_init"]);
   Rcpp::IntegerVector y_num = Rcpp::as<Rcpp::IntegerVector>(args["y_num"]);
   Rcpp::IntegerVector y_denom = Rcpp::as<Rcpp::IntegerVector>(args["y_denom"]);
+  Rcpp::NumericVector y_num_cont = Rcpp::as<Rcpp::NumericVector>(args["y_num_cont"]);
   Rcpp::NumericVector y_denom_cont = Rcpp::as<Rcpp::NumericVector>(args["y_denom_cont"]);
   Rcpp::NumericMatrix X_num = Rcpp::as<Rcpp::NumericMatrix>(args["X_num"]);
   Rcpp::NumericMatrix X_denom = Rcpp::as<Rcpp::NumericMatrix>(args["X_denom"]);
   Rcpp::List re_params = Rcpp::as<Rcpp::List>(args["re_params"]);
-  std::string model_type_str = Rcpp::as<std::string>(args["model_type_str"]);
+  Rcpp::List family = Rcpp::as<Rcpp::List>(args["family"]);
   Rcpp::List gp_params = Rcpp::as<Rcpp::List>(args["gp_params"]);
   Rcpp::List ms_gp_params = Rcpp::as<Rcpp::List>(args["ms_gp_params"]);
   Rcpp::List ms_temporal_params = Rcpp::as<Rcpp::List>(args["ms_temporal_params"]);
@@ -12063,9 +12125,9 @@ Rcpp::List cpp_hmc_fit_gp_v2(Rcpp::List args) {
 
   // Delegate to the original implementation (metric/gradient parsed inside)
   return cpp_hmc_fit_gp(
-    q_init, y_num, y_denom, y_denom_cont,
+    q_init, y_num, y_denom, y_num_cont, y_denom_cont,
     X_num, X_denom, re_params,
-    model_type_str, gp_params, ms_gp_params, ms_temporal_params, rsr_params,
+    family, gp_params, ms_gp_params, ms_temporal_params, rsr_params,
     temporal_params, latent_params, st_params, tvc_params, svc_params,
     sigma_beta, sigma_re_scale, phi_prior_shape, phi_prior_rate,
     zi_type_str, X_zi, zi_prior_sd,

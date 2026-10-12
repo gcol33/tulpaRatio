@@ -264,7 +264,7 @@ fit_gibbs <- function(formula,
   draws_full <- gibbs_natural_draws(draws_full, model_type)
   samples_list <- lapply(samples_list, gibbs_natural_draws, model_type = model_type)
   ratio_draws <- hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
-                                    model_type)$ratio
+                                    family_links(family, model_type))$ratio
   colnames(ratio_draws) <- paste0("ratio[", seq_len(N), "]")
 
   # Build ratiod_fit

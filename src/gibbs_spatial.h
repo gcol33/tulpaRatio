@@ -2,12 +2,17 @@
 // Component-wise Gibbs sampler for ICAR/BYM2 spatial models
 // Designed for large S where HMC struggles with dimensionality
 //
-// Update scheme:
+// Update scheme, ICAR:
 //   1. phi_s | phi_{-s}, beta, tau, y  (univariate MH per site)
 //   2. tau | phi                        (conjugate Gamma for ICAR)
 //   3. beta | phi, y                    (block MH with Gaussian proposal)
 //   4. dispersion | rest                (univariate MH on log scale)
-//   For BYM2: sigma, rho, phi, theta all updated
+// BYM2 (Knorr-Held and Rue 2002, Scand. J. Stat. 29:597):
+//   1. (beta, phi, theta) | sigma, rho  (independence MH, Gaussian proposal)
+//   2. (sigma, rho, beta, phi, theta)   (one block: random walk on the two
+//                                        hyperparameters, the latent field
+//                                        drawn from its Gaussian approximation)
+//   3. dispersion | rest                (MH on log scale)
 
 #pragma once
 
@@ -16,6 +21,8 @@
 #include <cmath>
 #include <random>
 #include <algorithm>
+#include <Eigen/Sparse>
+#include <Eigen/SparseCholesky>
 
 namespace gibbs {
 
@@ -768,58 +775,298 @@ inline double bym2_spatial_effect(int s, const double* phi, const double* theta,
     return sigma_s * scale_factor * phi[s] + sigma_u * theta[s];
 }
 
-// Site log-lik for BYM2 (spatial effect computed from phi + theta)
-inline double site_log_lik_bym2(int s, const double* phi, const double* theta,
-                                 double sigma_total, double rho, double scale_factor,
-                                 const double* beta_num, const double* beta_denom,
-                                 double disp_num, double disp_denom,
-                                 const GibbsData& d) {
-    double ll = 0.0;
-    bool is_binomial = (d.family == GibbsFamily::BINOMIAL);
-    double spatial = bym2_spatial_effect(s, phi, theta, sigma_total, rho, scale_factor);
+// d(log-lik)/d(eta) and -d^2(log-lik)/d(eta)^2 of one observation, for the
+// numerator and the denominator predictor. Every family here is log-concave
+// in its predictor, so each curvature is non-negative:
+//   Poisson   g = y - mu,                     h = mu
+//   NB        g = y - (y + r) mu / (r + mu),  h = (y + r) mu r / (r + mu)^2
+//   Gamma     g = alpha (y / mu - 1),         h = alpha y / mu
+//   binomial  g = y - n p,                    h = n p (1 - p)
+struct ObsDerivs {
+    double g_num = 0.0, h_num = 0.0, g_den = 0.0, h_den = 0.0;
+};
 
-    for (int idx = d.site_obs_ptr[s]; idx < d.site_obs_ptr[s + 1]; idx++) {
-        int i = d.site_obs_idx[idx];
-        double eta_num = spatial;
-        double eta_denom = is_binomial ? 0.0 : spatial;
-
-        for (int p = 0; p < d.p_num; p++)
-            eta_num += d.X_num[i * d.p_num + p] * beta_num[p];
-        if (!is_binomial) {
-            for (int p = 0; p < d.p_denom; p++)
-                eta_denom += d.X_denom[i * d.p_denom + p] * beta_denom[p];
-        }
-
-        ll += obs_log_lik(i, eta_num, eta_denom, disp_num, disp_denom, d);
+inline ObsDerivs obs_log_lik_derivs(int i, double eta_num, double eta_denom,
+                                    double disp_num, double disp_denom,
+                                    const GibbsData& d) {
+    ObsDerivs out;
+    auto negbin = [](double y, double eta, double r, double& g, double& h) {
+        const double mu = std::exp(std::min(eta, 20.0));
+        g = y - (y + r) * mu / (r + mu);
+        h = (y + r) * mu * r / ((r + mu) * (r + mu));
+    };
+    auto gamma = [](double y, double eta, double alpha, double& g, double& h) {
+        const double ratio = y * std::exp(-std::min(eta, 20.0));
+        g = alpha * (ratio - 1.0);
+        h = alpha * ratio;
+    };
+    switch (d.family) {
+    case GibbsFamily::POISSON_GAMMA: {
+        const double mu = std::exp(std::min(eta_num, 20.0));
+        out.g_num = d.y_num[i] - mu;
+        out.h_num = mu;
+        gamma(d.y_denom_cont[i], eta_denom, disp_denom, out.g_den, out.h_den);
+        break;
     }
-    return ll;
+    case GibbsFamily::NEGBIN_NEGBIN:
+        negbin(d.y_num[i], eta_num, disp_num, out.g_num, out.h_num);
+        negbin(d.y_denom[i], eta_denom, disp_denom, out.g_den, out.h_den);
+        break;
+    case GibbsFamily::BINOMIAL: {
+        const double p = 1.0 / (1.0 + std::exp(-eta_num));
+        out.g_num = d.y_num[i] - d.y_denom[i] * p;
+        out.h_num = d.y_denom[i] * p * (1.0 - p);
+        break;
+    }
+    case GibbsFamily::NEGBIN_GAMMA:
+        negbin(d.y_num[i], eta_num, disp_num, out.g_num, out.h_num);
+        gamma(d.y_denom_cont[i], eta_denom, disp_denom, out.g_den, out.h_den);
+        break;
+    }
+    return out;
 }
 
-// Full log-lik for BYM2
-inline double full_log_lik_bym2(const double* phi, const double* theta,
-                                 double sigma_total, double rho, double scale_factor,
-                                 const double* beta_num, const double* beta_denom,
-                                 double disp_num, double disp_denom,
-                                 const GibbsData& d) {
-    double ll = 0.0;
-    bool is_binomial = (d.family == GibbsFamily::BINOMIAL);
+// The latent Gaussian of a BYM2 model, x = (beta_num, beta_denom, phi, theta),
+// with prior precision blockdiag(I / sigma_beta^2, I / sigma_beta^2, Q, I)
+// (Q the ICAR precision of the standardised field). The field reaches both
+// predictors as c phi_s + u theta_s, with c = sigma sqrt(rho) scale and
+// u = sigma sqrt(1 - rho).
+struct Bym2Latent {
+    int p_num = 0, p_den = 0, S = 0;
+    int phi0() const { return p_num + p_den; }
+    int theta0() const { return p_num + p_den + S; }
+    int size() const { return p_num + p_den + 2 * S; }
+};
 
+// Predictors of every observation at x
+inline void bym2_latent_eta(const Eigen::VectorXd& x, double c, double u,
+                            const Bym2Latent& lay, const GibbsData& d,
+                            std::vector<double>& eta_num,
+                            std::vector<double>& eta_den) {
+    const bool is_binomial = (d.family == GibbsFamily::BINOMIAL);
+    eta_num.assign(d.N, 0.0);
+    eta_den.assign(d.N, 0.0);
     for (int i = 0; i < d.N; i++) {
-        int s = d.spatial_group[i];
-        double spatial = bym2_spatial_effect(s, phi, theta, sigma_total, rho, scale_factor);
-        double eta_num = spatial;
-        double eta_denom = is_binomial ? 0.0 : spatial;
-
-        for (int p = 0; p < d.p_num; p++)
-            eta_num += d.X_num[i * d.p_num + p] * beta_num[p];
+        const int s = d.spatial_group[i];
+        const double field = c * x[lay.phi0() + s] + u * x[lay.theta0() + s];
+        double en = field;
+        for (int j = 0; j < lay.p_num; j++) en += d.X_num[i * d.p_num + j] * x[j];
+        eta_num[i] = en;
         if (!is_binomial) {
-            for (int p = 0; p < d.p_denom; p++)
-                eta_denom += d.X_denom[i * d.p_denom + p] * beta_denom[p];
+            double ed = field;
+            for (int j = 0; j < lay.p_den; j++)
+                ed += d.X_denom[i * d.p_denom + j] * x[lay.p_num + j];
+            eta_den[i] = ed;
+        }
+    }
+}
+
+// Log density of (x, sigma, rho) given the dispersions, on the coordinates the
+// sampler moves: log sigma and logit rho, each prior's Jacobian included.
+inline double bym2_log_target(const Eigen::VectorXd& x, double sigma, double rho,
+                              double disp_num, double disp_den,
+                              const Bym2Latent& lay, const GibbsData& d) {
+    const double c = sigma * std::sqrt(rho) * d.bym2_scale;
+    const double u = sigma * std::sqrt(1.0 - rho);
+    std::vector<double> eta_num, eta_den;
+    bym2_latent_eta(x, c, u, lay, d, eta_num, eta_den);
+    double lp = 0.0;
+    for (int i = 0; i < d.N; i++) {
+        lp += obs_log_lik(i, eta_num[i], eta_den[i], disp_num, disp_den, d);
+    }
+    lp += beta_log_prior(x.data(), lay.p_num, d.sigma_beta);
+    lp += beta_log_prior(x.data() + lay.p_num, lay.p_den, d.sigma_beta);
+    lp -= 0.5 * icar_quadratic_form(x.data() + lay.phi0(), d);
+    for (int s = 0; s < lay.S; s++) lp -= 0.5 * x[lay.theta0() + s] * x[lay.theta0() + s];
+    lp += half_cauchy_log_dens_log_scale(sigma, d.sigma_re_scale);
+    lp += unif01_log_dens_logit_scale(rho);
+    return lp;
+}
+
+// A Gaussian approximation N(mode, P^-1) to the latent field's full
+// conditional at given hyperparameters: Newton iterations from zero to the
+// conditional mode, P the negative Hessian there. It depends on the
+// hyperparameters and the data alone, never on the current field, so it is a
+// valid proposal in both directions of the move. Along the ICAR null
+// direction the likelihood sees phi and the intercept only through their sum,
+// so the intercept's prior is what keeps P definite there; a small ridge on
+// phi covers a graph whose components have no intercept to lean on.
+struct Bym2Gauss {
+    Eigen::VectorXd mode;
+    Eigen::SparseMatrix<double> P;
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> chol;
+    double log_det = 0.0;
+    Eigen::VectorXd Pinv_a;   // P^-1 a, for the constraint
+    double a_Pinv_a = 0.0;
+    bool ok = false;
+};
+
+inline bool bym2_gaussian_approx(double sigma, double rho, double disp_num,
+                                 double disp_den, bool constrain,
+                                 const Bym2Latent& lay, const GibbsData& d,
+                                 Bym2Gauss& out) {
+    typedef Eigen::Triplet<double> Trip;
+    const int K = lay.size();
+    const int S = lay.S;
+    const double c = sigma * std::sqrt(rho) * d.bym2_scale;
+    const double u = sigma * std::sqrt(1.0 - rho);
+    const double prec_beta = 1.0 / (d.sigma_beta * d.sigma_beta);
+    const double ridge = 1e-6;
+    const bool is_binomial = (d.family == GibbsFamily::BINOMIAL);
+
+    // Objective with the ridge the proposal's precision carries
+    auto objective = [&](const Eigen::VectorXd& x) {
+        double ss_phi = 0.0;
+        for (int s = 0; s < S; s++) ss_phi += x[lay.phi0() + s] * x[lay.phi0() + s];
+        return bym2_log_target(x, sigma, rho, disp_num, disp_den, lay, d)
+               - 0.5 * ridge * ss_phi;
+    };
+
+    // Gradient and precision at x
+    auto build = [&](const Eigen::VectorXd& x, Eigen::VectorXd& grad,
+                     Eigen::SparseMatrix<double>& P) {
+        std::vector<double> eta_num, eta_den;
+        bym2_latent_eta(x, c, u, lay, d, eta_num, eta_den);
+        grad = Eigen::VectorXd::Zero(K);
+        std::vector<double> h_site(S, 0.0), g_site(S, 0.0);
+        Eigen::MatrixXd H_nn = Eigen::MatrixXd::Zero(lay.p_num, lay.p_num);
+        Eigen::MatrixXd H_dd = Eigen::MatrixXd::Zero(lay.p_den, lay.p_den);
+        Eigen::MatrixXd H_nf = Eigen::MatrixXd::Zero(lay.p_num, S);
+        Eigen::MatrixXd H_df = Eigen::MatrixXd::Zero(lay.p_den, S);
+        for (int i = 0; i < d.N; i++) {
+            const int s = d.spatial_group[i];
+            const ObsDerivs od = obs_log_lik_derivs(i, eta_num[i], eta_den[i],
+                                                    disp_num, disp_den, d);
+            const double* xn = d.X_num + i * d.p_num;
+            for (int j = 0; j < lay.p_num; j++) {
+                grad[j] += od.g_num * xn[j];
+                for (int k = 0; k <= j; k++) H_nn(j, k) += od.h_num * xn[j] * xn[k];
+                H_nf(j, s) += od.h_num * xn[j];
+            }
+            if (!is_binomial) {
+                const double* xd = d.X_denom + i * d.p_denom;
+                for (int j = 0; j < lay.p_den; j++) {
+                    grad[lay.p_num + j] += od.g_den * xd[j];
+                    for (int k = 0; k <= j; k++) H_dd(j, k) += od.h_den * xd[j] * xd[k];
+                    H_df(j, s) += od.h_den * xd[j];
+                }
+            }
+            g_site[s] += od.g_num + od.g_den;
+            h_site[s] += od.h_num + od.h_den;
         }
 
-        ll += obs_log_lik(i, eta_num, eta_denom, disp_num, disp_denom, d);
+        // Prior and penalty gradients
+        for (int j = 0; j < lay.p_num + lay.p_den; j++) grad[j] -= prec_beta * x[j];
+        for (int s = 0; s < S; s++) {
+            const int ip = lay.phi0() + s, it = lay.theta0() + s;
+            double q_phi = d.n_neighbors[s] * x[ip];
+            for (int k = d.adj_row_ptr[s]; k < d.adj_row_ptr[s + 1]; k++)
+                q_phi -= x[lay.phi0() + d.adj_col_idx[k]];
+            grad[ip] += c * g_site[s] - q_phi - ridge * x[ip];
+            grad[it] += u * g_site[s] - x[it];
+        }
+
+        std::vector<Trip> trip;
+        trip.reserve(static_cast<size_t>(K) * 4 + d.adj_row_ptr[S] +
+                     static_cast<size_t>(lay.p_num + lay.p_den) * (4 * S + 2 * (lay.p_num + lay.p_den)));
+        auto add_sym = [&trip](int r, int col, double v) {
+            if (v == 0.0) return;
+            trip.emplace_back(r, col, v);
+            if (r != col) trip.emplace_back(col, r, v);
+        };
+        for (int j = 0; j < lay.p_num; j++) {
+            add_sym(j, j, prec_beta);
+            for (int k = 0; k <= j; k++) add_sym(j, k, H_nn(j, k));
+            for (int s = 0; s < S; s++) {
+                add_sym(j, lay.phi0() + s, c * H_nf(j, s));
+                add_sym(j, lay.theta0() + s, u * H_nf(j, s));
+            }
+        }
+        for (int j = 0; j < lay.p_den; j++) {
+            const int r = lay.p_num + j;
+            add_sym(r, r, prec_beta);
+            for (int k = 0; k <= j; k++) add_sym(r, lay.p_num + k, H_dd(j, k));
+            for (int s = 0; s < S; s++) {
+                add_sym(r, lay.phi0() + s, c * H_df(j, s));
+                add_sym(r, lay.theta0() + s, u * H_df(j, s));
+            }
+        }
+        for (int s = 0; s < S; s++) {
+            const int ip = lay.phi0() + s, it = lay.theta0() + s;
+            add_sym(ip, ip, d.n_neighbors[s] + ridge + c * c * h_site[s]);
+            for (int k = d.adj_row_ptr[s]; k < d.adj_row_ptr[s + 1]; k++) {
+                trip.emplace_back(ip, lay.phi0() + d.adj_col_idx[k], -1.0);
+            }
+            add_sym(it, it, 1.0 + u * u * h_site[s]);
+            add_sym(ip, it, c * u * h_site[s]);
+        }
+        P.resize(K, K);
+        P.setFromTriplets(trip.begin(), trip.end());
+    };
+
+    Eigen::VectorXd x = Eigen::VectorXd::Zero(K);
+    Eigen::VectorXd grad;
+    double f = objective(x);
+    for (int it = 0; it < 50; it++) {
+        build(x, grad, out.P);
+        out.chol.compute(out.P);
+        if (out.chol.info() != Eigen::Success) return out.ok = false;
+        const Eigen::VectorXd step = out.chol.solve(grad);
+        double t = 1.0, f_new = objective(x + step);
+        while (!(f_new >= f - 1e-10) && t > 1e-6) {
+            t *= 0.5;
+            f_new = objective(x + t * step);
+        }
+        x += t * step;
+        f = f_new;
+        if ((t * step).cwiseAbs().maxCoeff() < 1e-8) break;
     }
-    return ll;
+    build(x, grad, out.P);
+    out.chol.compute(out.P);
+    if (out.chol.info() != Eigen::Success || !x.allFinite()) return out.ok = false;
+    out.mode = x;
+
+    Eigen::SparseMatrix<double> L = out.chol.matrixL();
+    out.log_det = 2.0 * L.diagonal().array().log().sum();
+    if (constrain) {
+        Eigen::VectorXd a = Eigen::VectorXd::Zero(K);
+        a.segment(lay.phi0(), S).setOnes();
+        out.Pinv_a = out.chol.solve(a);
+        out.a_Pinv_a = a.dot(out.Pinv_a);
+    }
+    return out.ok = std::isfinite(out.log_det);
+}
+
+// Log density of the proposal at x: N(mode, P^-1), conditioned on sum(phi) = 0
+// when the field is constrained, where every x it is evaluated at satisfies it.
+inline double bym2_proposal_log_density(const Bym2Gauss& g, const Eigen::VectorXd& x,
+                                        bool constrain, const Bym2Latent& lay) {
+    const Eigen::VectorXd r = x - g.mode;
+    double lq = 0.5 * g.log_det - 0.5 * r.dot(g.P * r)
+              - 0.5 * lay.size() * std::log(2.0 * M_PI);
+    if (constrain) {
+        const double a_mode = g.mode.segment(lay.phi0(), lay.S).sum();
+        lq += 0.5 * std::log(2.0 * M_PI * g.a_Pinv_a)
+              + 0.5 * a_mode * a_mode / g.a_Pinv_a;
+    }
+    return lq;
+}
+
+// A draw from the proposal: N(mode, P^-1), then the sum-to-zero correction
+// x - P^-1 a (a'x) / (a' P^-1 a) (Rue and Held 2005, Sec. 2.3.3).
+template <typename RNG>
+inline Eigen::VectorXd bym2_proposal_draw(const Bym2Gauss& g, bool constrain,
+                                          const Bym2Latent& lay, RNG& rng) {
+    std::normal_distribution<double> rnorm(0.0, 1.0);
+    Eigen::VectorXd z(lay.size());
+    for (int k = 0; k < lay.size(); k++) z[k] = rnorm(rng);
+    const Eigen::VectorXd w = g.chol.matrixU().solve(z);
+    Eigen::VectorXd x = g.mode + g.chol.permutationPinv() * w;
+    if (constrain) {
+        const double ax = x.segment(lay.phi0(), lay.S).sum();
+        x -= g.Pinv_a * (ax / g.a_Pinv_a);
+    }
+    return x;
 }
 
 inline GibbsResult run_gibbs_bym2(
@@ -843,45 +1090,31 @@ inline GibbsResult run_gibbs_bym2(
     const bool constrain = can_constrain_field(d);
 
     // Parameter dimensions
-    int p_num = d.p_num;
-    int p_denom = is_binomial ? 0 : d.p_denom;
+    Bym2Latent lay;
+    lay.p_num = d.p_num;
+    lay.p_den = is_binomial ? 0 : d.p_denom;
+    lay.S = S;
+    int p_num = lay.p_num;
+    int p_denom = lay.p_den;
     int n_hyper = 2;  // log_sigma_total, logit_rho
     if (has_disp_num) n_hyper++;
     if (has_disp_denom) n_hyper++;
     int n_params = p_num + p_denom + n_hyper;
 
-    // Initialize
-    std::vector<double> beta_num(p_num, 0.0);
-    std::vector<double> beta_denom(p_denom, 0.0);
-    std::vector<double> phi(S, 0.0);    // ICAR structured
-    std::vector<double> theta(S, 0.0);  // iid unstructured
+    // Initialize: the latent field x = (beta_num, beta_denom, phi, theta)
+    Eigen::VectorXd x = Eigen::VectorXd::Zero(lay.size());
     double log_sigma_total = std::log(1.0);
     double logit_rho = 0.0;  // rho = 0.5
     double log_disp_num = std::log(1.0);
     double log_disp_denom = std::log(5.0);
 
-    if (p_num > 0) beta_num[0] = 1.0;
-    if (p_denom > 0) beta_denom[0] = 1.0;
-
-    // Proposal scales
-    double beta_scale = 0.1;
+    // Proposal scales of the hyperparameter random walk and the dispersions
+    double hyper_scale = 0.3;
     double disp_scale = 0.1;
-    double sigma_scale = 0.1;
-    double rho_scale = 0.3;
-    double level_scale = 0.2;
-    double sigma_joint_scale = 0.2;
-    double rho_joint_scale = 0.2;
 
-    // Acceptance tracking
-    std::vector<int> phi_accept(S, 0), phi_total(S, 0);
-    std::vector<int> theta_accept(S, 0), theta_total(S, 0);
-    int beta_accept_cnt = 0, beta_total_cnt = 0;
+    int field_accept_cnt = 0, field_total_cnt = 0;
+    int hyper_accept_cnt = 0, hyper_total_cnt = 0;
     int disp_accept_cnt = 0, disp_total_cnt = 0;
-    int sigma_accept_cnt = 0, sigma_total_cnt = 0;
-    int rho_accept_cnt = 0, rho_total_cnt = 0;
-    int level_accept_cnt = 0, level_total_cnt = 0;
-    int sigma_joint_accept_cnt = 0, sigma_joint_total_cnt = 0;
-    int rho_joint_accept_cnt = 0, rho_joint_total_cnt = 0;
 
     // Output
     int n_save = (n_iter - n_warmup) / thin;
@@ -894,295 +1127,74 @@ inline GibbsResult run_gibbs_bym2(
     result.accept_phi.resize(S, 0.0);
 
     int save_idx = 0;
+    auto rho_of = [](double logit) { return 1.0 / (1.0 + std::exp(-logit)); };
 
-    // ---- Main Gibbs loop ----
+    Bym2Gauss approx_curr, approx_prop;
+
+    // ---- Main loop ----
     for (int iter = 0; iter < n_iter; iter++) {
-        double sigma_total = std::exp(log_sigma_total);
-        double rho = 1.0 / (1.0 + std::exp(-logit_rho));
         double disp_num_val = has_disp_num ? std::exp(log_disp_num) : 1.0;
         double disp_denom_val = has_disp_denom ? std::exp(log_disp_denom) : 1.0;
+        double sigma_total = std::exp(log_sigma_total);
+        double rho = rho_of(logit_rho);
 
-        // Scale the structured component contributes to eta; the Riebler
-        // parameterization carries it here rather than in phi's own precision.
-        double sigma_s = sigma_total * std::sqrt(rho);
-
-        // ---- 1. Update phi (ICAR structured) via MH ----
-        // phi is the standardised ICAR field: precision 1, scale carried by
-        // sigma and rho. Drawing from its own full conditional is what makes
-        // the acceptance ratio the likelihood ratio alone -- for the field
-        // itself. The field reaches eta as sigma_s * scale_factor * phi, so
-        // holding phi to sum zero moves sigma_s * scale_factor * phi_mean into
-        // the intercept every sweep; that move has its own prior (the
-        // intercept's N(0, sigma_beta^2)) and belongs in the same acceptance
-        // test as the site update, exactly as run_gibbs_icar's phi_off does
-        // above. Deciding it unconditionally after the sweep (no MH test)
-        // ignored the intercept's prior and let the field's level random-walk
-        // into the intercept without resistance.
-        {
-            const double c = sigma_s * scale_factor;
-            double phi_off = 0.0;
-            for (int s = 0; s < S; s++) {
-                auto [cond_mean, cond_prec] = icar_conditional(
-                    s, phi.data(), 1.0, d.adj_row_ptr, d.adj_col_idx, d.n_neighbors);
-
-                const double actual_s = phi[s] + phi_off;
-                const double phi_prop = cond_mean + phi_off
-                                      + rnorm(rng) / std::sqrt(cond_prec + 1e-10);
-                const double delta = phi_prop - actual_s;
-                const double phi_shift = constrain ? delta / S : 0.0;
-                const double eta_shift = c * phi_shift;
-
-                phi[s] = actual_s;
-                double ll_curr = site_log_lik_bym2(s, phi.data(), theta.data(),
-                                                    sigma_total, rho, scale_factor,
-                                                    beta_num.data(), beta_denom.data(),
-                                                    disp_num_val, disp_denom_val, d);
-                phi[s] = actual_s + delta;
-                double ll_prop = site_log_lik_bym2(s, phi.data(), theta.data(),
-                                                    sigma_total, rho, scale_factor,
-                                                    beta_num.data(), beta_denom.data(),
-                                                    disp_num_val, disp_denom_val, d);
-
-                double log_ratio = ll_prop - ll_curr;
-                if (constrain) {
-                    log_ratio += intercept_shift_log_prior_ratio(
-                        beta_num.data(), beta_denom.data(), d, eta_shift);
-                }
-
-                if (std::log(runif(rng)) < log_ratio) {
-                    if (constrain) {
-                        phi_off -= phi_shift;
-                        beta_num[d.icept_num] += eta_shift;
-                        if (d.icept_denom >= 0) beta_denom[d.icept_denom] += eta_shift;
-                    }
-                    phi_accept[s]++;
-                } else {
-                    phi[s] = actual_s;  // Reject
-                }
-                phi_total[s]++;
+        // ---- 1. The latent field at the current hyperparameters ----
+        // An independence proposal from the field's Gaussian approximation,
+        // so the acceptance ratio weighs the target against that
+        // approximation at both points.
+        const bool approx_ok = bym2_gaussian_approx(sigma_total, rho, disp_num_val,
+                                                    disp_denom_val, constrain, lay,
+                                                    d, approx_curr);
+        double lp_curr = bym2_log_target(x, sigma_total, rho, disp_num_val,
+                                         disp_denom_val, lay, d);
+        if (approx_ok) {
+            const double lq_curr = bym2_proposal_log_density(approx_curr, x, constrain, lay);
+            const Eigen::VectorXd x_prop = bym2_proposal_draw(approx_curr, constrain, lay, rng);
+            const double lp_prop = bym2_log_target(x_prop, sigma_total, rho, disp_num_val,
+                                                   disp_denom_val, lay, d);
+            const double lq_prop = bym2_proposal_log_density(approx_curr, x_prop,
+                                                             constrain, lay);
+            const double log_ratio = (lp_prop - lq_prop) - (lp_curr - lq_curr);
+            if (std::isfinite(lp_prop) && std::log(runif(rng)) < log_ratio) {
+                x = x_prop;
+                lp_curr = lp_prop;
+                field_accept_cnt++;
             }
-            if (phi_off != 0.0) {
-                for (int s = 0; s < S; s++) phi[s] += phi_off;
-            }
-        }
+            field_total_cnt++;
 
-        // ---- 2. Update theta (iid unstructured) via MH ----
-        // Prior: theta_s ~ N(0, 1)
-        for (int s = 0; s < S; s++) {
-            double theta_prop = rnorm(rng);  // Propose from prior N(0,1)
-
-            double old_theta_s = theta[s];
-            double ll_curr = site_log_lik_bym2(s, phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-            theta[s] = theta_prop;
-            double ll_prop = site_log_lik_bym2(s, phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-
-            if (std::log(runif(rng)) < ll_prop - ll_curr) {
-                theta_accept[s]++;
-            } else {
-                theta[s] = old_theta_s;
-            }
-            theta_total[s]++;
-        }
-
-        // ---- 2b. Move the unstructured component's level against the intercept ----
-        // sigma_u * mean(theta) is a level the intercept can carry just as well,
-        // and the per-site theta updates only reach it by agreeing S times over.
-        // Translating the whole of theta at once walks that direction in one
-        // step, at eta held fixed, so the acceptance ratio is the priors alone.
-        if (constrain) {
-            const double sigma_u = sigma_total * std::sqrt(1.0 - rho);
-            const double c = level_scale * rnorm(rng);
-            const double shift = sigma_u * c;
-
-            double theta_sum = 0.0;
-            for (int s = 0; s < S; s++) theta_sum += theta[s];
-
-            // theta_s ~ N(0, 1), shifted by -c
-            double log_ratio = -0.5 * (S * c * c - 2.0 * c * theta_sum);
-
-            // beta ~ N(0, sigma_beta^2), shifted by +sigma_u * c
-            const double prec_beta = 1.0 / (d.sigma_beta * d.sigma_beta);
-            const double b_num = beta_num[d.icept_num];
-            log_ratio -= 0.5 * prec_beta * (shift * shift + 2.0 * b_num * shift);
-            if (d.icept_denom >= 0) {
-                const double b_den = beta_denom[d.icept_denom];
-                log_ratio -= 0.5 * prec_beta * (shift * shift + 2.0 * b_den * shift);
-            }
-
-            if (std::log(runif(rng)) < log_ratio) {
-                for (int s = 0; s < S; s++) theta[s] -= c;
-                beta_num[d.icept_num] += shift;
-                if (d.icept_denom >= 0) beta_denom[d.icept_denom] += shift;
-                level_accept_cnt++;
-            }
-            level_total_cnt++;
-        }
-
-        // ---- 3. Update sigma_total via MH on log scale ----
-        {
-            double log_sigma_prop = log_sigma_total + sigma_scale * rnorm(rng);
-            double sigma_prop = std::exp(log_sigma_prop);
-
-            double ll_curr = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-            double ll_prop = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_prop, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-
-            double lp_curr = half_cauchy_log_dens_log_scale(sigma_total, d.sigma_re_scale);
-            double lp_prop = half_cauchy_log_dens_log_scale(sigma_prop, d.sigma_re_scale);
-
-            if (std::log(runif(rng)) < (ll_prop + lp_prop) - (ll_curr + lp_curr)) {
-                log_sigma_total = log_sigma_prop;
-                sigma_accept_cnt++;
-            }
-            sigma_total_cnt++;
-        }
-
-        // ---- 3b. Move sigma_total against the field, at eta held fixed ----
-        // sigma reaches eta only through sigma * (field), so scaling the field
-        // by the reciprocal puts every linear predictor back where it was and
-        // the likelihood drops out of the acceptance ratio. Step 3 can only
-        // move sigma as far as the likelihood allows with the field pinned,
-        // which at S sites is a width that shrinks with S; this move has no
-        // such limit and leaves the priors and the Jacobian to decide.
-        {
-            sigma_total = std::exp(log_sigma_total);
-
-            const double delta = sigma_joint_scale * rnorm(rng);
-            const double a = std::exp(-delta);
-            const double sigma_prop = sigma_total * std::exp(delta);
-
-            const double quad_phi = icar_quadratic_form(phi.data(), d);
-            double ss_theta = 0.0;
-            for (int s = 0; s < S; s++) ss_theta += theta[s] * theta[s];
-
-            // phi carries S-1 free dimensions under the sum-to-zero constraint
-            // and theta carries S, so scaling both by a has log-Jacobian
-            // (2S-1) * log(a).
-            double log_ratio = -0.5 * (a * a - 1.0) * (quad_phi + ss_theta)
-                             - (2.0 * S - 1.0) * delta
-                             + half_cauchy_log_dens_log_scale(sigma_prop, d.sigma_re_scale)
-                             - half_cauchy_log_dens_log_scale(sigma_total, d.sigma_re_scale);
-
-            if (std::log(runif(rng)) < log_ratio) {
-                for (int s = 0; s < S; s++) { phi[s] *= a; theta[s] *= a; }
-                log_sigma_total = std::log(sigma_prop);
-                sigma_joint_accept_cnt++;
-            }
-            sigma_joint_total_cnt++;
-        }
-
-        // ---- 4. Update rho via MH on logit scale ----
-        {
-            double logit_rho_prop = logit_rho + rho_scale * rnorm(rng);
-            double rho_prop = 1.0 / (1.0 + std::exp(-logit_rho_prop));
-
-            sigma_total = std::exp(log_sigma_total);  // Refresh
-
-            double ll_curr = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-            double ll_prop = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho_prop, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-
-            double lp_curr = unif01_log_dens_logit_scale(rho);
-            double lp_prop = unif01_log_dens_logit_scale(rho_prop);
-
-            if (std::log(runif(rng)) < (ll_prop + lp_prop) - (ll_curr + lp_curr)) {
-                logit_rho = logit_rho_prop;
-                rho_accept_cnt++;
-            }
-            rho_total_cnt++;
-        }
-
-        // ---- 4b. Move rho against the field, at eta held fixed ----
-        // rho splits a fixed total between the structured and unstructured
-        // components. Rescaling each by the reciprocal of its own share holds
-        // eta where it was, so the split can be re-drawn without the
-        // likelihood having any say, which is what step 4 lacks.
-        {
-            rho = 1.0 / (1.0 + std::exp(-logit_rho));
-
-            const double logit_rho_prop = logit_rho + rho_joint_scale * rnorm(rng);
-            const double rho_prop = 1.0 / (1.0 + std::exp(-logit_rho_prop));
-
-            if (rho_prop > 0.0 && rho_prop < 1.0) {
-                const double a_phi = std::sqrt(rho / rho_prop);
-                const double a_th = std::sqrt((1.0 - rho) / (1.0 - rho_prop));
-
-                const double quad_phi = icar_quadratic_form(phi.data(), d);
-                double ss_theta = 0.0;
-                for (int s = 0; s < S; s++) ss_theta += theta[s] * theta[s];
-
-                double log_ratio = -0.5 * (a_phi * a_phi - 1.0) * quad_phi
-                                 - 0.5 * (a_th * a_th - 1.0) * ss_theta
-                                 + (S - 1.0) * std::log(a_phi) + S * std::log(a_th)
-                                 + unif01_log_dens_logit_scale(rho_prop)
-                                 - unif01_log_dens_logit_scale(rho);
-
-                if (std::isfinite(log_ratio) && std::log(runif(rng)) < log_ratio) {
-                    for (int s = 0; s < S; s++) {
-                        phi[s] *= a_phi;
-                        theta[s] *= a_th;
-                    }
+            // ---- 2. One block: (sigma, rho) by random walk, the field from
+            // its Gaussian approximation at the proposed values ----
+            const double log_sigma_prop = log_sigma_total + hyper_scale * rnorm(rng);
+            const double logit_rho_prop = logit_rho + hyper_scale * rnorm(rng);
+            const double sigma_prop = std::exp(log_sigma_prop);
+            const double rho_prop = rho_of(logit_rho_prop);
+            if (rho_prop > 0.0 && rho_prop < 1.0 &&
+                bym2_gaussian_approx(sigma_prop, rho_prop, disp_num_val, disp_denom_val,
+                                     constrain, lay, d, approx_prop)) {
+                const double lq_back = bym2_proposal_log_density(approx_curr, x,
+                                                                 constrain, lay);
+                const Eigen::VectorXd x_new = bym2_proposal_draw(approx_prop, constrain,
+                                                                 lay, rng);
+                const double lq_fwd = bym2_proposal_log_density(approx_prop, x_new,
+                                                                constrain, lay);
+                const double lp_new = bym2_log_target(x_new, sigma_prop, rho_prop,
+                                                      disp_num_val, disp_denom_val,
+                                                      lay, d);
+                const double log_ratio2 = (lp_new - lq_fwd) - (lp_curr - lq_back);
+                if (std::isfinite(lp_new) && std::log(runif(rng)) < log_ratio2) {
+                    x = x_new;
+                    log_sigma_total = log_sigma_prop;
                     logit_rho = logit_rho_prop;
-                    rho_joint_accept_cnt++;
+                    hyper_accept_cnt++;
                 }
             }
-            rho_joint_total_cnt++;
+            hyper_total_cnt++;
         }
 
-        // ---- 5. Update beta via block MH ----
-        {
-            sigma_total = std::exp(log_sigma_total);
-            rho = 1.0 / (1.0 + std::exp(-logit_rho));
-
-            std::vector<double> beta_num_prop(beta_num);
-            std::vector<double> beta_denom_prop(beta_denom);
-            for (int j = 0; j < p_num; j++)
-                beta_num_prop[j] += beta_scale * rnorm(rng);
-            for (int j = 0; j < p_denom; j++)
-                beta_denom_prop[j] += beta_scale * rnorm(rng);
-
-            double ll_curr = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                disp_num_val, disp_denom_val, d);
-            double ll_prop = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num_prop.data(), beta_denom_prop.data(),
-                                                disp_num_val, disp_denom_val, d);
-
-            double lp_curr = beta_log_prior(beta_num.data(), p_num, d.sigma_beta)
-                           + beta_log_prior(beta_denom.data(), p_denom, d.sigma_beta);
-            double lp_prop = beta_log_prior(beta_num_prop.data(), p_num, d.sigma_beta)
-                           + beta_log_prior(beta_denom_prop.data(), p_denom, d.sigma_beta);
-
-            if (std::log(runif(rng)) < (ll_prop + lp_prop) - (ll_curr + lp_curr)) {
-                beta_num = beta_num_prop;
-                beta_denom = beta_denom_prop;
-                beta_accept_cnt++;
-            }
-            beta_total_cnt++;
-        }
-
-        // ---- 6. Update dispersion via MH ----
+        // ---- 3. Update dispersion via MH ----
         if (has_disp_num || has_disp_denom) {
             sigma_total = std::exp(log_sigma_total);
-            rho = 1.0 / (1.0 + std::exp(-logit_rho));
+            rho = rho_of(logit_rho);
 
             double log_dn_prop = log_disp_num;
             double log_dd_prop = log_disp_denom;
@@ -1194,26 +1206,20 @@ inline GibbsResult run_gibbs_bym2(
             double dn_prop = has_disp_num ? std::exp(log_dn_prop) : 1.0;
             double dd_prop = has_disp_denom ? std::exp(log_dd_prop) : 1.0;
 
-            double ll_curr = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                dn_curr, dd_curr, d);
-            double ll_prop = full_log_lik_bym2(phi.data(), theta.data(),
-                                                sigma_total, rho, scale_factor,
-                                                beta_num.data(), beta_denom.data(),
-                                                dn_prop, dd_prop, d);
+            double ll_curr = bym2_log_target(x, sigma_total, rho, dn_curr, dd_curr, lay, d);
+            double ll_prop = bym2_log_target(x, sigma_total, rho, dn_prop, dd_prop, lay, d);
 
-            double lp_curr = 0.0, lp_prop = 0.0;
+            double lpr_curr = 0.0, lpr_prop = 0.0;
             if (has_disp_num) {
-                lp_curr += std::log(dn_curr) - 0.5 * dn_curr;
-                lp_prop += std::log(dn_prop) - 0.5 * dn_prop;
+                lpr_curr += std::log(dn_curr) - 0.5 * dn_curr;
+                lpr_prop += std::log(dn_prop) - 0.5 * dn_prop;
             }
             if (has_disp_denom) {
-                lp_curr += std::log(dd_curr) - 0.5 * dd_curr;
-                lp_prop += std::log(dd_prop) - 0.5 * dd_prop;
+                lpr_curr += std::log(dd_curr) - 0.5 * dd_curr;
+                lpr_prop += std::log(dd_prop) - 0.5 * dd_prop;
             }
 
-            if (std::log(runif(rng)) < (ll_prop + lp_prop) - (ll_curr + lp_curr)) {
+            if (std::log(runif(rng)) < (ll_prop + lpr_prop) - (ll_curr + lpr_curr)) {
                 log_disp_num = log_dn_prop;
                 log_disp_denom = log_dd_prop;
                 disp_accept_cnt++;
@@ -1222,10 +1228,9 @@ inline GibbsResult run_gibbs_bym2(
         }
 
         // ---- Adaptation during warmup ----
+        // The two-dimensional random walk aims at an acceptance near 0.3
         if (iter < n_warmup && iter > 0 && iter % 50 == 0) {
-            double target = 0.44;
-
-            auto adapt = [&](double& scale, int& acc, int& tot) {
+            auto adapt = [&](double& scale, int& acc, int& tot, double target) {
                 if (tot == 0) return;
                 double rate = (double)acc / tot;
                 if (rate > target + 0.05) scale *= 1.2;
@@ -1233,26 +1238,19 @@ inline GibbsResult run_gibbs_bym2(
                 scale = std::max(0.001, std::min(scale, 5.0));
                 acc = 0; tot = 0;
             };
-
-            adapt(beta_scale, beta_accept_cnt, beta_total_cnt);
-            adapt(sigma_scale, sigma_accept_cnt, sigma_total_cnt);
-            adapt(rho_scale, rho_accept_cnt, rho_total_cnt);
-            adapt(level_scale, level_accept_cnt, level_total_cnt);
-            adapt(sigma_joint_scale, sigma_joint_accept_cnt, sigma_joint_total_cnt);
-            adapt(rho_joint_scale, rho_joint_accept_cnt, rho_joint_total_cnt);
+            adapt(hyper_scale, hyper_accept_cnt, hyper_total_cnt, 0.3);
             if (has_disp_num || has_disp_denom)
-                adapt(disp_scale, disp_accept_cnt, disp_total_cnt);
+                adapt(disp_scale, disp_accept_cnt, disp_total_cnt, 0.44);
         }
 
         // ---- Store draws ----
         if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
             sigma_total = std::exp(log_sigma_total);
-            rho = 1.0 / (1.0 + std::exp(-logit_rho));
+            rho = rho_of(logit_rho);
 
             int row = save_idx * n_params;
             int col = 0;
-            for (int j = 0; j < p_num; j++) result.draws_flat[row + col++] = beta_num[j];
-            for (int j = 0; j < p_denom; j++) result.draws_flat[row + col++] = beta_denom[j];
+            for (int j = 0; j < p_num + p_denom; j++) result.draws_flat[row + col++] = x[j];
             if (has_disp_num) result.draws_flat[row + col++] = log_disp_num;
             if (has_disp_denom) result.draws_flat[row + col++] = log_disp_denom;
             result.draws_flat[row + col++] = log_sigma_total;
@@ -1261,7 +1259,7 @@ inline GibbsResult run_gibbs_bym2(
             // Store total spatial effect per site
             for (int s = 0; s < S; s++) {
                 result.phi_draws_flat[save_idx * S + s] =
-                    bym2_spatial_effect(s, phi.data(), theta.data(),
+                    bym2_spatial_effect(s, x.data() + lay.phi0(), x.data() + lay.theta0(),
                                         sigma_total, rho, scale_factor);
             }
 
@@ -1275,12 +1273,12 @@ inline GibbsResult run_gibbs_bym2(
         }
     }
 
-    // Acceptance rates
-    for (int s = 0; s < S; s++) {
-        result.accept_phi[s] = phi_total[s] > 0 ?
-            (double)phi_accept[s] / phi_total[s] : 0.0;
-    }
-    result.accept_beta = beta_total_cnt > 0 ? (double)beta_accept_cnt / beta_total_cnt : 0.0;
+    // Acceptance rates: the field moves as one block, so every site reports
+    // the block's rate
+    const double field_rate = field_total_cnt > 0 ?
+        (double)field_accept_cnt / field_total_cnt : 0.0;
+    for (int s = 0; s < S; s++) result.accept_phi[s] = field_rate;
+    result.accept_beta = field_rate;
     result.accept_disp = disp_total_cnt > 0 ? (double)disp_accept_cnt / disp_total_cnt : 0.0;
 
     // Param names

@@ -46,11 +46,14 @@ posterior_predict.ratiod_fit <- function(object, ndraws = NULL, ...) {
   if (!identical(zi_type, "none")) {
     num_dist <- inflation_base_distribution(zi_type)
     draws_mat <- as.matrix(object$draws)
-    logit_zi <- if (!is.null(object$zi$X_zi) && ncol(object$zi$X_zi) > 0L) {
-      .ratiod_inflation_linpred(draws_mat, "beta_zi", object$zi$X_zi)
+    links <- fit_links(object)
+    pi_zi <- if (!is.null(object$zi$X_zi) && ncol(object$zi$X_zi) > 0L) {
+      pp_linkinv(links$zi)(
+        .ratiod_inflation_linpred(draws_mat, "beta_zi", object$zi$X_zi))
     }
-    logit_oi <- if (zi_type %in% c("oi_binomial", "zoib")) {
-      .ratiod_inflation_linpred(draws_mat, "beta_oi", object$zi$X_oi)
+    pi_oi <- if (zi_type %in% c("oi_binomial", "zoib")) {
+      pp_linkinv(links$oi)(
+        .ratiod_inflation_linpred(draws_mat, "beta_oi", object$zi$X_oi))
     }
   }
 
@@ -84,8 +87,8 @@ posterior_predict.ratiod_fit <- function(object, ndraws = NULL, ...) {
     y_num_rep[k, ] <- pp_rdist(num_dist, mu_num[s, ], disp_num[s], trials)
     if (!identical(zi_type, "none")) {
       y_num_rep[k, ] <- pp_inflate(zi_type, y_num_rep[k, ], mu_num[s, ],
-                                   disp_num[s], trials, logit_zi[s, ],
-                                   if (!is.null(logit_oi)) logit_oi[s, ])
+                                   disp_num[s], trials, pi_zi[s, ],
+                                   if (!is.null(pi_oi)) pi_oi[s, ])
     }
     y_denom_rep[k, ] <- if (denom_fixed) {
       observed$y_denom
@@ -123,7 +126,7 @@ inflation_base_distribution <- function(zi_type) {
 #' trial count).
 #'
 #' @keywords internal
-pp_inflate <- function(zi_type, y, mu, disp, trials, logit_zi, logit_oi) {
+pp_inflate <- function(zi_type, y, mu, disp, trials, pi_zi, pi_oi) {
   N <- length(y)
   base <- inflation_base_distribution(zi_type)
   cdf <- function(q) switch(base,
@@ -141,22 +144,22 @@ pp_inflate <- function(zi_type, y, mu, disp, trials, logit_zi, logit_oi) {
   switch(
     zi_type,
     zi_poisson = , zi_negbin = , zi_binomial = {
-      y[stats::runif(N) < stats::plogis(logit_zi)] <- 0
+      y[stats::runif(N) < pi_zi] <- 0
       y
     },
     hurdle_poisson = , hurdle_negbin = , hurdle_binomial = {
-      positive <- stats::runif(N) < stats::plogis(logit_zi)
+      positive <- stats::runif(N) < pi_zi
       upper <- if (identical(base, "binomial")) trials else Inf
       ifelse(positive, between(0, upper), 0)
     },
     oi_binomial = {
-      one <- stats::runif(N) < stats::plogis(logit_oi)
+      one <- stats::runif(N) < pi_oi
       y[one] <- trials[one]
       y
     },
     zoib = {
-      zero <- stats::runif(N) < stats::plogis(logit_zi)
-      one <- !zero & stats::runif(N) < stats::plogis(logit_oi)
+      zero <- stats::runif(N) < pi_zi
+      one <- !zero & stats::runif(N) < pi_oi
       ifelse(zero, 0, ifelse(one, trials, y))
     }
   )

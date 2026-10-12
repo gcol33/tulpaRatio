@@ -168,21 +168,28 @@ test_that("Gibbs agrees with HMC on an ICAR model", {
   }
 })
 
-test_that("a BYM2 field is refused by Gibbs and fitted by HMC in auto mode", {
-  # The component-wise BYM2 sweep does not reach the posterior HMC samples:
-  # on gibbs_field_data() its sigma settles near 0.9 where HMC's is near 8,
-  # and the intercept's R-hat stays at 1.6 after 40000 iterations.
-  d <- gibbs_test_data()
-  bym <- spatial_bym2(d$adj, level = "group", group_var = "spatial_site")
-  expect_error(
+test_that("Gibbs agrees with HMC on a BYM2 model, and auto mode picks it", {
+  # The BYM2 field moves as one block with its fixed effects and
+  # hyperparameters. The component-wise sweep it replaced settled sigma near
+  # 0.9 where HMC's is near 8, with the intercept's R-hat at 1.6 after 40000
+  # iterations (#133).
+  skip_on_cran()
+  d <- gibbs_field_data()
+  bym <- spatial_bym2(d$adj, level = "group", group_var = "site")
+  fit_mode <- function(mode) {
     tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
-           spatial = bym, mode = "gibbs",
-           control = list(iter = 20, chains = 1, seed = 1)),
-    "BYM2"
-  )
+           spatial = bym, mode = mode,
+           control = list(iter = 2000, warmup = 1000, chains = 4, seed = 99))
+  }
+  g <- as.matrix(fit_mode("gibbs")$draws)
+  h <- as.matrix(fit_mode("hmc")$draws)
+  for (nm in c("beta_num[1]", "beta_num[2]", "sigma_spatial", "rho_spatial")) {
+    expect_lt(abs(mean(g[, nm]) - mean(h[, nm])) / sd(h[, nm]), 0.25, label = nm)
+  }
+
   selection <- tulpaRatio:::select_inference_mode(
     mode = "auto", family = ratiod_binomial(), n_obs = nrow(d$df),
     structures = list(spatial = bym)
   )
-  expect_equal(selection$backend, "hmc")
+  expect_equal(selection$backend, "gibbs")
 })

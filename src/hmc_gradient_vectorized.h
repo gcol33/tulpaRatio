@@ -1358,6 +1358,9 @@ inline bool dispatch_fused_gradient(
         params, data, layout, grad, obs_ll, compute_lp,
         grad_temporal_lik_out, grad_spatial_lik_out, ws);
       return true;
+    default:
+      // Model types without a hand-coded likelihood take the arena gradient
+      break;
   }
   return false;
 }
@@ -1645,6 +1648,8 @@ inline bool dispatch_vectorized_gradient(
         params, data, layout, grad, obs_ll, compute_lp,
         grad_temporal_lik_out, grad_spatial_lik_out, ws);
       return true;
+    default:
+      break;
   }
   return false;
 }
@@ -1795,6 +1800,8 @@ inline bool dispatch_residuals_and_beta_grads(
         DISPATCH_CASE(ModelType::GAMMA_GAMMA)
         DISPATCH_CASE(ModelType::LOGNORMAL)
         DISPATCH_CASE(ModelType::BETA_BINOMIAL)
+        default:
+            break;
     }
     #undef DISPATCH_CASE
     return false;

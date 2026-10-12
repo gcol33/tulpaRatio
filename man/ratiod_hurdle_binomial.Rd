@@ -7,9 +7,9 @@
 ratiod_hurdle_binomial(link_num = "logit", link_hurdle = "logit")
 }
 \arguments{
-\item{link_num}{Link function for the success probability: "logit".}
+\item{link_num}{Link function for the success probability: "logit" (default), "probit" or "cloglog".}
 
-\item{link_hurdle}{Link function for the hurdle probability P(Y > 0): "logit".}
+\item{link_hurdle}{Link function for the hurdle probability P(Y > 0): "logit" (default), "probit" or "cloglog".}
 }
 \value{
 A \code{ratiod_family} object with hurdle structure

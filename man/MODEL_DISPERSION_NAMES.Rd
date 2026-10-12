@@ -7,6 +7,8 @@
 MODEL_DISPERSION_NAMES
 }
 \description{
-Draw names for the dispersion parameters of each model type
+A model type with a \code{num} entry carries a numerator dispersion parameter,
+one with a \code{denom} entry a denominator one; the parameter layout reads both
+off this table.
 }
 \keyword{internal}

@@ -596,6 +596,14 @@ inline Var digamma(const Var& a) {
     return r;
 }
 
+// A unary function whose value f and derivative df at a the caller computed
+inline Var unary(const Var& a, double f, double df) {
+    Var r;
+    r.arena_ = a.arena_;
+    r.idx_ = a.arena_->add_unary(f, a.idx_, df);
+    return r;
+}
+
 inline Var abs(const Var& a) {
     return (a.val() >= 0) ? a : -a;
 }

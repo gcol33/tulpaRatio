@@ -205,23 +205,11 @@ fit_vi <- function(formula,
     seed = as.integer(seed)
   )
 
-  # Compute number of parameters
-  n_params <- cpp_vi_get_n_params(
-    hmc_data$X_num,
-    hmc_data$X_denom,
-    model_type,
-    re_params,
-    spatial_params,
-    temporal_params,
-    zi_params
-  )
-
-  # Initialize from zeros (or could use Laplace mode)
-  q_init <- rep(0.0, n_params)
+  # The variational mean starts at zero on the layout the fit computes
+  q_init <- numeric(0)
 
   if (verbose) {
     message("Variational Inference")
-    message("  Parameters: ", n_params)
     message("  Variant: ", variant)
     message("  Max iterations: ", max_iter)
   }
@@ -231,10 +219,11 @@ fit_vi <- function(formula,
     q_init = q_init,
     y_num = as.integer(hmc_data$y_num),
     y_denom = as.integer(hmc_data$y_denom),
+    y_num_cont = as.numeric(hmc_data$y_num_cont),
     y_denom_cont = hmc_data$y_denom_cont,
     X_num = hmc_data$X_num,
     X_denom = hmc_data$X_denom,
-    model_type_str = model_type,
+    family = family_params(family, model_type),
     re_params = re_params,
     spatial_params = spatial_params,
     temporal_params = temporal_params,
@@ -272,10 +261,10 @@ fit_vi <- function(formula,
     family = family,
     model_type = model_type,
     n_obs = hmc_data$N,
-    n_params = n_params,
+    n_params = length(fit_raw$param_names),
     p_num = ncol(hmc_data$X_num),
     p_denom = ncol(hmc_data$X_denom),
-    param_names = get_param_names_vi(hmc_data, spatial_info, temporal_info, zi_info, model_type),
+    param_names = fit_raw$param_names,
 
     # Backend info
     backend = "vi",
@@ -307,70 +296,6 @@ fit_vi <- function(formula,
   }
 
   result
-}
-
-
-#' Get parameter names for VI fit
-#' @keywords internal
-get_param_names_vi <- function(hmc_data, spatial_info, temporal_info, zi_info, model_type) {
-  names <- character(0)
-
-  # Fixed effects numerator
-  names <- c(names, paste0("beta_num[", seq_len(ncol(hmc_data$X_num)), "]"))
-
-  # Fixed effects denominator (binomial/beta_binomial have 0 columns: fixed
-  # trials, no denominator coefficient; paste0() would otherwise emit a
-  # phantom "beta_denom[]" name for a zero-length seq_len())
-  if (ncol(hmc_data$X_denom) > 0) {
-    names <- c(names, paste0("beta_denom[", seq_len(ncol(hmc_data$X_denom)), "]"))
-  }
-
-  # Random effects
-  if (hmc_data$n_re_groups > 0) {
-    names <- c(names, "log_sigma_re")
-    names <- c(names, paste0("re[", seq_len(hmc_data$n_re_groups), "]"))
-  }
-
-  # Overdispersion
-  if (model_type == "negbin_negbin" || model_type == "negbin_gamma") {
-    names <- c(names, "log_phi_num", "log_phi_denom")
-  } else if (model_type == "poisson_gamma") {
-    names <- c(names, "log_shape")
-  }
-
-  # Spatial
-  if (spatial_info$type == "icar") {
-    names <- c(names, "log_tau_spatial")
-    names <- c(names, paste0("phi_spatial[", seq_len(spatial_info$n_units), "]"))
-  } else if (spatial_info$type == "bym2") {
-    names <- c(names, "log_sigma_bym2", "logit_rho_bym2")
-    names <- c(names, paste0("phi_spatial[", seq_len(spatial_info$n_units), "]"))
-    names <- c(names, paste0("theta_bym2[", seq_len(spatial_info$n_units), "]"))
-  }
-
-  # Temporal
-  if (temporal_info$type != "none" && temporal_info$n_temporal_params > 0) {
-    names <- c(names, "log_tau_temporal")
-    names <- c(names, paste0("phi_temporal[", seq_len(temporal_info$n_temporal_params), "]"))
-    if (temporal_info$type == "ar1") {
-      names <- c(names, "logit_rho_ar1")
-    }
-  }
-
-  # Zero-inflation. Use the explicit p_zi (not ncol(X_zi)) because OI-only
-  # models pass a 1-column placeholder X_zi but p_zi = 0.
-  p_zi <- zi_info$p_zi %||% ncol(zi_info$X_zi)
-  if (zi_info$type != "none" && p_zi > 0) {
-    names <- c(names, paste0("beta_zi[", seq_len(p_zi), "]"))
-  }
-
-  # One-inflation (OI-binomial and ZOIB)
-  p_oi <- zi_info$p_oi %||% 0L
-  if (p_oi > 0) {
-    names <- c(names, paste0("beta_oi[", seq_len(p_oi), "]"))
-  }
-
-  names
 }
 
 

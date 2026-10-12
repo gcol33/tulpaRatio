@@ -29,10 +29,13 @@ NULL
 #' \eqn{P_{NB}} is the negative binomial PMF.
 #'
 #' @param link_num Link function for the count mean: "log".
-#' @param link_denom Link function for the denominator mean: "log".
-#' @param link_zi Link function for the zero-inflation probability: "logit".
-#' @param denom_family Denominator distribution: "negbin" (default) or
-#'   "gamma" for continuous effort.
+#' @param link_denom Link function for the denominator mean: "log" (default);
+#'   a gamma denominator also takes "identity" or "inverse".
+#' @param link_zi Link function for the zero-inflation probability: "logit" (default), "probit" or "cloglog".
+#' @param denom_family Denominator distribution: "negbin" (default),
+#'   "gamma" for continuous effort, or "fixed" for a known exposure. A known
+#'   exposure is data: it scales the count mean, which is then the rate times
+#'   the exposure, and the ratio is the rate.
 #'
 #' @return A `ratiod_family` object with zero-inflation
 #'
@@ -93,7 +96,8 @@ ratiod_zinegbin <- function(link_num = "log", link_denom = "log",
 #' Useful when overdispersion is primarily due to excess zeros.
 #'
 #' @inheritParams ratiod_zinegbin
-#' @param denom_family Denominator distribution: "gamma".
+#' @param denom_family Denominator distribution: "gamma" (default),
+#'   "negbin" for a count denominator, or "fixed" for a known exposure.
 #'
 #' @return A `ratiod_family` object with zero-inflation
 #'
@@ -152,7 +156,7 @@ ratiod_zipois <- function(link_num = "log", link_denom = "log",
 #' \eqn{P_{NB}^+} is the truncated-at-zero negative binomial.
 #'
 #' @inheritParams ratiod_zinegbin
-#' @param link_hurdle Link function for the hurdle probability: "logit".
+#' @param link_hurdle Link function for the hurdle probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object with hurdle structure
 #'
@@ -211,7 +215,8 @@ ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
 #' Hurdle model with truncated Poisson for positive counts.
 #'
 #' @inheritParams ratiod_hurdle_negbin
-#' @param denom_family Denominator distribution: "gamma".
+#' @param denom_family Denominator distribution: "gamma" (default),
+#'   "negbin" for a count denominator, or "fixed" for a known exposure.
 #'
 #' @return A `ratiod_family` object with hurdle structure
 #'
@@ -229,8 +234,8 @@ ratiod_hurdle_pois <- function(link_num = "log", link_denom = "log",
 # Denominators each inflated count numerator is fitted with; every pair is
 # one likelihood of the samplers (get_hmc_model_type()).
 zi_count_denominators <- list(
-  poisson = c(gamma = "gamma"),
-  neg_binomial_2 = c(negbin = "neg_binomial_2", gamma = "gamma")
+  poisson = c(gamma = "gamma", negbin = "neg_binomial_2", fixed = "fixed"),
+  neg_binomial_2 = c(negbin = "neg_binomial_2", gamma = "gamma", fixed = "fixed")
 )
 
 #' Build a zero-inflated or hurdle count family
@@ -245,18 +250,23 @@ zi_count_denominators <- list(
 zi_count_family <- function(base, type, denom_family, link_num, link_denom,
                             link_inflation) {
   validate_link(link_num, "log")
-  validate_link(link_denom, "log")
-  validate_link(link_inflation, "logit")
+  validate_link(link_inflation, LINKS_PROBABILITY)
   allowed <- zi_count_denominators[[base]]
   if (!(length(denom_family) == 1L && denom_family %in% names(allowed))) {
     stop(sprintf("`denom_family` must be one of %s.",
                  paste0('"', names(allowed), '"', collapse = ", ")),
          call. = FALSE)
   }
+  fixed <- identical(denom_family, "fixed")
+  if (!fixed) {
+    validate_link(link_denom,
+                  if (identical(allowed[[denom_family]], "gamma")) LINKS_GAMMA else "log")
+  }
   hurdle <- identical(type, "hurdle")
   short <- c(poisson = "pois", neg_binomial_2 = "negbin")[[base]]
   label <- c(poisson = "Poisson", neg_binomial_2 = "negative binomial")[[base]]
-  denom_label <- c(gamma = "Gamma", negbin = "negative binomial")[[denom_family]]
+  denom_label <- c(gamma = "Gamma", negbin = "negative binomial",
+                   fixed = "known exposure")[[denom_family]]
 
   numerator <- list(
     distribution = paste0(if (hurdle) "hurdle_" else "zero_inflated_",
@@ -271,7 +281,7 @@ zi_count_family <- function(base, type, denom_family, link_num, link_denom,
       name = paste0(if (hurdle) "hurdle_" else "zi", short, "_", denom_family),
       numerator = numerator,
       denominator = list(distribution = allowed[[denom_family]],
-                         link = link_denom),
+                         link = if (fixed) NULL else link_denom),
       zero_inflated = TRUE,
       zi_type = type,
       description = sprintf("%s %s numerator, %s denominator",
@@ -342,8 +352,8 @@ print.ratiod_family_zi <- function(x, ...) {
 #' \deqn{P(Y = 0) = \pi + (1 - \pi) \cdot (1-p)^n}
 #' \deqn{P(Y = y) = (1 - \pi) \cdot \binom{n}{y} p^y (1-p)^{n-y}, \quad y > 0}
 #'
-#' @param link_num Link function for the success probability: "logit".
-#' @param link_zi Link function for the zero-inflation probability: "logit".
+#' @param link_num Link function for the success probability: "logit" (default), "probit" or "cloglog".
+#' @param link_zi Link function for the zero-inflation probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object with zero-inflation
 #'
@@ -364,9 +374,8 @@ print.ratiod_family_zi <- function(x, ...) {
 #' @export
 ratiod_zibinomial <- function(link_num = "logit", link_zi = "logit") {
 
-  validate_link(link_num, "logit")
-
-  validate_link(link_zi, "logit")
+  validate_link(link_num, LINKS_PROBABILITY)
+  validate_link(link_zi, LINKS_PROBABILITY)
 
   structure(
     list(
@@ -399,8 +408,8 @@ ratiod_zibinomial <- function(link_num = "logit", link_zi = "logit") {
 #' \deqn{P(Y = n) = \psi + (1 - \psi) \cdot p^n}
 #' \deqn{P(Y = y) = (1 - \psi) \cdot \binom{n}{y} p^y (1-p)^{n-y}, \quad y < n}
 #'
-#' @param link_num Link function for the success probability: "logit".
-#' @param link_oi Link function for the one-inflation probability: "logit".
+#' @param link_num Link function for the success probability: "logit" (default), "probit" or "cloglog".
+#' @param link_oi Link function for the one-inflation probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object with one-inflation
 #'
@@ -418,8 +427,8 @@ ratiod_zibinomial <- function(link_num = "logit", link_zi = "logit") {
 #' @export
 ratiod_oibinomial <- function(link_num = "logit", link_oi = "logit") {
 
-  validate_link(link_num, "logit")
-  validate_link(link_oi, "logit")
+  validate_link(link_num, LINKS_PROBABILITY)
+  validate_link(link_oi, LINKS_PROBABILITY)
 
   structure(
     list(
@@ -451,9 +460,9 @@ ratiod_oibinomial <- function(link_num = "logit", link_oi = "logit") {
 #' Commonly needed in ecological applications where both absence (structural)
 #' and perfect detection (saturation) have distinct processes.
 #'
-#' @param link_num Link function for the success probability: "logit".
-#' @param link_zi Link function for the zero-inflation probability: "logit".
-#' @param link_oi Link function for the one-inflation probability: "logit".
+#' @param link_num Link function for the success probability: "logit" (default), "probit" or "cloglog".
+#' @param link_zi Link function for the zero-inflation probability: "logit" (default), "probit" or "cloglog".
+#' @param link_oi Link function for the one-inflation probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object with zero-and-one inflation
 #'
@@ -474,9 +483,9 @@ ratiod_oibinomial <- function(link_num = "logit", link_oi = "logit") {
 ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
                                link_oi = "logit") {
 
-  validate_link(link_num, "logit")
-  validate_link(link_zi, "logit")
-  validate_link(link_oi, "logit")
+  validate_link(link_num, LINKS_PROBABILITY)
+  validate_link(link_zi, LINKS_PROBABILITY)
+  validate_link(link_oi, LINKS_PROBABILITY)
 
   structure(
     list(
@@ -508,8 +517,8 @@ ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
 #' Hurdle model for binomial data where zero counts are modeled separately
 #' from positive counts using a truncated binomial.
 #'
-#' @param link_num Link function for the success probability: "logit".
-#' @param link_hurdle Link function for the hurdle probability P(Y > 0): "logit".
+#' @param link_num Link function for the success probability: "logit" (default), "probit" or "cloglog".
+#' @param link_hurdle Link function for the hurdle probability P(Y > 0): "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object with hurdle structure
 #'
@@ -520,8 +529,8 @@ ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
 #' @export
 ratiod_hurdle_binomial <- function(link_num = "logit", link_hurdle = "logit") {
 
-  validate_link(link_num, "logit")
-  validate_link(link_hurdle, "logit")
+  validate_link(link_num, LINKS_PROBABILITY)
+  validate_link(link_hurdle, LINKS_PROBABILITY)
 
   structure(
     list(

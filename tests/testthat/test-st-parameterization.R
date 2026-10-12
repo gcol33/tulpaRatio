@@ -37,3 +37,12 @@ test_that("centred and non-centred interactions give the same tau", {
                               ty, mean(tau[[1]]), mean(tau[[2]])))
   }
 })
+
+test_that("the non-centred GP interaction is a change of variables of the centred one", {
+  # At fixed hyperparameters the non-centred density at z and the centred
+  # density at delta(z) differ by the log-Jacobian alone, the same for every z.
+  for (field in c("stgp_nc", "stgp_gneiting_nc")) {
+    expect_lt(tulpaRatio:::cpp_st_gp_nc_coordinate_spread(field), 1e-8,
+              label = field)
+  }
+})

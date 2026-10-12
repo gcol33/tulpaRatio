@@ -69,15 +69,20 @@ test_that("ratiod_gamma_gamma creates valid family", {
   expect_equal(fam$denominator$link, "log")
 })
 
-test_that("a family accepts only the links the samplers fit", {
-  # Every likelihood kernel uses the canonical link, so any other link would
-  # be stored on the family and silently not fitted.
-  expect_error(ratiod_binomial(link = "probit"), "not supported")
-  expect_error(ratiod_beta_binomial(link = "cloglog"), "not supported")
-  expect_error(ratiod_gamma_gamma(link_num = "identity"), "not supported")
+test_that("a family accepts only the links its likelihood implements", {
+  # Probabilities take logit, probit or cloglog; gamma means log, identity or
+  # inverse; count means and the log-normal location the log link only.
+  expect_equal(ratiod_binomial(link = "probit")$numerator$link, "probit")
+  expect_equal(ratiod_beta_binomial(link = "cloglog")$numerator$link, "cloglog")
+  expect_equal(ratiod_gamma_gamma(link_num = "identity")$numerator$link, "identity")
+  expect_equal(ratiod_zibinomial(link_zi = "probit")$numerator$link_zi, "probit")
+  expect_equal(ratiod_hurdle_pois(link_hurdle = "cloglog")$numerator$link_hurdle,
+               "cloglog")
+  expect_error(ratiod_binomial(link = "log"), "not supported")
   expect_error(ratiod_lognormal(link_num = "identity"), "not supported")
-  expect_error(ratiod_zibinomial(link_zi = "probit"), "not supported")
-  expect_error(ratiod_hurdle_pois(link_hurdle = "cloglog"), "not supported")
+  expect_error(ratiod_negbin_negbin(link_num = "identity"), "not supported")
+  expect_error(ratiod_poisson_gamma(link_num = "inverse"), "not supported")
+  expect_error(ratiod_zibinomial(link_zi = "inverse"), "not supported")
 })
 
 test_that("inflated count families fit the denominators they name", {
@@ -88,8 +93,17 @@ test_that("inflated count families fit the denominators they name", {
   expect_equal(get_hmc_model_type(ratiod_hurdle_negbin(denom_family = "gamma")),
                "negbin_gamma")
   expect_equal(get_hmc_model_type(ratiod_hurdle_pois()), "poisson_gamma")
-  expect_error(ratiod_zipois(denom_family = "negbin"), "must be one of")
-  expect_error(ratiod_zinegbin(denom_family = "fixed"), "must be one of")
+  expect_equal(get_hmc_model_type(ratiod_zipois(denom_family = "negbin")),
+               "poisson_negbin")
+  expect_equal(get_hmc_model_type(ratiod_zipois(denom_family = "fixed")),
+               "poisson_fixed")
+  expect_equal(get_hmc_model_type(ratiod_zinegbin(denom_family = "fixed")),
+               "negbin_fixed")
+  expect_equal(get_hmc_model_type(ratiod_hurdle_negbin(denom_family = "fixed")),
+               "negbin_fixed")
+  expect_equal(get_hmc_model_type(ratiod_lognormal(denom_fixed = TRUE)),
+               "lognormal_fixed")
+  expect_error(ratiod_zipois(denom_family = "binomial"), "must be one of")
 })
 
 test_that("ratiod_lognormal creates valid family", {

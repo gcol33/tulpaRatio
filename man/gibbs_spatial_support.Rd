@@ -16,7 +16,8 @@ depend on what else is in the model}
 \code{TRUE}, or a phrase naming the restriction
 }
 \description{
-The component-wise sampler fits an intrinsic CAR field. Its BYM2 sweep
-does not converge to the posterior HMC samples, so a BYM2 field is refused.
+The sampler fits an intrinsic CAR field site by site, and a BYM2 field as
+one block with its fixed effects and hyperparameters. A restricted field
+names itself.
 }
 \keyword{internal}

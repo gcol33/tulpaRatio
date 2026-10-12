@@ -52,3 +52,21 @@ test_that("the intercept's posterior sd matches its own prior under ICAR", {
   dr <- gibbs_recovery_fit(s, car, ratiod_priors(beta = prior_normal(0, 0.5)))
   expect_equal(sd(dr[, "beta_num[1]"]), 0.5, tolerance = 0.3)
 })
+
+test_that("BYM2 sigma, rho and the intercept recover their priors with zero-trials data", {
+  # The one-block update proposes the fixed effects, both field components
+  # and the two hyperparameters together; a wrong proposal density or
+  # constraint correction anywhere in it moves these marginals off their
+  # priors.
+  skip_on_cran()
+  s <- gibbs_recovery_setup()
+  bym <- spatial_bym2(s$adj, level = "group", group_var = "site")
+  priors <- ratiod_priors(beta = prior_normal(0, 0.5))
+  dr <- gibbs_recovery_fit(s, bym, priors)
+  scale <- tulpaRatio:::sampler_priors(priors, "binomial")$sigma_re_scale
+  p <- c(0.25, 0.5, 0.75)
+  expect_equal(unname(quantile(dr[, "sigma_spatial"], p)), scale * tan(pi * p / 2),
+               tolerance = 0.25)
+  expect_equal(unname(quantile(dr[, "rho_spatial"], p)), p, tolerance = 0.2)
+  expect_equal(sd(dr[, "beta_num[1]"]), 0.5, tolerance = 0.3)
+})

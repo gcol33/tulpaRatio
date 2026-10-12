@@ -348,6 +348,7 @@ tratio <- function(formula,
   # Refuse a model the selected backend would fit without part of its
   # structure. `auto` never reaches this, having filtered on the same table.
   assert_backend_fits_structures(selected_backend, structures)
+  assert_backend_fits_likelihood(selected_backend, family, structures)
 
   # PG backend only works for binomial family (currently experimental)
   if (selected_backend == "pg") {

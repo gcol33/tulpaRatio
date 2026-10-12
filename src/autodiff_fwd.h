@@ -318,6 +318,11 @@ inline Dual digamma(const Dual& x) {
     return Dual(ratiod::math::portable_digamma(x.val), ratiod::math::portable_trigamma(x.val) * x.grad);
 }
 
+// A unary function whose value f and derivative df at x the caller computed
+inline Dual unary(const Dual& x, double f, double df) {
+    return Dual(f, df * x.grad);
+}
+
 inline Dual abs(const Dual& x) {
     if (x.val >= 0) {
         return x;

@@ -12,7 +12,8 @@ initialize_hmc_params_full(
   zi_info,
   latent_info = NULL,
   svc_info = NULL,
-  spatiotemporal_info = NULL
+  spatiotemporal_info = NULL,
+  links = family_links(NULL, model_type)
 )
 }
 \description{

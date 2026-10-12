@@ -33,10 +33,11 @@ Rcpp::List cpp_ess_fit(
     Rcpp::NumericVector q_init,
     Rcpp::IntegerVector y_num,
     Rcpp::IntegerVector y_denom,
+    Rcpp::NumericVector y_num_cont,
     Rcpp::NumericVector y_denom_cont,
     Rcpp::NumericMatrix X_num,
     Rcpp::NumericMatrix X_denom,
-    std::string model_type_str,
+    Rcpp::List family,
     Rcpp::List re_params,
     Rcpp::List spatial_params,
     Rcpp::List temporal_params,
@@ -55,42 +56,11 @@ Rcpp::List cpp_ess_fit(
     // Set up model data (similar to cpp_hmc_fit)
     // =========================================================================
 
-    int N = y_num.size();
-    int p_num = X_num.ncol();
-    int p_denom = X_denom.ncol();
-
     ModelData data;
-    data.N = N;
-    data.p_num = p_num;
-    data.p_denom = p_denom;
-
-    // Copy response data
-    data.y_num = Rcpp::as<std::vector<int>>(y_num);
-    data.y_denom = Rcpp::as<std::vector<int>>(y_denom);
-    data.y_denom_cont = Rcpp::as<std::vector<double>>(y_denom_cont);
-
-    // Copy design matrices (row-major for cache efficiency)
-    data.X_num_flat.resize(N * p_num);
-    data.X_denom_flat.resize(N * p_denom);
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < p_num; j++) {
-            data.X_num_flat[i * p_num + j] = X_num(i, j);
-        }
-        for (int j = 0; j < p_denom; j++) {
-            data.X_denom_flat[i * p_denom + j] = X_denom(i, j);
-        }
-    }
-
-    // Model type
-    if (model_type_str == "binomial") {
-        data.model_type = ModelType::BINOMIAL;
-    } else if (model_type_str == "negbin_negbin") {
-        data.model_type = ModelType::NEGBIN_NEGBIN;
-    } else if (model_type_str == "poisson_gamma") {
-        data.model_type = ModelType::POISSON_GAMMA;
-    } else {
-        data.model_type = ModelType::NEGBIN_NEGBIN;  // Default
-    }
+    apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
+                        X_num, X_denom);
+    apply_family_params(data, family);
+    const int N = data.N;
 
     // Random effects
     data.re_group = Rcpp::as<std::vector<int>>(re_params["group"]);
@@ -279,76 +249,7 @@ Rcpp::List cpp_ess_fit(
         }
     }
 
-    // Build parameter names
-    CharacterVector param_names(n_params);
-    int idx = 0;
-
-    // Beta numerator
-    for (int j = 0; j < p_num; j++) {
-        param_names[idx++] = "beta_num[" + std::to_string(j + 1) + "]";
-    }
-
-    // Beta denominator
-    for (int j = 0; j < p_denom; j++) {
-        param_names[idx++] = "beta_denom[" + std::to_string(j + 1) + "]";
-    }
-
-    // Random effects
-    if (layout.has_re) {
-        param_names[idx++] = "log_sigma_re";
-        for (int g = 0; g < data.n_re_groups; g++) {
-            param_names[idx++] = "re[" + std::to_string(g + 1) + "]";
-        }
-    }
-
-    // Overdispersion
-    if (layout.has_phi_num) {
-        param_names[idx++] = "log_phi_num";
-    }
-    if (layout.has_phi_denom) {
-        param_names[idx++] = "log_phi_denom";
-    }
-
-    // Spatial
-    if (layout.has_spatial) {
-        param_names[idx++] = "log_tau_spatial";
-        for (int s = 0; s < data.n_spatial_units; s++) {
-            param_names[idx++] = "phi_spatial[" + std::to_string(s + 1) + "]";
-        }
-        if (layout.is_bym2) {
-            param_names[idx++] = "log_sigma_bym2";
-            param_names[idx++] = "logit_rho_bym2";
-            for (int s = 0; s < data.n_spatial_units; s++) {
-                param_names[idx++] = "theta_bym2[" + std::to_string(s + 1) + "]";
-            }
-        }
-    }
-
-    // Temporal
-    if (layout.has_temporal) {
-        param_names[idx++] = "log_tau_temporal";
-        for (int t = 0; t < data.n_temporal_params; t++) {
-            param_names[idx++] = "phi_temporal[" + std::to_string(t + 1) + "]";
-        }
-        if (layout.is_ar1) {
-            param_names[idx++] = "logit_rho_ar1";
-        }
-    }
-
-    // ZI
-    if (layout.has_zi) {
-        for (int j = 0; j < data.p_zi; j++) {
-            param_names[idx++] = "beta_zi[" + std::to_string(j + 1) + "]";
-        }
-    }
-
-    // OI
-    if (layout.has_oi) {
-        for (int j = 0; j < data.p_oi; j++) {
-            param_names[idx++] = "beta_oi[" + std::to_string(j + 1) + "]";
-        }
-    }
-
+    CharacterVector param_names = layout_param_names(data, layout);
     colnames(samples_out) = param_names;
 
     return List::create(
@@ -361,72 +262,3 @@ Rcpp::List cpp_ess_fit(
     );
 }
 
-// [[Rcpp::export]]
-int cpp_ess_get_n_params(
-    Rcpp::NumericMatrix X_num,
-    Rcpp::NumericMatrix X_denom,
-    std::string model_type_str,
-    Rcpp::List re_params,
-    Rcpp::List spatial_params,
-    Rcpp::List temporal_params,
-    Rcpp::List zi_params
-) {
-    // Simplified parameter counting for ESS
-    int n_params = 0;
-
-    // Fixed effects
-    n_params += X_num.ncol();
-    n_params += X_denom.ncol();
-
-    // Random effects
-    int n_re_groups = Rcpp::as<int>(re_params["n_groups"]);
-    if (n_re_groups > 0) {
-        n_params += 1;  // log_sigma_re
-        n_params += n_re_groups;  // re values
-    }
-
-    // Overdispersion (depends on model type)
-    if (model_type_str == "negbin_negbin") {
-        n_params += 2;  // log_phi_num, log_phi_denom
-    } else if (model_type_str == "poisson_gamma") {
-        n_params += 1;  // log_phi (shape for gamma)
-    }
-
-    // Spatial
-    std::string spatial_type = Rcpp::as<std::string>(spatial_params["type"]);
-    if (spatial_type != "none") {
-        int n_units = Rcpp::as<int>(spatial_params["n_units"]);
-        n_params += 1;  // log_tau_spatial
-        n_params += n_units;  // phi_spatial
-        if (spatial_type == "bym2") {
-            n_params += 2;  // log_sigma_bym2, logit_rho_bym2
-            n_params += n_units;  // theta_bym2
-        }
-    }
-
-    // Temporal
-    std::string temporal_type = Rcpp::as<std::string>(temporal_params["type"]);
-    if (temporal_type != "none") {
-        int n_temporal_params = Rcpp::as<int>(temporal_params["n_params"]);
-        n_params += 1;  // log_tau_temporal
-        n_params += n_temporal_params;  // phi_temporal
-        if (temporal_type == "ar1") {
-            n_params += 1;  // logit_rho_ar1
-        }
-    }
-
-    // ZI
-    if (ratiod_zi::parse_zi_type(Rcpp::as<std::string>(zi_params["type"])) != ZIType::NONE) {
-        // Use explicit p_zi from R (not X_zi.ncol()) because OI-only models
-        // pass a 1-column placeholder X_zi but p_zi=0
-        SEXP p_zi_sexp = zi_params["p_zi"];
-        if (!Rf_isNull(p_zi_sexp)) {
-            n_params += Rcpp::as<int>(p_zi_sexp);
-        } else {
-            NumericMatrix X_zi = Rcpp::as<NumericMatrix>(zi_params["X"]);
-            n_params += X_zi.ncol();  // beta_zi
-        }
-    }
-
-    return n_params;
-}
