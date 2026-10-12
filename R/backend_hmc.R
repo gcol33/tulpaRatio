@@ -620,6 +620,8 @@ fit_hmc <- function(formula,
       adj_col_idx = as.integer(spatial_info$adj_col_idx),
       n_neighbors = as.integer(spatial_info$n_neighbors),
       bym2_scale = spatial_info$bym2_scale,
+      component = spatial_info$component,
+      node_prec = spatial_info$node_prec,
       Q_inv = spatial_info$Q_inv,
       L_Q = spatial_info$L_Q,
       parameterization = spatial_info$parameterization %||% "standard",
@@ -1404,6 +1406,10 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
     adj_col_idx = adj_col_idx,
     n_neighbors = n_neighbors,
     bym2_scale = bym2_scale,
+    # A disconnected graph: the sum-to-zero blocks and the per-unit ICAR
+    # precision; NULL on a connected one
+    component = if (spatial_type %in% c("icar", "bym2", "car")) spatial$component,
+    node_prec = if (spatial_type %in% c("icar", "bym2", "car")) spatial$node_prec,
     group_var = spatial$group_var,  # Preserve for prediction lookup
     Q_inv = Q_inv_flat,
     L_Q = L_Q_flat,

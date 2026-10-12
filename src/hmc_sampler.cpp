@@ -302,6 +302,7 @@ ParamLayout compute_param_layout(const ModelData& data) {
         layout.theta_bym2_end = idx;
       }
       layout.log_tau_spatial_idx = -1;
+      layout.logit_rho_car_idx = -1;
     } else {
       // ICAR / proper CAR: log_tau, [logit_rho if proper CAR], [phi if not collapsed]
       layout.log_tau_spatial_idx = idx++;
@@ -727,44 +728,73 @@ Rcpp::CharacterVector layout_param_names(const ModelData& data,
     Rcpp::stop("layout_param_names() names the blocks of the ESS, SGHMC, "
                "SGLD and VI samplers only");
   }
-  std::vector<std::string> names;
-  names.reserve(layout.total_params);
-  auto indexed = [&names](const char* stem, int n) {
-    for (int k = 0; k < n; k++) {
-      names.push_back(std::string(stem) + "[" + std::to_string(k + 1) + "]");
+  // Each name is written at the index the layout assigns, so the names follow
+  // the parameter vector whatever order the blocks take in it
+  std::vector<std::string> names(layout.total_params);
+  auto scalar = [&names](int idx, const char* name) {
+    if (idx >= 0) names[idx] = name;
+  };
+  auto indexed = [&names](const char* stem, int start, int end) {
+    for (int i = start; i >= 0 && i < end; i++) {
+      names[i] = std::string(stem) + "[" + std::to_string(i - start + 1) + "]";
     }
   };
 
-  indexed("beta_num", data.p_num);
-  indexed("beta_denom", data.p_denom);
+  indexed("beta_num", layout.beta_num_start, layout.beta_num_end);
+  indexed("beta_denom", layout.beta_denom_start, layout.beta_denom_end);
   if (layout.has_re) {
-    names.push_back("log_sigma_re");
-    indexed("re", data.n_re_groups);
+    scalar(layout.log_sigma_re_idx, "log_sigma_re");
+    indexed("re", layout.re_start, layout.re_end);
   }
-  if (layout.has_phi_num) names.push_back("log_phi_num");
-  if (layout.has_phi_denom) names.push_back("log_phi_denom");
+  if (layout.has_phi_num) scalar(layout.log_phi_num_idx, "log_phi_num");
+  if (layout.has_phi_denom) scalar(layout.log_phi_denom_idx, "log_phi_denom");
   if (layout.has_spatial) {
-    names.push_back("log_tau_spatial");
-    indexed("phi_spatial", data.n_spatial_units);
-    if (layout.is_bym2) {
-      names.push_back("log_sigma_bym2");
-      names.push_back("logit_rho_bym2");
-      indexed("theta_bym2", data.n_spatial_units);
-    }
+    scalar(layout.log_tau_spatial_idx, "log_tau_spatial");
+    scalar(layout.logit_rho_car_idx, "logit_rho_car");
+    scalar(layout.log_sigma_bym2_idx, "log_sigma_bym2");
+    scalar(layout.logit_rho_bym2_idx, "logit_rho_bym2");
+    indexed("phi_spatial", layout.spatial_start, layout.spatial_end);
+    indexed("theta_bym2", layout.theta_bym2_start, layout.theta_bym2_end);
   }
   if (layout.has_temporal) {
-    names.push_back("log_tau_temporal");
-    indexed("phi_temporal", data.n_temporal_params);
-    if (layout.is_ar1) names.push_back("logit_rho_ar1");
+    scalar(layout.log_tau_temporal_idx, "log_tau_temporal");
+    scalar(layout.logit_rho_ar1_idx, "logit_rho_ar1");
+    scalar(layout.log_sigma2_temporal_gp_idx, "log_sigma2_temporal_gp");
+    scalar(layout.logit_phi_temporal_gp_idx, "logit_phi_temporal_gp");
+    indexed("phi_temporal", layout.temporal_start, layout.temporal_end);
   }
-  if (layout.has_zi) indexed("beta_zi", data.p_zi);
-  if (layout.has_oi) indexed("beta_oi", data.p_oi);
+  if (layout.has_zi) indexed("beta_zi", layout.beta_zi_start, layout.beta_zi_end);
+  if (layout.has_oi) indexed("beta_oi", layout.beta_oi_start, layout.beta_oi_end);
 
-  if (static_cast<int>(names.size()) != layout.total_params) {
-    Rcpp::stop("layout_param_names(): named " + std::to_string(names.size()) +
-               " of " + std::to_string(layout.total_params) + " parameters");
+  for (int i = 0; i < layout.total_params; i++) {
+    if (names[i].empty()) {
+      Rcpp::stop("layout_param_names(): parameter " + std::to_string(i + 1) +
+                 " of " + std::to_string(layout.total_params) + " has no name");
+    }
   }
   return Rcpp::wrap(names);
+}
+
+void apply_areal_structure(ModelData& data, Rcpp::List spatial_params) {
+  data.areal_components = ratiod_constraints::ArealComponents();
+  data.areal_node_prec.clear();
+  if (spatial_params.containsElementNamed("component")) {
+    SEXP comp = spatial_params["component"];
+    if (!Rf_isNull(comp)) {
+      const std::vector<int> block = Rcpp::as<std::vector<int>>(comp);
+      int n_blocks = 0;
+      for (int v : block) n_blocks = std::max(n_blocks, v + 1);
+      data.areal_components.block_of = block;
+      data.areal_components.members.assign(n_blocks, std::vector<int>());
+      for (int u = 0; u < static_cast<int>(block.size()); u++) {
+        if (block[u] >= 0) data.areal_components.members[block[u]].push_back(u);
+      }
+    }
+  }
+  if (spatial_params.containsElementNamed("node_prec")) {
+    SEXP np = spatial_params["node_prec"];
+    if (!Rf_isNull(np)) data.areal_node_prec = Rcpp::as<std::vector<double>>(np);
+  }
 }
 
 int get_n_params(const ModelData& data) {
@@ -1008,7 +1038,7 @@ static inline double gp_pc_prior_grad_log_sigma2(
 static inline void spatial_gmrf_prior_grad(
     const ModelData& data, const ParamLayout& layout,
     const double* phi_spatial, const double* phi_spatial_prior,
-    double phi_raw_sum, bool centered,
+    const std::vector<double>& phi_raw_sums, bool centered,
     double tau_spatial,
     double sigma_s_bym2, double sigma_u_bym2, double rho_bym2,
     double rho_car,
@@ -1033,12 +1063,13 @@ void compute_gradient_analytical(
   // the constrained field. The returned gradient is with respect to the raw
   // parameters, which is why the spatial likelihood gradient is projected below.
   std::vector<double> params_centered;
-  double phi_raw_sum = 0.0;
+  std::vector<double> phi_raw_sums;
   const bool center_spatial = spatial_block_is_centred(data, layout);
   if (center_spatial) {
     params_centered = params_in;
-    phi_raw_sum = ratiod_constraints::center_spatial_block(
-        params_centered, layout.spatial_start, data.n_spatial_units);
+    phi_raw_sums = ratiod_constraints::center_areal_blocks(
+        params_centered, layout.spatial_start, data.n_spatial_units,
+        data.areal_components);
   }
   const std::vector<double>& params = center_spatial ? params_centered : params_in;
 
@@ -2286,7 +2317,7 @@ void compute_gradient_analytical(
 
   // ============ Spatial GMRF prior gradients (ICAR and BYM2) ============
   if (layout.has_spatial && n_spatial > 0) {
-    spatial_gmrf_prior_grad(data, layout, phi_spatial, phi_spatial, phi_raw_sum,
+    spatial_gmrf_prior_grad(data, layout, phi_spatial, phi_spatial, phi_raw_sums,
                             center_spatial,
                             tau_spatial, sigma_s_bym2, sigma_u_bym2, rho_bym2, 0.0,
                             theta_bym2, grad_spatial_lik.data(), grad.data());
@@ -2296,7 +2327,7 @@ void compute_gradient_analytical(
   // Prior/structural terms are computed via compute_log_post with skip_obs_loop=true (O(p+S+T)).
   // Observation log-lik was accumulated inline during the gradient computation (O(N)).
   // Total: one O(N) pass instead of two.
-  // compute_log_post centres its own copy and recovers phi_raw_sum from the raw
+  // compute_log_post centres its own copy and recovers phi_raw_sums from the raw
   // field, so it takes params_in; the centred copy would zero that sum and drop
   // the freed constant direction from the prior.
   if (log_post_out) {
@@ -3169,8 +3200,8 @@ static inline double gp_pc_prior_grad_log_sigma2(
 // see spatial_field_constraint.h -- so that the gradient and the density it is
 // returned alongside describe the same target.
 //
-// phi_spatial must be the centred field and phi_raw_sum its pre-centring sum,
-// both as produced by CenteredSpatialParams. grad_spatial_lik holds the
+// phi_spatial must be the centred field and phi_raw_sums its pre-centring
+// sums per block, both as produced by CenteredSpatialParams. grad_spatial_lik holds the
 // accumulated likelihood gradient with respect to the phi *parameters*, so for
 // BYM2 the sigma_s * scale chain factor is already applied by the caller's
 // scatter. theta_bym2 gradients stay with the caller, which sets the prior term
@@ -3202,7 +3233,7 @@ static inline void spatial_gmrf_prior_grad(
     const ModelData& data, const ParamLayout& layout,
     const double* phi_spatial,
     const double* phi_spatial_prior,
-    double phi_raw_sum,
+    const std::vector<double>& phi_raw_sums,
     bool centered,
     double tau_spatial,
     double sigma_s_bym2, double sigma_u_bym2,
@@ -3216,38 +3247,39 @@ static inline void spatial_gmrf_prior_grad(
     const bool is_bym2 = (data.spatial_type == SpatialType::BYM2);
     const bool is_car_proper = (data.spatial_type == SpatialType::CAR_PROPER);
 
-    // The likelihood sees the centred field, so its gradient with respect to
-    // the raw parameters is the projection (I - 11'/n). Applied here only:
-    // d(eta)/d(sigma_bym2) is a function of the centred field with no such
-    // projection, so grad_spatial_lik itself must stay unprojected.
-    double glik_mean = 0.0;
-    if (centered) {
-        for (int s = 0; s < S; s++) glik_mean += grad_spatial_lik[s];
-        glik_mean /= static_cast<double>(S);
-    }
+    // The likelihood sees each block centred, so its gradient with respect to
+    // the raw parameters is the projection removing each block's mean.
+    // Applied here only: d(eta)/d(sigma_bym2) is a function of the centred
+    // field with no such projection, so grad_spatial_lik itself must stay
+    // unprojected.
     for (int s = 0; s < S; s++) {
-        grad[layout.spatial_start + s] = grad_spatial_lik[s] - glik_mean;
+        grad[layout.spatial_start + s] = grad_spatial_lik[s];
+    }
+    if (centered) {
+        ratiod_constraints::project_areal_gradient(&grad[layout.spatial_start], S,
+                                                   data.areal_components);
     }
 
-    // ICAR prior: -0.5 * tau * phi' * Q * phi where Q_ij = n_neighbors[i] if i=j, -1 if i~j
-    // d/d(phi[i]) = -tau * (n_neighbors[i]*phi[i] - sum_{j~i} phi[j])
+    // ICAR prior: -0.5 * tau * phi' * Q * phi, Q the ICAR precision with the
+    // per-unit multipliers and island diagonal of ratiod::icar_precision_row.
     // Proper CAR: Q(rho)_ij = n_neighbors[i] if i=j, -rho if i~j; no freed direction.
-    double icar_quad = 0.0;
-    // Gradient of the freed constant direction; see spatial_field_constraint.h.
+    // Gradient of each block's freed constant direction; see
+    // spatial_field_constraint.h.
     const double free_scale = is_bym2 ? 1.0 : tau_spatial;
-    const double free_grad = is_car_proper ? 0.0 :
-        ratiod_constraints::free_direction_grad(phi_raw_sum, S, free_scale);
     for (int i = 0; i < S; i++) {
-        double Qphi_i = data.n_neighbors[i] * phi_spatial_prior[i];
-        const double w = is_car_proper ? rho_car : 1.0;
-        for (int k = data.adj_row_ptr[i]; k < data.adj_row_ptr[i + 1]; k++) {
-            const int j = data.adj_col_idx[k];
-            Qphi_i -= w * phi_spatial_prior[j];
-            if (j > i && !is_car_proper) {
-                const double diff = phi_spatial_prior[i] - phi_spatial_prior[j];
-                icar_quad += diff * diff;
+        double Qphi_i;
+        if (is_car_proper) {
+            Qphi_i = data.n_neighbors[i] * phi_spatial_prior[i];
+            for (int k = data.adj_row_ptr[i]; k < data.adj_row_ptr[i + 1]; k++) {
+                Qphi_i -= rho_car * phi_spatial_prior[data.adj_col_idx[k]];
             }
+        } else {
+            Qphi_i = ratiod::icar_precision_times(phi_spatial_prior, i, data);
         }
+        const double free_grad = is_car_proper ? 0.0 :
+            ratiod_constraints::areal_free_direction_grad(phi_raw_sums, S,
+                                                          data.areal_components,
+                                                          i, free_scale);
 
         if (is_bym2) {
             // For BYM2, ICAR prior has no tau scaling (it's absorbed into sigma/rho)
@@ -3306,7 +3338,9 @@ static inline void spatial_gmrf_prior_grad(
         // tau is n/2 and the quadratic form carries the freed direction.
         // log_post = 0.5*n*log(tau) - 0.5*tau*(quad + sum^2/n) + const
         const double quad_full =
-            icar_quad + ratiod_constraints::free_direction_quad(phi_raw_sum, S);
+            ratiod::icar_quadratic_form_t(phi_spatial_prior, S, data)
+            + ratiod_constraints::areal_free_direction_quad(phi_raw_sums, S,
+                                                            data.areal_components);
         grad[layout.log_tau_spatial_idx] += 0.5 * S - 0.5 * tau_spatial * quad_full;
     }
 }
@@ -6416,7 +6450,8 @@ void compute_gradient_ms_temporal_handcoded(
     // raw parameters, which is what spatial_gmrf_prior_grad projects for.
     const bool center_spatial = spatial_block_is_centred(data, layout);
     ratiod_constraints::CenteredSpatialParams centering(
-        params_in, center_spatial, layout.spatial_start, data.n_spatial_units);
+        params_in, center_spatial, layout.spatial_start, data.n_spatial_units,
+        data.areal_components);
     const std::vector<double>& params = centering.params();
 
     const bool fuse_lp = (log_post_out != nullptr);
@@ -6624,7 +6659,7 @@ void compute_gradient_ms_temporal_handcoded(
                                         theta_bym2, grad_theta_lik.data(),
                                         grad_spatial_lik.data(), grad.data());
         spatial_gmrf_prior_grad(data, layout, spatial_phi, spatial_phi,
-                                centering.raw_sum(),
+                                centering.raw_sums(),
                                 centering.active(), tau_spatial,
                                 sigma_s_bym2, sigma_u_bym2, rho_bym2, 0.0, theta_bym2,
                                 grad_spatial_lik.data(), grad.data());
@@ -6662,7 +6697,7 @@ void compute_gradient_ms_temporal_handcoded(
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
 
     // params_in, not params: compute_log_post centres its own copy and recovers
-    // phi_raw_sum from the raw field, which the centred copy has zeroed.
+    // phi_raw_sums from the raw field, which the centred copy has zeroed.
     if (fuse_lp) *log_post_out = compute_log_post(params_in, data, layout, /*skip_obs_loop=*/true) + obs_log_lik;
 }
 
@@ -6683,7 +6718,8 @@ void compute_gradient_spatiotemporal_handcoded(
     // raw parameters, which is what spatial_gmrf_prior_grad projects for.
     const bool center_spatial = spatial_block_is_centred(data, layout);
     ratiod_constraints::CenteredSpatialParams centering(
-        params_in, center_spatial, layout.spatial_start, data.n_spatial_units);
+        params_in, center_spatial, layout.spatial_start, data.n_spatial_units,
+        data.areal_components);
     const std::vector<double>& params = centering.params();
 
     const bool fuse_lp = (log_post_out != nullptr);
@@ -6950,7 +6986,7 @@ void compute_gradient_spatiotemporal_handcoded(
                                         theta_bym2, grad_theta_lik.data(),
                                         grad_spatial_lik.data(), grad.data());
         spatial_gmrf_prior_grad(data, layout, spatial_phi, spatial_phi,
-                                centering.raw_sum(),
+                                centering.raw_sums(),
                                 centering.active(), tau_spatial,
                                 sigma_s_bym2, sigma_u_bym2, rho_bym2, 0.0, theta_bym2,
                                 grad_spatial_lik.data(), grad.data());
@@ -6997,7 +7033,7 @@ void compute_gradient_spatiotemporal_handcoded(
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
 
     // params_in, not params: compute_log_post centres its own copy and recovers
-    // phi_raw_sum from the raw field, which the centred copy has zeroed.
+    // phi_raw_sums from the raw field, which the centred copy has zeroed.
     if (fuse_lp) *log_post_out = compute_log_post(params_in, data, layout, /*skip_obs_loop=*/true, &st_lp_accum) + obs_log_lik;
 }
 
@@ -7028,12 +7064,13 @@ void compute_gradient_composite(
     // centered like ICAR/BYM2's rank-deficient Q.
     const bool center_spatial = spatial_block_is_centred(data, layout);
     ratiod_constraints::CenteredSpatialParams centering(
-        params_in, center_spatial, layout.spatial_start, data.n_spatial_units);
+        params_in, center_spatial, layout.spatial_start, data.n_spatial_units,
+        data.areal_components);
     const std::vector<double>& params = centering.params();
 
     const bool fuse_lp = (log_post_out != nullptr) && !layout.has_zi;
     // params_in, not params: compute_log_post centres its own copy and recovers
-    // phi_raw_sum from the raw field, which the centred copy has zeroed.
+    // phi_raw_sums from the raw field, which the centred copy has zeroed.
     if (log_post_out && layout.has_zi) *log_post_out = compute_log_post(params_in, data, layout);
     double obs_log_lik = 0.0;
     int n_params = params.size();
@@ -8033,7 +8070,7 @@ void compute_gradient_composite(
                                         layout.is_bym2 ? grad_theta_lik.data() : nullptr,
                                         grad_spatial_lik.data(), grad.data());
         spatial_gmrf_prior_grad(data, layout, spatial_phi, spatial_phi_prior,
-                                centering.raw_sum(),
+                                centering.raw_sums(),
                                 centering.active(), tau_spatial,
                                 sigma_s_bym2, sigma_u_bym2, rho_bym2, rho_car, theta_bym2,
                                 grad_spatial_lik.data(), grad.data());
@@ -8262,7 +8299,7 @@ void compute_gradient_composite(
     re_blocks_writeback(params, data, layout, grad, re_ws);
 
     // Fused log-posterior. params_in, not params: compute_log_post centres its
-    // own copy and recovers phi_raw_sum from the raw field, which the centred
+    // own copy and recovers phi_raw_sums from the raw field, which the centred
     // copy has zeroed.
     if (fuse_lp && !layout.has_zi) {
         *log_post_out = compute_log_post(params_in, data, layout);
@@ -11484,6 +11521,7 @@ Rcpp::List cpp_hmc_fit(
 
   data.spatial_group = spatial_group;  // Already deep copied above
   data.n_spatial_units = n_spatial_units;
+  apply_areal_structure(data, spatial_params);
   data.adj_row_ptr = adj_row_ptr;
   data.adj_col_idx = adj_col_idx;
   data.n_neighbors = n_neighbors;

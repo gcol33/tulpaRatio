@@ -17,7 +17,8 @@ depend on what else is in the model}
 }
 \description{
 The sampler fits an intrinsic CAR field site by site, and a BYM2 field as
-one block with its fixed effects and hyperparameters. A restricted field
-names itself.
+one block with its fixed effects and hyperparameters, each centred over the
+whole graph. A restricted field, and a graph with several connected
+components or an island, name themselves.
 }
 \keyword{internal}

@@ -72,19 +72,38 @@ inline const char* log_post_impl_gap(const ModelData& data,
 // arms of the spatial prior and for the analytic gradient paths.
 template<typename T>
 inline T icar_quadratic_form_t(const T* phi, int J, const ModelData& data) {
+    // Q_ii = c_i n_i (c_i for an island), Q_ij = -c_i for i ~ j, with c_i the
+    // unit's precision multiplier (one on a connected graph; constant within
+    // a component, so Q stays symmetric)
+    const bool weighted = !data.areal_node_prec.empty();
     T quad_form = T(0.0);
     for (int i = 0; i < J; i++) {
-        quad_form = quad_form + T(data.n_neighbors[i]) * phi[i] * phi[i];
+        const double c = weighted ? data.areal_node_prec[i] : 1.0;
+        const int n_i = data.n_neighbors[i];
+        const double diag = (n_i > 0 ? n_i : (weighted ? 1 : 0)) * c;
+        quad_form = quad_form + T(diag) * phi[i] * phi[i];
         const int row_start = data.adj_row_ptr[i];
         const int row_end = data.adj_row_ptr[i + 1];
         for (int k = row_start; k < row_end; k++) {
             const int j = data.adj_col_idx[k];
             if (j > i) {
-                quad_form = quad_form - T(2.0) * phi[i] * phi[j];
+                quad_form = quad_form - T(2.0 * c) * phi[i] * phi[j];
             }
         }
     }
     return quad_form;
+}
+
+// (Q phi)_i for the ICAR precision of icar_quadratic_form_t
+inline double icar_precision_times(const double* phi, int i, const ModelData& data) {
+    const bool weighted = !data.areal_node_prec.empty();
+    const double c = weighted ? data.areal_node_prec[i] : 1.0;
+    const int n_i = data.n_neighbors[i];
+    double out = (n_i > 0 ? n_i : (weighted ? 1 : 0)) * c * phi[i];
+    for (int k = data.adj_row_ptr[i]; k < data.adj_row_ptr[i + 1]; k++) {
+        out -= c * phi[data.adj_col_idx[k]];
+    }
+    return out;
 }
 
 // What a caller wants of the density that is not the density. A fused gradient
@@ -125,13 +144,14 @@ T compute_log_post_impl(
     // Hard sum-to-zero: centre the spatial block once, matching the analytic
     // compute_log_post. See spatial_field_constraint.h.
     std::vector<T> params_centered;
-    T phi_spatial_raw_sum = T(0.0);
+    std::vector<T> phi_spatial_raw_sums;
     const bool center_spatial =
         ratiod_hmc::spatial_block_is_centred(data, layout);
     if (center_spatial) {
         params_centered = params_in;
-        phi_spatial_raw_sum = ratiod_constraints::center_spatial_block(
-            params_centered, layout.spatial_start, data.n_spatial_units);
+        phi_spatial_raw_sums = ratiod_constraints::center_areal_blocks(
+            params_centered, layout.spatial_start, data.n_spatial_units,
+            data.areal_components);
     }
     const std::vector<T>& params = center_spatial ? params_centered : params_in;
 
@@ -390,7 +410,8 @@ T compute_log_post_impl(
                 // field's own scale.
                 T quad_form = icar_quadratic_form_t(phi_spatial, J, data);
                 log_post = log_post - T(0.5) * (quad_form
-                    + ratiod_constraints::free_direction_quad(phi_spatial_raw_sum, J));
+                    + ratiod_constraints::areal_free_direction_quad(
+                          phi_spatial_raw_sums, J, data.areal_components));
 
                 // N(0, I) prior on theta
                 for (int s = 0; s < J; s++) {
@@ -408,7 +429,8 @@ T compute_log_post_impl(
                 // than (J-1)/2, and the quadratic form carries the freed direction.
                 log_post = log_post + T(0.5 * J) * log_tau
                          - T(0.5) * tau_spatial * (quad_form
-                             + ratiod_constraints::free_direction_quad(phi_spatial_raw_sum, J));
+                             + ratiod_constraints::areal_free_direction_quad(
+                          phi_spatial_raw_sums, J, data.areal_components));
             }
         } else {
             // Proper CAR: tau ~ Gamma(shape, rate); rho ~ Beta(a, b) scaled to

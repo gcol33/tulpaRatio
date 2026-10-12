@@ -90,7 +90,7 @@ laplace_areal_parts <- function(spatial, spatial_info, first_block,
 
   if (identical(tolower(type), "bym2")) {
     sf <- spatial$scale_factor %||% 1.0
-    block <- list(type = "bym2", scale_factor = sf)
+    block <- list(type = "bym2", scale_factor = sf, node_prec = spatial$node_prec)
     effect <- function(Z, theta) {
       sigma <- theta[, paste0("b", k, ".sigma")]
       rho <- theta[, paste0("b", k, ".rho")]

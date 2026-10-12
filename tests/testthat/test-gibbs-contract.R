@@ -193,3 +193,15 @@ test_that("Gibbs agrees with HMC on a BYM2 model, and auto mode picks it", {
   )
   expect_equal(selection$backend, "gibbs")
 })
+
+test_that("Gibbs names the dispersion of a family that carries only a denominator one", {
+  # Poisson-gamma has a Gamma shape for its denominator and nothing for its
+  # numerator; the name map has to look the numerator up without indexing a
+  # name the family does not have.
+  draws <- matrix(c(0.1, 0.2, log(3), log(2)), 1, 4,
+                  dimnames = list(NULL, c("beta_num[1]", "beta_denom[1]",
+                                          "log_disp_denom", "log_sigma_total")))
+  out <- tulpaRatio:::gibbs_natural_draws(draws, "poisson_gamma")
+  expect_equal(colnames(out), c("beta_num[1]", "beta_denom[1]", "shape", "sigma_spatial"))
+  expect_equal(unname(out[1, "shape"]), 3)
+})

@@ -246,15 +246,27 @@ unrestricted_spatial_support <- function(spatial, structures) {
 #'
 #' @description
 #' The sampler fits an intrinsic CAR field site by site, and a BYM2 field as
-#' one block with its fixed effects and hyperparameters. A restricted field
-#' names itself.
+#' one block with its fixed effects and hyperparameters, each centred over the
+#' whole graph. A restricted field, and a graph with several connected
+#' components or an island, name themselves.
 #'
 #' @inheritParams laplace_spatial_support
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 gibbs_spatial_support <- function(spatial, structures) {
+  if (!is.null(spatial$component)) {
+    return(disconnected_graph_restriction)
+  }
   unrestricted_spatial_support(spatial, structures)
 }
+
+
+#' The phrase naming a disconnected areal graph where a sampler centres the
+#' field over the whole graph
+#' @keywords internal
+disconnected_graph_restriction <- paste0(
+  "a graph with several connected components or an island is centred per ",
+  "component on the HMC and Laplace backends only")
 
 
 #' Spatial support rule for the Polya-Gamma sampler
@@ -267,6 +279,9 @@ gibbs_spatial_support <- function(spatial, structures) {
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 pg_spatial_support <- function(spatial, structures) {
+  if (!is.null(spatial$component)) {
+    return(disconnected_graph_restriction)
+  }
   if (inherits(spatial, "ratiod_rsr") &&
       (!identical(spatial$type, "car") ||
        inherits(spatial, c("ratiod_gp", "ratiod_hsgp", "ratiod_multiscale")))) {

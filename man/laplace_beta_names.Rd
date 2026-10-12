@@ -4,7 +4,7 @@
 \alias{laplace_beta_names}
 \title{Column names of the fixed effects of one process}
 \usage{
-laplace_beta_names(X, prefix = NULL)
+laplace_beta_names(X, prefix)
 }
 \description{
 Column names of the fixed effects of one process

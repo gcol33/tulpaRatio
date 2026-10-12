@@ -136,7 +136,9 @@ fit_vi <- function(formula,
     adj_row_ptr = as.integer(spatial_info$adj_row_ptr %||% 0L),
     adj_col_idx = as.integer(spatial_info$adj_col_idx %||% integer(0)),
     n_neighbors = as.integer(spatial_info$n_neighbors %||% integer(0)),
-    bym2_scale = spatial_info$bym2_scale %||% 1.0
+    bym2_scale = spatial_info$bym2_scale %||% 1.0,
+    component = spatial_info$component,
+    node_prec = spatial_info$node_prec
   )
 
   temporal_params <- list(

@@ -202,6 +202,13 @@ spatial_car <- function(adjacency, level = c("group", "obs"),
     )
   }
 
+  component <- if (!proper) areal_components(adjacency)
+  if (!is.null(component) && parameterization == "collapsed") {
+    stop("The collapsed parameterization marginalizes a field on a connected ",
+         "graph; this adjacency has several components or an island.",
+         call. = FALSE)
+  }
+
   structure(
     list(
       type = if (proper) "car_proper" else "car",
@@ -213,7 +220,12 @@ spatial_car <- function(adjacency, level = c("group", "obs"),
       shared = shared,
       parameterization = parameterization,
       center = center,
-      n_spatial = nrow(adjacency)
+      n_spatial = nrow(adjacency),
+      # An intrinsic field on a disconnected graph is centred per component;
+      # an island gets a unit-precision prior, carried as a unit precision
+      # multiplier on every unit
+      component = if (!proper) component,
+      node_prec = if (!proper && any(component < 0L)) rep(1, nrow(adjacency))
     ),
     class = c("ratiod_spatial", "list")
   )
@@ -364,9 +376,14 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
     stop("`group_var` is required when level = 'group'", call. = FALSE)
   }
 
-  # Compute scale factor if not provided
+  # Scale factor per connected component (tulpa's Riebler scaling): the
+  # largest component's scale, and each other component's and island's
+  # remainder as a per-unit precision multiplier
+  node_prec <- NULL
   if (is.null(scale_factor)) {
-    scale_factor <- compute_bym2_scale(adjacency)
+    scaling <- bym2_scaling(adjacency)
+    scale_factor <- scaling$scale_factor
+    node_prec <- scaling$node_prec
   }
 
   # Warning for non-shared spatial effects
@@ -379,6 +396,13 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
     )
   }
 
+  component <- areal_components(adjacency)
+  if (!is.null(component) && parameterization == "collapsed") {
+    stop("The collapsed parameterization marginalizes a field on a connected ",
+         "graph; this adjacency has several components or an island.",
+         call. = FALSE)
+  }
+
   structure(
     list(
       type = "bym2",
@@ -388,7 +412,9 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
       shared = shared,
       parameterization = parameterization,
       n_spatial = nrow(adjacency),
-      scale_factor = scale_factor
+      scale_factor = scale_factor,
+      node_prec = node_prec,
+      component = component
     ),
     class = c("ratiod_spatial", "list")
   )
@@ -409,7 +435,56 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
 #' @return Scaling factor (scalar)
 #' @keywords internal
 compute_bym2_scale <- function(adjacency) {
-  tulpa::spatial_bym2(as.matrix(adjacency), level = "obs")$scale_factor
+  bym2_scaling(adjacency)$scale_factor
+}
+
+
+#' BYM2 scaling of an areal graph
+#'
+#' @param adjacency Adjacency matrix
+#' @return A list with `scale_factor` (the largest component's scale) and
+#'   `node_prec` (the per-unit precision multiplier that brings every other
+#'   component and island to unit generalised variance; `NULL` on a connected
+#'   graph), both tulpa's
+#' @keywords internal
+bym2_scaling <- function(adjacency) {
+  spec <- tulpa::spatial_bym2(as.matrix(adjacency), level = "obs")
+  list(scale_factor = spec$scale_factor, node_prec = spec$node_prec)
+}
+
+
+#' Connected components of an areal graph
+#'
+#' An intrinsic CAR field has one constant null direction per connected
+#' component, and the field is centred on each separately. An island (a unit
+#' with no neighbours) carries a proper prior and no constraint.
+#'
+#' @param adjacency Adjacency matrix
+#' @return Per unit, the 0-based index of its component among those of two or
+#'   more units, -1 for an island; `NULL` on a connected graph
+#' @keywords internal
+areal_components <- function(adjacency) {
+  adj <- as.matrix(adjacency) != 0
+  diag(adj) <- FALSE
+  n <- nrow(adj)
+  comp <- rep(NA_integer_, n)
+  k <- 0L
+  for (s in seq_len(n)) {
+    if (!is.na(comp[s])) next
+    k <- k + 1L
+    comp[s] <- k
+    queue <- s
+    while (length(queue)) {
+      nb <- which(adj[queue[1], ] & is.na(comp))
+      comp[nb] <- k
+      queue <- c(queue[-1], nb)
+    }
+  }
+  if (k == 1L) return(NULL)
+  blocks <- which(tabulate(comp, k) >= 2L)
+  out <- match(comp, blocks) - 1L
+  out[is.na(out)] <- -1L
+  out
 }
 
 #' @rdname ratiod_spatial

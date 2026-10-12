@@ -16,6 +16,7 @@
 #include "hmc_temporal_gp.h"
 #include "hmc_zi.h"
 #include "link_function.h"
+#include "spatial_field_constraint.h"
 #include "hmc_svc.h"
 #include "hmc_gp.h"
 #include "hmc_svc_field.h"
@@ -203,6 +204,12 @@ struct ModelData {
   std::vector<int> adj_col_idx;      // CSR format: column indices
   std::vector<int> n_neighbors;      // Number of neighbors per unit
   double bym2_scale_factor = 1.0;    // For BYM2 scaling
+  // A disconnected areal graph: the blocks the sum-to-zero acts on, and a
+  // per-unit precision multiplier on the ICAR prior (the per-component BYM2
+  // scaling beyond bym2_scale_factor; an island's unit-variance prior). Both
+  // empty on a connected graph.
+  ratiod_constraints::ArealComponents areal_components;
+  std::vector<double> areal_node_prec;
   // Proper CAR (rho estimated from data, Q = D - rho*W): rho support and prior
   double car_rho_lower = 0.0;
   double car_rho_upper = 1.0;
@@ -564,6 +571,11 @@ void apply_response_data(ModelData& data,
 // SGHMC, SGLD and VI samplers carry. Stops on a block it does not name.
 Rcpp::CharacterVector layout_param_names(const ModelData& data,
                                          const ParamLayout& layout);
+
+// The areal blocks and per-unit ICAR precision of a spatial specification:
+// spatial_params$component (0-based block per unit, -1 for an island) and
+// spatial_params$node_prec, both absent on a connected graph.
+void apply_areal_structure(ModelData& data, Rcpp::List spatial_params);
 
 // Whether every link is the canonical one, the links the hand-coded
 // gradients and the collapsed marginals are written for.

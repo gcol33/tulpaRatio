@@ -16,6 +16,10 @@
 # (gcol33/tulpaRatio#40).
 FIELDS <- c("icar", "bym2", "rw1", "rw2", "temporal_ar1", "temporal_iid",
             "temporal_ar1_nc", "icar_rw1",
+            # A disconnected areal graph: two components centred separately,
+            # an island on a proper prior, and for BYM2 a different precision
+            # multiplier per component (gcol33/tulpaRatio#141).
+            "icar_disconnected", "bym2_disconnected", "icar_disconnected_rw1",
             # The intrinsic walks in their non-centred coordinate, where the
             # block holds z ~ N(0, I) and tau reaches the field through
             # sigma * A^{-1} z. rw2_nc keeps a free linear direction the

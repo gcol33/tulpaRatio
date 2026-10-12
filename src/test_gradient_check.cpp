@@ -133,7 +133,8 @@ const char* const KNOWN_FIELDS[] = {
   "rw1", "rw2", "rw1_nc", "rw2_nc", "rw1_cyclic", "rw1_cyclic_nc",
   "rw1_panel", "rw1_nc_panel", "rw2_nc_panel", "rw1_cyclic_nc_panel",
   "temporal_ar1", "temporal_ar1_nc", "temporal_iid", "icar_rw1",
-  "icar_ms", "bym2_ms", "icar_st", "bym2_st", "st4", "st4_nc", "st4_ar1",
+  "icar_ms", "bym2_ms", "icar_st", "bym2_st",
+  "icar_disconnected", "bym2_disconnected", "icar_disconnected_rw1", "st4", "st4_nc", "st4_ar1",
   "st4_ar1_nc", "st2", "st2_rw2", "st2_ar1", "st3", "icar_st_nc", "st2_nc",
   "st2_rw2_nc", "st2_ar1_nc", "st2_cyclic", "st2_cyclic_nc", "st3_nc",
   "stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
@@ -375,11 +376,19 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // icar_collapsed_rw1 / bym2_collapsed_rw1 pair a collapsed spatial field
   // with a companion temporal RW1 term -- the combination the specialized
   // collapsed gradient has to carry into its inner Laplace.
+  // Two grid components and an island: centred per component, the island on
+  // a proper prior, BYM2 with a different precision multiplier per component.
+  const bool want_disconnected = (field == "icar_disconnected" ||
+                                  field == "bym2_disconnected" ||
+                                  field == "icar_disconnected_rw1");
   const bool want_icar = (field == "icar" || field == "icar_rw1" ||
+                          field == "icar_disconnected" ||
+                          field == "icar_disconnected_rw1" ||
                           field == "icar_ms" || field == "icar_st" ||
                           field == "icar_collapsed" || field == "icar_collapsed_rw1" ||
                           field == "icar_collapsed_st4");
   const bool want_bym2 = (field == "bym2" || field == "bym2_ms" ||
+                          field == "bym2_disconnected" ||
                           field == "bym2_st" || field == "bym2_collapsed" ||
                           field == "bym2_collapsed_rw1" ||
                           field == "bym2_collapsed_st4");
@@ -398,7 +407,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                           field == "rw1_cyclic" || field == "rw1_cyclic_nc" ||
                           field == "rw1_panel" || field == "rw1_nc_panel" ||
                           field == "rw1_cyclic_nc_panel" ||
-                          field == "icar_rw1" || want_st ||
+                          field == "icar_rw1" || field == "icar_disconnected_rw1" || want_st ||
                           field == "icar_collapsed_rw1" || field == "bym2_collapsed_rw1" ||
                           field == "gp_temporal" || field == "msgp_temporal" ||
                           field == "gp_temporal_st4");
@@ -599,6 +608,40 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                          want_car_proper ? SpatialType::CAR_PROPER : SpatialType::ICAR;
     data.n_spatial_units = n_units;
     build_grid_adjacency(n_units, data.adj_row_ptr, data.adj_col_idx, data.n_neighbors);
+    if (want_disconnected) {
+      // Units [0, h) and [h, n - 1) are two grids, unit n - 1 an island
+      const int h = (n_units - 1) / 2;
+      std::vector<int> ptr_a, idx_a, nn_a, ptr_b, idx_b, nn_b;
+      build_grid_adjacency(h, ptr_a, idx_a, nn_a);
+      build_grid_adjacency(n_units - 1 - h, ptr_b, idx_b, nn_b);
+      data.adj_row_ptr.assign(n_units + 1, 0);
+      data.adj_col_idx.clear();
+      data.n_neighbors.assign(n_units, 0);
+      for (int i = 0; i < n_units; i++) {
+        data.adj_row_ptr[i] = static_cast<int>(data.adj_col_idx.size());
+        if (i < h) {
+          for (int k = ptr_a[i]; k < ptr_a[i + 1]; k++) data.adj_col_idx.push_back(idx_a[k]);
+          data.n_neighbors[i] = nn_a[i];
+        } else if (i < n_units - 1) {
+          for (int k = ptr_b[i - h]; k < ptr_b[i - h + 1]; k++)
+            data.adj_col_idx.push_back(idx_b[k] + h);
+          data.n_neighbors[i] = nn_b[i - h];
+        }
+      }
+      data.adj_row_ptr[n_units] = static_cast<int>(data.adj_col_idx.size());
+      auto& comps = data.areal_components;
+      comps.block_of.assign(n_units, -1);
+      comps.members.assign(2, std::vector<int>());
+      for (int i = 0; i < n_units - 1; i++) {
+        comps.block_of[i] = (i < h) ? 0 : 1;
+        comps.members[comps.block_of[i]].push_back(i);
+      }
+      data.areal_node_prec.assign(n_units, 1.0);
+      if (want_bym2) {
+        for (int i = h; i < n_units - 1; i++) data.areal_node_prec[i] = 1.7;
+        data.areal_node_prec[n_units - 1] = 0.6;
+      }
+    }
     data.spatial_group.resize(n_obs);
     for (int i = 0; i < n_obs; i++) data.spatial_group[i] = (i % n_units) + 1;
     data.bym2_scale_factor = 1.0;

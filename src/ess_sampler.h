@@ -457,6 +457,20 @@ inline std::vector<GaussianPrior> build_gaussian_priors(
         priors.push_back(prior);
     }
 
+    // BYM2 unstructured component: theta ~ N(0, I)
+    if (layout.is_bym2 && layout.theta_bym2_end > layout.theta_bym2_start) {
+        GaussianPrior prior;
+        for (int j = layout.theta_bym2_start; j < layout.theta_bym2_end; j++) {
+            prior.param_indices.push_back(j);
+        }
+
+        int n = prior.param_indices.size();
+        prior.mean = Eigen::VectorXd::Zero(n);
+        prior.is_identity_cov = true;
+        prior.scale = 1.0;
+        priors.push_back(prior);
+    }
+
     // Temporal effects: phi_temporal ~ N(0, tau_temporal^-1 * Q)
     if (layout.has_temporal && layout.temporal_end > layout.temporal_start) {
         GaussianPrior prior;

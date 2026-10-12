@@ -160,6 +160,7 @@ Rcpp::List cpp_vi_fit(
 
   Rcpp::IntegerVector spatial_group = spatial_params["group"];
   data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
+  apply_areal_structure(data, spatial_params);
   data.spatial_group.resize(data.N);
   for (int i = 0; i < data.N; i++) {
     data.spatial_group[i] = spatial_group[i];

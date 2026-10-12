@@ -1,5 +1,27 @@
 # tulpaRatio 1.7.3
 
+* An intrinsic CAR or BYM2 field on a disconnected map (#141) is centred on
+  each connected component rather than over the whole graph, an island gets a
+  unit-variance prior instead of none, and BYM2 carries tulpa's per-component
+  scaling (Freni-Sterrantino, Ventrucci and Rue 2018). HMC, ESS, SGHMC, SGLD,
+  VI and the Laplace backend fit it; the Gibbs and Polya-Gamma samplers, which
+  centre over the whole graph, and the collapsed parameterization refuse it by
+  name, and auto mode sends it to HMC.
+
+* ESS, SGHMC, SGLD and VI fit BYM2 again (#145). Their parameter names
+  are now written at the indices the layout assigns; before, a BYM2 field
+  stopped with "named 23 of 22 parameters". ESS also updates the
+  unstructured BYM2 component, which it had left at its starting value.
+
+* `coef()` and `vcov()` of a single-process Laplace fit (binomial,
+  beta-binomial) return the fixed effects (#144). Its draws were named by
+  design column rather than `beta_num[j]`, so both came back empty.
+
+* A Gibbs fit whose numerator has no dispersion parameter (e.g.,
+  `ratiod_poisson_gamma()`) returns its draws; it stopped on the missing
+  numerator dispersion name, which broke the BYM2 chunk of the
+  spatial-temporal vignette.
+
 * The BYM2 field has one scale on every backend (#140): the structured
   component is multiplied by tulpa's Riebler et al. (2016) scale, `1 /
   sqrt(s)` with `s` the geometric mean of the ICAR marginal variances. The

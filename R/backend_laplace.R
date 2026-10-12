@@ -269,9 +269,8 @@ prepare_spatial_for_laplace <- function(spatial, data, formula) {
 
 #' Column names of the fixed effects of one process
 #' @keywords internal
-laplace_beta_names <- function(X, prefix = NULL) {
-  if (!is.null(prefix)) return(paste0(prefix, "[", seq_len(ncol(X)), "]"))
-  colnames(X) %||% paste0("beta[", seq_len(ncol(X)), "]")
+laplace_beta_names <- function(X, prefix) {
+  paste0(prefix, "[", seq_len(ncol(X)), "]")
 }
 
 
@@ -415,12 +414,10 @@ convert_laplace_fit <- function(engine, latent, parts, arms, formula, data,
     })
   )
 
-  fixed_names <- if (two_process) {
-    c(laplace_beta_names(responses$num$X, "beta_num"),
-      laplace_beta_names(responses$denom$X, "beta_denom"))
-  } else {
-    laplace_beta_names(responses$num$X)
-  }
+  fixed_names <- c(
+    laplace_beta_names(responses$num$X, "beta_num"),
+    if (two_process) laplace_beta_names(responses$denom$X, "beta_denom")
+  )
 
   draws_list <- stats::setNames(
     lapply(seq_len(n_beta), function(j) samples[, j]), fixed_names

@@ -74,6 +74,7 @@ Rcpp::List cpp_sghmc_fit(
         data.spatial_type = SpatialType::ICAR;
         data.spatial_group = Rcpp::as<std::vector<int>>(spatial_params["group"]);
         data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
+        apply_areal_structure(data, spatial_params);
         data.adj_row_ptr = Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]);
         data.adj_col_idx = Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]);
         data.n_neighbors = Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]);
@@ -83,6 +84,7 @@ Rcpp::List cpp_sghmc_fit(
         data.spatial_type = SpatialType::BYM2;
         data.spatial_group = Rcpp::as<std::vector<int>>(spatial_params["group"]);
         data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
+        apply_areal_structure(data, spatial_params);
         data.adj_row_ptr = Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]);
         data.adj_col_idx = Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]);
         data.n_neighbors = Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]);
@@ -320,6 +322,7 @@ Rcpp::List cpp_sgld_fit(
         }
         data.spatial_group = Rcpp::as<std::vector<int>>(spatial_params["group"]);
         data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
+        apply_areal_structure(data, spatial_params);
         data.adj_row_ptr = Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]);
         data.adj_col_idx = Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]);
         data.n_neighbors = Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]);

@@ -61,6 +61,80 @@ inline T free_direction_grad(const T& raw_sum, int n, const T& scale) {
   return -tulpa::s2z_aug_coef(scale, n) * raw_sum;
 }
 
+// The blocks an areal field's sum-to-zero acts on: one per connected
+// component of two or more units (Freni-Sterrantino, Ventrucci and Rue 2018,
+// INLA's constr = TRUE on a disconnected graph). An island carries a proper
+// prior and no constraint. Empty `members` means one block over the whole
+// field, the connected case.
+struct ArealComponents {
+  std::vector<std::vector<int>> members;  // constrained components, 0-based units
+  std::vector<int> block_of;              // per unit: index into members, -1 for none
+  bool whole() const { return members.empty(); }
+  int block_of_unit(int i) const { return whole() ? 0 : block_of[i]; }
+  int block_size(int b, int n) const {
+    return whole() ? n : static_cast<int>(members[b].size());
+  }
+  int n_blocks() const { return whole() ? 1 : static_cast<int>(members.size()); }
+};
+
+// Centres each block of the spatial field in place and returns the raw sum of
+// each, in block order.
+template <typename T>
+inline std::vector<T> center_areal_blocks(std::vector<T>& params, int start, int n,
+                                          const ArealComponents& comps) {
+  if (comps.whole()) return {center_spatial_block(params, start, n)};
+  std::vector<T> sums;
+  sums.reserve(comps.members.size());
+  for (const auto& m : comps.members) {
+    const int size = static_cast<int>(m.size());
+    const T s = tulpa::s2z_component_sum(params.data(), start, m.data(), size);
+    const T mean = s / T(static_cast<double>(size));
+    for (int u : m) params[start + u] = params[start + u] - mean;
+    sums.push_back(s);
+  }
+  return sums;
+}
+
+// Quadratic-form contribution of the freed constant directions:
+// sum over blocks of sum_b^2 / J_b.
+template <typename T>
+inline T areal_free_direction_quad(const std::vector<T>& sums, int n,
+                                   const ArealComponents& comps) {
+  T q = T(0.0);
+  for (int b = 0; b < static_cast<int>(sums.size()); b++) {
+    q = q + tulpa::s2z_aug_coef(T(1), comps.block_size(b, n)) * sums[b] * sums[b];
+  }
+  return q;
+}
+
+// d/d(phi_raw[i]) of -0.5 * scale * sum_b^2 / J_b, for the block unit i is in;
+// zero for an unconstrained island.
+inline double areal_free_direction_grad(const std::vector<double>& sums, int n,
+                                        const ArealComponents& comps, int i,
+                                        double scale) {
+  const int b = comps.block_of_unit(i);
+  if (b < 0) return 0.0;
+  return -tulpa::s2z_aug_coef(scale, comps.block_size(b, n)) * sums[b];
+}
+
+// The likelihood sees each block centred, so its gradient with respect to the
+// raw field is the projection that removes each block's mean.
+inline void project_areal_gradient(double* g, int n, const ArealComponents& comps) {
+  if (comps.whole()) {
+    double mean = 0.0;
+    for (int i = 0; i < n; i++) mean += g[i];
+    mean /= static_cast<double>(n);
+    for (int i = 0; i < n; i++) g[i] -= mean;
+    return;
+  }
+  for (const auto& m : comps.members) {
+    double mean = 0.0;
+    for (int u : m) mean += g[u];
+    mean /= static_cast<double>(m.size());
+    for (int u : m) g[u] -= mean;
+  }
+}
+
 // Binds the parameter vector that every downstream reader of a gradient
 // function should see. When the spatial block is intrinsic it is centred into
 // an owned copy and raw_sum() carries the freed constant direction; otherwise
@@ -73,22 +147,22 @@ inline T free_direction_grad(const T& raw_sum, int n, const T& scale) {
 class CenteredSpatialParams {
  public:
   CenteredSpatialParams(const std::vector<double>& params_in, bool center,
-                        int start, int n)
+                        int start, int n, const ArealComponents& comps)
       : in_(&params_in), active_(center && start >= 0 && n > 0) {
     if (active_) {
       storage_ = params_in;
-      raw_sum_ = center_spatial_block(storage_, start, n);
+      raw_sums_ = center_areal_blocks(storage_, start, n, comps);
     }
   }
 
   const std::vector<double>& params() const { return active_ ? storage_ : *in_; }
-  double raw_sum() const { return raw_sum_; }
+  const std::vector<double>& raw_sums() const { return raw_sums_; }
   bool active() const { return active_; }
 
  private:
   const std::vector<double>* in_;
   std::vector<double> storage_;
-  double raw_sum_ = 0.0;
+  std::vector<double> raw_sums_;
   bool active_;
 };
 

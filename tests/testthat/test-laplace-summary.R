@@ -60,3 +60,18 @@ test_that("a Laplace fit with a field refuses to predict at new rows", {
                 control = list(verbose = FALSE))
   expect_error(predict(fit, newdata = df[1:2, ]), "not implemented")
 })
+
+test_that("a binomial Laplace fit reports its fixed effects to coef() and vcov()", {
+  skip_on_cran()
+  set.seed(61)
+  A <- 1 * (as.matrix(dist(expand.grid(1:3, 1:3))) <= 1.01)
+  diag(A) <- 0
+  dimnames(A) <- list(as.character(1:9), as.character(1:9))
+  df <- data.frame(region = factor(rep(1:9, each = 10)), x = rnorm(90), trials = 15L)
+  df$y <- rbinom(90, 15, stats::plogis(0.2 + 0.4 * df$x))
+  fit <- suppressWarnings(tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
+                                 spatial = spatial_car(A, level = "group", group_var = "region"),
+                                 mode = "laplace"))
+  expect_named(coef(fit), c("num:(Intercept)", "num:x"))
+  expect_equal(dim(vcov(fit)), c(2L, 2L))
+})

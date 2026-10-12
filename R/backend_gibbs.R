@@ -314,11 +314,12 @@ fit_gibbs <- function(formula,
 #' @keywords internal
 gibbs_natural_draws <- function(draws, model_type) {
   disp <- MODEL_DISPERSION_NAMES[[model_type]]
+  disp_name <- function(arm) if (arm %in% names(disp)) disp[[arm]] else NA
   map <- list(
-    log_phi_num = c(disp[["num"]] %||% NA, "exp"),
-    log_disp_num = c(disp[["num"]] %||% NA, "exp"),
-    log_phi_denom = c(if ("denom" %in% names(disp)) disp[["denom"]] else NA, "exp"),
-    log_disp_denom = c(if ("denom" %in% names(disp)) disp[["denom"]] else NA, "exp"),
+    log_phi_num = c(disp_name("num"), "exp"),
+    log_disp_num = c(disp_name("num"), "exp"),
+    log_phi_denom = c(disp_name("denom"), "exp"),
+    log_disp_denom = c(disp_name("denom"), "exp"),
     log_tau = c("tau_spatial", "exp"),
     log_sigma_total = c("sigma_spatial", "exp"),
     logit_rho = c("rho_spatial", "plogis")
