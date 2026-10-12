@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
   comment = "#>",
   fig.width = 7,
   fig.height = 5,
-  eval = FALSE
+  eval = identical(Sys.getenv("NOT_CRAN"), "true") || identical(Sys.getenv("IN_PKGDOWN"), "true")
 )
 ```
 
@@ -28,7 +28,7 @@ pak::pak("gcol33/tulpaRatio")
 
 ## Overview
 
-Ecological and survey data often exhibit excess zeros beyond what standard distributions predict. numdenom provides several families to handle this:
+Ecological and survey data often exhibit excess zeros beyond what standard distributions predict. tulpaRatio provides several families to handle this:
 
 **Zero-inflated models** assume zeros come from two sources:
 1. Structural zeros (species truly absent, observer non-response)
@@ -64,38 +64,45 @@ Use `ratiod_zibinomial()` when modeling proportions with excess zeros beyond wha
 ### Example: Species Detection
 
 ```{r}
-library(numdenom)
+library(tulpaRatio)
+
+ctl <- list(seed = 1)
 
 # Simulate detection data with structural zeros
 set.seed(123)
-n <- 100
-zi_prob <- 0.3  # 30% structural zeros
+n <- 60
+habitat <- factor(rep(c("forest", "grassland"), each = n/2))
+site <- factor(rep(1:10, each = n/10))
+site_eff <- rnorm(10, 0, 0.5)[site]
+# Detection probability rises in grassland and varies by site
+p <- plogis(-0.4 + 0.5 * (habitat == "grassland") + site_eff)
+# Structural zeros: 15% in forest, 40% in grassland
+zi_prob <- ifelse(habitat == "forest", 0.15, 0.4)
 
-df <- data.frame(
+detection <- data.frame(
   detected = ifelse(
     runif(n) < zi_prob,
     0,  # Structural zero
-    rbinom(n, size = 10, prob = 0.4)  # Binomial detections
+    rbinom(n, size = 10, prob = p)  # Binomial detections
   ),
   trials = 10,
-  habitat = factor(rep(c("forest", "grassland"), each = n/2)),
-  site = factor(rep(1:10, each = n/10))
+  habitat = habitat,
+  site = site
 )
 
 # Fit zero-inflated binomial
 fit_zi <- tratio(
   detected | trials ~ habitat + (1 | site),
-  zi = ~ habitat,  # Predictors for zero-inflation
-
-  data = df,
+  zi = zi_binomial(~ habitat),  # Predictors for zero-inflation
+  data = detection,
   family = ratiod_zibinomial(),
-  control = list(iter = 2000, chains = 2)
+  control = ctl
 )
 
-summary(fit_zi)
+print(coef(summary(fit_zi)), digits = 3)
 ```
 
-The `zi` argument specifies the linear predictor for the zero-inflation probability. Use `~ 1` for intercept-only or include covariates that predict structural zeros.
+The `zi` argument takes a specification such as `zi_binomial()`, whose formula is the linear predictor for the zero-inflation probability (`beta_zi` above, on the logit scale). Use `zi_binomial(~ 1)` for intercept-only or include covariates that predict structural zeros.
 
 
 ## One-Inflated Binomial
@@ -107,10 +114,10 @@ Use `ratiod_oibinomial()` when data has excess ones (100% success rates).
 ```{r}
 # Survey completion data with some "always complete" respondents
 set.seed(456)
-n <- 80
+n <- 60
 oi_prob <- 0.2  # 20% always complete all items
 
-df <- data.frame(
+survey <- data.frame(
   completed = ifelse(
     runif(n) < oi_prob,
     20,  # Structural one (all items completed)
@@ -124,12 +131,12 @@ df <- data.frame(
 # Fit one-inflated binomial
 fit_oi <- tratio(
   completed | total_items ~ age_group + education,
-  data = df,
+  data = survey,
   family = ratiod_oibinomial(),
-  control = list(iter = 2000, chains = 2)
+  control = ctl
 )
 
-summary(fit_oi)
+print(coef(summary(fit_oi)), digits = 3)
 ```
 
 
@@ -143,11 +150,11 @@ Vegetation cover data often has structural zeros (no vegetation) and structural 
 
 ```{r}
 set.seed(789)
-n <- 120
+n <- 60
 zi_prob <- 0.15  # 15% bare ground
 oi_prob <- 0.10  # 10% complete cover (given not bare)
 
-df <- data.frame(
+cover <- data.frame(
   cover_points = sapply(1:n, function(i) {
     if (runif(1) < zi_prob) {
       0  # Structural zero
@@ -158,21 +165,23 @@ df <- data.frame(
     }
   }),
   total_points = 100,
-  elevation = rnorm(n, 1000, 200),
+  elevation = rnorm(n),  # standardized elevation
   aspect = factor(sample(c("N", "S", "E", "W"), n, replace = TRUE))
 )
 
 # Fit ZOIB model
 fit_zoib <- tratio(
   cover_points | total_points ~ elevation + aspect,
-  zi = ~ elevation,    # Zero-inflation predictors
-  oi = ~ elevation,    # One-inflation predictors
-  data = df,
+  zi = zoib(
+    zi_formula = ~ elevation,  # Zero-inflation predictors
+    oi_formula = ~ elevation   # One-inflation predictors
+  ),
+  data = cover,
   family = ratiod_zoibinomial(),
-  control = list(iter = 2000, chains = 2)
+  control = ctl
 )
 
-summary(fit_zoib)
+print(coef(summary(fit_zoib)), digits = 3)
 ```
 
 
@@ -184,30 +193,36 @@ Use `ratiod_hurdle_binomial()` when zeros represent a distinct process from posi
 
 ```{r}
 set.seed(321)
-n <- 100
-occupancy_prob <- 0.7  # Probability of presence
-
-df <- data.frame(
-  detections = ifelse(
-    runif(n) > occupancy_prob,
-    0,  # Absent
-    1 + rbinom(n, size = 4, prob = 0.6)  # Present and detected 1-5 times
-  ),
-  visits = 5,
+n <- 60
+occupancy <- data.frame(
+  visits = 5L,
   habitat_quality = rnorm(n),
-  site = factor(rep(1:20, each = 5))
+  site = factor(rep(1:12, each = 5))
 )
+# Presence rises with habitat quality; where present, the detections out of
+# five visits are a binomial count given at least one detection, with a
+# site effect on the detection probability
+present <- runif(n) < plogis(0.8 + 0.8 * occupancy$habitat_quality)
+p_detect <- plogis(0.3 + 0.4 * occupancy$habitat_quality +
+                     rnorm(12, 0, 0.5)[occupancy$site])
+detect_positive <- function(p) {
+  repeat {
+    y <- rbinom(1, 5, p)
+    if (y > 0) return(y)
+  }
+}
+occupancy$detections <- ifelse(present, vapply(p_detect, detect_positive, numeric(1)), 0)
 
 # Fit hurdle binomial
 fit_hurdle <- tratio(
   detections | visits ~ habitat_quality + (1 | site),
-  zi = ~ habitat_quality,  # Predictors for hurdle (presence)
-  data = df,
+  zi = hurdle_binomial(~ habitat_quality),  # Predictors for hurdle (presence)
+  data = occupancy,
   family = ratiod_hurdle_binomial(),
-  control = list(iter = 2000, chains = 2)
+  control = ctl
 )
 
-summary(fit_hurdle)
+print(coef(summary(fit_hurdle)), digits = 3)
 ```
 
 
@@ -218,31 +233,37 @@ For count numerators with continuous denominators (CPUE-type data):
 ```{r}
 # Zero-inflated CPUE data
 set.seed(111)
-n <- 80
-zi_prob <- 0.25
+n <- 60
+season <- factor(rep(c("spring", "summer"), each = n/2))
+vessel <- factor(rep(1:12, each = n/12))
+# A vessel effect shared by catch and effort
+vessel_eff <- rnorm(12, 0, 0.5)[vessel]
+depth <- rnorm(n)
+# Structural zeros: 15% in spring, 35% in summer
+zi_prob <- ifelse(season == "spring", 0.15, 0.35)
 
-df <- data.frame(
+cpue <- data.frame(
   catch = ifelse(
     runif(n) < zi_prob,
     0,
-    rnbinom(n, size = 3, mu = 8)
+    rpois(n, exp(2 - 0.3 * depth + vessel_eff))
   ),
-  effort = rgamma(n, shape = 4, rate = 1),
-  depth = rnorm(n),
-  season = factor(rep(c("spring", "summer"), each = n/2)),
-  vessel = factor(rep(1:8, each = n/8))
+  effort = rgamma(n, shape = 4, rate = exp(-vessel_eff)),
+  depth = depth,
+  season = season,
+  vessel = vessel
 )
 
-# Zero-inflated negative binomial with gamma denominator
+# Zero-inflated Poisson with gamma denominator
 fit_zi_cpue <- tratio(
   catch | effort ~ depth + season + (1 | vessel),
-  zi = ~ season,
-  data = df,
-  family = ratiod_zinegbin(denom_family = "gamma"),
-  control = list(iter = 2000, chains = 2)
+  zi = zi_poisson(~ season),
+  data = cpue,
+  family = ratiod_zipois(denom_family = "gamma"),
+  control = ctl
 )
 
-summary(fit_zi_cpue)
+print(coef(summary(fit_zi_cpue)), digits = 3)
 ```
 
 
@@ -267,30 +288,31 @@ Compare ZI and non-ZI models using LOO-CV:
 # Fit standard model
 fit_standard <- tratio(
   detected | trials ~ habitat + (1 | site),
-  data = df,
+  data = detection,
   family = ratiod_binomial(),
-  control = list(iter = 2000, chains = 2)
+  control = ctl
 )
 
 # Fit zero-inflated model
 fit_zi <- tratio(
   detected | trials ~ habitat + (1 | site),
-  zi = ~ 1,
-  data = df,
+  zi = zi_binomial(~ 1),
+  data = detection,
   family = ratiod_zibinomial(),
-  control = list(iter = 2000, chains = 2)
+  control = ctl
 )
 
 # Compare
-loo_standard <- loo(fit_standard)
-loo_zi <- loo(fit_zi)
-loo_compare(loo_standard, loo_zi)
+ratiod_compare(fit_standard, fit_zi)
 ```
+
+The Pareto $k$ warning marks observations whose site effect moves too far when they are left out for importance sampling to follow; their contributions to the comparison are less reliable than the rest.
 
 
 ## Posterior Predictive Checks
 
 Validate ZI models with posterior predictive checks:
+
 ```{r}
 # Check proportion of zeros
 pp_check(fit_zi, type = "stat", stat = function(y) mean(y == 0))

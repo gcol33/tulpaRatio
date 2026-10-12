@@ -791,8 +791,8 @@ build_model_matrix <- function(f, data) {
   tt <- terms(mf)
   X <- model.matrix(tt, data = mf)
   list(X = X,
-       design = list(terms = delete.response(tt),
-                     xlevels = .getXlevels(tt, mf),
+       design = list(terms = stats::delete.response(tt),
+                     xlevels = stats::.getXlevels(tt, mf),
                      contrasts = attr(X, "contrasts")))
 }
 

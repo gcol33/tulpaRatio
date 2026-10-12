@@ -899,6 +899,10 @@ print.ratiod_fit <- function(x, ...) {
 #' formula.
 #'
 #' @param object A ratiod_fit object
+#' @param x A fit returned by [tratio()]: a `ratiod_fit`, or one of the
+#'   backend subclasses `ratiod_vi`, `ratiod_sghmc` and `ratiod_sgld`, or the
+#'   summary of one.
+#' @param digits Number of significant digits to print (default 3).
 #' @param prob Probability mass for credible intervals (default 0.95)
 #' @param ... Ignored
 #' @return `summary()`: a `summary.ratiod_fit` object. `coef()`: a named

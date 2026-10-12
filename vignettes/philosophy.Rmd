@@ -16,7 +16,9 @@ knitr::opts_chunk$set(
   fig.width = 7,
   fig.height = 5,
   dev = "svglite",
-  fig.ext = "svg"
+  fig.ext = "svg",
+  eval = identical(Sys.getenv("NOT_CRAN"), "true") ||
+    identical(Sys.getenv("IN_PKGDOWN"), "true")
 )
 ```
 
@@ -27,11 +29,28 @@ install.packages("pak")                   # development version
 pak::pak("gcol33/tulpaRatio")
 ```
 
+```{r}
+library(tulpaRatio)
+```
+
 ## The Core Problem
 
 Ecologists routinely analyse ratios: catch per unit effort (CPUE), species per unit area, biomass per trawl hour, detections per camera-night. The standard approach is to compute the ratio and model it directly:
 
-```r
+```{r}
+# Simulated trawls: site quality raises both catch and effort,
+# while the true CPUE is 3 everywhere
+set.seed(1)
+n <- 200
+site_quality <- rnorm(20, 0, 0.5)
+data <- data.frame(
+  site = factor(rep(1:20, each = 10)),
+  depth = rnorm(n),
+  season = factor(sample(c("spring", "summer", "fall"), n, replace = TRUE))
+)
+data$effort <- rgamma(n, shape = 5, rate = 5 / exp(1 + site_quality[data$site]))
+data$catch <- rpois(n, lambda = 3 * data$effort)
+
 # The WRONG approach (don't do this)
 data$cpue <- data$catch / data$effort
 lm(cpue ~ depth + season, data = data)
@@ -40,7 +59,7 @@ This approach is fundamentally flawed. Here's why.
 
 ## Ratios Inherit Correlated Errors
 
-When you divide two measured quantities, the ratio inherits uncertainty from both. If catch and effort share any common drivers—observer effects, site conditions, temporal autocorrelation—those dependencies propagate into the ratio in complex, non-linear ways.
+When you divide two measured quantities, the ratio inherits uncertainty from both. If catch and effort share any common drivers (observer effects, site conditions, temporal autocorrelation), those dependencies propagate into the ratio in complex, non-linear ways.
 
 Consider a simple example: two sites with identical true CPUE, but different effort levels.
 
@@ -50,26 +69,27 @@ Consider a simple example: two sites with identical true CPUE, but different eff
 | B | 5 | 100 | 500 | 512 | 5.12 |
 
 Site B's CPUE estimate is more precise simply because it has more effort. But a ratio-based model treats both CPUE values as equally informative. This is **heteroscedasticity by construction**.
+
 ## The Offset Fallacy
 
 A common "fix" is to use an offset:
 
-```r
+```{r}
 # Still wrong
 glm(catch ~ depth + season + offset(log(effort)), family = poisson, data = data)
 ```
 
 This assumes the ratio is the quantity of interest and that effort affects catch proportionally with coefficient exactly 1. Neither assumption is generally true:
 
-1. **Effort has its own structure**: Effort varies systematically—more effort in accessible sites, during good weather, when funding permits. These patterns create confounding.
+1. **Effort has its own structure**: Effort varies systematically: more effort in accessible sites, during good weather, when funding permits. These patterns create confounding.
 
 2. **The proportionality assumption fails**: A 10% increase in effort rarely yields exactly 10% more catch. Saturation effects, interference between sampling units, and diminishing returns are common.
 
 3. **Uncertainty in effort is ignored**: Effort measurements have error. Offset models treat effort as fixed and known.
 
-## The numdenom Solution: Joint Modelling
+## The tulpaRatio Solution: Joint Modelling
 
-numdenom takes a different approach. Instead of modelling the ratio, we jointly model the two processes that generate it:
+tulpaRatio takes a different approach. Instead of modelling the ratio, we jointly model the two processes that generate it:
 
 $$
 Y_i \sim \text{Distribution}_1(\mu_Y, \phi_Y) \quad \text{(numerator)}
@@ -112,11 +132,11 @@ With shared structure:
 3. The shared effect **cancels in the ratio** (it appears in both $\eta$ and $\xi$)
 4. What remains is the **true ratio signal**, not confounded by site quality
 
-This is why numdenom makes shared structure the **default**. Independence is a special case that must be explicitly requested—and triggers a warning.
+This is why tulpaRatio makes shared structure the **default**. Independence is a special case that must be explicitly requested and triggers a warning.
 
 ## The Three Families
 
-numdenom provides three model families for different data types:
+tulpaRatio provides three model families for different data types:
 
 ### 1. Two-Process Counts: `ratiod_negbin_negbin()`
 
@@ -128,7 +148,7 @@ $$
 
 **Use cases**: Species count / total count, events / opportunities
 
-This is the family for the "hard case"—what people cannot do correctly with binomial models.
+This is the family for the "hard case": what people cannot do correctly with binomial models.
 
 ### 2. Trial-Based: `ratiod_binomial()`
 
@@ -163,16 +183,19 @@ Because ratios are computed from the full posterior, every draw reflects uncerta
 
 This is **exact** posterior inference on the ratio, not an approximation or delta-method estimate.
 
-```r
+```{r}
+fit <- tratio(
+  catch | effort ~ depth + season + (1 | site),
+  data = data,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
+)
+
 # Extract ratio posteriors
 cpue_posterior <- ratio(fit)
 
 # Full posterior distribution, not just point estimate
 summary(cpue_posterior)
-#>   obs  mean    sd   q2.5   q50  q97.5
-#>     1  4.82  0.31   4.24  4.81   5.46
-#>     2  5.14  0.28   4.62  5.13   5.71
-#>   ...
 ```
 
 ## When Independence Is Appropriate
@@ -187,12 +210,23 @@ There are cases where shared structure is not needed:
 
 In these cases, use `shared = ~ 0`:
 
-```r
-fit <- tratio(
+```{r}
+set.seed(2)
+experiment_data <- data.frame(
+  treatment = factor(rep(c("control", "treated"), each = 20)),
+  trials = rpois(40, 30) + 1
+)
+experiment_data$successes <- rbinom(
+  40, experiment_data$trials,
+  ifelse(experiment_data$treatment == "treated", 0.6, 0.4)
+)
+
+fit_indep <- tratio(
   successes | trials ~ treatment,
   shared = ~ 0,  # Explicit independence (triggers warning)
   family = ratiod_binomial(),
-  data = experiment_data
+  data = experiment_data,
+  control = list(seed = 1)
 )
 ```
 
@@ -205,9 +239,9 @@ The warning reminds you that this is a strong assumption.
 | Model ratio directly | Heteroscedasticity, ignores denominator uncertainty |
 | Use offset | Assumes proportionality, ignores effort structure |
 | Independent joint model | Spurious ratio effects from shared unmeasured drivers |
-| **numdenom (shared structure)** | Correct propagation of uncertainty, shared drivers cancel |
+| **tulpaRatio (shared structure)** | Correct propagation of uncertainty, shared drivers cancel |
 
-numdenom enforces the correct approach by design:
+tulpaRatio enforces the correct approach by design:
 
 - **No offsets allowed**
 - **Shared structure by default**

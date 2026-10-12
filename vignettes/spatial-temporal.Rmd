@@ -1,3 +1,4 @@
+---
 title: "Spatial and Temporal Models"
 author: "Gilles Colling"
 date: "`r Sys.Date()`"
@@ -6,6 +7,7 @@ vignette: >
   %\VignetteIndexEntry{Spatial and Temporal Models}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+---
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
@@ -13,7 +15,8 @@ knitr::opts_chunk$set(
   comment = "#>",
   fig.width = 7,
   fig.height = 5,
-  eval = FALSE
+  eval = identical(Sys.getenv("NOT_CRAN"), "true") ||
+    identical(Sys.getenv("IN_PKGDOWN"), "true")
 )
 ```
 
@@ -26,12 +29,16 @@ pak::pak("gcol33/tulpaRatio")
 
 ## Overview
 
-This vignette covers spatial and temporal extensions in numdenom. These allow borrowing strength across neighboring locations or time points, improving estimates in data-sparse regions.
+This vignette covers spatial and temporal extensions in tulpaRatio. These allow borrowing strength across neighboring locations or time points, improving estimates in data-sparse regions.
+
+```{r}
+library(tulpaRatio)
+```
 
 
 # Spatial Models
 
-numdenom supports two spatial priors for areal (discrete region) data:
+tulpaRatio supports two spatial priors for areal (discrete region) data:
 
 | Function | Prior | Use Case |
 |----------|-------|----------|
@@ -66,12 +73,13 @@ for (i in 1:n) {
 
 ```{r}
 library(sf)
-library(spdep)
 
-# From shapefile
-regions <- st_read("regions.shp")
-nb <- poly2nb(regions, queen = TRUE)
-adj <- nb2mat(nb, style = "B", zero.policy = TRUE)
+# North Carolina counties, shipped with sf
+nc <- st_read(system.file("shape/nc.shp", package = "sf"), quiet = TRUE)
+nc$county <- seq_len(nrow(nc))
+
+# Queen contiguity: counties sharing a border or a corner
+adj_nc <- 1 * st_touches(nc, sparse = FALSE)
 ```
 
 ## ICAR Model: `spatial_car()`
@@ -85,21 +93,31 @@ $$
 where $j \sim i$ denotes neighbors of region $i$.
 
 ```{r}
+# Four surveys per grid cell; the spatial field enters catch and effort
+set.seed(1)
+phi <- 0.4 * sin(coords$x) + 0.4 * cos(coords$y)
+df <- data.frame(region = rep(1:n, each = 4), x = rnorm(4 * n))
+df$effort <- rgamma(nrow(df), shape = 5, rate = 1 / exp(phi[df$region]))
+df$count <- rpois(nrow(df), exp(3 + 0.3 * df$x + phi[df$region]))
+
 fit <- tratio(
-  count | effort ~ x + (1 | region),
+  count | effort ~ x,
   spatial = spatial_car(
-    adj = adj,
+    adjacency = adj,
     level = "group",
     group_var = "region"
   ),
   data = df,
-  family = ratiod_poisson_gamma()
+  family = ratiod_poisson_gamma(),
+  mode = "hmc",
+  control = list(seed = 1)
 )
+summary(fit)
 ```
 
 ### Parameters
 
-- `adj`: Square binary adjacency matrix
+- `adjacency`: Square binary adjacency matrix
 - `level`: `"group"` (one effect per group) or `"obs"` (one per observation)
 - `group_var`: Variable name matching the grouping factor (required if `level = "group"`)
 
@@ -112,21 +130,29 @@ $$
 $$
 
 where:
+
 - $\phi_i^*$ is the scaled ICAR component
 - $v_i \sim \text{Normal}(0, 1)$ is unstructured noise
 - $\rho \in [0, 1]$ is the proportion of variance that is spatial
 
 ```{r}
-fit <- tratio(
-  cases | population ~ age + (1 | county),
+# Sudden infant deaths among live births, 1974-78
+nc_df <- st_drop_geometry(nc)
+nc_df$nonwhite <- nc_df$NWBIR74 / nc_df$BIR74
+
+fit_bym2 <- tratio(
+  SID74 | BIR74 ~ nonwhite,
   spatial = spatial_bym2(
-    adj = adj,
+    adjacency = adj_nc,
     level = "group",
     group_var = "county"
   ),
-  data = df,
-  family = ratiod_binomial()
+  data = nc_df,
+  family = ratiod_binomial(),
+  mode = "hmc",
+  control = list(seed = 1)
 )
+summary(fit_bym2)
 ```
 
 The $\rho$ parameter is directly interpretable: $\rho = 0.8$ means 80% of the random effect variance is spatially structured.
@@ -134,30 +160,29 @@ The $\rho$ parameter is directly interpretable: $\rho = 0.8$ means 80% of the ra
 ## Extracting Spatial Effects
 
 ```{r}
-# Get posterior summaries
-spatial_effects <- extract_spatial(fit)
+# County-level posterior summaries
+county_rate <- as.data.frame(ratio(fit_bym2, by = "county", summary = TRUE))
 
 # Map visualization
 library(ggplot2)
-library(sf)
 
-regions$spatial_effect <- spatial_effects$mean
-ggplot(regions) +
-geom_sf(aes(fill = spatial_effect)) +
-  scale_fill_gradient2()
+nc_map <- merge(nc, county_rate, by.x = "county", by.y = "group")
+ggplot(nc_map) +
+  geom_sf(aes(fill = mean)) +
+  scale_fill_viridis_c(name = "SIDS rate")
 ```
 
 
 # Temporal Models
 
-numdenom supports temporal priors for time series structure:
+tulpaRatio supports temporal priors for time series structure:
 
 | Function | Prior | Use Case |
 |----------|-------|----------|
-| `temporal_rw()` | Random walk | Smooth trends |
+| `temporal_rw1()`, `temporal_rw2()` | Random walk | Smooth trends |
 | `temporal_ar1()` | AR(1) | Mean-reverting dynamics |
 
-## Random Walk: `temporal_rw()`
+## Random Walk: `temporal_rw1()`, `temporal_rw2()`
 
 First-order random walk (RW1):
 
@@ -172,26 +197,32 @@ $$
 $$
 
 ```{r}
+# Twelve sites surveyed once a year for twelve years, in a random month
+set.seed(2)
+df_t <- expand.grid(site = factor(1:12), year = 2010:2021)
+df_t$month <- sample(1:12, nrow(df_t), replace = TRUE)
+df_t$x <- rnorm(nrow(df_t))
+gamma_t <- 0.3 * sin((df_t$year - 2010) / 2) + 0.2 * cos(2 * pi * df_t$month / 12) +
+  rnorm(12, 0, 0.3)[df_t$site]
+df_t$effort <- rgamma(nrow(df_t), shape = 5, rate = 1 / exp(gamma_t))
+df_t$count <- rpois(nrow(df_t), exp(3 + 0.2 * df_t$x + gamma_t))
+
 # First-order random walk
-fit <- tratio(
+fit_rw1 <- tratio(
   count | effort ~ x + (1 | site),
-  temporal = temporal_rw(
-    time_var = "year",
-    order = 1
-  ),
-  data = df,
-  family = ratiod_poisson_gamma()
+  temporal = temporal_rw1(time_var = "year"),
+  data = df_t,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 
 # Second-order for smoother trends
-fit <- tratio(
+fit_rw2 <- tratio(
   count | effort ~ x,
-  temporal = temporal_rw(
-    time_var = "year",
-    order = 2
-  ),
-  data = df,
-  family = ratiod_poisson_gamma()
+  temporal = temporal_rw2(time_var = "year"),
+  data = df_t,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 ```
 
@@ -202,13 +233,13 @@ For seasonal patterns that wrap around (e.g., month 12 neighbors month 1):
 ```{r}
 fit <- tratio(
   count | effort ~ x,
-  temporal = temporal_rw(
+  temporal = temporal_rw1(
     time_var = "month",
-    order = 1,
     cyclic = TRUE
   ),
-  data = df,
-  family = ratiod_poisson_gamma()
+  data = df_t,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 ```
 
@@ -228,8 +259,9 @@ fit <- tratio(
   temporal = temporal_ar1(
     time_var = "year"
   ),
-  data = df,
-  family = ratiod_poisson_gamma()
+  data = df_t,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 ```
 
@@ -238,15 +270,24 @@ fit <- tratio(
 By default, temporal effects are shared across all groups. For group-specific trends:
 
 ```{r}
+# Each site follows its own random-walk trend
+df_g <- df_t
+site_trend <- apply(matrix(rnorm(12 * 12, 0, 0.15), 12), 2, cumsum)
+eta_g <- rnorm(12, 0, 0.3)[df_g$site] +
+  site_trend[cbind(df_g$year - 2009, as.integer(df_g$site))]
+df_g$effort <- rgamma(nrow(df_g), shape = 5, rate = 1 / exp(eta_g))
+df_g$count <- rpois(nrow(df_g), exp(3 + eta_g))
+
+# The site walks carry each site's level, so no site intercept is added
 fit <- tratio(
-  count | effort ~ (1 | site),
-  temporal = temporal_rw(
+  count | effort ~ 1,
+  temporal = temporal_rw1(
     time_var = "year",
-    group_var = "site",
-    shared = FALSE
+    group_var = "site"
   ),
-  data = df,
-  family = ratiod_poisson_gamma()
+  data = df_g,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 ```
 
@@ -254,14 +295,11 @@ fit <- tratio(
 
 ```{r}
 # Year-level effects
-temporal_effects <- extract_temporal(fit)
+temporal_effects <- temporal(fit_rw1, summary = TRUE)
+temporal_effects
 
 # Plot trend
-library(ggplot2)
-ggplot(temporal_effects, aes(x = year, y = mean)) +
-  geom_ribbon(aes(ymin = q2.5, ymax = q97.5), alpha = 0.2) +
-  geom_line() +
-  labs(y = "Temporal effect")
+plot(temporal(fit_rw1))
 ```
 
 
@@ -270,12 +308,28 @@ ggplot(temporal_effects, aes(x = year, y = mean)) +
 For spatiotemporal data, include both:
 
 ```{r}
+# The 25 grid cells surveyed twice a year for four years
+set.seed(3)
+df_st <- expand.grid(region = 1:n, year = 2015:2018, survey = 1:2)
+df_st$x <- rnorm(nrow(df_st))
+df_st$lon <- coords$x[df_st$region]
+df_st$lat <- coords$y[df_st$region]
+delta <- matrix(rnorm(n * 4, sd = 0.5), n, 4)
+# Spatial field, a random walk over the years, and a region-by-year term
+year_eff <- cumsum(rnorm(4, 0, 0.3))
+eta_st <- phi[df_st$region] + year_eff[df_st$year - 2014] +
+  delta[cbind(df_st$region, df_st$year - 2014)]
+df_st$effort <- rgamma(nrow(df_st), shape = 5, rate = 1 / exp(eta_st))
+df_st$count <- rpois(nrow(df_st), exp(3 + 0.3 * df_st$x + eta_st))
+
 fit <- tratio(
-  count | effort ~ x + (1 | region),
+  count | effort ~ x,
   spatial = spatial_bym2(adj, level = "group", group_var = "region"),
-  temporal = temporal_rw(time_var = "year"),
-  data = df,
-  family = ratiod_poisson_gamma()
+  temporal = temporal_rw1(time_var = "year"),
+  data = df_st,
+  family = ratiod_poisson_gamma(),
+  mode = "hmc",
+  control = list(seed = 1)
 )
 ```
 
@@ -284,7 +338,7 @@ This fits additive spatial and temporal effects. For interaction effects, see th
 
 # Spatiotemporal Interaction
 
-When spatial patterns change over time (or temporal trends differ across space), additive models may be insufficient. numdenom supports spatiotemporal interaction effects following Knorr-Held (2000).
+When spatial patterns change over time (or temporal trends differ across space), additive models may be insufficient. tulpaRatio supports spatiotemporal interaction effects following Knorr-Held (2000).
 
 ## Interaction Types
 
@@ -305,15 +359,16 @@ $$
 $$
 
 ```{r}
-fit <- tratio(
+fit_type1 <- tratio(
   count | effort ~ x,
-  data = df,
+  data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
     spatial = spatial_car(adj, level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "I"
-  )
+  ),
+  control = list(seed = 1)
 )
 ```
 
@@ -328,15 +383,16 @@ $$
 This captures location-specific temporal trends.
 
 ```{r}
-fit <- tratio(
+fit_type2 <- tratio(
   count | effort ~ x,
-  data = df,
+  data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
     spatial = spatial_car(adj, level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "II"
-  )
+  ),
+  control = list(seed = 1)
 )
 ```
 
@@ -351,15 +407,16 @@ $$
 This captures time-specific spatial patterns.
 
 ```{r}
-fit <- tratio(
+fit_type3 <- tratio(
   count | effort ~ x,
-  data = df,
+  data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
     spatial = spatial_car(adj, level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "III"
-  )
+  ),
+  control = list(seed = 1)
 )
 ```
 
@@ -374,15 +431,16 @@ $$
 This is the most constrained and often most appropriate model.
 
 ```{r}
-fit <- tratio(
+fit_type4 <- tratio(
   count | effort ~ x,
-  data = df,
+  data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
     spatial = spatial_car(adj, level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "IV"
-  )
+  ),
+  control = list(seed = 1)
 )
 ```
 
@@ -393,18 +451,19 @@ space-time grid rather than a GMRF stencil on it. The interaction carries its
 own `coords`, so an areal main effect pairs with a continuous interaction over
 the same units:
 
-```{r}
+```{r, eval = FALSE}
 fit <- tratio(
   count | effort ~ x,
-  data = df,
+  data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
     spatial = spatial_car(adj, level = "group", group_var = "region"),
-    temporal = temporal_rw1("date"),
+    temporal = temporal_rw1("year"),
     type = "nonsep_gp",
     nonsep_type = "gneiting",
     coords = ~ lon + lat
-  )
+  ),
+  control = list(seed = 1)
 )
 ```
 
@@ -426,11 +485,12 @@ neighbours per cell chosen on a joint space-time metric.
 
 ```{r}
 # Summary format
-st_effects <- spatiotemporal_effects(fit, format = "summary")
+st_effects <- spatiotemporal_effects(fit_type4, format = "summary")
 head(st_effects)
 
 # Array format (S x T x draws)
-st_array <- spatiotemporal_effects(fit, format = "array")
+st_array <- spatiotemporal_effects(fit_type4, format = "array")
+dim(st_array)
 
 # Visualization
 plot(st_effects, type = "heatmap")
@@ -442,25 +502,26 @@ plot(st_effects, type = "time_series")
 Compare interaction types using LOO-CV:
 
 ```{r}
-fit_type1 <- tratio(..., spatiotemporal = spatiotemporal(..., type = "I"))
-fit_type4 <- tratio(..., spatiotemporal = spatiotemporal(..., type = "IV"))
-
-loo_compare(loo(fit_type1), loo(fit_type4))
+ratiod_compare(fit_type1, fit_type4)
 ```
+
+Each space-time cell carries its own interaction parameter, informed here by two surveys, so leaving one survey out shifts that parameter strongly and PSIS-LOO flags most observations with Pareto $k > 0.67$; the ranking is a guide, and K-fold cross-validation over held-out cells gives the reliable comparison.
 
 
 ## Prior Specification
 
 ### Spatial Priors
 
+The `sigma` prior is the half-Cauchy on the total standard deviation of a BYM2 field (and on random-effect standard deviations); its scale sets how large a spatial effect is plausible before the data are seen. An ICAR field's precision takes a Gamma(1, 0.01) prior.
+
 ```{r}
 fit <- tratio(
-  ...,
-  spatial = spatial_car(adj, level = "group", group_var = "region"),
-  priors = ratiod_priors(
-    tau_spatial_shape = 1.0,  # Gamma shape for precision
-    tau_spatial_rate = 0.01   # Gamma rate for precision
-  )
+  count | effort ~ x,
+  data = df,
+  family = ratiod_poisson_gamma(),
+  spatial = spatial_bym2(adj, level = "group", group_var = "region"),
+  priors = ratiod_priors(sigma = prior_half_cauchy(0.5)),
+  control = list(seed = 1)
 )
 ```
 
@@ -468,12 +529,14 @@ fit <- tratio(
 
 ```{r}
 fit <- tratio(
-  ...,
-  temporal = temporal_rw(time_var = "year"),
+  count | effort ~ x,
+  data = df_t,
+  family = ratiod_poisson_gamma(),
+  temporal = temporal_ar1(time_var = "year"),
   priors = ratiod_priors(
-    tau_temporal_shape = 2.0,
-    tau_temporal_rate = 0.5
-  )
+    rho_temporal = prior_beta(5, 2)  # Beta on (rho + 1) / 2, mode near 0.6
+  ),
+  control = list(seed = 1)
 )
 ```
 
@@ -483,4 +546,4 @@ fit <- tratio(
 - `vignette("getting-started")` - Basic usage
 - `vignette("workflows")` - Complete analysis examples
 - `?spatial_car`, `?spatial_bym2` - Function documentation
-- `?temporal_rw`, `?temporal_ar1` - Function documentation
+- `?temporal_rw1`, `?temporal_rw2`, `?temporal_ar1` - Function documentation

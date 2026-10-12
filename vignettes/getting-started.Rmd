@@ -15,29 +15,30 @@ knitr::opts_chunk$set(
   comment = "#>",
   fig.width = 7,
   fig.height = 5,
-  eval = FALSE
+  eval = identical(Sys.getenv("NOT_CRAN"), "true") ||
+    identical(Sys.getenv("IN_PKGDOWN"), "true")
 )
 ```
 
 ## Installation
 
 ```{r, eval = FALSE}
-pak::pak("gcol33/numdenom")
+pak::pak("gcol33/tulpaRatio")
 ```
 
-```{r, eval = FALSE}
-library(numdenom)
+```{r}
+library(tulpaRatio)
 ```
 
-## What numdenom Does
+## What tulpaRatio Does
 
-numdenom fits Bayesian hierarchical models for ratios, rates, and proportions. Instead of modelling ratios directly (which is statistically problematic), numdenom jointly models the numerator and denominator processes, then derives ratios with full uncertainty propagation.
+tulpaRatio fits Bayesian hierarchical models for ratios, rates, and proportions. Instead of modelling ratios directly (which is statistically problematic), tulpaRatio jointly models the numerator and denominator processes, then derives ratios with full uncertainty propagation.
 
 See `vignette("philosophy")` for the statistical motivation.
 
 ## The Three Families
 
-numdenom provides three model families for common ratio types:
+tulpaRatio provides three model families for common ratio types:
 
 | Family | Numerator | Denominator | Use Case |
 |--------|-----------|-------------|----------|
@@ -50,8 +51,6 @@ numdenom provides three model families for common ratio types:
 Catch per unit effort with site-level variation:
 
 ```{r}
-library(numdenom)
-
 # Simulated trawl data
 set.seed(123)
 n_sites <- 20
@@ -59,17 +58,23 @@ n_obs <- 200
 
 trawl_data <- data.frame(
   site = factor(rep(1:n_sites, each = n_obs/n_sites)),
-  depth = rnorm(n_obs, 50, 15),
+  depth = rnorm(n_obs),  # standardised depth
   season = factor(sample(c("spring", "summer", "fall"), n_obs, replace = TRUE)),
-  catch = rpois(n_obs, lambda = 15),
-  effort = rgamma(n_obs, shape = 5, rate = 1)
+  weather = factor(sample(c("calm", "rough"), n_obs, replace = TRUE))
 )
+# A site effect raises both effort and catch; catch per unit effort
+# falls with depth
+site_effect <- rnorm(n_sites, 0, 0.4)[trawl_data$site]
+trawl_data$effort <- rgamma(n_obs, shape = 5, rate = 5 / exp(1 + site_effect))
+trawl_data$catch <- rpois(n_obs, trawl_data$effort *
+                            exp(1 + site_effect - 0.3 * trawl_data$depth))
 
 # Fit model
 fit <- tratio(
   catch | effort ~ depth + season + (1 | site),
   data = trawl_data,
-  family = ratiod_poisson_gamma()
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 
 # View results
@@ -96,8 +101,9 @@ Use `num | denom ~ predictors` when both processes share predictors:
 ```{r}
 fit <- tratio(
   catch | effort ~ depth + season + (1 | site),
-  data = df,
-  family = ratiod_poisson_gamma()
+  data = trawl_data,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
 ```
 
@@ -105,39 +111,60 @@ fit <- tratio(
 
 Add terms that affect only numerator or denominator:
 ```{r}
-fit <- tratio(
+fit_split <- tratio(
   catch | effort ~ (1 | site),           # Shared structure
   formula_num = ~ depth + season,         # Catch-specific
 
   formula_denom = ~ weather,              # Effort-specific
-  data = df,
-  family = ratiod_poisson_gamma()
+  data = trawl_data,
+  family = ratiod_poisson_gamma(),
+  control = list(seed = 1)
 )
+coef(fit_split)
 ```
 
 ## Random Effects
+
+The examples in this section use simulated counts `y` out of totals `n`, with a covariate `x`, plots nested in sites, and survey years crossed with sites:
+
+```{r}
+set.seed(42)
+counts <- expand.grid(plot = 1:3, site = 1:12, year = 1:10)
+site_eff <- rnorm(12, 0, 0.4)
+year_eff <- rnorm(10, 0, 0.3)
+plot_eff <- rnorm(36, 0, 0.2)
+slope_eff <- rnorm(12, 0, 0.2)
+eta <- site_eff[counts$site] + year_eff[counts$year] +
+  plot_eff[(counts$site - 1) * 3 + counts$plot]
+counts$x <- rnorm(nrow(counts))
+counts$n <- rnbinom(nrow(counts), size = 10, mu = 60 * exp(eta))
+counts$y <- rnbinom(nrow(counts), size = 10,
+                    mu = 12 * exp(eta + (0.3 + slope_eff[counts$site]) * counts$x))
+counts[c("plot", "site", "year")] <- lapply(counts[c("plot", "site", "year")], factor)
+ctrl <- list(seed = 1)
+```
 
 ### Random Intercepts
 
 ```{r}
 # Single grouping factor
-fit <- tratio(y | n ~ x + (1 | site), ...)
+fit_re <- tratio(y | n ~ x + (1 | site), data = counts, control = ctrl)
 
 # Multiple (crossed) grouping factors
-fit <- tratio(y | n ~ x + (1 | site) + (1 | year), ...)
+fit_re <- tratio(y | n ~ x + (1 | site) + (1 | year), data = counts, control = ctrl)
 
 # Nested grouping factors
-fit <- tratio(y | n ~ x + (1 | site/plot), ...)
+fit_re <- tratio(y | n ~ x + (1 | site/plot), data = counts, control = ctrl)
 ```
 
 ### Random Slopes
 
 ```{r}
 # Correlated intercept and slope
-fit <- tratio(y | n ~ x + (1 + x | site), ...)
+fit_re <- tratio(y | n ~ x + (1 + x | site), data = counts, control = ctrl)
 
 # Uncorrelated (independent) intercept and slope
-fit <- tratio(y | n ~ x + (1 + x || site), ...)
+fit_re <- tratio(y | n ~ x + (1 + x || site), data = counts, control = ctrl)
 ```
 
 ## Model Checking
@@ -151,10 +178,16 @@ loo(fit)
 waic(fit)
 
 # Compare models
-fit1 <- tratio(y | n ~ x, ...)
-fit2 <- tratio(y | n ~ x + z, ...)
+fit1 <- tratio(catch | effort ~ depth + (1 | site), data = trawl_data,
+               family = ratiod_poisson_gamma(), control = ctrl)
+fit2 <- tratio(catch | effort ~ depth + season + (1 | site), data = trawl_data,
+               family = ratiod_poisson_gamma(), control = ctrl)
 ratiod_compare(fit1, fit2)
 ```
+
+The `|elpd_diff| < 4` flag marks a difference too small to separate the two models: adding season does not improve the expected predictive accuracy.
+
+Both criteria print warnings here. Each site effect is estimated from ten observations, so leaving one observation out moves it noticeably: `waic()` then reports observations whose `p_waic` exceeds 0.4 and recommends `loo()`, and `loo()` flags the observations whose Pareto $k$ is too high for importance sampling to follow. Their contributions to `elpd_loo` are less reliable than the rest, which the standard errors do not show.
 
 ## Quick Reference
 

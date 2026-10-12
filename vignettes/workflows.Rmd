@@ -1,3 +1,4 @@
+---
 title: "Complete Workflows"
 author: "Gilles Colling"
 date: "`r Sys.Date()`"
@@ -6,6 +7,7 @@ vignette: >
   %\VignetteIndexEntry{Complete Workflows}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+---
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
@@ -13,7 +15,8 @@ knitr::opts_chunk$set(
   comment = "#>",
   fig.width = 7,
   fig.height = 5,
-  eval = FALSE
+  eval = identical(Sys.getenv("NOT_CRAN"), "true") ||
+    identical(Sys.getenv("IN_PKGDOWN"), "true")
 )
 ```
 
@@ -26,7 +29,7 @@ pak::pak("gcol33/tulpaRatio")
 
 ## Overview
 
-This vignette demonstrates complete analysis workflows using numdenom. Each example shows data preparation, model fitting, diagnostics, and inference. See `vignette("getting-started")` for basic usage and `vignette("philosophy")` for statistical motivation.
+This vignette demonstrates complete analysis workflows using tulpaRatio. Each example shows data preparation, model fitting, diagnostics, and inference. See `vignette("getting-started")` for basic usage and `vignette("philosophy")` for statistical motivation.
 
 
 # Workflow 1: Fisheries CPUE
@@ -40,7 +43,7 @@ This vignette demonstrates complete analysis workflows using numdenom. Each exam
 ### Data
 
 ```{r}
-library(numdenom)
+library(tulpaRatio)
 
 # Simulated fisheries data
 set.seed(42)
@@ -66,7 +69,7 @@ fit_cpue <- tratio(
   catch | effort_hours ~ depth + season + (1 | site),
   data = fisheries,
   family = ratiod_poisson_gamma(),
-  control = list(iter = 2000, warmup = 1000, chains = 4)
+  control = list(seed = 1)
 )
 
 summary(fit_cpue)
@@ -94,7 +97,11 @@ summary(cpue_by_site)
 ratio_contrast(fit_cpue, ~ season)
 
 # Effect of depth
-ratio_contrast(fit_cpue, ~ depth, at = list(depth = c(30, 50, 70)))
+predict(
+  fit_cpue,
+  newdata = data.frame(depth = c(30, 50, 70), season = "summer"),
+  re_formula = NA
+)
 ```
 
 
@@ -116,10 +123,15 @@ n_visits <- 4
 abundance <- data.frame(
   plot = factor(rep(1:n_plots, each = n_visits)),
   habitat = factor(rep(sample(c("forest", "grassland", "wetland"), n_plots, replace = TRUE), each = n_visits)),
-  observer = factor(sample(1:5, n_plots * n_visits, replace = TRUE)),
-  target_count = rnbinom(n_plots * n_visits, size = 3, mu = 15),
-  total_count = rnbinom(n_plots * n_visits, size = 5, mu = 50)
+  observer = factor(sample(1:10, n_plots * n_visits, replace = TRUE))
 )
+
+# Plot and observer effects scale target and total counts alike; the
+# target share is higher in grassland and lower in wetland
+u <- rnorm(n_plots, sd = 0.4)[abundance$plot] + rnorm(10, sd = 0.4)[abundance$observer]
+hab <- c(forest = 0, grassland = 0.4, wetland = -0.3)[as.character(abundance$habitat)]
+abundance$target_count <- rnbinom(n_plots * n_visits, size = 3, mu = 15 * exp(u + hab))
+abundance$total_count <- rnbinom(n_plots * n_visits, size = 5, mu = 50 * exp(u))
 
 # Ensure target <= total
 abundance$target_count <- pmin(abundance$target_count, abundance$total_count)
@@ -132,7 +144,7 @@ fit_abundance <- tratio(
   target_count | total_count ~ habitat + (1 | plot) + (1 | observer),
   data = abundance,
   family = ratiod_negbin_negbin(),
-  control = list(iter = 2000, chains = 4)
+  control = list(seed = 1)
 )
 
 summary(fit_abundance)
@@ -146,6 +158,7 @@ ratio_contrast(fit_abundance, ~ habitat)
 
 # Plot-level estimates
 abundance_by_plot <- ratio(fit_abundance, by = "plot")
+summary(abundance_by_plot)
 ```
 
 
@@ -181,21 +194,28 @@ for (i in 1:n_cameras) {
 camera_data <- data.frame(
   camera = factor(1:n_cameras),
   vegetation = rnorm(n_cameras),
-  nights_active = sample(20:30, n_cameras, replace = TRUE),
-  detections = rbinom(n_cameras, size = 25, prob = 0.3)
+  nights_active = sample(20:30, n_cameras, replace = TRUE)
 )
-camera_data$detections <- pmin(camera_data$detections, camera_data$nights_active)
+
+# Detection varies smoothly across the grid
+field <- 0.6 * sin(coords$x / 2) - 0.4 * cos(coords$y / 2)
+camera_data$detections <- rbinom(
+  n_cameras,
+  size = camera_data$nights_active,
+  prob = plogis(-0.8 + 0.3 * camera_data$vegetation + field)
+)
 ```
 
 ### Spatial Model
 
 ```{r}
 fit_detection <- tratio(
-  detections | nights_active ~ vegetation + (1 | camera),
+  detections | nights_active ~ vegetation,
   spatial = spatial_car(adj, level = "group", group_var = "camera"),
   data = camera_data,
   family = ratiod_binomial(),
-  control = list(iter = 2000, chains = 4)
+  mode = "hmc",
+  control = list(seed = 1)
 )
 
 summary(fit_detection)
@@ -203,14 +223,13 @@ summary(fit_detection)
 
 ### Spatial Predictions
 
-```{r}
+```{r, message = FALSE}
 # Camera-level detection probabilities
-detection_probs <- ratio(fit_detection, by = "camera")
-summary(detection_probs)
+detection_probs <- ratio(fit_detection, by = "camera", summary = TRUE)
+detection_probs
 
 # Visualize spatial pattern
-camera_data$detection_prob <- detection_probs$mean
-# plot with sf/ggplot2...
+plot_map(as.data.frame(detection_probs), coords = coords)
 ```
 
 
@@ -231,19 +250,24 @@ trend_data <- expand.grid(
   year = 1:n_years,
   site = factor(1:n_sites)
 )
-trend_data$count <- rpois(nrow(trend_data), lambda = 20)
 trend_data$effort <- rgamma(nrow(trend_data), shape = 5, rate = 1)
+trend_data$count <- rpois(
+  nrow(trend_data),
+  lambda = 4 * trend_data$effort * exp(0.3 * sin(trend_data$year / 3))
+)
 ```
 
 ### Model with Temporal Structure
 
+A temporal effect shared by numerator and denominator cancels in their ratio, so the walk on the index uses `shared = FALSE`; the warning this prints notes that such a walk can also absorb unmeasured year-to-year drivers of the ratio.
+
 ```{r}
 fit_trend <- tratio(
   count | effort ~ (1 | site),
-  temporal = temporal_rw(time_var = "year", order = 1),
+  temporal = temporal_rw1(time_var = "year", shared = FALSE),
   data = trend_data,
   family = ratiod_poisson_gamma(),
-  control = list(iter = 2000, chains = 4)
+  control = list(seed = 1)
 )
 
 summary(fit_trend)
@@ -257,7 +281,7 @@ trend_by_year <- ratio(fit_trend, by = "year")
 summary(trend_by_year)
 
 # Plot trend with uncertainty
-# ggplot code...
+plot(temporal(fit_trend))
 ```
 
 

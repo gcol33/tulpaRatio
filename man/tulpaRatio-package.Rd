@@ -40,7 +40,7 @@ are computed post hoc with full uncertainty propagation.
 Useful links:
 \itemize{
   \item \url{https://github.com/gcol33/tulpaRatio}
-  \item \url{https://gillescolling.com/tulpaRatio}
+  \item \url{https://gillescolling.com/tulpaRatio/}
   \item Report bugs at \url{https://github.com/gcol33/tulpaRatio/issues}
 }
 

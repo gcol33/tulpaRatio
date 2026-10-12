@@ -46,6 +46,12 @@
 \method{plot}{ratiod_fit}(x, pars = NULL, type = c("trace", "dens", "both"), n_col = NULL, ...)
 }
 \arguments{
+\item{x}{A fit returned by \code{\link[=tratio]{tratio()}}: a \code{ratiod_fit}, or one of the
+backend subclasses \code{ratiod_vi}, \code{ratiod_sghmc} and \code{ratiod_sgld}, or the
+summary of one.}
+
+\item{digits}{Number of significant digits to print (default 3).}
+
 \item{...}{Ignored}
 
 \item{object}{A ratiod_fit object}
