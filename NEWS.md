@@ -119,6 +119,14 @@
 * Divergent transitions raise a warning of class `tulpaRatio_divergence`
   whether or not `verbose` is set (#123), and `print(summary(fit))` flags
   parameters with R-hat above 1.01 or bulk ESS below 100 per chain (#126).
+* `spatiotemporal(parameterization = "noncentered")` covers Knorr-Held Types
+  I to III as well as IV: the interaction is sampled as `z` with
+  `delta = z / sqrt(tau)`, and its sum-to-zero penalty acts on `z`, so a weak
+  interaction no longer leaves `tau` in a funnel (#132).
+* The centred space-time interaction's normalizer counts only the directions
+  its sum-to-zero constraints leave; Types I to III and the GP types counted
+  the constrained directions as well and overstated `tau` (Type I by about two
+  posterior SDs on a 25 x 6 grid). Space-time results change (#138).
 * A NUTS leaf whose step leaves the posterior's support counts as a
   divergence with acceptance zero; `std::min(1, exp(-NaN))` had reported it as
   perfect acceptance, so the step size adaptation could grow epsilon to its

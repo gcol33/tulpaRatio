@@ -1319,9 +1319,9 @@ T compute_log_post_impl(
 
         const T* z_or_delta = &params[layout.st_delta_start];
 
-        // NC reparameterization for Type IV: store z, reconstruct delta
-        const bool st_use_nc = (data.st_parameterization == 1 &&
-                                st_data.type == STType::TYPE_IV);
+        // NC reparameterization: store z, reconstruct delta
+        const bool st_use_nc = ratiod_spatiotemporal::st_noncentered(
+            data.st_parameterization, data.st_is_hsgp, st_data);
 
         if (st_use_nc) {
             // Forward transform: delta = z / sqrt(tau_st)
@@ -1338,17 +1338,17 @@ T compute_log_post_impl(
                 st_data
             );
 
-            // Rank term with actual tau, combined with the NC Jacobian:
-            // 0.5 * rank * log(tau) - ST/2 * log(tau)
-            int rank_space = S - 1;
-            int rank_time = ratiod_spatiotemporal::st_time_rank(
-                st_data.temporal_type, T_st, st_data.temporal_cyclic);
-            int total_rank = rank_space * rank_time;
-            log_post = log_post + T(0.5 * (total_rank - ST)) * safe_log(tau_st);
+            // The GMRF normalizer and the NC Jacobian, less the null
+            // directions the sum-to-zero penalty on z pins
+            const int tau_power = ratiod_spatiotemporal::st_noncentered_tau_power(st_data);
+            log_post = log_post + T(0.5 * tau_power) * safe_log(tau_st);
 
-            // Sum-to-zero on reconstructed delta
+            // Sum-to-zero on z. In the hard limit this is the constraint on
+            // delta = z / sqrt(tau); held on z, its strength does not fade as
+            // tau grows, which would leave z free to drift along the
+            // directions Q does not constrain.
             log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                st_delta, S, T_st, true, true
+                z_or_delta, S, T_st, true, true
             );
         } else if (data.st_is_hsgp) {
             // HSGP-ST: spectral basis interaction (centered). Each basis
@@ -1419,10 +1419,13 @@ T compute_log_post_impl(
                 st_data
             );
 
-            // Soft sum-to-zero constraint for identifiability
+            // Soft sum-to-zero constraint for identifiability, and the
+            // normalizer of the subspace it leaves
             log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
                 st_delta, S, T_st, true, true
             );
+            log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
+                st_data)) * safe_log(tau_st);
         }
     }
 

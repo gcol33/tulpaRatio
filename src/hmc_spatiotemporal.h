@@ -644,6 +644,135 @@ inline Scalar st_gp_nngp_log_lik(
 }
 
 // =====================================================================
+// Knorr-Held precision stencils
+// =====================================================================
+
+// The rank of the interaction's GMRF precision Q, the coefficient of
+// 0.5 * log(tau) in its normalizer: S*T for the iid Type I, S copies of the
+// time margin for Type II, T copies of the ICAR margin for Type III and the
+// product of the two margins' ranks for Type IV.
+inline int st_gmrf_rank(const SpatiotemporalData& st) {
+  const int S = st.n_spatial;
+  const int T = st.n_times;
+  const int rank_time = st_time_rank(st.temporal_type, T, st.temporal_cyclic);
+  switch (st.type) {
+    case STType::TYPE_I:   return S * T;
+    case STType::TYPE_II:  return S * rank_time;
+    case STType::TYPE_III: return (S - 1) * T;
+    case STType::TYPE_IV:  return (S - 1) * rank_time;
+    default:               return 0;
+  }
+}
+
+// How many null directions of Q the sum-to-zero penalties pin: the row sums
+// pin each time's spatial constant, the column sums each unit's temporal
+// constant. Under the non-centered parameterization those directions carry a
+// tau-free proper prior on z, so they drop out of the tau normalizer; the
+// null directions they leave free (an RW2 margin's linear trends) keep
+// theirs. Type I is full rank; Type II's time margin has a constant null
+// direction per unit when it is RW1 or RW2; Type III's ICAR margin has one
+// per time; Type IV's Kronecker null space contains both families, sharing
+// the grand constant.
+inline int st_constrained_null_dim(const SpatiotemporalData& st) {
+  const int S = st.n_spatial;
+  const int T = st.n_times;
+  const bool time_null = st.temporal_type == TemporalType::RW1 ||
+                         st.temporal_type == TemporalType::RW2;
+  switch (st.type) {
+    case STType::TYPE_I:   return 0;
+    case STType::TYPE_II:  return time_null ? S : 0;
+    case STType::TYPE_III: return T;
+    case STType::TYPE_IV:  return T + (time_null ? S - 1 : 0);
+    default:               return 0;
+  }
+}
+
+// The power of tau in the non-centered interaction's density, times two:
+// the GMRF normalizer tau^(rank/2), the Jacobian tau^(-ST/2) of
+// delta = z / sqrt(tau), and back the directions the sum-to-zero penalty on z
+// pins (st_constrained_null_dim). Zero whenever the constraints pin the whole
+// null space.
+inline int st_noncentered_tau_power(const SpatiotemporalData& st) {
+  return st_gmrf_rank(st) + st_constrained_null_dim(st) - st.n_params;
+}
+
+// The centered density's correction to its tau normalizer, times two. The
+// sum-to-zero penalties constrain the row and column sums of delta, S + T - 1
+// directions; in their hard limit the field lives on the subspace they leave,
+// whose normalizer counts only the directions Q makes proper there. The
+// per-type priors count rank(Q), which is right only where every constrained
+// direction is a null direction of Q (Type IV with an RW margin); the
+// constrained directions Q makes proper (all of them for Type I and the GP
+// types) are taken back out here.
+inline int st_centered_tau_correction(const SpatiotemporalData& st) {
+  const int n_constraints = st.n_spatial + st.n_times - 1;
+  return st_constrained_null_dim(st) - n_constraints;
+}
+
+// Whether the interaction is sampled non-centered: z with delta = z / sqrt(tau),
+// for the Knorr-Held GMRF types. The spectral (HSGP) margin and the GP types
+// are always centered.
+inline bool st_noncentered(int parameterization, bool is_hsgp,
+                           const SpatiotemporalData& st) {
+  if (parameterization != 1 || is_hsgp) return false;
+  return st.type == STType::TYPE_I || st.type == STType::TYPE_II ||
+         st.type == STType::TYPE_III || st.type == STType::TYPE_IV;
+}
+
+// out[s,t] = (Q_t x[s,:])_t for every unit s: the time margin's precision
+// (RW1, cyclic or not; RW2; AR1 at rho) applied within each unit. The field
+// is stored unit-major, x[s * T + t].
+inline void st_apply_time_margin(const SpatiotemporalData& st, const double* x,
+                                 double rho, double* out) {
+  const int S = st.n_spatial;
+  const int T = st.n_times;
+  for (int s = 0; s < S; s++) {
+    const double* xs = &x[s * T];
+    double* os = &out[s * T];
+    if (st.temporal_type == TemporalType::RW1) {
+      for (int t = 0; t < T; t++) {
+        double v = 0.0;
+        if (t > 0) v += xs[t] - xs[t - 1];
+        else if (st.temporal_cyclic && T > 1) v += xs[0] - xs[T - 1];
+        if (t < T - 1) v += xs[t] - xs[t + 1];
+        else if (st.temporal_cyclic && T > 1) v += xs[T - 1] - xs[0];
+        os[t] = v;
+      }
+    } else if (st.temporal_type == TemporalType::RW2) {
+      for (int t = 0; t < T; t++) os[t] = 0.0;
+      for (int k = 0; k + 2 < T; k++) {
+        const double d2 = xs[k] - 2.0 * xs[k + 1] + xs[k + 2];
+        os[k] += d2;
+        os[k + 1] -= 2.0 * d2;
+        os[k + 2] += d2;
+      }
+    } else if (st.temporal_type == TemporalType::AR1 && T >= 2) {
+      ratiod_ar1::ar1_precision_apply(xs, T, rho, os);
+    } else {
+      for (int t = 0; t < T; t++) os[t] = 0.0;
+    }
+  }
+}
+
+// out[s,t] = (Q_s x[:,t])_s for every time t: the ICAR precision of the
+// adjacency applied within each time point.
+inline void st_apply_space_margin(const SpatiotemporalData& st, const double* x,
+                                  double* out) {
+  const int S = st.n_spatial;
+  const int T = st.n_times;
+  for (int s = 0; s < S; s++) {
+    const int n_neigh = st.adj_row_ptr[s + 1] - st.adj_row_ptr[s];
+    for (int t = 0; t < T; t++) {
+      double v = n_neigh * x[s * T + t];
+      for (int idx = st.adj_row_ptr[s]; idx < st.adj_row_ptr[s + 1]; idx++) {
+        v -= x[(st.adj_col_idx[idx] - 1) * T + t];
+      }
+      out[s * T + t] = v;
+    }
+  }
+}
+
+// =====================================================================
 // Master function: spatiotemporal log-prior
 // =====================================================================
 

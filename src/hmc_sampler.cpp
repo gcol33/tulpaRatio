@@ -6648,8 +6648,8 @@ void compute_gradient_spatiotemporal_handcoded(
     }
 
     // NC reparameterization: params store z, reconstruct delta
-    const bool st_use_nc = (data.st_parameterization == 1 &&
-                            st.type == STType::TYPE_IV);
+    const bool st_use_nc = ratiod_spatiotemporal::st_noncentered(
+        data.st_parameterization, data.st_is_hsgp, st);
     const double* z_or_delta = &params[layout.st_delta_start];
     RATIOD_TLS_WORKSPACE(std::vector<double>, st_delta_buf);
     const double* delta;
@@ -7273,7 +7273,8 @@ void compute_gradient_composite(
             phi_st_space = std::exp(params[layout.log_phi_st_space_idx]);
             phi_st_time = std::exp(params[layout.log_phi_st_time_idx]);
         }
-        st_use_nc = (data.st_parameterization == 1 && st.type == STType::TYPE_IV);
+        st_use_nc = ratiod_spatiotemporal::st_noncentered(
+            data.st_parameterization, data.st_is_hsgp, st);
         z_or_delta_st = &params[layout.st_delta_start];
         if (st_use_nc) {
             inv_scale_st = 1.0 / std::sqrt(tau_st);

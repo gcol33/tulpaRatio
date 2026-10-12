@@ -59,15 +59,16 @@ NULL
 #' @param shared Logical; if TRUE (default), spatiotemporal effect enters both
 #'   numerator and denominator. Set to FALSE for process-specific effects
 #'   (triggers warning about potential confounding).
-#' @param parameterization For `type = "IV"` with the HMC backend: `"centered"`
-#'   (default) samples the interaction directly; `"noncentered"` samples a
-#'   tau-free `z` and reconstructs the interaction as `z / sqrt(tau)`. When the
-#'   data carry little or no space-time interaction, the posterior for `tau`
-#'   drifts toward large values and the centered field's conditional scale
-#'   shrinks with it (a funnel), which NUTS cannot span with a single step
-#'   size; `"noncentered"` decouples the two and should be tried first when
-#'   `rhat` for the interaction (or an intercept sharing its geometry) will
-#'   not drop with more warmup. Ignored outside the HMC backend.
+#' @param parameterization For the Knorr-Held types (`"I"` to `"IV"`) with the
+#'   HMC backend: `"centered"` (default) samples the interaction directly;
+#'   `"noncentered"` samples a tau-free `z` and reconstructs the interaction as
+#'   `z / sqrt(tau)`. When the data carry little or no space-time interaction,
+#'   the posterior for `tau` drifts toward large values and the centered
+#'   field's conditional scale shrinks with it (a funnel), which NUTS cannot
+#'   span with a single step size; `"noncentered"` decouples the two and should
+#'   be tried first when `rhat` for the interaction (or an intercept sharing
+#'   its geometry) will not drop with more warmup. The GP types and an HSGP
+#'   spatial margin are sampled centered. Ignored outside the HMC backend.
 #' @param nonsep_type For `type = "nonsep_gp"`: `"product"` (the separable
 #'   covariance) or `"gneiting"` (Gneiting 2002). An additive covariance is not
 #'   among them: on a complete `S x T` grid its rank is `S + T - 1`, and the

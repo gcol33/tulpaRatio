@@ -384,8 +384,8 @@ layout_st_block <- function(cur, st_info) {
   is_gp <- st_info$type %in% c("separable", "nonsep_gp")
   is_hsgp <- isTRUE(st_info$spatial_is_hsgp)
 
-  # Non-centred Type IV stores z with delta = z / sqrt(tau)
-  noncentered <- identical(st_info$type, "IV") &&
+  # A non-centred Knorr-Held interaction stores z with delta = z / sqrt(tau)
+  noncentered <- st_info$type %in% c("I", "II", "III", "IV") && !is_hsgp &&
     identical(st_info$parameterization, "noncentered")
   out <- list(type = st_info$type, is_gp = is_gp, is_hsgp = is_hsgp,
               noncentered = noncentered, log_tau = cur$one())

@@ -93,7 +93,11 @@ ST_IV_FIELDS <- c("st4", "st4_nc")
 # compute_gradient_composite had no branch for at all -- and Type III applies
 # ICAR at each time point. Both reach the shared interaction gradient
 # (src/st_prior_grad.h) through a different margin than Type IV does.
-ST_OTHER_FIELDS <- c("st2", "st2_rw2", "st2_ar1", "st3")
+ST_OTHER_FIELDS <- c("st2", "st2_rw2", "st2_ar1", "st3",
+                     # The non-centered interaction for every Knorr-Held type,
+                     # and the cyclic RW1 time margin in both coordinates.
+                     "icar_st_nc", "st2_nc", "st2_rw2_nc", "st2_ar1_nc",
+                     "st2_cyclic", "st2_cyclic_nc", "st3_nc")
 # The AR1 time margin, centered and non-centered. Its precision R(rho) enters
 # both the quadratic form and the log-determinant, and its correlation is the
 # only hyperparameter the layout allocates logit_rho_st_idx for

@@ -134,7 +134,8 @@ const char* const KNOWN_FIELDS[] = {
   "rw1_panel", "rw1_nc_panel", "rw2_nc_panel", "rw1_cyclic_nc_panel",
   "temporal_ar1", "temporal_ar1_nc", "temporal_iid", "icar_rw1",
   "icar_ms", "bym2_ms", "icar_st", "bym2_st", "st4", "st4_nc", "st4_ar1",
-  "st4_ar1_nc", "st2", "st2_rw2", "st2_ar1", "st3",
+  "st4_ar1_nc", "st2", "st2_rw2", "st2_ar1", "st3", "icar_st_nc", "st2_nc",
+  "st2_rw2_nc", "st2_ar1_nc", "st2_cyclic", "st2_cyclic_nc", "st3_nc",
   "stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
   "icar_collapsed", "bym2_collapsed",
   "icar_collapsed_rw1", "bym2_collapsed_rw1",
@@ -332,7 +333,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                         field == "ms_temporal_seasonal" ||
                         field == "ms_temporal_seasonal_nc");
   const bool want_st = (field == "icar_st" || field == "bym2_st" ||
-                        field == "car_proper_st");
+                        field == "car_proper_st" || field == "icar_st_nc");
   // st4: a spatiotemporal Type IV (Kronecker) interaction with NO accompanying
   // additive spatial or temporal field -- the only structured term is the
   // interaction itself. icar_st/bym2_st above exercise
@@ -351,8 +352,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // gradient through a different margin than Type IV does, and Type II is the
   // one whose RW2 and AR1 arms the composite gradient used to be missing.
   const bool want_st2 = (field == "st2" || field == "st2_rw2" ||
-                         field == "st2_ar1");
-  const bool want_st3 = (field == "st3");
+                         field == "st2_ar1" || field == "st2_nc" ||
+                         field == "st2_rw2_nc" || field == "st2_ar1_nc" ||
+                         field == "st2_cyclic" || field == "st2_cyclic_nc");
+  const bool want_st3 = (field == "st3" || field == "st3_nc");
   // The GP interaction types, over the same S x T grid the Knorr-Held types
   // use. Each is a continuous covariance over that grid rather than a GMRF
   // stencil on it, so it reaches st_prior_grad.h's GP branch and the two
@@ -960,10 +963,12 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     } else if (want_st2) {
       // Type II reads only the time margin, so it carries no adjacency. Its
       // three arms are the three temporal precisions.
-      st.temporal_type = (field == "st2_ar1") ? ratiod_temporal::TemporalType::AR1
-                       : (field == "st2_rw2") ? ratiod_temporal::TemporalType::RW2
-                                              : ratiod_temporal::TemporalType::RW1;
-      st.temporal_cyclic = false;
+      st.temporal_type = (field == "st2_ar1" || field == "st2_ar1_nc")
+                             ? ratiod_temporal::TemporalType::AR1
+                       : (field == "st2_rw2" || field == "st2_rw2_nc")
+                             ? ratiod_temporal::TemporalType::RW2
+                             : ratiod_temporal::TemporalType::RW1;
+      st.temporal_cyclic = (field == "st2_cyclic" || field == "st2_cyclic_nc");
     } else {
       st.temporal_type = ratiod_temporal::TemporalType::NONE;
       st.temporal_cyclic = false;
@@ -972,11 +977,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     st.sigma2_prior_alpha = 0.01;
     data.has_spatiotemporal = true;
     data.st_is_hsgp = false;
-    // st4_nc exercises the non-centered branch of compute_gradient_spatiotemporal_
-    // handcoded's Type IV block (st_use_nc): params store z,
+    // The *_nc fields exercise the non-centered interaction: params store z,
     // delta = z/sqrt(tau_st).
     data.st_parameterization =
-        (field == "st4_nc" || field == "st4_ar1_nc") ? 1 : 0;
+        (field.size() > 3 && field.compare(field.size() - 3, 3, "_nc") == 0) ? 1 : 0;
   }
 
   // GP interaction over the S x T grid: one spatial coordinate pair per unit,
