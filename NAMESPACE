@@ -10,7 +10,6 @@ S3method(fitted,ratiod_fit)
 S3method(loo::loo,ratiod_fit)
 S3method(loo::waic,ratiod_fit)
 S3method(plot,ratiod_fit)
-S3method(plot,ratiod_st_summary)
 S3method(plot,ratiod_svc_posterior)
 S3method(plot,ratiod_temporal_posterior)
 S3method(plot,ratiod_tvc_posterior)
@@ -61,7 +60,6 @@ S3method(print,summary.ratiod_ess)
 S3method(print,summary.ratiod_vi)
 S3method(print,tulpaRatio_gpu_info)
 S3method(ratio,ratiod_fit)
-S3method(spatiotemporal_effects,ratiod_fit)
 S3method(summary,ratiod_ess)
 S3method(summary,ratiod_fit)
 S3method(summary,ratiod_ratio)
@@ -168,14 +166,11 @@ importFrom(Rcpp,sourceCpp)
 importFrom(bayesplot,pp_check)
 importFrom(grDevices,
   adjustcolor,
-  colorRampPalette,
-  hcl.colors
+  colorRampPalette
 )
 importFrom(graphics,
   abline,
-  image,
   lines,
-  matplot,
   polygon
 )
 importFrom(loo,
@@ -212,7 +207,9 @@ importFrom(stats,
 )
 importFrom(tulpa,
   diagnostics,
-  posterior_predict
+  latent_factors,
+  posterior_predict,
+  spatiotemporal_effects
 )
 importFrom(utils,head)
 useDynLib(tulpaRatio, .registration = TRUE)

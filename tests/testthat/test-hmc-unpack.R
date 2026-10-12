@@ -208,8 +208,14 @@ test_that("a spatiotemporal fit reports its interaction", {
   expect_equal(fit$.internal$layout$total, ncol(fit$.internal$samples))
 
   eff <- spatiotemporal_effects(fit)
-  expect_s3_class(eff, "ratiod_st_array")
+  expect_true(is.array(eff))
   expect_equal(dim(eff)[1:2], c(S, T_times))
+
+  summ <- spatiotemporal_effects(fit, format = "summary")
+  expect_s3_class(summ, "tulpa_st_summary")
+  for (i in seq_len(S)) for (j in seq_len(T_times)) {
+    expect_equal(summ$mean[summ$s == i & summ$t == j], mean(eff[i, j, ]))
+  }
 
   expect_equal(
     unname(fitted(fit, component = "ratio", summary = FALSE)$ratio),

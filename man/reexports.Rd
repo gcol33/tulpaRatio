@@ -6,6 +6,8 @@
 \alias{as_draws}
 \alias{pp_check}
 \alias{posterior_predict}
+\alias{latent_factors}
+\alias{spatiotemporal_effects}
 \alias{diagnostics}
 \title{Objects exported from other packages}
 \keyword{internal}
@@ -18,6 +20,6 @@ below to see their documentation.
 
   \item{posterior}{\code{\link[posterior:as_draws]{as_draws()}}}
 
-  \item{tulpa}{\code{\link[tulpa:diagnostics]{diagnostics()}}, \code{\link[tulpa:posterior_predict]{posterior_predict()}}}
+  \item{tulpa}{\code{\link[tulpa:diagnostics]{diagnostics()}}, \code{\link[tulpa:latent_factors]{latent_factors()}}, \code{\link[tulpa:posterior_predict]{posterior_predict()}}, \code{\link[tulpa:spatiotemporal_effects]{spatiotemporal_effects()}}}
 }}
 

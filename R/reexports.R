@@ -13,3 +13,11 @@ bayesplot::pp_check
 #' @importFrom tulpa posterior_predict
 #' @export
 tulpa::posterior_predict
+
+#' @importFrom tulpa latent_factors
+#' @export
+tulpa::latent_factors
+
+#' @importFrom tulpa spatiotemporal_effects
+#' @export
+tulpa::spatiotemporal_effects

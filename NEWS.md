@@ -1,5 +1,14 @@
 # tulpaRatio 1.7.3
 
+* `latent_factors()` and `spatiotemporal_effects()` are tulpa's verbs,
+  re-exported, instead of tulpaRatio copies that masked tulpa's on attach
+  (#100). The spatiotemporal summary and long formats now label region `s` and
+  time `t` correctly when the numbers of regions and times differ: the old
+  copy read the s-fastest draw layout t-fastest. `format = "summary"` returns
+  a `tulpa_st_summary` (with `print()` and a `plot()` that adds
+  `type = "spatial_map"`), and the array and long formats are a plain array
+  and data frame. Requires tulpa >= 0.7.4.
+
 * **`spatial_svc()` samples each NNGP term non-centred by default (#96).** The
   new `parameterization` argument takes `"noncentered"` (default) or
   `"centered"`. Non-centred, each term's block holds `z ~ N(0, I)` and the
