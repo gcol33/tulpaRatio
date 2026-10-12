@@ -1,13 +1,16 @@
-#' Model families for tulpaRatio
+#' Model Families
 #'
 #' @description
 #' Distribution families for the numerator and denominator processes.
 #' Each family specifies the likelihood structure for joint modelling.
 #'
+#' @examples
+#' ratiod_poisson_gamma()
+#' ratiod_binomial()
 #' @name ratiod_families
 NULL
 
-#' Negative binomial - Negative binomial family
+#' Negative Binomial-Negative Binomial Family
 #'
 #' @description
 #' Two-process model where both numerator and denominator follow negative
@@ -39,14 +42,15 @@ NULL
 #'   site = factor(rep(1:10, each = n/10))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   sp_count | total_count ~ habitat + (1 | site),
 #'   data = df,
 #'   family = ratiod_negbin_negbin(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -72,7 +76,7 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
   )
 }
 
-#' Binomial family for trial-based ratios
+#' Binomial Family for Trial-Based Ratios
 #'
 #' @description
 #' Trial-based model where the numerator represents successes out of
@@ -105,14 +109,15 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
 #'   site = factor(rep(1:10, each = 5))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   detections | trials ~ effort + (1 | site),
 #'   data = df,
 #'   family = ratiod_binomial(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -142,7 +147,7 @@ ratiod_binomial <- function(link = "logit", denominator_known = TRUE) {
   )
 }
 
-#' Poisson-Gamma family for count/effort ratios
+#' Poisson-Gamma Family for Count/Effort Ratios
 #'
 #' @description
 #' Two-process model where the numerator follows a Poisson distribution
@@ -175,14 +180,15 @@ ratiod_binomial <- function(link = "logit", denominator_known = TRUE) {
 #'   vessel = factor(rep(1:6, each = n/6))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   catch | effort_hours ~ depth + season + (1 | vessel),
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -208,7 +214,7 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
   )
 }
 
-#' Negative binomial - Gamma family for overdispersed count/effort ratios
+#' Negative Binomial-Gamma Family for Overdispersed Count/Effort Ratios
 #'
 #' @description
 #' Two-process model where the numerator follows a negative binomial distribution
@@ -242,14 +248,15 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
 #'   vessel = factor(rep(1:6, each = n/6))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   catch | effort_hours ~ depth + (1 | vessel),
 #'   data = df,
 #'   family = ratiod_negbin_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -289,7 +296,7 @@ validate_link <- function(link, allowed) {
   }
 }
 
-#' Beta-binomial family for overdispersed proportions
+#' Beta-Binomial Family for Overdispersed Proportions
 #'
 #' @description
 #' Two-process model where the numerator follows a beta-binomial distribution,
@@ -333,14 +340,15 @@ validate_link <- function(link, allowed) {
 #'   site = factor(rep(1:8, each = n/8))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   infected | tested ~ treatment + (1 | site),
 #'   data = df,
 #'   family = ratiod_beta_binomial(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -371,7 +379,7 @@ ratiod_beta_binomial <- function(link = "logit", denominator_known = TRUE) {
 }
 
 
-#' Gamma-Gamma family for continuous ratio data
+#' Gamma-Gamma Family for Continuous Ratio Data
 #'
 #' @description
 #' Two-process model where both numerator and denominator follow gamma
@@ -411,14 +419,15 @@ ratiod_beta_binomial <- function(link = "logit", denominator_known = TRUE) {
 #'   site = factor(rep(1:10, each = n/10))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   species_biomass | total_biomass ~ habitat + (1 | site),
 #'   data = df,
 #'   family = ratiod_gamma_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -444,7 +453,7 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 }
 
 
-#' Log-normal family for multiplicative processes
+#' Log-Normal Family for Multiplicative Processes
 #'
 #' @description
 #' Two-process model where both numerator and denominator follow log-normal
@@ -488,14 +497,15 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 #'   cohort = factor(rep(1:6, each = n/6))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (slow, not run on CRAN)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   weight | length_cubed ~ age + sex + (1 | cohort),
 #'   data = df,
 #'   family = ratiod_lognormal(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -530,8 +540,7 @@ ratiod_lognormal <- function(link_num = "log", link_denom = "log",
 }
 
 
-#' Print method for ratiod_family
-#'
+#' @rdname ratiod_families
 #' @param x A ratiod_family object
 #' @param ... Ignored
 #'

@@ -1,15 +1,17 @@
-#' Latent Factor Specification for Unmeasured Confounders
+#' Latent Factors for Unmeasured Confounders
 #'
 #' @description
 #' Specify latent factors to capture shared unmeasured confounders between
 #' numerator and denominator processes. Latent factors are particularly useful
 #' when you suspect that both processes are driven by common unmeasured variables.
 #'
+#' @examples
+#' latent_factor(n_factors = 2)
 #' @name ratiod_latent
 NULL
 
 
-#' Create a latent factor specification
+#' Latent Factor Specification
 #'
 #' @description
 #' Define latent factors for capturing unmeasured shared structure between
@@ -98,14 +100,24 @@ NULL
 #' # Numerator-only factor (not shared)
 #' latent_factor(n_factors = 1, shared = FALSE)
 #'
-#' \dontrun{
+#' \donttest{
 #' # Use in model fitting
+#' set.seed(1)
+#' n <- 60
+#' df <- data.frame(
+#'   species_count = rnbinom(n, size = 5, mu = 15),
+#'   total_count = rnbinom(n, size = 8, mu = 100),
+#'   habitat = factor(rep(c("forest", "grassland"), each = n / 2)),
+#'   site = factor(rep(1:10, each = n / 10))
+#' )
 #' fit <- tratio(
 #'   species_count | total_count ~ habitat + (1 | site),
 #'   data = df,
 #'   family = ratiod_negbin_negbin(),
-#'   latent = latent_factor(n_factors = 2)
+#'   latent = latent_factor(n_factors = 1),
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' head(latent_factors(fit))
 #' }
 #'
 #' @seealso [tratio()] for model fitting, [prior_pc()] for prior specification
@@ -163,8 +175,7 @@ latent_factor <- function(
 }
 
 
-#' Print method for ratiod_latent
-#'
+#' @rdname latent_factor
 #' @param x A ratiod_latent object
 #' @param ... Ignored
 #'
@@ -317,4 +328,28 @@ initialize_latent_params <- function(latent_info, seed = NULL) {
   # But exclude one observation per factor for identifiability
   # Simpler: just return all and let C++ handle constraint
   c(log_sigma_init, as.vector(t(factor_init)))
+}
+
+
+#' @rdname latent_factor
+#' @param fit A `ratiod_fit` sampled with `latent = latent_factor(...)`.
+#' @param summary Logical; `TRUE` (default) returns one row per observation
+#'   and factor with the posterior mean, sd and `probs` quantiles of its score,
+#'   `FALSE` the draws matrix with columns `factor[observation,factor]`.
+#' @param probs Quantiles for the summary.
+#' @exportS3Method tulpa::latent_factors
+latent_factors.ratiod_fit <- function(fit, summary = TRUE,
+                                      probs = c(0.025, 0.5, 0.975), ...) {
+  scores <- fit$.internal$latent_draws
+  info <- fit$.internal$latent_info
+  if (is.null(scores) || is.null(info) || identical(info$type, "none")) {
+    stop("Model was not fit with latent factors", call. = FALSE)
+  }
+  n_obs <- dim(scores)[2]
+  n_factors <- dim(scores)[3]
+  draws <- matrix(scores, nrow = dim(scores)[1])
+  colnames(draws) <- sprintf("factor[%d,%d]", rep(seq_len(n_obs), n_factors),
+                             rep(seq_len(n_factors), each = n_obs))
+  tulpa::latent_factors(list(draws = draws, .internal = list(latent_info = info)),
+                        summary = summary, probs = probs)
 }

@@ -112,9 +112,13 @@ test_that("print.ratiod_fit works", {
 test_that("summary.ratiod_fit works", {
   fit <- quick_fit()
 
-  # summary prints to console and returns fit object invisibly
   summ <- summary(fit)
-  expect_s3_class(summ, "ratiod_fit")
+  expect_s3_class(summ, "summary.ratiod_fit")
+  expect_true(is.data.frame(coef(summ)))
+  expect_true(any(grepl("^beta_num", coef(summ)$parameter)))
+  expect_output(print(summ), "Fixed effects")
+  expect_named(coef(fit), colnames(vcov(fit)))
+  expect_equal(nobs(fit), nrow(fit$data))
 })
 
 # Test summary with prob argument
@@ -122,9 +126,9 @@ test_that("summary.ratiod_fit respects prob argument", {
   fit <- quick_fit()
 
   # summary.ratiod_fit takes prob (CI width) not probs (quantiles)
-  # It invisibly returns the fit object
   result <- summary(fit, prob = 0.90)
-  expect_s3_class(result, "ratiod_fit")
+  expect_s3_class(result, "summary.ratiod_fit")
+  expect_identical(result$ci_names, c("5%", "50%", "95%"))
 })
 
 # Test coef.ratiod_fit (if method exists)

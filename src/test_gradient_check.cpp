@@ -760,7 +760,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       svc.nn_order = nb.nn_order;
       svc.nn_order_inv = nb.nn_order_inv;
       data.svc_noncentered = want_svc_nc;
-      if (want_svc_nc) data.svc_gp_view = ratiod_svc::make_svc_gp_view(svc);
+      data.svc_gp_view = ratiod_svc::make_svc_gp_view(svc);
     }
     data.svc_sigma2_prior_scale = 1.0;
     data.svc_phi_prior_lower = 0.001;

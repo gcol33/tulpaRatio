@@ -569,17 +569,29 @@ select_backend_for_mode <- function(mode) {
 # Mode Validation
 # ==============================================================================
 
-#' Validate that a fit used the expected mode
+#' Validate That a Fit Used the Expected Mode
 #'
 #' @description
 #' Ensures the fit object was created with the expected inference mode.
 #' Useful for enforcing mode requirements in downstream analysis.
 #'
 #' @param fit A ratiod_fit object
-#' @param expected_mode Mode that should have been used
+#' @param expected_mode Mode that should have been used: a tier (`"exact"`,
+#'   `"structured"`, `"optimized"`) or a backend (`"hmc"`, `"laplace"`, ...),
+#'   as passed to `tratio(mode = )`.
 #' @param error If TRUE (default), error on mismatch. If FALSE, return logical.
 #'
 #' @return If error = FALSE, returns TRUE/FALSE. Otherwise errors on mismatch.
+#'
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' validate_mode(fit, "hmc")
+#' validate_mode(fit, "laplace", error = FALSE)
+#' }
 #'
 #' @export
 validate_mode <- function(fit, expected_mode, error = TRUE) {
@@ -592,8 +604,9 @@ validate_mode <- function(fit, expected_mode, error = TRUE) {
 
   expected_mode <- tolower(expected_mode)
 
-  # Check if modes match
-  match <- (actual_mode == expected_mode)
+  # A tier name ("exact") or the backend it ran on ("hmc") both match
+  match <- actual_mode == expected_mode ||
+    identical(fit$backend, expected_mode)
 
   # Also accept tier-based matching
  if (!match && expected_mode %in% names(INFERENCE_TIERS)) {
@@ -618,11 +631,14 @@ validate_mode <- function(fit, expected_mode, error = TRUE) {
 # ==============================================================================
 # User-Facing Information
 # ==============================================================================
-#' Print inference mode information
+#' Inference Mode Information
 #'
 #' @description
 #' Displays information about the inference modes available in tulpaRatio,
 #' including their tiers, guarantees, and appropriate use cases.
+#'
+#' @examples
+#' inference_mode_info()
 #'
 #' @export
 inference_mode_info <- function() {

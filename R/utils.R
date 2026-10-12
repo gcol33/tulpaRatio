@@ -14,3 +14,21 @@
 #' @keywords internal
 #' @noRd
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+
+#' Ridged precision mass matrix
+#'
+#' Adds `ridge * I` to a (possibly rank-deficient) precision matrix and
+#' factors it once. The HMC mass matrix uses both the inverse, the prior
+#' covariance, and the lower Cholesky factor.
+#'
+#' @param Q Symmetric positive semi-definite precision matrix.
+#' @param ridge Diagonal ridge making `Q` positive definite.
+#' @return List with `Q_inv` and `L` (lower Cholesky factor, `L %*% t(L)`
+#'   equals the ridged `Q`), each flattened column-major.
+#' @keywords internal
+#' @noRd
+ridged_precision_factors <- function(Q, ridge = 0.01) {
+  R <- chol(Q + ridge * diag(nrow(Q)))
+  list(Q_inv = as.numeric(chol2inv(R)), L = as.numeric(t(R)))
+}

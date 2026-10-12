@@ -2,7 +2,10 @@
 % Please edit documentation in R/ratio.R
 \name{ratio}
 \alias{ratio}
-\title{Extract ratio posteriors from a ratio model}
+\alias{summary.ratiod_ratio}
+\alias{print.ratiod_ratio}
+\alias{print.ratiod_ratio_summary}
+\title{Ratio Posteriors from a Ratio Model}
 \usage{
 ratio(
   object,
@@ -13,6 +16,12 @@ ratio(
   probs = c(0.025, 0.5, 0.975),
   ...
 )
+
+\method{summary}{ratiod_ratio}(object, probs = c(0.025, 0.5, 0.975), ...)
+
+\method{print}{ratiod_ratio}(x, ...)
+
+\method{print}{ratiod_ratio_summary}(x, n = 10, ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object}
@@ -30,6 +39,11 @@ of full posterior draws.}
 \item{probs}{Quantiles to compute if \code{summary = TRUE}.}
 
 \item{...}{Ignored}
+
+\item{x}{A \code{ratiod_ratio} object, or the \code{ratiod_ratio_summary} its
+\code{summary()} returns.}
+
+\item{n}{Number of rows to print}
 }
 \value{
 A \code{ratiod_ratio} object containing posterior draws or summaries.
@@ -60,7 +74,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract all observation-level ratios

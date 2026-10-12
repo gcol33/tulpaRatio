@@ -57,7 +57,7 @@
   thin          = list(default = 1L,   validate = .tratio_count),
   cores         = list(default = NULL, validate = .tratio_count),
   seed          = list(default = NULL, validate = .tratio_seed),
-  verbose       = list(default = TRUE, validate = .tratio_flag),
+  verbose       = list(default = FALSE, validate = .tratio_flag),
 
   # NUTS / HMC.
   adapt_delta   = list(default = NULL, validate = .tratio_adapt_delta),

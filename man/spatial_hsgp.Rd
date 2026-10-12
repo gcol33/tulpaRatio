@@ -2,9 +2,12 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_hsgp}
 \alias{spatial_hsgp}
-\title{Hilbert Space Gaussian Process (HSGP) spatial structure}
+\alias{print.ratiod_hsgp}
+\title{Hilbert Space Gaussian Process (HSGP) Spatial Structure}
 \usage{
 spatial_hsgp(coords, m = 6, c = 1.5, shared = TRUE, scale_coords = TRUE)
+
+\method{print}{ratiod_hsgp}(x, ...)
 }
 \arguments{
 \item{coords}{A one-sided formula specifying coordinate columns (e.g.,
@@ -24,6 +27,10 @@ effects (triggers warning about potential confounding).}
 
 \item{scale_coords}{Logical; if TRUE (default), coordinates are scaled to
 unit variance before computing basis functions.}
+
+\item{x}{A ratiod_hsgp object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_hsgp} object

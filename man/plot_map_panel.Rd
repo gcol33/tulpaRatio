@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_map.R
 \name{plot_map_panel}
 \alias{plot_map_panel}
-\title{Plot multiple maps in a grid}
+\title{Plot Several Maps in a Grid}
 \usage{
 plot_map_panel(x, newdata = NULL, ncol = 2, ...)
 }
@@ -23,8 +23,29 @@ Create a multi-panel figure with ratio estimate and uncertainty maps
 side by side.
 }
 \examples{
-# See plot_map() examples for fitting a spatial model
-# plot_map_panel(fit)
-# plot_map_panel(fit, ncol = 1)
+\donttest{
+# Twenty sites on a chain, each visited three times
+set.seed(123)
+n_sites <- 20
+sites <- data.frame(site = factor(seq_len(n_sites)),
+                    x = sort(runif(n_sites)), y = runif(n_sites))
+df <- sites[rep(seq_len(n_sites), 3), ]
+df$count <- rpois(nrow(df), lambda = 8)
+df$effort <- rgamma(nrow(df), shape = 4, rate = 1)
+df$elevation <- rnorm(nrow(df))
+adj <- matrix(0, n_sites, n_sites)
+for (i in 1:(n_sites - 1)) adj[i, i + 1] <- adj[i + 1, i] <- 1
+fit <- tratio(
+  count | effort ~ elevation,
+  data = df,
+  family = ratiod_poisson_gamma(),
+  spatial = spatial_car(adj, group_var = "site"),
+  mode = "laplace"
+)
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("patchwork", quietly = TRUE)) {
+  plot_map_panel(fit, coords = df[, c("x", "y")], ncol = 1)
+}
+}
 
 }

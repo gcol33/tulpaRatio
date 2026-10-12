@@ -7,6 +7,7 @@
 predict_spatial_hsgp(object, coords.0, return_spatial)
 }
 \description{
-Predict HSGP spatial effects at new locations (basis evaluation)
+Evaluates the fit's Laplacian eigenbasis, on the training rectangle, at
+\code{coords.0} and applies each draw's spectral weights to it.
 }
 \keyword{internal}

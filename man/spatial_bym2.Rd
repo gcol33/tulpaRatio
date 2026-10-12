@@ -2,7 +2,7 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_bym2}
 \alias{spatial_bym2}
-\title{BYM2 spatial structure}
+\title{BYM2 Spatial Structure}
 \usage{
 spatial_bym2(
   adjacency,
@@ -64,8 +64,8 @@ for (i in 1:9) {
 bym2 <- spatial_bym2(adj, level = "group", group_var = "region")
 print(bym2)
 
-\dontrun{
-# Generate synthetic epidemiological data (not run - requires laplace backend)
+\donttest{
+# Generate synthetic epidemiological data
 set.seed(456)
 n_regions <- 10
 epi_data <- data.frame(

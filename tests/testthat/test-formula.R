@@ -192,3 +192,15 @@ test_that("missing variables trigger errors", {
     "not found in data"
   )
 })
+
+test_that("(1 | a:b) groups by the interaction, as the second term of (1 | a/b)", {
+  df <- data.frame(site = factor(rep(1:3, each = 4)), plot = factor(rep(1:2, 6)))
+  inter <- tulpaRatio:::extract_random_effects("(1 | site:plot)", df)
+  nested <- tulpaRatio:::extract_random_effects("(1 | site/plot)", df)
+  expect_length(inter, 1L)
+  expect_identical(inter[[1]]$group_var, "site:plot")
+  expect_identical(inter[[1]]$group, nested[[2]]$group)
+  expect_identical(inter[[1]]$n_groups, 6L)
+  expect_error(tulpaRatio:::extract_random_effects("(1 | site:block)", df),
+               "'block' not found")
+})

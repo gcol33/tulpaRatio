@@ -1,13 +1,24 @@
-#' Posterior predictive checks for ratio models
+#' Posterior Predictive Checks for Ratio Models
 #'
 #' @description
 #' Visual and numerical checks comparing observed data to posterior
 #' predictive distributions. Essential for assessing model fit.
 #'
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   pp_check(fit, type = "dens_overlay")
+#' }
+#' loo(fit)
+#' }
 #' @name ratiod_validate
 NULL
 
-#' Posterior predictive check
+#' Posterior Predictive Check
 #'
 #' @description
 #' Generate posterior predictive checks for a fitted ratio model.
@@ -25,7 +36,7 @@ NULL
 #'
 #' @examples
 #' \donttest{
-#' # Simulate data and fit model (slow, not run on CRAN)
+#' # Simulate data and fit model
 #' set.seed(123)
 #' n <- 50
 #' df <- data.frame(
@@ -38,7 +49,7 @@ NULL
 #'   count | total ~ x + (1 | site),
 #'   data = df,
 #'   family = ratiod_negbin_negbin(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' # Density overlay of replicated against observed numerators
 #' pp_check(fit, type = "dens_overlay")
@@ -188,6 +199,34 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
   list(eta_num = eta_num, eta_denom = eta_denom)
 }
 
+# The two linear predictors each observation's likelihood is evaluated at,
+# per draw: fixed effects plus every random and structured effect the fit
+# carries. An HMC fit rebuilds them as fitted() does; the other backends that
+# store a draw matrix carry fixed effects only, so a model with any other
+# term is refused rather than scored on a likelihood missing it.
+#' @keywords internal
+.ratiod_pointwise_eta <- function(fit, draws, hmc_data) {
+  if (identical(fit$backend, "hmc")) {
+    eta <- hmc_eta_draws(hmc_fit_unpack(fit), hmc_fit_design(fit))
+    if (length(eta$dropped)) {
+      stop("Pointwise log-likelihood needs every term of the linear ",
+           "predictor; ", paste(eta$dropped, collapse = ", "),
+           " could not be reconstructed.", call. = FALSE)
+    }
+    return(eta[c("eta_num", "eta_denom")])
+  }
+  structured <- (hmc_data$n_re_groups %||% 0L) > 0L ||
+    !identical(fit$spatial$type %||% "none", "none") ||
+    !is.null(fit$temporal) || !is.null(fit$latent) ||
+    !is.null(fit$spatiotemporal) || !is.null(fit$svc) || !is.null(fit$tvc)
+  if (structured) {
+    stop("Pointwise log-likelihood on a '", fit$backend, "' fit is available ",
+         "for fixed-effect models only; refit with mode = \"hmc\" for WAIC / ",
+         "LOO with random or structured effects.", call. = FALSE)
+  }
+  .ratiod_linpred_fixed(draws, hmc_data)
+}
+
 # Per-draw dispersion / shape / scale parameters on the natural scale.
 # Backends differ in both the column name and whether the parameter is stored
 # on the log scale, so each quantity is resolved from an ordered list of
@@ -262,7 +301,7 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
     )
   }
 
-  lp  <- .ratiod_linpred_fixed(draws, hmc_data)
+  lp  <- .ratiod_pointwise_eta(fit, draws, hmc_data)
   disp <- .ratiod_dispersion(draws, model_type)
 
   S <- nrow(lp$eta_num)
@@ -332,7 +371,7 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
   ll
 }
 
-#' LOO cross-validation
+#' Leave-One-Out Cross-Validation
 #'
 #' @description
 #' Compute leave-one-out cross-validation using Pareto-smoothed
@@ -350,6 +389,15 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 #' @return A loo object
 #'
 #' @importFrom loo loo
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' loo(fit)
+#' }
+#'
 #' @exportS3Method loo::loo
 loo.ratiod_fit <- function(x, ...) {
   if (!requireNamespace("loo", quietly = TRUE)) {
@@ -359,7 +407,7 @@ loo.ratiod_fit <- function(x, ...) {
   loo::loo(.ratiod_pointwise_loglik(x), ...)
 }
 
-#' WAIC computation
+#' Widely Applicable Information Criterion (WAIC)
 #'
 #' @description
 #' Compute Widely Applicable Information Criterion (WAIC).
@@ -375,6 +423,15 @@ loo.ratiod_fit <- function(x, ...) {
 #' @return A waic object
 #'
 #' @importFrom loo waic
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' waic(fit)
+#' }
+#'
 #' @exportS3Method loo::waic
 waic.ratiod_fit <- function(x, ...) {
   if (!requireNamespace("loo", quietly = TRUE)) {
@@ -384,7 +441,7 @@ waic.ratiod_fit <- function(x, ...) {
   loo::waic(.ratiod_pointwise_loglik(x), ...)
 }
 
-#' Compare ratio models
+#' Compare Ratio Models
 #'
 #' @description
 #' Compare multiple ratio models using LOO-CV or WAIC.
@@ -396,23 +453,14 @@ waic.ratiod_fit <- function(x, ...) {
 #'
 #' @examples
 #' \donttest{
-#' # Fit models with different structures (slow, not run on CRAN)
-#' set.seed(123)
-#' n <- 50
-#' df <- data.frame(
-#'   y_num = rnbinom(n, size = 5, mu = 15),
-#'   y_denom = rnbinom(n, size = 8, mu = 100),
-#'   x = rnorm(n),
-#'   z = rnorm(n)
-#' )
-#' fit1 <- tratio(y_num | y_denom ~ x, data = df,
-#'               family = ratiod_negbin_negbin(),
-#'               control = list(iter = 200, warmup = 100, chains = 1))
-#' fit2 <- tratio(y_num | y_denom ~ x + z, data = df,
-#'               family = ratiod_negbin_negbin(),
-#'               control = list(iter = 200, warmup = 100, chains = 1))
-#' # Compare (requires loo package)
-#' # ratiod_compare(fit1, fit2)
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+#'                family = ratiod_poisson_gamma(),
+#'                control = list(iter = 1000, chains = 2, seed = 1))
+#' ratiod_compare(fit0, fit)
 #' }
 #'
 #' @export
@@ -451,7 +499,7 @@ ratiod_compare <- function(..., criterion = c("loo", "waic")) {
 }
 
 
-#' Model averaging for tulpaRatio fits
+#' Model Averaging for Ratio Models
 #'
 #' @description
 #' Compute model-averaged predictions using stacking or pseudo-BMA weights.
@@ -487,25 +535,16 @@ ratiod_compare <- function(..., criterion = c("loo", "waic")) {
 #'
 #' @examples
 #' \donttest{
-#' # Fit candidate models (slow, not run on CRAN)
-#' set.seed(123)
-#' n <- 60
-#' df <- data.frame(
-#'   count = rpois(n, lambda = 8),
-#'   effort = rgamma(n, shape = 4, rate = 1),
-#'   x = rnorm(n),
-#'   z = rnorm(n),
-#'   site = factor(rep(1:10, each = 6))
-#' )
-#' fit1 <- tratio(count | effort ~ x + (1 | site), data = df,
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
 #'               family = ratiod_poisson_gamma(),
-#'               control = list(iter = 200, warmup = 100, chains = 1))
-#' fit2 <- tratio(count | effort ~ x + z + (1 | site), data = df,
-#'               family = ratiod_poisson_gamma(),
-#'               control = list(iter = 200, warmup = 100, chains = 1))
-#' # Model averaging (requires loo package)
-#' # avg <- ratiod_average(fit1, fit2)
-#' # print(avg)
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+#'                family = ratiod_poisson_gamma(),
+#'                control = list(iter = 1000, chains = 2, seed = 1))
+#' avg <- ratiod_average(fit0, fit)
+#' avg
+#' weights(avg)
 #' }
 #'
 #' @seealso [ratiod_compare()] for model comparison, [loo::stacking_weights()]
@@ -753,11 +792,9 @@ average_predictions <- function(predictions, weights, type, summary) {
 }
 
 
-#' Print method for ratiod_average
-#'
+#' @rdname ratiod_average
 #' @param x A ratiod_average object
 #' @param digits Number of digits for printing
-#' @param ... Ignored
 #'
 #' @export
 print.ratiod_average <- function(x, digits = 3, ...) {
@@ -788,10 +825,8 @@ print.ratiod_average <- function(x, digits = 3, ...) {
 }
 
 
-#' Extract predictions from ratiod_average
-#'
+#' @rdname ratiod_average
 #' @param object A ratiod_average object
-#' @param ... Ignored
 #'
 #' @return Predictions data frame or matrix
 #'
@@ -801,10 +836,7 @@ fitted.ratiod_average <- function(object, ...) {
 }
 
 
-#' Extract model weights from ratiod_average
-#'
-#' @param object A ratiod_average object
-#' @param ... Ignored
+#' @rdname ratiod_average
 #'
 #' @return Named numeric vector of weights
 #'

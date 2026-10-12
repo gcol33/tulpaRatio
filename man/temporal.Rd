@@ -3,7 +3,10 @@
 \name{temporal}
 \alias{temporal}
 \alias{temporal.ratiod_fit}
-\title{Extract temporal effects from a fitted model}
+\alias{print.ratiod_temporal_posterior}
+\alias{summary.ratiod_temporal_posterior}
+\alias{plot.ratiod_temporal_posterior}
+\title{Temporal Effects of a Fitted Model}
 \usage{
 temporal(
   object,
@@ -20,6 +23,12 @@ temporal(
   probs = c(0.025, 0.5, 0.975),
   ...
 )
+
+\method{print}{ratiod_temporal_posterior}(x, ...)
+
+\method{summary}{ratiod_temporal_posterior}(object, probs = c(0.025, 0.5, 0.975), ...)
+
+\method{plot}{ratiod_temporal_posterior}(x, component = NULL, type = "ribbon", ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object fitted with \code{temporal} argument}
@@ -33,6 +42,10 @@ full posterior draws.}
 \item{probs}{Quantiles to compute if \code{summary = TRUE}.}
 
 \item{...}{Ignored}
+
+\item{x}{A ratiod_temporal_posterior object}
+
+\item{type}{Plot type: "ribbon" (default) or "line"}
 }
 \value{
 A \code{ratiod_temporal_posterior} object
@@ -42,8 +55,8 @@ Extract posterior distributions of temporal effects from a fitted tulpaRatio
 model with temporal specification.
 }
 \examples{
-\dontrun{
-# Fit model with multi-scale temporal effects (not run - experimental)
+\donttest{
+# Fit model with multi-scale temporal effects
 set.seed(131)
 df <- data.frame(
   year = 1:40,
@@ -57,7 +70,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   temporal = temporal_multiscale("year", trend = "rw2", seasonal = 12),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract all temporal effects

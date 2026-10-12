@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_half_cauchy}
 \alias{prior_half_cauchy}
-\title{Half-Cauchy prior}
+\title{Half-Cauchy Prior}
 \usage{
 prior_half_cauchy(scale = 2.5)
 }

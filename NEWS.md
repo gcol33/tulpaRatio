@@ -7,7 +7,46 @@
   copy read the s-fastest draw layout t-fastest. `format = "summary"` returns
   a `tulpa_st_summary` (with `print()` and a `plot()` that adds
   `type = "spatial_map"`), and the array and long formats are a plain array
-  and data frame. Requires tulpa >= 0.7.4.
+  and data frame. Requires tulpa >= 0.7.5.
+
+* `spatial_gp()` fits no longer run away. Outside the range prior's bounds
+  the hand-coded GP and multi-scale GP gradients returned a zero gradient
+  without reporting the log-posterior, so NUTS read an out-of-support point as
+  carrying the previous point's density; once the range crossed its upper bound
+  the chain random-walked to `beta` near 1e6 with `phi_gp = Inf` (#102).
+* NNGP fits are several times faster: the centred gradient computes the field's
+  density in the same pass and the fused log-posterior reuses it, the
+  non-centred density no longer rebuilds a field it does not read, and every
+  neighbour covariance is filled once per pair on the cached distances. A
+  60-location `spatial_gp()` fit drops from 69 to 13 s. The SVC terms use the
+  spatial GP's NNGP density and gradient instead of their own copies, and the
+  block-diagonal warmup metric shrinks its covariance as the diagonal one does
+  (#101).
+* `predict()` builds new-data design matrices from the training terms, factor
+  levels and contrasts, so a factor predictor, or new data holding only some of
+  its levels, predicts (#103). `predict(coords.0 = )` krigs `spatial_gp()` fits
+  from the stored field draws and evaluates `spatial_hsgp()` fits on the fit's
+  own sine eigenbasis, both on the training coordinate scaling (#104).
+* `loo()`, `waic()`, `ratiod_compare()` and `ratiod_average()` evaluate each
+  observation's likelihood at the full linear predictor, random and
+  structured effects included; non-HMC draw backends refuse models with such
+  terms (#108). `loo()` and `waic()` are re-exported.
+* `summary()` returns a `summary.ratiod_fit` object whose `print()` method lays
+  it out; `coef(summary(fit))` is its parameter table. `coef()`, `vcov()`,
+  `nobs()` and `formula()` methods are new for fits, and `as.data.frame()`
+  returns the posterior draws again (#105).
+* The HMC sampler records each iteration's Hamiltonian, so `plot_energy()` and
+  `diagnostic_summary()` report E-BFMI, per chain through
+  `tulpa::energy_bfmi()` (#107). `diagnostic_summary()` returns its object
+  instead of printing it, without terminal colour codes.
+* `latent_factors()` reads a `tratio()` fit's factor scores (#106), and
+  `validate_mode()` accepts the backend a fit ran on (`"hmc"`) as well as its
+  tier.
+* `tratio()` is quiet by default: `control = list(verbose = TRUE)` prints the
+  progress messages and sampler adaptation traces.
+* Help pages: one Title Case style, print/summary/plot methods documented on
+  the page of the function returning their class, and every exported topic
+  with an example that runs.
 
 * **`spatial_svc()` samples each NNGP term non-centred by default (#96).** The
   new `parameterization` argument takes `"noncentered"` (default) or

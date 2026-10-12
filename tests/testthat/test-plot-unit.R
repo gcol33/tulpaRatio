@@ -281,7 +281,7 @@ test_that("plot_energy handles missing energy", {
 test_that("diagnostic_summary works with mock fit", {
   fit <- make_mock_fit()
 
-  summ <- diagnostic_summary(fit, quiet = TRUE)
+  summ <- diagnostic_summary(fit)
 
   expect_s3_class(summ, "ratiod_diagnostic_summary")
   expect_true("status" %in% names(summ))
@@ -294,7 +294,7 @@ test_that("diagnostic_summary errors on non-ratiod_fit", {
 
 test_that("print.ratiod_diagnostic_summary works", {
   fit <- make_mock_fit()
-  summ <- diagnostic_summary(fit, quiet = TRUE)
+  summ <- diagnostic_summary(fit)
 
   output <- capture.output(print(summ))
   expect_true(length(output) > 0)
@@ -318,7 +318,7 @@ test_that("print.ratiod_diagnostic_summary prints the worst-Rhat table", {
     class = "ratiod_fit"
   )
 
-  summ <- diagnostic_summary(fit, quiet = TRUE)
+  summ <- diagnostic_summary(fit)
   expect_true(!is.null(summ$worst_rhat))
   expect_true(summ$worst_rhat$rhat[1] > 1.01)
 

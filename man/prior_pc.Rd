@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_pc}
 \alias{prior_pc}
-\title{Penalized complexity (PC) prior}
+\title{Penalized Complexity (PC) Prior}
 \usage{
 prior_pc(U = 1, alpha = 0.01)
 }

@@ -2,7 +2,8 @@
 % Please edit documentation in R/spatiotemporal.R
 \name{spatiotemporal}
 \alias{spatiotemporal}
-\title{Spatiotemporal interaction specifications for tulpaRatio}
+\alias{print.ratiod_spatiotemporal}
+\title{Spatiotemporal Interaction Specifications}
 \usage{
 spatiotemporal(
   spatial,
@@ -16,6 +17,8 @@ spatiotemporal(
   cov_time = NULL,
   nn = NULL
 )
+
+\method{print}{ratiod_spatiotemporal}(x, ...)
 }
 \arguments{
 \item{spatial}{A spatial specification from \code{\link[=spatial_car]{spatial_car()}}, \code{\link[=spatial_bym2]{spatial_bym2()}},
@@ -67,6 +70,10 @@ kernels, one of \code{"exponential"} (default), \code{"matern"}, \code{"gaussian
 
 \item{nn}{For the GP types: NNGP neighbours per grid cell (default 15,
 capped at \code{S * T - 1}), chosen on a joint space-time metric.}
+
+\item{x}{A ratiod_spatiotemporal object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_spatiotemporal} object
@@ -163,8 +170,8 @@ st4 <- spatiotemporal(
 )
 print(st4)
 
-\dontrun{
-# Generate synthetic spatiotemporal data (not run - experimental)
+\donttest{
+# Generate synthetic spatiotemporal data
 set.seed(123)
 n_regions <- 10
 n_years <- 8
@@ -186,7 +193,7 @@ fit <- tratio(
     temporal = temporal_rw1("year"),
     type = "IV"
   ),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 summary(fit)
 }

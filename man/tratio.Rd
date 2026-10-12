@@ -2,7 +2,7 @@
 % Please edit documentation in R/tratio.R
 \name{tratio}
 \alias{tratio}
-\title{Fit a ratio, rate, or proportion model}
+\title{Fit a Ratio, Rate, or Proportion Model}
 \usage{
 tratio(
   formula,
@@ -116,7 +116,8 @@ Sampling budget (all backends):
 \item \code{thin}: thinning interval (default 1).
 \item \code{cores}: cores for parallel chains (default \code{getOption("mc.cores", chains)}).
 \item \code{seed}: random seed for reproducibility.
-\item \code{verbose}: print progress messages during fitting (default \code{TRUE}).
+\item \code{verbose}: print progress messages and sampler adaptation traces
+during fitting (default \code{FALSE}).
 }
 
 NUTS / HMC (\code{mode = "hmc"}):
@@ -210,7 +211,7 @@ fit <- tratio(
   catch | effort ~ depth + season + (1 | site),
   data = df,
   family = ratiod_poisson_gamma(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Different predictors for each process
@@ -220,7 +221,7 @@ fit2 <- tratio(
   formula_denom = ~ season,
   data = df,
   family = ratiod_poisson_gamma(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract ratio posteriors

@@ -2,7 +2,7 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_hurdle_pois}
 \alias{ratiod_hurdle_pois}
-\title{Hurdle Poisson family}
+\title{Hurdle Poisson Family}
 \usage{
 ratiod_hurdle_pois(
   link_num = "log",
@@ -25,4 +25,9 @@ A \code{ratiod_family} object with hurdle structure
 }
 \description{
 Hurdle model with truncated Poisson for positive counts.
+}
+\examples{
+ratiod_hurdle_pois()
+ratiod_hurdle_pois(denom_family = "negbin")
+
 }

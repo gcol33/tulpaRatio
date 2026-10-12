@@ -37,12 +37,15 @@
 #' - `hurdle_poisson()`: Zero hurdle with equidispersed positive counts
 #' - `hurdle_negbin()`: Zero hurdle with overdispersed positive counts
 #'
+#' @examples
+#' zi_poisson()
+#' hurdle_negbin()
 #' @name zi_specification
 #' @keywords models
 NULL
 
 
-#' Create a zero-inflated Poisson specification
+#' Zero-Inflated Poisson Specification
 #'
 #' @param formula Optional formula for the zero-inflation probability.
 #'   If NULL, uses intercept-only model for P(structural zero).
@@ -69,7 +72,7 @@ zi_poisson <- function(formula = NULL) {
 }
 
 
-#' Create a zero-inflated negative binomial specification
+#' Zero-Inflated Negative Binomial Specification
 #'
 #' @param formula Optional formula for the zero-inflation probability.
 #'   If NULL, uses intercept-only model for P(structural zero).
@@ -96,7 +99,7 @@ zi_negbin <- function(formula = NULL) {
 }
 
 
-#' Create a hurdle Poisson specification
+#' Hurdle Poisson Specification
 #'
 #' @param formula Optional formula for the hurdle probability (P(Y > 0)).
 #'   If NULL, uses intercept-only model.
@@ -123,7 +126,7 @@ hurdle_poisson <- function(formula = NULL) {
 }
 
 
-#' Create a zero-inflated binomial specification
+#' Zero-Inflated Binomial Specification
 #'
 #' @param formula Optional formula for the zero-inflation probability.
 #'   If NULL, uses intercept-only model for P(structural zero).
@@ -150,7 +153,7 @@ zi_binomial <- function(formula = NULL) {
 }
 
 
-#' Create a hurdle binomial specification
+#' Hurdle Binomial Specification
 #'
 #' @param formula Optional formula for the hurdle probability (P(Y > 0)).
 #'   If NULL, uses intercept-only model.
@@ -174,7 +177,7 @@ hurdle_binomial <- function(formula = NULL) {
 }
 
 
-#' Create a one-inflated binomial specification
+#' One-Inflated Binomial Specification
 #'
 #' @param formula Optional formula for the one-inflation probability
 #'   (excess at the upper boundary, y = n). If NULL, uses intercept-only model.
@@ -198,7 +201,7 @@ oi_binomial <- function(formula = NULL) {
 }
 
 
-#' Create a zero-and-one-inflated binomial (ZOIB) specification
+#' Zero-and-One-Inflated Binomial (ZOIB) Specification
 #'
 #' @param zi_formula Optional formula for the zero-inflation probability.
 #'   If NULL, uses intercept-only model.
@@ -225,7 +228,7 @@ zoib <- function(zi_formula = NULL, oi_formula = NULL) {
 }
 
 
-#' Create a hurdle negative binomial specification
+#' Hurdle Negative Binomial Specification
 #'
 #' @param formula Optional formula for the hurdle probability (P(Y > 0)).
 #'   If NULL, uses intercept-only model.
@@ -252,8 +255,7 @@ hurdle_negbin <- function(formula = NULL) {
 }
 
 
-#' Print method for ratiod_zi objects
-#'
+#' @rdname zi_specification
 #' @param x A ratiod_zi object
 #' @param ... Additional arguments (ignored)
 #'

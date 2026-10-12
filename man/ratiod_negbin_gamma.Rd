@@ -2,7 +2,7 @@
 % Please edit documentation in R/family.R
 \name{ratiod_negbin_gamma}
 \alias{ratiod_negbin_gamma}
-\title{Negative binomial - Gamma family for overdispersed count/effort ratios}
+\title{Negative Binomial-Gamma Family for Overdispersed Count/Effort Ratios}
 \usage{
 ratiod_negbin_gamma(link_num = "log", link_denom = "log")
 }
@@ -43,14 +43,15 @@ df <- data.frame(
   vessel = factor(rep(1:6, each = n/6))
 )
 
-\dontrun{
-# Fit model (slow, not run on CRAN)
+\donttest{
+# Fit model
 fit <- tratio(
   catch | effort_hours ~ depth + (1 | vessel),
   data = df,
   family = ratiod_negbin_gamma(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/family.R
 \name{ratiod_negbin_negbin}
 \alias{ratiod_negbin_negbin}
-\title{Negative binomial - Negative binomial family}
+\title{Negative Binomial-Negative Binomial Family}
 \usage{
 ratiod_negbin_negbin(link_num = "log", link_denom = "log")
 }
@@ -41,14 +41,15 @@ df <- data.frame(
   site = factor(rep(1:10, each = n/10))
 )
 
-\dontrun{
-# Fit model (slow, not run on CRAN)
+\donttest{
+# Fit model
 fit <- tratio(
   sp_count | total_count ~ habitat + (1 | site),
   data = df,
   family = ratiod_negbin_negbin(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

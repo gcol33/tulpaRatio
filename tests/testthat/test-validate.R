@@ -430,3 +430,22 @@ test_that("print.ratiod_average handles matrix predictions", {
   expect_true(any(grepl("draws x", output)))
   expect_true(any(grepl("observations", output)))
 })
+
+test_that("the pointwise log-likelihood is evaluated at the full linear predictor", {
+  skip_on_cran()
+  sim <- sim_ratiod(n = 80, family = ratiod_poisson_gamma(), sigma_re = 0.8,
+                    seed = 4)
+  fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+                family = ratiod_poisson_gamma(),
+                control = list(iter = 300, chains = 1, seed = 1))
+  ll <- tulpaRatio:::.ratiod_pointwise_loglik(fit)
+
+  fv <- fitted(fit, component = "all", summary = FALSE)
+  S <- nrow(fv$numerator)
+  y_num <- matrix(sim$data$y_num, S, ncol(ll), byrow = TRUE)
+  y_den <- matrix(sim$data$y_denom, S, ncol(ll), byrow = TRUE)
+  shape <- fit$draws[, "shape"]
+  manual <- dpois(y_num, fv$numerator, log = TRUE) +
+    dgamma(y_den, shape = shape, rate = shape / fv$denominator, log = TRUE)
+  expect_equal(unname(ll), unname(manual))
+})

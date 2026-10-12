@@ -2,7 +2,8 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_multiscale}
 \alias{spatial_multiscale}
-\title{Multi-Scale Gaussian Process spatial structure}
+\alias{print.ratiod_multiscale}
+\title{Multi-Scale Gaussian Process Spatial Structure}
 \usage{
 spatial_multiscale(
   coords,
@@ -21,6 +22,8 @@ spatial_multiscale(
   sampler = c("auto", "lbfgs"),
   parameterization = c("centered", "noncentered")
 )
+
+\method{print}{ratiod_multiscale}(x, ...)
 }
 \arguments{
 \item{coords}{A one-sided formula specifying coordinate columns (e.g.,
@@ -75,6 +78,10 @@ effects are \eqn{w = L(\sigma^2, \phi) z}. Both scales carry a variance
 parameter over the same locations, so the non-centred coordinate is worth
 trying when the variances are weakly informed by the data. Ignored for
 \code{approx = "hsgp"}, whose basis coefficients are already that coordinate.}
+
+\item{x}{A ratiod_multiscale object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_multiscale} object
@@ -137,7 +144,7 @@ fit <- tratio(
     range_local = c(0.1, 0.5),
     range_regional = c(1, 5)
   ),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 summary(fit)
 }

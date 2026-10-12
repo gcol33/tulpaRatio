@@ -2,7 +2,7 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_zibinomial}
 \alias{ratiod_zibinomial}
-\title{Zero-inflated binomial family}
+\title{Zero-Inflated Binomial Family}
 \usage{
 ratiod_zibinomial(link_num = "logit", link_zi = "logit")
 }

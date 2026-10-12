@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate.R
 \name{loo.ratiod_fit}
 \alias{loo.ratiod_fit}
-\title{LOO cross-validation}
+\title{Leave-One-Out Cross-Validation}
 \usage{
 \method{loo}{ratiod_fit}(x, ...)
 }
@@ -23,4 +23,14 @@ The pointwise log-likelihood is reconstructed from the posterior draws and
 the model (see \code{\link[=ratiod_compare]{ratiod_compare()}}); it works on any fit produced by the
 hmc, ess, sghmc, or vi backend. The score is conditional on the fixed-effect
 (population-level) linear predictor.
+}
+\examples{
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+loo(fit)
+}
+
 }

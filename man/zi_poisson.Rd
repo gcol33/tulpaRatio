@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{zi_poisson}
 \alias{zi_poisson}
-\title{Create a zero-inflated Poisson specification}
+\title{Zero-Inflated Poisson Specification}
 \usage{
 zi_poisson(formula = NULL)
 }
@@ -14,7 +14,7 @@ If NULL, uses intercept-only model for P(structural zero).}
 A \code{ratiod_zi} object
 }
 \description{
-Create a zero-inflated Poisson specification
+Zero-Inflated Poisson Specification
 }
 \examples{
 # Intercept-only ZI

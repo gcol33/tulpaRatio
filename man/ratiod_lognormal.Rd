@@ -2,7 +2,7 @@
 % Please edit documentation in R/family.R
 \name{ratiod_lognormal}
 \alias{ratiod_lognormal}
-\title{Log-normal family for multiplicative processes}
+\title{Log-Normal Family for Multiplicative Processes}
 \usage{
 ratiod_lognormal(link_num = "log", link_denom = "log", denom_fixed = FALSE)
 }
@@ -54,14 +54,15 @@ df <- data.frame(
   cohort = factor(rep(1:6, each = n/6))
 )
 
-\dontrun{
-# Fit model (slow, not run on CRAN)
+\donttest{
+# Fit model
 fit <- tratio(
   weight | length_cubed ~ age + sex + (1 | cohort),
   data = df,
   family = ratiod_lognormal(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

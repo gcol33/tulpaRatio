@@ -8,6 +8,8 @@
 \alias{posterior_predict}
 \alias{latent_factors}
 \alias{spatiotemporal_effects}
+\alias{loo}
+\alias{waic}
 \alias{diagnostics}
 \title{Objects exported from other packages}
 \keyword{internal}
@@ -17,6 +19,8 @@ below to see their documentation.
 
 \describe{
   \item{bayesplot}{\code{\link[bayesplot:pp_check]{pp_check()}}}
+
+  \item{loo}{\code{\link[loo:loo]{loo()}}, \code{\link[loo:waic]{waic()}}}
 
   \item{posterior}{\code{\link[posterior:as_draws]{as_draws()}}}
 

@@ -2,10 +2,26 @@
 % Please edit documentation in R/spatial.R
 \name{ratiod_spatial}
 \alias{ratiod_spatial}
-\title{Spatial structure specifications for tulpaRatio}
+\alias{print.ratiod_spatial}
+\title{Spatial Structure Specifications}
+\usage{
+\method{print}{ratiod_spatial}(x, ...)
+}
+\arguments{
+\item{x}{A ratiod_spatial object}
+
+\item{...}{Ignored}
+}
 \description{
 Functions to specify spatial random effects for ratio models.
 Spatial effects are shared between numerator and denominator by default,
 which helps prevent spurious ratio effects from spatially-structured
 unmeasured confounders.
+}
+\examples{
+adj <- matrix(0, 4, 4)
+adj[cbind(1:3, 2:4)] <- 1
+adj <- adj + t(adj)
+spatial_car(adj, group_var = "region")
+spatial_gp(coords = c("x", "y"))
 }

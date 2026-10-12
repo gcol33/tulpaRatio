@@ -29,7 +29,8 @@ fit_laplace(
 \code{BACKEND_STRUCTURE_SUPPORT} for what this backend carries.}
 
 \item{priors}{Prior specification. A \code{prior_pc()} or \code{prior_half_normal()} on
-\code{sigma} is carried to the random-effect standard deviations.}
+\code{sigma} is carried to the random-effect standard deviations; left
+unspecified, \code{sigma} takes \code{prior_pc(U = 1, alpha = 0.01)}.}
 
 \item{n_samples}{Number of posterior samples to draw}
 

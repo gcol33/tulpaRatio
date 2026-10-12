@@ -2,9 +2,12 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_rsr}
 \alias{spatial_rsr}
+\alias{print.ratiod_rsr}
 \title{Restricted Spatial Regression (RSR)}
 \usage{
 spatial_rsr(spatial, restrict_to)
+
+\method{print}{ratiod_rsr}(x, ...)
 }
 \arguments{
 \item{spatial}{A spatial specification (\code{spatial_gp}, \code{spatial_car}, etc.)}
@@ -12,6 +15,10 @@ spatial_rsr(spatial, restrict_to)
 \item{restrict_to}{Formula specifying which covariates to orthogonalize
 against (e.g., \code{~ depth + temp}). The spatial effect will be constrained
 to be orthogonal to the column space of these covariates.}
+
+\item{x}{A ratiod_rsr object}
+
+\item{...}{Passed to underlying print method}
 }
 \value{
 A modified spatial specification with RSR enabled
@@ -79,7 +86,7 @@ fit1 <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_gp(~ lon + lat),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # RSR to protect depth and temp coefficients
@@ -92,7 +99,7 @@ fit2 <- tratio(
     restrict_to = ~ depth + temp
   ),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Compare coefficient estimates

@@ -2,7 +2,9 @@
 % Please edit documentation in R/latent.R
 \name{latent_factor}
 \alias{latent_factor}
-\title{Create a latent factor specification}
+\alias{print.ratiod_latent}
+\alias{latent_factors.ratiod_fit}
+\title{Latent Factor Specification}
 \usage{
 latent_factor(
   n_factors = 1L,
@@ -11,6 +13,10 @@ latent_factor(
   constraint = c("sum_to_zero", "first_zero"),
   scale = TRUE
 )
+
+\method{print}{ratiod_latent}(x, ...)
+
+\method{latent_factors}{ratiod_fit}(fit, summary = TRUE, probs = c(0.025, 0.5, 0.975), ...)
 }
 \arguments{
 \item{n_factors}{Integer; number of latent factors. Default is 1.
@@ -32,6 +38,18 @@ factors only affect the numerator.}
 
 \item{scale}{Logical; if TRUE (default), factor loadings are standardized
 to have unit variance before applying sigma.}
+
+\item{x}{A ratiod_latent object}
+
+\item{...}{Ignored}
+
+\item{fit}{A \code{ratiod_fit} sampled with \code{latent = latent_factor(...)}.}
+
+\item{summary}{Logical; \code{TRUE} (default) returns one row per observation
+and factor with the posterior mean, sd and \code{probs} quantiles of its score,
+\code{FALSE} the draws matrix with columns \code{factor[observation,factor]}.}
+
+\item{probs}{Quantiles for the summary.}
 }
 \value{
 A \code{ratiod_latent} object for use in \code{\link[=tratio]{tratio()}}.
@@ -116,14 +134,24 @@ latent_factor(n_factors = 1, prior = prior_pc(U = 0.5, alpha = 0.01))
 # Numerator-only factor (not shared)
 latent_factor(n_factors = 1, shared = FALSE)
 
-\dontrun{
+\donttest{
 # Use in model fitting
+set.seed(1)
+n <- 60
+df <- data.frame(
+  species_count = rnbinom(n, size = 5, mu = 15),
+  total_count = rnbinom(n, size = 8, mu = 100),
+  habitat = factor(rep(c("forest", "grassland"), each = n / 2)),
+  site = factor(rep(1:10, each = n / 10))
+)
 fit <- tratio(
   species_count | total_count ~ habitat + (1 | site),
   data = df,
   family = ratiod_negbin_negbin(),
-  latent = latent_factor(n_factors = 2)
+  latent = latent_factor(n_factors = 1),
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+head(latent_factors(fit))
 }
 
 }

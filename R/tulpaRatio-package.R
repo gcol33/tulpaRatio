@@ -3,7 +3,7 @@
 
 #' @useDynLib tulpaRatio, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
-#' @importFrom stats as.formula model.frame model.matrix na.pass quantile sd optim fitted predict rnorm rnbinom var ar cor pnorm qnorm reshape qlogis
+#' @importFrom stats as.formula model.frame model.matrix na.pass quantile sd optim fitted predict rnorm rnbinom var ar cor pnorm qnorm reshape qlogis coef vcov nobs formula
 #' @importFrom utils head
 #' @importFrom grDevices adjustcolor
 #' @importFrom graphics abline lines polygon

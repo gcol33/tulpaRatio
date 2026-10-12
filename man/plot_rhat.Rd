@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_diagnostics.R
 \name{plot_rhat}
 \alias{plot_rhat}
-\title{Plot Rhat Convergence Diagnostic}
+\title{Plot the Rhat Convergence Diagnostic}
 \usage{
 plot_rhat(fit, threshold = 1.01, pars = NULL)
 }
@@ -31,23 +31,12 @@ Color coding:
 }
 }
 \examples{
-# Diagnostic plots require a fitted ratio model
-# See tratio() examples for fitting models
-
 \donttest{
-# Fit a model (slow, not run on CRAN)
-set.seed(123)
-n <- 50
-df <- data.frame(
-  count = rpois(n, lambda = 8),
-  effort = rgamma(n, shape = 4, rate = 1),
-  depth = rnorm(n),
-  site = factor(rep(1:10, each = 5))
-)
-fit <- tratio(count | effort ~ depth + (1|site), data = df,
-             family = ratiod_poisson_gamma(),
-             control = list(iter = 200, warmup = 100, chains = 1))
-# plot_rhat(fit)
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+plot_rhat(fit)
 }
 
 }

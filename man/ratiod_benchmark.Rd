@@ -2,7 +2,8 @@
 % Please edit documentation in R/benchmark.R
 \name{ratiod_benchmark}
 \alias{ratiod_benchmark}
-\title{Benchmark tulpaRatio performance}
+\alias{print.ratiod_benchmark}
+\title{Benchmark Sampler Performance}
 \usage{
 ratiod_benchmark(
   N = 500,
@@ -15,6 +16,8 @@ ratiod_benchmark(
   n_threads = 1,
   verbose = FALSE
 )
+
+\method{print}{ratiod_benchmark}(x, ...)
 }
 \arguments{
 \item{N}{Number of observations}
@@ -34,6 +37,10 @@ ratiod_benchmark(
 \item{n_threads}{Number of threads per chain}
 
 \item{verbose}{Print progress (default: FALSE)}
+
+\item{x}{A ratiod_benchmark object}
+
+\item{...}{Ignored}
 }
 \value{
 A list with timing and diagnostic information
@@ -46,7 +53,7 @@ Fits a model on simulated data and reports timing and performance metrics.
 }
 \examples{
 \donttest{
-# Quick benchmark (slow, not run on CRAN)
+# Quick benchmark
 bench <- ratiod_benchmark(N = 100, p = 3, n_iter = 200, n_warmup = 100)
 print(bench)
 }

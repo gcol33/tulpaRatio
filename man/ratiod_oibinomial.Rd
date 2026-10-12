@@ -2,7 +2,7 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_oibinomial}
 \alias{ratiod_oibinomial}
-\title{One-inflated binomial family}
+\title{One-Inflated Binomial Family}
 \usage{
 ratiod_oibinomial(link_num = "logit", link_oi = "logit")
 }

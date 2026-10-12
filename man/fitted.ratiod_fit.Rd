@@ -2,7 +2,8 @@
 % Please edit documentation in R/ratio.R
 \name{fitted.ratiod_fit}
 \alias{fitted.ratiod_fit}
-\title{Extract fitted values from a ratio model}
+\alias{print.ratiod_fitted}
+\title{Fitted Values of a Ratio Model}
 \usage{
 \method{fitted}{ratiod_fit}(
   object,
@@ -11,6 +12,8 @@
   probs = c(0.025, 0.5, 0.975),
   ...
 )
+
+\method{print}{ratiod_fitted}(x, n = 10, ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object}
@@ -24,6 +27,10 @@ full posterior draws (default TRUE).}
 \item{probs}{Quantiles to compute if \code{summary = TRUE}.}
 
 \item{...}{Ignored}
+
+\item{x}{A ratiod_fitted object}
+
+\item{n}{Number of rows to print}
 }
 \value{
 If \code{summary = TRUE}, a data frame with posterior summaries.
@@ -50,7 +57,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Get fitted value summaries

@@ -2,14 +2,16 @@
 % Please edit documentation in R/inference_modes.R
 \name{validate_mode}
 \alias{validate_mode}
-\title{Validate that a fit used the expected mode}
+\title{Validate That a Fit Used the Expected Mode}
 \usage{
 validate_mode(fit, expected_mode, error = TRUE)
 }
 \arguments{
 \item{fit}{A ratiod_fit object}
 
-\item{expected_mode}{Mode that should have been used}
+\item{expected_mode}{Mode that should have been used: a tier (\code{"exact"},
+\code{"structured"}, \code{"optimized"}) or a backend (\code{"hmc"}, \code{"laplace"}, ...),
+as passed to \code{tratio(mode = )}.}
 
 \item{error}{If TRUE (default), error on mismatch. If FALSE, return logical.}
 }
@@ -19,4 +21,15 @@ If error = FALSE, returns TRUE/FALSE. Otherwise errors on mismatch.
 \description{
 Ensures the fit object was created with the expected inference mode.
 Useful for enforcing mode requirements in downstream analysis.
+}
+\examples{
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+validate_mode(fit, "hmc")
+validate_mode(fit, "laplace", error = FALSE)
+}
+
 }

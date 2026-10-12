@@ -99,15 +99,16 @@ fit_sghmc <- function(formula,
   zi_info <- prepare_zi_for_hmc(zi, data, N, family)
 
   # Prior parameters
-  if (is.null(priors)) priors <- list()
-  sigma_beta <- priors$sigma_beta %||% 10.0
-  sigma_re_scale <- priors$sigma_re_scale %||% 2.5
-  phi_shape <- priors$phi_shape %||% 2.0
-  phi_rate <- priors$phi_rate %||% 0.1
-  tau_temporal_shape <- priors$tau_temporal_shape %||% 2.0
-  tau_temporal_rate <- priors$tau_temporal_rate %||% 0.5
-  tau_spatial_shape <- priors$tau_spatial_shape %||% 1.0
-  tau_spatial_rate <- priors$tau_spatial_rate %||% 0.01
+  sp <- sampler_priors(priors, model_type)
+  priors <- fill_priors(priors, model_type)
+  sigma_beta <- sp$sigma_beta
+  sigma_re_scale <- sp$sigma_re_scale
+  phi_shape <- sp$phi_shape
+  phi_rate <- sp$phi_rate
+  tau_temporal_shape <- sp$tau_temporal_shape
+  tau_temporal_rate <- sp$tau_temporal_rate
+  tau_spatial_shape <- sp$tau_spatial_shape
+  tau_spatial_rate <- sp$tau_spatial_rate
 
   # Bundle parameters
   re_params <- list(
@@ -156,7 +157,7 @@ fit_sghmc <- function(formula,
     # OI info for OI-binomial and ZOIB models
     X_oi = zi_info$X_oi,
     p_oi = zi_info$p_oi %||% 0L,
-    oi_prior_sd = priors$oi_prior_sd %||% priors$zi_prior_sd %||% 10.0
+    oi_prior_sd = sp$zi_prior_sd
   )
 
   latent_params <- list(
@@ -327,15 +328,16 @@ fit_sgld <- function(formula,
   zi_info <- prepare_zi_for_hmc(zi, data, N, family)
 
   # Priors
-  if (is.null(priors)) priors <- list()
-  sigma_beta <- priors$sigma_beta %||% 10.0
-  sigma_re_scale <- priors$sigma_re_scale %||% 2.5
-  phi_shape <- priors$phi_shape %||% 2.0
-  phi_rate <- priors$phi_rate %||% 0.1
-  tau_temporal_shape <- priors$tau_temporal_shape %||% 2.0
-  tau_temporal_rate <- priors$tau_temporal_rate %||% 0.5
-  tau_spatial_shape <- priors$tau_spatial_shape %||% 1.0
-  tau_spatial_rate <- priors$tau_spatial_rate %||% 0.01
+  sp <- sampler_priors(priors, model_type)
+  priors <- fill_priors(priors, model_type)
+  sigma_beta <- sp$sigma_beta
+  sigma_re_scale <- sp$sigma_re_scale
+  phi_shape <- sp$phi_shape
+  phi_rate <- sp$phi_rate
+  tau_temporal_shape <- sp$tau_temporal_shape
+  tau_temporal_rate <- sp$tau_temporal_rate
+  tau_spatial_shape <- sp$tau_spatial_shape
+  tau_spatial_rate <- sp$tau_spatial_rate
 
   re_params <- list(
     group = as.integer(hmc_data$re_group),
@@ -383,7 +385,7 @@ fit_sgld <- function(formula,
     # OI info for OI-binomial and ZOIB models
     X_oi = zi_info$X_oi,
     p_oi = zi_info$p_oi %||% 0L,
-    oi_prior_sd = priors$oi_prior_sd %||% priors$zi_prior_sd %||% 10.0
+    oi_prior_sd = sp$zi_prior_sd
   )
 
   latent_params <- list(has_latent = FALSE, n_factors = 0L, shared = FALSE,
@@ -471,11 +473,7 @@ fit_sgld <- function(formula,
 }
 
 
-#' Print method for ratiod_sghmc objects
-#'
-#' @param x A `ratiod_sghmc` fit object.
-#' @param digits Number of significant digits to print (default 3).
-#' @param ... Additional arguments passed to [print()].
+#' @rdname summary.ratiod_fit
 #'
 #' @export
 print.ratiod_sghmc <- function(x, digits = 3, ...) {
@@ -511,11 +509,7 @@ print.ratiod_sghmc <- function(x, digits = 3, ...) {
 }
 
 
-#' Print method for ratiod_sgld objects
-#'
-#' @param x A `ratiod_sgld` fit object.
-#' @param digits Number of significant digits to print (default 3).
-#' @param ... Additional arguments passed to [print()].
+#' @rdname summary.ratiod_fit
 #'
 #' @export
 print.ratiod_sgld <- function(x, digits = 3, ...) {

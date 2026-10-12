@@ -2,7 +2,7 @@
 % Please edit documentation in R/benchmark.R
 \name{ratiod_benchmark_compare}
 \alias{ratiod_benchmark_compare}
-\title{Compare benchmark across configurations}
+\title{Compare Benchmarks Across Configurations}
 \usage{
 ratiod_benchmark_compare(configs, n_iter = 500, n_warmup = 250, n_threads = 1)
 }
@@ -23,7 +23,7 @@ Run benchmarks across multiple configurations to compare performance.
 }
 \examples{
 \donttest{
-# Compare benchmarks (slow, not run on CRAN)
+# Compare benchmarks
 configs <- list(
   list(N = 50, p = 2, n_groups = 0),
   list(N = 100, p = 2, n_groups = 0)

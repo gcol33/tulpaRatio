@@ -2,7 +2,8 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_svc}
 \alias{spatial_svc}
-\title{Spatially-Varying Coefficients (SVC)}
+\alias{print.ratiod_svc}
+\title{Spatially Varying Coefficients (SVC)}
 \usage{
 spatial_svc(
   coords,
@@ -17,6 +18,8 @@ spatial_svc(
   range = svc_default_range(),
   parameterization = c("noncentered", "centered")
 )
+
+\method{print}{ratiod_svc}(x, ...)
 }
 \arguments{
 \item{coords}{A one-sided formula specifying coordinate columns (e.g.,
@@ -71,6 +74,10 @@ directly under its NNGP prior, where the field's level and
 the same prior on \eqn{w_j}.
 Applies to \code{approx = "nngp"}; the HSGP arm already samples standardised
 basis coefficients.}
+
+\item{x}{A ratiod_svc object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_svc} object
@@ -117,8 +124,8 @@ space.
 svc_spec <- spatial_svc(~ lon + lat, terms = 1)
 print(svc_spec)
 
-\dontrun{
-# Generate synthetic spatial data (not run - SVC not fully supported)
+\donttest{
+# Generate synthetic spatial data
 set.seed(202)
 n <- 40
 df <- data.frame(
@@ -136,13 +143,13 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   spatial = spatial_svc(~ lon + lat, terms = 1),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 summary(fit)
 
 # Extract and plot the spatially-varying coefficients
 svc_effects <- svc(fit)
-plot(svc_effects, "depth")
+plot(svc_effects)
 }
 
 }

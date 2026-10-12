@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_half_normal}
 \alias{prior_half_normal}
-\title{Half-normal prior}
+\title{Half-Normal Prior}
 \usage{
 prior_half_normal(sd = 1)
 }

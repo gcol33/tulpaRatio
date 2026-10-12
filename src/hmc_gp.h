@@ -312,156 +312,13 @@ struct NNGPGradients {
   std::vector<double> grad_w;         // Gradient w.r.t. spatial effects
   double grad_log_sigma2;             // Gradient w.r.t. log(sigma2)
   double grad_log_phi;                // Gradient w.r.t. log(phi)
+  // The NNGP log-density the gradient differentiates, accumulated in the same
+  // pass. `log_lik_valid` is false where gp_nngp_log_lik_t() would return its
+  // -1e10 sentinel (a neighbour block that does not factor), so a caller
+  // evaluates the density itself there.
+  double log_lik = 0.0;
+  bool log_lik_valid = true;
 };
-
-// Analytical gradient of NNGP log-likelihood w.r.t. w (spatial effects)
-// O(N * nn) complexity - much faster than numerical differentiation
-// Returns gradients w.r.t. w only; sigma2/phi gradients computed numerically
-inline void gp_nngp_gradient_w_analytical(
-    const std::vector<double>& w,
-    double sigma2,
-    double phi,
-    const GPData& gp_data,
-    std::vector<double>& grad_w  // Output: gradient (length n_obs)
-) {
-  int N = gp_data.n_obs;
-  int nn = gp_data.nn;
-
-  grad_w.assign(N, 0.0);
-
-  // Validate input sizes
-  if (gp_data.nn_order.size() < (size_t)N) return;
-  if (gp_data.nn_idx.size() < (size_t)(N * nn)) return;
-  if (gp_data.nn_dist.size() < (size_t)(N * nn)) return;
-  if (w.size() < (size_t)N) return;
-  if (gp_data.coords.size() < (size_t)(2 * N)) return;
-
-  // First observation: marginal N(0, sigma2)
-  // ll_0 = -0.5*log(sigma2) - 0.5*w[first]^2/sigma2
-  // d/dw[first] = -w[first]/sigma2
-  int first_idx = gp_data.nn_order[0];
-  if (first_idx < 0 || first_idx >= N) return;
-  grad_w[first_idx] = -w[first_idx] / sigma2;
-
-  // Process remaining observations in ordering
-  for (int i = 1; i < N; i++) {
-    int obs_idx = gp_data.nn_order[i];
-
-    // Bounds check for obs_idx
-    if (obs_idx < 0 || obs_idx >= N) continue;
-
-    // Count actual neighbors
-    int n_neighbors = 0;
-    for (int j = 0; j < nn; j++) {
-      int nn_flat_idx = i * nn + j;
-      if (nn_flat_idx >= (int)gp_data.nn_idx.size()) break;
-      if (gp_data.nn_idx[nn_flat_idx] > 0) n_neighbors++;
-    }
-
-    if (n_neighbors == 0) {
-      // No neighbors: marginal - same as first obs
-      grad_w[obs_idx] += -w[obs_idx] / sigma2;
-      continue;
-    }
-
-    // Build c_vec (covariances between obs i and its neighbors)
-    std::vector<double> c_vec(n_neighbors);
-    for (int j = 0; j < n_neighbors; j++) {
-      int nn_flat_idx = i * nn + j;
-      double d = gp_data.nn_dist[nn_flat_idx];
-      c_vec[j] = compute_cov(d, sigma2, phi, gp_data.cov_type);
-    }
-
-    // Build C_mat (covariances among neighbors)
-    std::vector<double> C_mat(n_neighbors * n_neighbors);
-    std::vector<int> neighbor_orig_idx(n_neighbors);
-
-    bool bounds_ok = true;
-    for (int j1 = 0; j1 < n_neighbors; j1++) {
-      int raw_nn_idx1 = gp_data.nn_idx[i * nn + j1];
-
-      // Bounds check
-      if (raw_nn_idx1 - 1 < 0 || raw_nn_idx1 - 1 >= (int)gp_data.nn_order.size()) {
-        bounds_ok = false;
-        break;
-      }
-
-      int nn_idx1 = gp_data.nn_order[raw_nn_idx1 - 1];
-
-      if (nn_idx1 < 0 || nn_idx1 * 2 + 1 >= (int)gp_data.coords.size()) {
-        bounds_ok = false;
-        break;
-      }
-
-      neighbor_orig_idx[j1] = nn_idx1;
-
-      for (int j2 = 0; j2 < n_neighbors; j2++) {
-        int raw_nn_idx2 = gp_data.nn_idx[i * nn + j2];
-
-        if (raw_nn_idx2 - 1 < 0 || raw_nn_idx2 - 1 >= (int)gp_data.nn_order.size()) {
-          bounds_ok = false;
-          break;
-        }
-
-        int nn_idx2 = gp_data.nn_order[raw_nn_idx2 - 1];
-
-        if (j1 == j2) {
-          C_mat[j1 * n_neighbors + j2] = sigma2;
-        } else {
-          // Phase 1.3: Use cached pairwise neighbor distances
-          double d12 = gp_data.nn_neighbor_dist[i * nn * nn + j1 * nn + j2];
-          C_mat[j1 * n_neighbors + j2] = compute_cov(d12, sigma2, phi, gp_data.cov_type);
-        }
-      }
-      if (!bounds_ok) break;
-    }
-
-    if (!bounds_ok) {
-      // Skip this observation - marginal fallback
-      grad_w[obs_idx] += -w[obs_idx] / sigma2;
-      continue;
-    }
-
-    // Cholesky decomposition of C_mat, through the shared factorization.
-    std::vector<double> L, y, alpha;
-    if (!ratiod_cov::nngp_chol(C_mat, n_neighbors, L)) continue;
-    ratiod_cov::nngp_forward_solve(L, n_neighbors, c_vec, y);
-    ratiod_cov::nngp_back_solve(L, n_neighbors, y, alpha);
-
-    // Conditional mean: mu = alpha' * w_neighbors
-    double cond_mean = 0.0;
-    for (int j = 0; j < n_neighbors; j++) {
-      int nn_idx = neighbor_orig_idx[j];
-      if (nn_idx >= 0 && nn_idx < N) {
-        cond_mean += alpha[j] * w[nn_idx];
-      }
-    }
-
-    // Conditional variance: sigma2_cond = sigma2 - c' * alpha
-    double c_Cinv_c = 0.0;
-    for (int j = 0; j < n_neighbors; j++) {
-      c_Cinv_c += c_vec[j] * alpha[j];
-    }
-    double cond_var = ratiod_cov::nngp_floor_cond_var(sigma2 - c_Cinv_c);
-
-    // Residual
-    double resid = w[obs_idx] - cond_mean;
-
-    // Gradient w.r.t. w[obs_idx] (the target):
-    // d(ll_i)/d(w_i) = -resid / cond_var
-    grad_w[obs_idx] += -resid / cond_var;
-
-    // Gradient w.r.t. neighbors w[neighbor_j]:
-    // d(ll_i)/d(w_neighbor_j) = alpha_j * resid / cond_var
-    // (because d(cond_mean)/d(w_neighbor_j) = alpha_j)
-    for (int j = 0; j < n_neighbors; j++) {
-      int nn_idx = neighbor_orig_idx[j];
-      if (nn_idx >= 0 && nn_idx < N) {
-        grad_w[nn_idx] += alpha[j] * resid / cond_var;
-      }
-    }
-  }
-}
 
 using ratiod_cov::dcov_dphi;
 
@@ -481,18 +338,26 @@ inline void gp_nngp_gradients(
   grads.grad_w.assign(N, 0.0);
   grads.grad_log_sigma2 = 0.0;
   grads.grad_log_phi = 0.0;
+  grads.log_lik = 0.0;
+  grads.log_lik_valid = false;
 
   // Validate
   if ((int)gp_data.nn_order.size() < N || (int)gp_data.nn_idx.size() < N * nn ||
       (int)gp_data.nn_dist.size() < N * nn || (int)w.size() < N ||
+      (int)gp_data.nn_neighbor_dist.size() < N * nn * nn ||
       (int)gp_data.coords.size() < 2 * N) return;
+
+  const double half_log_2pi = 0.5 * std::log(2.0 * M_PI);
+  const double log_sigma2 = std::log(sigma2);
 
   // First observation: marginal N(0, sigma2)
   int first_idx = gp_data.nn_order[0];
   if (first_idx < 0 || first_idx >= N) return;
+  grads.log_lik_valid = true;
   double w0 = w[first_idx];
   grads.grad_w[first_idx] = -w0 / sigma2;
   grads.grad_log_sigma2 += 0.5 * (w0 * w0 / sigma2 - 1.0);  // Will multiply by sigma2 at end
+  grads.log_lik += -half_log_2pi - 0.5 * log_sigma2 - 0.5 * w0 * w0 / sigma2;
 
   // Preallocate work arrays (reused across iterations)
   std::vector<double> c_vec(nn), dc_vec(nn), C_mat(nn * nn), L(nn * nn);
@@ -511,6 +376,7 @@ inline void gp_nngp_gradients(
       double wi = w[obs_idx];
       grads.grad_w[obs_idx] += -wi / sigma2;
       grads.grad_log_sigma2 += 0.5 * (wi * wi / sigma2 - 1.0);
+      grads.log_lik += -half_log_2pi - 0.5 * log_sigma2 - 0.5 * wi * wi / sigma2;
       continue;
     }
 
@@ -521,7 +387,9 @@ inline void gp_nngp_gradients(
       dc_vec[j] = dcov_dphi(d, sigma2, phi, c_vec[j], gp_data.cov_type);
     }
 
-    // Build C_mat and get neighbor indices
+    // Build C_mat (symmetric: one kernel evaluation per neighbour pair, on the
+    // cached distances the density reads) and get neighbor indices
+    const double* nb_dist = &gp_data.nn_neighbor_dist[static_cast<size_t>(i) * nn * nn];
     bool ok = true;
     for (int j1 = 0; j1 < n_nb && ok; j1++) {
       int raw1 = gp_data.nn_idx[i * nn + j1];
@@ -530,28 +398,26 @@ inline void gp_nngp_gradients(
       if (idx1 < 0 || idx1 >= N) { ok = false; break; }
       nb_idx[j1] = idx1;
 
-      for (int j2 = 0; j2 < n_nb; j2++) {
-        if (j1 == j2) {
-          C_mat[j1 * n_nb + j2] = sigma2;
-        } else {
-          int raw2 = gp_data.nn_idx[i * nn + j2];
-          if (raw2 - 1 < 0 || raw2 - 1 >= (int)gp_data.nn_order.size()) { ok = false; break; }
-          int idx2 = gp_data.nn_order[raw2 - 1];
-          double dx = gp_data.coords[idx1 * 2] - gp_data.coords[idx2 * 2];
-          double dy = gp_data.coords[idx1 * 2 + 1] - gp_data.coords[idx2 * 2 + 1];
-          C_mat[j1 * n_nb + j2] = compute_cov(std::sqrt(dx*dx + dy*dy), sigma2, phi, gp_data.cov_type);
-        }
+      C_mat[j1 * n_nb + j1] = sigma2;
+      for (int j2 = 0; j2 < j1; j2++) {
+        double c12 = compute_cov(nb_dist[j1 * nn + j2], sigma2, phi, gp_data.cov_type);
+        C_mat[j1 * n_nb + j2] = c12;
+        C_mat[j2 * n_nb + j1] = c12;
       }
     }
     if (!ok) {
       double wi = w[obs_idx];
       grads.grad_w[obs_idx] += -wi / sigma2;
       grads.grad_log_sigma2 += 0.5 * (wi * wi / sigma2 - 1.0);
+      grads.log_lik_valid = false;
       continue;
     }
 
     // Cholesky: C = LL', through the same factorization the density uses.
-    if (!ratiod_cov::nngp_chol(C_mat.data(), n_nb, L.data())) continue;
+    if (!ratiod_cov::nngp_chol(C_mat.data(), n_nb, L.data())) {
+      grads.log_lik_valid = false;
+      continue;
+    }
 
     // alpha = C^{-1} c
     ratiod_cov::nngp_forward_solve(L.data(), n_nb, c_vec.data(), y_vec.data());
@@ -567,6 +433,7 @@ inline void gp_nngp_gradients(
     for (int j = 0; j < n_nb; j++) { mu += alpha[j] * w_nb[j]; c_alpha += c_vec[j] * alpha[j]; }
     double v = ratiod_cov::nngp_floor_cond_var(sigma2 - c_alpha);
     double r = w[obs_idx] - mu;
+    grads.log_lik += -half_log_2pi - 0.5 * std::log(v) - 0.5 * r * r / v;
 
     // Gradient w.r.t. w
     grads.grad_w[obs_idx] += -r / v;
@@ -580,20 +447,15 @@ inline void gp_nngp_gradients(
     double alpha_dc = 0.0, dc_beta = 0.0;
     for (int j = 0; j < n_nb; j++) { alpha_dc += alpha[j] * dc_vec[j]; dc_beta += dc_vec[j] * beta[j]; }
 
-    // alpha' * dC/dphi * alpha and alpha' * dC/dphi * beta (computed on-the-fly)
+    // alpha' * dC/dphi * alpha and alpha' * dC/dphi * beta. dC/dphi is
+    // symmetric with a zero diagonal, so each pair is visited once.
     double alpha_dC_alpha = 0.0, alpha_dC_beta = 0.0;
-    for (int j1 = 0; j1 < n_nb; j1++) {
-      for (int j2 = 0; j2 < n_nb; j2++) {
-        double dC_jk = 0.0;
-        if (j1 != j2) {
-          double dx = gp_data.coords[nb_idx[j1] * 2] - gp_data.coords[nb_idx[j2] * 2];
-          double dy = gp_data.coords[nb_idx[j1] * 2 + 1] - gp_data.coords[nb_idx[j2] * 2 + 1];
-          double d12 = std::sqrt(dx*dx + dy*dy);
-          dC_jk = dcov_dphi(d12, sigma2, phi, C_mat[j1 * n_nb + j2],
-                            gp_data.cov_type);
-        }
-        alpha_dC_alpha += alpha[j1] * dC_jk * alpha[j2];
-        alpha_dC_beta += alpha[j1] * dC_jk * beta[j2];
+    for (int j1 = 1; j1 < n_nb; j1++) {
+      for (int j2 = 0; j2 < j1; j2++) {
+        double dC_jk = dcov_dphi(nb_dist[j1 * nn + j2], sigma2, phi,
+                                 C_mat[j1 * n_nb + j2], gp_data.cov_type);
+        alpha_dC_alpha += 2.0 * alpha[j1] * dC_jk * alpha[j2];
+        alpha_dC_beta += dC_jk * (alpha[j1] * beta[j2] + alpha[j2] * beta[j1]);
       }
     }
 
@@ -709,14 +571,13 @@ inline void nngp_nc_forward(
             if (loc1 < 0 || loc1 >= N) { ok = false; break; }
             ws.nb_idx_flat[i * nn + j1] = loc1;
 
-            for (int j2 = 0; j2 < n_nb; j2++) {
-                if (j1 == j2) {
-                    C_mat[j1 * n_nb + j2] = sigma2;
-                } else {
-                    double d12 = gp_data.nn_neighbor_dist[i * nn * nn + j1 * nn + j2];
-                    C_mat[j1 * n_nb + j2] = ratiod_cov::compute_cov(d12, sigma2, phi,
-                                                                    gp_data.cov_type);
-                }
+            // C is symmetric: one kernel evaluation per neighbour pair.
+            C_mat[j1 * n_nb + j1] = sigma2;
+            for (int j2 = 0; j2 < j1; j2++) {
+                double d12 = gp_data.nn_neighbor_dist[i * nn * nn + j1 * nn + j2];
+                T c12 = ratiod_cov::compute_cov(d12, sigma2, phi, gp_data.cov_type);
+                C_mat[j1 * n_nb + j2] = c12;
+                C_mat[j2 * n_nb + j1] = c12;
             }
         }
 
@@ -899,8 +760,8 @@ inline void nngp_nc_backward(
     grad_log_phi_jac = 0.0;
 
     // Work arrays
-    std::vector<double> c_vec(nn), dc_vec(nn), C_mat(nn * nn), L(nn * nn);
-    std::vector<double> y_vec(nn), alpha(nn), dalpha(nn);
+    std::vector<double> c_vec(nn), dc_vec(nn), L(nn * nn);
+    std::vector<double> y_vec(nn), alpha(nn), dalpha(nn), dC_alpha(nn), rhs(nn);
 
     // First observation: d[0] = sigma2, independent of phi → no contribution
 
@@ -909,53 +770,34 @@ inline void nngp_nc_backward(
         int n_nb = ws.B_n_nb[i];
         if (n_nb == 0 || obs_loc < 0 || obs_loc >= N) continue;
 
-        // Rebuild c_vec, dc_vec and C_mat for the phi derivatives. The
-        // Cholesky itself is restored from the forward pass below, but C_mat
-        // has to be rebuilt: dC/dphi is a function of the covariance value at
-        // each neighbour pair, so an unfilled C_mat makes every dC entry zero
-        // and silently drops both the -dC*alpha term from dalpha and the
-        // alpha'dC*alpha term from dd_dphi.
+        // c_vec and its phi derivative, the factor and alpha restored from the
+        // forward pass, and dC/dphi * alpha accumulated pair by pair: dC/dphi
+        // is symmetric with a zero diagonal, and each entry needs the
+        // covariance at that pair, so one kernel evaluation serves both.
         for (int j = 0; j < n_nb; j++) {
             double d = gp_data.nn_dist[i * nn + j];
             c_vec[j] = compute_cov(d, sigma2, phi, gp_data.cov_type);
             dc_vec[j] = dcov_dphi(d, sigma2, phi, c_vec[j], gp_data.cov_type);
         }
         for (int j1 = 0; j1 < n_nb; j1++) {
-            for (int j2 = 0; j2 < n_nb; j2++) {
-                if (j1 == j2) {
-                    C_mat[j1 * n_nb + j2] = sigma2;
-                } else {
-                    double d12 = gp_data.nn_neighbor_dist[i * nn * nn + j1 * nn + j2];
-                    C_mat[j1 * n_nb + j2] =
-                        compute_cov(d12, sigma2, phi, gp_data.cov_type);
-                }
-            }
-        }
-
-        // Restore cached Cholesky factor L and alpha from forward pass
-        for (int j1 = 0; j1 < n_nb; j1++) {
             for (int j2 = 0; j2 <= j1; j2++) {
                 L[j1 * n_nb + j2] = ws.L_flat[i * nn * nn + j1 * nn + j2];
             }
             alpha[j1] = ws.B_flat[i * nn + j1];  // B = C^{-1}c = alpha
+            dC_alpha[j1] = 0.0;
         }
-
-        // dC/dphi * alpha
-        std::vector<double> dC_alpha(n_nb, 0.0);
-        for (int j1 = 0; j1 < n_nb; j1++) {
-            for (int j2 = 0; j2 < n_nb; j2++) {
-                double dC_jk = 0.0;
-                if (j1 != j2) {
-                    double d12 = gp_data.nn_neighbor_dist[i * nn * nn + j1 * nn + j2];
-                    dC_jk = dcov_dphi(d12, sigma2, phi, C_mat[j1 * n_nb + j2],
-                                      gp_data.cov_type);
-                }
+        const double* nb_dist = &gp_data.nn_neighbor_dist[static_cast<size_t>(i) * nn * nn];
+        for (int j1 = 1; j1 < n_nb; j1++) {
+            for (int j2 = 0; j2 < j1; j2++) {
+                double d12 = nb_dist[j1 * nn + j2];
+                double c12 = compute_cov(d12, sigma2, phi, gp_data.cov_type);
+                double dC_jk = dcov_dphi(d12, sigma2, phi, c12, gp_data.cov_type);
                 dC_alpha[j1] += dC_jk * alpha[j2];
+                dC_alpha[j2] += dC_jk * alpha[j1];
             }
         }
 
         // dalpha/dphi = C^{-1} (dc/dphi - dC/dphi * alpha)
-        std::vector<double> rhs(n_nb);
         for (int j = 0; j < n_nb; j++) rhs[j] = dc_vec[j] - dC_alpha[j];
         for (int j = 0; j < n_nb; j++) {
             double s = 0.0;

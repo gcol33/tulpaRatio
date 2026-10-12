@@ -83,41 +83,60 @@ test_that("prior_pc validates parameters", {
   expect_error(prior_pc(alpha = 1.5), "in \\(0, 1\\)")
 })
 
-test_that("ratiod_priors creates valid priors object", {
-  p <- ratiod_priors()
-
+test_that("ratiod_priors() leaves unspecified components to the defaults", {
+  p <- ratiod_priors(beta = prior_normal(0, 1))
   expect_s3_class(p, "ratiod_priors")
-  expect_s3_class(p$beta, "ratiod_prior")
-  expect_s3_class(p$sigma, "ratiod_prior")
-  expect_s3_class(p$phi, "ratiod_prior")
-  expect_s3_class(p$rho_temporal, "ratiod_prior")
-  expect_s3_class(p$rho_spatial, "ratiod_prior")
+  expect_equal(p$beta$sd, 1)
+  expect_null(p$sigma)
+
+  f <- tulpaRatio:::fill_priors(p, "poisson_gamma")
+  expect_equal(f$beta$sd, 1)
+  expect_equal(f$sigma$distribution, "half_cauchy")
+  expect_equal(f$sigma$scale, 2.5)
+  expect_equal(c(f$phi$shape, f$phi$rate), c(2, 0.5))
+  expect_equal(c(f$rho_temporal$alpha, f$rho_temporal$beta), c(2, 2))
+  expect_equal(c(f$rho_spatial$alpha, f$rho_spatial$beta), c(1, 1))
 })
 
-test_that("ratiod_priors uses correct defaults", {
-  p <- ratiod_priors()
+test_that("the dispersion default follows the family", {
+  dp <- function(mt) {
+    x <- tulpaRatio:::default_prior("phi", mt)
+    c(x$shape, x$rate)
+  }
+  expect_equal(dp("lognormal"), c(2, 2))
+  expect_equal(dp("gamma_gamma"), c(2, 0.5))
+  expect_equal(dp("negbin_negbin"), c(2, 0.1))
+  expect_equal(tulpaRatio:::default_prior("beta")$sd, 10)
+})
 
-  # Beta: Normal(0, 2.5)
-  expect_equal(p$beta$distribution, "normal")
-  expect_equal(p$beta$mean, 0)
-  expect_equal(p$beta$sd, 2.5)
+test_that("sampler_priors() passes the families the samplers carry and refuses others", {
+  sp <- tulpaRatio:::sampler_priors(
+    ratiod_priors(beta = prior_normal(0, 3), sigma = prior_half_cauchy(1),
+                  phi = prior_gamma(3, 1)),
+    "negbin_negbin")
+  expect_equal(sp[c("sigma_beta", "sigma_re_scale", "phi_shape", "phi_rate")],
+               list(sigma_beta = 3, sigma_re_scale = 1, phi_shape = 3, phi_rate = 1))
+  expect_error(tulpaRatio:::sampler_priors(ratiod_priors(sigma = prior_pc(1, 0.01)),
+                                           "negbin_negbin"),
+               "prior_half_cauchy")
+  expect_error(tulpaRatio:::sampler_priors(ratiod_priors(beta = prior_normal(1, 2)),
+                                           "negbin_negbin"),
+               "prior_normal\\(0, sd\\)")
+})
 
-  # Sigma: PC prior
-  expect_equal(p$sigma$distribution, "pc")
-  expect_equal(p$sigma$U, 1.0)
-  expect_equal(p$sigma$alpha, 0.01)
-
-  # Phi: PC prior
-  expect_equal(p$phi$distribution, "pc")
-  expect_equal(p$phi$U, 10.0)
-
-  # Rho temporal: Beta(2, 2)
-  expect_equal(p$rho_temporal$distribution, "beta")
-  expect_equal(p$rho_temporal$alpha, 2)
-
-  # Rho spatial: Beta(1, 1) - uniform
-  expect_equal(p$rho_spatial$distribution, "beta")
-  expect_equal(p$rho_spatial$alpha, 1)
+test_that("a prior given to tratio() is the prior the HMC fit runs under", {
+  skip_on_cran()
+  sim <- sim_ratiod(n = 40, family = ratiod_poisson_gamma(), seed = 5)
+  fit_prior <- function(priors) {
+    tratio(y_num | y_denom ~ x1, data = sim$data,
+           family = ratiod_poisson_gamma(), priors = priors,
+           control = list(iter = 300, chains = 1, seed = 1))
+  }
+  b_default <- coef(fit_prior(NULL))
+  b_tight <- coef(fit_prior(ratiod_priors(beta = prior_normal(0, 0.01))))
+  expect_true(all(abs(b_tight) < 0.05))
+  expect_true(any(abs(b_default) > 0.2))
+  expect_error(fit_prior(ratiod_priors(sigma = prior_pc(1, 0.01))), "half_cauchy")
 })
 
 test_that("ratiod_priors accepts custom priors", {
@@ -142,15 +161,6 @@ test_that("ratiod_priors rejects invalid priors", {
     ratiod_priors(sigma = list(distribution = "normal")),
     "must be a prior object"
   )
-})
-
-test_that("ratiod_priors_legacy works for backwards compatibility", {
-  p <- ratiod_priors_legacy(sigma_U = 0.5, sigma_alpha = 0.05, beta_sd = 1)
-
-  expect_s3_class(p, "ratiod_priors")
-  expect_equal(p$beta$sd, 1)
-  expect_equal(p$sigma$U, 0.5)
-  expect_equal(p$sigma$alpha, 0.05)
 })
 
 test_that("prior print methods work", {

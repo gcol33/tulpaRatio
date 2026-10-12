@@ -2,7 +2,10 @@
 % Please edit documentation in R/validate.R
 \name{ratiod_average}
 \alias{ratiod_average}
-\title{Model averaging for tulpaRatio fits}
+\alias{print.ratiod_average}
+\alias{fitted.ratiod_average}
+\alias{weights.ratiod_average}
+\title{Model Averaging for Ratio Models}
 \usage{
 ratiod_average(
   ...,
@@ -11,6 +14,12 @@ ratiod_average(
   type = c("ratio", "numerator", "denominator"),
   summary = TRUE
 )
+
+\method{print}{ratiod_average}(x, digits = 3, ...)
+
+\method{fitted}{ratiod_average}(object, ...)
+
+\method{weights}{ratiod_average}(object, ...)
 }
 \arguments{
 \item{...}{Multiple \code{ratiod_fit} objects to average}
@@ -24,6 +33,12 @@ ratiod_average(
 
 \item{summary}{Logical; if TRUE (default), return summary statistics. If FALSE,
 return full posterior draws.}
+
+\item{x}{A ratiod_average object}
+
+\item{digits}{Number of digits for printing}
+
+\item{object}{A ratiod_average object}
 }
 \value{
 A \code{ratiod_average} object containing:
@@ -32,6 +47,10 @@ A \code{ratiod_average} object containing:
 \item \code{predictions}: Model-averaged predictions
 \item \code{models}: List of model names
 }
+
+Predictions data frame or matrix
+
+Named numeric vector of weights
 }
 \description{
 Compute model-averaged predictions using stacking or pseudo-BMA weights.
@@ -55,25 +74,16 @@ the multiplicative nature of ratios.
 }
 \examples{
 \donttest{
-# Fit candidate models (slow, not run on CRAN)
-set.seed(123)
-n <- 60
-df <- data.frame(
-  count = rpois(n, lambda = 8),
-  effort = rgamma(n, shape = 4, rate = 1),
-  x = rnorm(n),
-  z = rnorm(n),
-  site = factor(rep(1:10, each = 6))
-)
-fit1 <- tratio(count | effort ~ x + (1 | site), data = df,
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
               family = ratiod_poisson_gamma(),
-              control = list(iter = 200, warmup = 100, chains = 1))
-fit2 <- tratio(count | effort ~ x + z + (1 | site), data = df,
-              family = ratiod_poisson_gamma(),
-              control = list(iter = 200, warmup = 100, chains = 1))
-# Model averaging (requires loo package)
-# avg <- ratiod_average(fit1, fit2)
-# print(avg)
+              control = list(iter = 1000, chains = 2, seed = 1))
+fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+               family = ratiod_poisson_gamma(),
+               control = list(iter = 1000, chains = 2, seed = 1))
+avg <- ratiod_average(fit0, fit)
+avg
+weights(avg)
 }
 
 }

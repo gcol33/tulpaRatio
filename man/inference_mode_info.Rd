@@ -2,11 +2,15 @@
 % Please edit documentation in R/inference_modes.R
 \name{inference_mode_info}
 \alias{inference_mode_info}
-\title{Print inference mode information}
+\title{Inference Mode Information}
 \usage{
 inference_mode_info()
 }
 \description{
 Displays information about the inference modes available in tulpaRatio,
 including their tiers, guarantees, and appropriate use cases.
+}
+\examples{
+inference_mode_info()
+
 }

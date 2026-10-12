@@ -2,9 +2,17 @@
 % Please edit documentation in R/gpu.R
 \name{gpu_info}
 \alias{gpu_info}
-\title{Get GPU device information}
+\alias{print.tulpaRatio_gpu_info}
+\title{GPU Device Information}
 \usage{
 gpu_info()
+
+\method{print}{tulpaRatio_gpu_info}(x, ...)
+}
+\arguments{
+\item{x}{GPU info object from \code{\link[=gpu_info]{gpu_info()}}}
+
+\item{...}{Ignored}
 }
 \value{
 A list with GPU information, or NULL if no GPU is available.

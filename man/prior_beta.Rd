@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_beta}
 \alias{prior_beta}
-\title{Beta prior}
+\title{Beta Prior}
 \usage{
 prior_beta(alpha = 1, beta = 1)
 }

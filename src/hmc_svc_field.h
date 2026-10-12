@@ -14,6 +14,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 #include "hmc_svc.h"
 #include "hmc_gp.h"
@@ -128,6 +129,72 @@ inline void svc_field_accumulate(const double* block, const double* sigma2,
     grad[log_sigma2_start + j] += g_sigma2;
     grad[log_phi_start + j] += g_phi;
   }
+}
+
+// Scratch for a gradient pass over every SVC term. Held per-thread (via
+// RATIOD_TLS_WORKSPACE at the call site), never as members of SVCData: SVCData
+// hangs off the single ModelData that every chain thread shares, so buffers
+// living there are the same memory for every chain and a concurrent write from
+// one chain overwrites what another chain's gradient evaluation is reading.
+struct SVCGradWorkspace {
+  std::vector<double> sigma2;   // size n_svc
+  std::vector<double> phi;      // size n_svc
+  std::vector<double> w_flat;   // size n_obs * n_svc
+  std::vector<double> w_j;      // size n_obs (reused per term)
+  // dL/dw_c, accumulated apart from the field prior's gradient so
+  // svc_center_terms projects the likelihood part alone.
+  std::vector<double> lik_grad; // size n_obs * n_svc
+  std::vector<double> term_mean; // size n_svc
+  ratiod_gp::NNGPGradients grads;  // reused per term
+
+  void resize(int n_svc, int n_obs) {
+    sigma2.resize(n_svc);
+    phi.resize(n_svc);
+    w_flat.resize(static_cast<size_t>(n_obs) * n_svc);
+    w_j.resize(n_obs);
+    lik_grad.assign(static_cast<size_t>(n_obs) * n_svc, 0.0);
+    term_mean.assign(n_svc, 0.0);
+  }
+};
+
+// Accumulate the centred NNGP field prior's gradient for every SVC term: d/dw
+// into `grad` at `w_start` in the j-major layout the field is stored in, and
+// the two hyperparameter derivatives at their own slots. Each term is the
+// single-scale NNGP on `view`, so the gradient and density are the spatial
+// GP's. Returns the summed log-density, or NaN where gp_nngp_log_lik_t() would
+// return its sentinel, so a caller evaluates the density itself there.
+inline double svc_nngp_prior_grads(
+    const double* w_flat,
+    const double* sigma2,
+    const double* phi,
+    const SVCData& svc_data,
+    const ratiod_gp::GPData& view,
+    int w_start,
+    int log_sigma2_start,
+    int log_phi_start,
+    SVCGradWorkspace& ws,
+    double* grad
+) {
+  const int n_obs = svc_data.n_obs;
+  const int n_svc = svc_data.n_svc;
+  double log_prior = 0.0;
+  bool valid = true;
+
+  for (int j = 0; j < n_svc; j++) {
+    const double* w_j_src = w_flat + static_cast<size_t>(j) * n_obs;
+    std::copy(w_j_src, w_j_src + n_obs, ws.w_j.begin());
+
+    ratiod_gp::gp_nngp_gradients(ws.w_j, sigma2[j], phi[j], view, ws.grads);
+
+    for (int i = 0; i < n_obs; i++) {
+      grad[w_start + j * n_obs + i] += ws.grads.grad_w[i];
+    }
+    grad[log_sigma2_start + j] += ws.grads.grad_log_sigma2;
+    grad[log_phi_start + j] += ws.grads.grad_log_phi;
+    log_prior += ws.grads.log_lik;
+    valid = valid && ws.grads.log_lik_valid;
+  }
+  return valid ? log_prior : std::numeric_limits<double>::quiet_NaN();
 }
 
 }  // namespace ratiod_svc

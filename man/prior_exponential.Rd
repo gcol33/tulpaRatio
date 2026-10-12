@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_exponential}
 \alias{prior_exponential}
-\title{Exponential prior}
+\title{Exponential Prior}
 \usage{
 prior_exponential(rate = 1)
 }

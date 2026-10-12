@@ -12,7 +12,9 @@ build_model_matrix(f, data)
 \item{data}{Data frame}
 }
 \value{
-Model matrix X
+List with the model matrix \code{X} and its \code{design}: the terms without
+response, the factor levels and the contrasts it was built with, which
+\code{design_matrix_newdata()} reuses so new data get the same columns.
 }
 \description{
 Build model matrix from fixed effects formula

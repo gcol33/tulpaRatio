@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_normal}
 \alias{prior_normal}
-\title{Normal prior}
+\title{Normal Prior}
 \usage{
 prior_normal(mean = 0, sd = 2.5)
 }

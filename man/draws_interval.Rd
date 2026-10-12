@@ -3,7 +3,7 @@
 \name{draws_interval}
 \alias{draws_interval}
 \alias{draws_interval.ratiod_fit}
-\title{Point estimates and credible intervals for selected parameters}
+\title{Point Estimates and Credible Intervals for Selected Parameters}
 \usage{
 draws_interval(
   object,
@@ -60,7 +60,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Get point estimates and 95\% intervals

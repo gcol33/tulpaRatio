@@ -2,7 +2,8 @@
 % Please edit documentation in R/simulate.R
 \name{sim_ratiod_sbc}
 \alias{sim_ratiod_sbc}
-\title{Simulate multiple datasets for SBC}
+\alias{print.ratiod_sbc_sims}
+\title{Simulate Datasets for Simulation-Based Calibration}
 \usage{
 sim_ratiod_sbc(
   n_sims = 100,
@@ -12,6 +13,8 @@ sim_ratiod_sbc(
   n_groups = 10,
   seed = NULL
 )
+
+\method{print}{ratiod_sbc_sims}(x, ...)
 }
 \arguments{
 \item{n_sims}{Number of simulations to run.}
@@ -25,6 +28,10 @@ sim_ratiod_sbc(
 \item{n_groups}{Number of random effect groups.}
 
 \item{seed}{Random seed.}
+
+\item{x}{A ratiod_sbc_sims object}
+
+\item{...}{Ignored}
 }
 \value{
 A list of \code{ratiod_simdata} objects.
@@ -44,12 +51,12 @@ sims <- sim_ratiod_sbc(
 print(sims)
 
 \donttest{
-# Fit model to each simulation (slow, not run on CRAN)
+# Fit model to each simulation
 # ranks <- lapply(sims, function(sim) {
 #   fit <- tratio(y_num | y_denom ~ x1 + (1 | group),
 #                data = sim$data,
 #                family = ratiod_negbin_negbin(),
-#                control = list(iter = 200, warmup = 100, chains = 1))
+#                control = list(iter = 400, chains = 1, seed = 1))
 #   sum(as.matrix(fit$draws)[, "beta_num[1]"] < sim$true_params$beta_num[1])
 # })
 }

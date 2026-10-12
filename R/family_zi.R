@@ -1,4 +1,4 @@
-#' Zero-inflated model families for tulpaRatio
+#' Zero-Inflated Model Families
 #'
 #' @description
 #' Distribution families for handling excess zeros in count data.
@@ -9,11 +9,14 @@
 #' - **Zero-inflated (ZI)**: Mixture of point mass at zero and count distribution
 #' - **Hurdle**: Separate processes for zero vs positive counts
 #'
+#' @examples
+#' ratiod_zipois()
+#' ratiod_hurdle_negbin()
 #' @name ratiod_zi_families
 NULL
 
 
-#' Zero-inflated negative binomial family
+#' Zero-Inflated Negative Binomial Family
 #'
 #' @description
 #' Zero-inflated negative binomial for the numerator process.
@@ -57,14 +60,15 @@ NULL
 #'   site = factor(rep(1:10, each = n/10))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (not run - ZI models require specialized backend support)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   count | total ~ habitat + (1 | site),
 #'   data = df,
 #'   family = ratiod_zinegbin(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @seealso [ratiod_hurdle_negbin()] for hurdle model alternative
@@ -107,7 +111,7 @@ ratiod_zinegbin <- function(link_num = "log", link_denom = "log",
 }
 
 
-#' Zero-inflated Poisson family
+#' Zero-Inflated Poisson Family
 #'
 #' @description
 #' Zero-inflated Poisson for the numerator process.
@@ -142,14 +146,15 @@ ratiod_zinegbin <- function(link_num = "log", link_denom = "log",
 #'   vessel = factor(rep(1:6, each = n/6))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (not run - ZI models require specialized backend support)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   catch | effort ~ depth + (1 | vessel),
 #'   data = df,
 #'   family = ratiod_zipois(denom_family = "gamma"),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -196,7 +201,7 @@ ratiod_zipois <- function(link_num = "log", link_denom = "log",
 }
 
 
-#' Hurdle negative binomial family
+#' Hurdle Negative Binomial Family
 #'
 #' @description
 #' Hurdle model where zero vs positive counts are modelled as separate processes.
@@ -242,14 +247,15 @@ ratiod_zipois <- function(link_num = "log", link_denom = "log",
 #'   site = factor(rep(1:10, each = n/10))
 #' )
 #'
-#' \dontrun{
-#' # Fit model (not run - hurdle models require specialized backend support)
+#' \donttest{
+#' # Fit model
 #' fit <- tratio(
 #'   count | total ~ habitat + (1 | site),
 #'   data = df,
 #'   family = ratiod_hurdle_negbin(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
+#' summary(fit)
 #' }
 #'
 #' @export
@@ -290,7 +296,7 @@ ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
 }
 
 
-#' Hurdle Poisson family
+#' Hurdle Poisson Family
 #'
 #' @description
 #' Hurdle model with truncated Poisson for positive counts.
@@ -299,6 +305,10 @@ ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
 #' @param denom_family Denominator distribution: "gamma" (default), "negbin", or "fixed"
 #'
 #' @return A `ratiod_family` object with hurdle structure
+#'
+#' @examples
+#' ratiod_hurdle_pois()
+#' ratiod_hurdle_pois(denom_family = "negbin")
 #'
 #' @export
 ratiod_hurdle_pois <- function(link_num = "log", link_denom = "log",
@@ -364,8 +374,7 @@ is_hurdle_family <- function(family) {
 }
 
 
-#' Print method for zero-inflated ratiod_family
-#'
+#' @rdname ratiod_zi_families
 #' @param x A ratiod_family_zi object
 #' @param ... Ignored
 #'
@@ -395,7 +404,7 @@ print.ratiod_family_zi <- function(x, ...) {
 }
 
 
-#' Zero-inflated binomial family
+#' Zero-Inflated Binomial Family
 #'
 #' @description
 #' Zero-inflated binomial for the numerator when modeling proportions
@@ -452,7 +461,7 @@ ratiod_zibinomial <- function(link_num = "logit", link_zi = "logit") {
 }
 
 
-#' One-inflated binomial family
+#' One-Inflated Binomial Family
 #'
 #' @description
 #' One-inflated binomial for proportions with excess ones (100% success).
@@ -506,7 +515,7 @@ ratiod_oibinomial <- function(link_num = "logit", link_oi = "logit") {
 }
 
 
-#' Zero-and-one inflated binomial family
+#' Zero-and-One-Inflated Binomial Family
 #'
 #' @description
 #' Zero-and-one inflated binomial for proportions with excess zeros AND ones.
@@ -564,7 +573,7 @@ ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
 }
 
 
-#' Hurdle binomial family
+#' Hurdle Binomial Family
 #'
 #' @description
 #' Hurdle model for binomial data where zero counts are modeled separately

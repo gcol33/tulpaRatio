@@ -2,7 +2,7 @@
 #' @importFrom grDevices colorRampPalette
 NULL
 
-#' Extract ratio posteriors from a ratio model
+#' Ratio Posteriors from a Ratio Model
 #'
 #' @description
 #' Compute posterior distributions of ratios from a fitted ratio model.
@@ -42,7 +42,7 @@ NULL
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract all observation-level ratios
@@ -162,11 +162,7 @@ aggregate_by_group <- function(draws, data, by) {
   result
 }
 
-#' Summary method for ratiod_ratio
-#'
-#' @param object A ratiod_ratio object
-#' @param probs Quantiles to compute
-#' @param ... Ignored
+#' @rdname ratio
 #'
 #' @export
 summary.ratiod_ratio <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
@@ -201,10 +197,9 @@ summary.ratiod_ratio <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
   )
 }
 
-#' Print method for ratiod_ratio
-#'
-#' @param x A ratiod_ratio object
-#' @param ... Ignored
+#' @rdname ratio
+#' @param x A `ratiod_ratio` object, or the `ratiod_ratio_summary` its
+#'   `summary()` returns.
 #'
 #' @export
 print.ratiod_ratio <- function(x, ...) {
@@ -221,11 +216,8 @@ print.ratiod_ratio <- function(x, ...) {
   invisible(x)
 }
 
-#' Print method for ratiod_ratio_summary
-#'
-#' @param x A ratiod_ratio_summary object
+#' @rdname ratio
 #' @param n Number of rows to print
-#' @param ... Passed to print.data.frame
 #'
 #' @export
 print.ratiod_ratio_summary <- function(x, n = 10, ...) {
@@ -242,7 +234,7 @@ print.ratiod_ratio_summary <- function(x, n = 10, ...) {
   invisible(x)
 }
 
-#' Compute contrasts between ratio conditions
+#' Contrasts Between Ratio Conditions
 #'
 #' @description
 #' Compute posterior distributions of contrasts (differences or ratios)
@@ -273,7 +265,7 @@ print.ratiod_ratio_summary <- function(x, n = 10, ...) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Compare CPUE between seasons
@@ -312,8 +304,14 @@ ratio_contrast <- function(object, contrast, type = c("difference", "ratio"),
     draws <- draws$ratio
   }
 
-  # Get levels
-  levels <- unique(object$data[[contrast_var]])
+  # Levels of the grouping variable, in factor order
+  group <- object$data[[contrast_var]]
+  if (!(is.factor(group) || is.character(group) || is.logical(group))) {
+    stop(sprintf(paste0("`%s` is %s; ratio_contrast() compares the levels of a ",
+                        "grouping variable. Convert it with factor() first."),
+                 contrast_var, class(group)[1]), call. = FALSE)
+  }
+  levels <- if (is.factor(group)) levels(droplevels(group)) else sort(unique(group))
   if (is.null(ref)) {
     ref <- levels[1]
   }
@@ -363,10 +361,8 @@ ratio_contrast <- function(object, contrast, type = c("difference", "ratio"),
   )
 }
 
-#' Print method for ratiod_contrast
-#'
+#' @rdname ratio_contrast
 #' @param x A ratiod_contrast object
-#' @param ... Passed to print.data.frame
 #'
 #' @export
 print.ratiod_contrast <- function(x, ...) {
@@ -380,7 +376,7 @@ print.ratiod_contrast <- function(x, ...) {
 }
 
 
-#' Extract fitted values from a ratio model
+#' Fitted Values of a Ratio Model
 #'
 #' @description
 #' Compute posterior distributions of fitted values (expected values) for both
@@ -414,7 +410,7 @@ print.ratiod_contrast <- function(x, ...) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Get fitted value summaries
@@ -580,7 +576,7 @@ compute_fitted_laplace <- function(object) {
 }
 
 
-#' Predict method for ratio models
+#' Predictions from a Ratio Model
 #'
 #' @description
 #' Compute posterior predictions for new data from a fitted ratio model.
@@ -618,62 +614,42 @@ compute_fitted_laplace <- function(object) {
 #'   If `return_spatial = TRUE`, returns a list with `predictions` and `w.0.samples`.
 #'
 #' @examples
-#' \dontrun{
-#' # Generate synthetic data
+#' \donttest{
 #' set.seed(321)
-#' n <- 50
+#' n <- 60
 #' df <- data.frame(
 #'   count = rpois(n, lambda = 18),
 #'   effort = rgamma(n, shape = 9, rate = 1),
 #'   depth = rnorm(n),
-#'   season = sample(c("summer", "winter"), n, replace = TRUE)
+#'   season = factor(sample(c("summer", "winter"), n, replace = TRUE)),
+#'   x = runif(n),
+#'   y = runif(n)
 #' )
-#'
-#' # Fit model
 #' fit <- tratio(
 #'   count | effort ~ depth + season,
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
-#' # Predict for new data
-#' new_df <- data.frame(depth = c(10, 20, 30), season = "summer")
+#' # Predict for new data; levels of `season` follow the training data
+#' new_df <- data.frame(depth = c(-1, 0, 1), season = "summer")
 #' predict(fit, newdata = new_df)
 #'
-#' # Population-level prediction (no random effects)
-#' predict(fit, newdata = new_df, re_formula = NA)
+#' # Full posterior draws of the predicted ratio (draws x rows)
+#' dim(predict(fit, newdata = new_df, summary = FALSE)$ratio)
 #'
-#' # Get full posterior draws
-#' predict(fit, newdata = new_df, summary = FALSE)
-#'
-#' # --- Spatial prediction example (GP) ---
-#' # Fit model with GP spatial effects
-#' df$x <- runif(n)
-#' df$y <- runif(n)
+#' # Spatial prediction at new locations (kriging) from a GP fit
 #' fit_gp <- tratio(
 #'   count | effort ~ depth,
 #'   data = df,
 #'   spatial = spatial_gp(coords = c("x", "y")),
 #'   family = ratiod_poisson_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
-#'
-#' # Predict at new locations (kriging)
-#' new_coords <- matrix(runif(20), ncol = 2)
-#' new_df <- data.frame(depth = rnorm(10))
-#' pred <- predict(fit_gp, newdata = new_df, coords.0 = new_coords)
-#'
-#' # Return spatial effect samples (like spOccupancy)
-#' pred_spatial <- predict(fit_gp, newdata = new_df, coords.0 = new_coords,
-#'                         return_spatial = TRUE)
-#' str(pred_spatial$w.0.samples)  # [n_samples, n_new]
-#'
-#' # --- Areal spatial prediction (ICAR/BYM2) ---
-#' # Predict for existing regions (lookup)
-#' new_df <- data.frame(region = c("A", "B"), depth = c(1, 2))
-#' predict(fit_icar, newdata = new_df)
+#' new_coords <- matrix(runif(10), ncol = 2)
+#' predict(fit_gp, newdata = data.frame(depth = rnorm(5)),
+#'         coords.0 = new_coords)
 #' }
 #'
 #' @method predict ratiod_fit
@@ -784,45 +760,14 @@ predict.ratiod_fit <- function(object, newdata, type = c("response", "link"),
 build_prediction_data <- function(object, newdata, re_formula, allow_new_levels) {
   formula <- object$formula
 
-  # Build design matrix for numerator
-  # Extract fixed effect terms from formula
-  num_terms <- formula$numerator$terms
   design_info <- prediction_design_info(object)
-  if (is.null(num_terms)) {
-    # Fall back to using X column names
-    X_num <- model.matrix(~ 1, data = newdata)
-    colnames_orig <- colnames(design_info$X_num)
-    if (ncol(X_num) != length(colnames_orig)) {
-      # Try to match the original predictors
-      pred_vars <- setdiff(colnames_orig, "(Intercept)")
-      if (length(pred_vars) > 0) {
-        fmla <- as.formula(paste("~", paste(pred_vars, collapse = " + ")))
-        X_num <- model.matrix(fmla, data = newdata)
-      }
-    }
-  } else {
-    X_num <- model.matrix(num_terms, data = newdata)
-  }
+  X_num <- design_matrix_newdata(formula$numerator$design, newdata)
 
-  # Build design matrix for denominator
   # For binomial/beta_binomial, denominator is fixed trials - no design matrix
   if (design_info$p_denom == 0) {
     X_denom <- matrix(numeric(0), nrow = nrow(newdata), ncol = 0)
   } else {
-    denom_terms <- formula$denominator$terms
-    if (is.null(denom_terms)) {
-      X_denom <- model.matrix(~ 1, data = newdata)
-      colnames_orig <- colnames(design_info$X_denom)
-      if (ncol(X_denom) != length(colnames_orig)) {
-        pred_vars <- setdiff(colnames_orig, "(Intercept)")
-        if (length(pred_vars) > 0) {
-          fmla <- as.formula(paste("~", paste(pred_vars, collapse = " + ")))
-          X_denom <- model.matrix(fmla, data = newdata)
-        }
-      }
-    } else {
-      X_denom <- model.matrix(denom_terms, data = newdata)
-    }
+    X_denom <- design_matrix_newdata(formula$denominator$design, newdata)
   }
 
   # Random effects, remapped onto the new data
@@ -980,6 +925,8 @@ predict_hmc <- function(object, newdata, type, re_formula, allow_new_levels,
 detect_spatial_type <- function(object) {
   spatial <- object$spatial
   if (is.null(spatial)) return(NULL)
+  # The Laplace backend records the type alone
+  if (is.character(spatial)) spatial <- list(type = spatial)
 
   # Check hmc_data for spatial type (string values)
   hmc_data <- object$.internal$hmc_data
@@ -1028,45 +975,27 @@ predict_spatial_hmc <- function(object, newdata, coords.0, spatial_type, return_
 
 
 #' Predict GP spatial effects at new locations (kriging)
+#'
+#' Krigs each posterior draw of the field at the training locations onto
+#' `coords.0`, put in the units the fit was made in, under that draw's
+#' variance and range.
+#'
 #' @keywords internal
 predict_spatial_gp <- function(object, coords.0, return_spatial) {
-  hmc_data <- object$.internal$hmc_data
-  samples <- object$.internal$samples
-  n_samples <- nrow(samples)
-  n_new <- nrow(coords.0)
-
-  # Get training coordinates
-  coords_train <- matrix(hmc_data$coords, ncol = 2, byrow = TRUE)
-  n_train <- nrow(coords_train)
-
-  # Extract GP hyperparameters and spatial effects from samples
-  # Find parameter indices - this depends on model structure
-  idx <- hmc_data$p_num + hmc_data$p_denom
-  if (hmc_data$n_re_groups > 0) {
-    idx <- idx + 1 + hmc_data$n_re_groups  # skip sigma_re and RE values
+  gp <- object$.internal$spatial_spec
+  w_train <- object$.internal$spatial_draws
+  if (is.null(gp$unique_coords) || is.null(w_train)) {
+    stop("This fit carries no GP field draws to krig from.", call. = FALSE)
   }
-
-  # GP hyperparameters: log_sigma2_gp, log_phi_gp
-  log_sigma2_gp <- samples[, idx + 1]
-  log_phi_gp <- samples[, idx + 2]
-  sigma2_gp <- exp(log_sigma2_gp)
-  phi_gp <- exp(log_phi_gp)
-
-  # Spatial effects w: n_train values
-  w_start <- idx + 3
-  w_train <- samples[, w_start:(w_start + n_train - 1), drop = FALSE]
-
-  # Covariance type
-  cov_type <- hmc_data$cov_type %||% 0L  # 0 = exponential
-
+  draws <- object$draws
   w_pred <- cpp_kriging_predict(
-    coords_train = coords_train,
-    coords_new = gp_scale_new_coords(object$spatial, coords.0),
+    coords_train = gp$unique_coords,
+    coords_new = gp_scale_new_coords(gp, coords.0),
     w_train = w_train,
-    sigma2 = sigma2_gp,
-    phi = phi_gp,
-    cov_type = cov_type,
-    nn = min(hmc_data$nn %||% 15L, n_train)
+    sigma2 = draws[, "sigma2_gp"],
+    phi = draws[, "phi_gp"],
+    cov_type = cov_type_code(gp$cov),
+    nn = min(gp$nn, nrow(gp$unique_coords))
   )
 
   list(
@@ -1077,50 +1006,24 @@ predict_spatial_gp <- function(object, coords.0, return_spatial) {
 
 
 #' Predict HSGP spatial effects at new locations (basis evaluation)
+#'
+#' Evaluates the fit's Laplacian eigenbasis, on the training rectangle, at
+#' `coords.0` and applies each draw's spectral weights to it.
+#'
 #' @keywords internal
 predict_spatial_hsgp <- function(object, coords.0, return_spatial) {
-  hmc_data <- object$.internal$hmc_data
+  gp <- object$.internal$spatial_spec
+  lay <- object$.internal$layout$hsgp
   samples <- object$.internal$samples
-  n_samples <- nrow(samples)
-  n_new <- nrow(coords.0)
-
-  # HSGP parameters
-  hsgp_m <- hmc_data$hsgp_m %||% 8L
-  hsgp_c <- hmc_data$hsgp_c %||% 1.5
-
-  # Get training coordinates to determine domain
-  coords_train <- matrix(hmc_data$coords, ncol = 2, byrow = TRUE)
-  L <- hsgp_c * apply(coords_train, 2, function(x) diff(range(x)) / 2)
-
-  # Center coordinates
-  center <- colMeans(coords_train)
-  coords_centered <- t(t(coords.0) - center)
-
-  # Compute HSGP basis at new locations
-  n_basis <- hsgp_m^2
-  phi_new <- matrix(0, n_new, n_basis)
-
-  idx <- 0
-  for (m1 in seq_len(hsgp_m)) {
-    for (m2 in seq_len(hsgp_m)) {
-      idx <- idx + 1
-      phi_new[, idx] <- cos(m1 * pi * (coords_centered[, 1] + L[1]) / (2 * L[1])) *
-                        cos(m2 * pi * (coords_centered[, 2] + L[2]) / (2 * L[2]))
-    }
+  if (is.null(gp$coords_matrix) || is.null(lay) || identical(lay$type, "none")) {
+    stop("This fit carries no HSGP field to evaluate.", call. = FALSE)
   }
-
-  # Find HSGP coefficients in samples
-  # Layout: beta_num, beta_denom, [sigma_re, re], log_sigma2, log_phi, hsgp_beta[1:n_basis]
-  idx <- hmc_data$p_num + hmc_data$p_denom
-  if (hmc_data$n_re_groups > 0) {
-    idx <- idx + 1 + hmc_data$n_re_groups
-  }
-  idx <- idx + 2  # skip log_sigma2, log_phi
-
-  hsgp_beta <- samples[, (idx + 1):(idx + n_basis), drop = FALSE]
-
-  # Compute spatial effect at new locations
-  w_pred <- hsgp_beta %*% t(phi_new)  # [n_samples, n_new]
+  domain <- hsgp_domain_2d(gp$coords_matrix, gp$c)
+  basis <- hsgp_basis_2d(gp_scale_new_coords(gp, coords.0), gp$m, gp$c, domain)
+  w_pred <- hsgp_field(block_draws(samples, lay$beta),
+                       exp(samples[, lay$log_sigma2]),
+                       exp(samples[, lay$log_lengthscale]),
+                       basis$phi, basis$eigenvalues)
 
   list(
     w_pred = w_pred,
@@ -1271,45 +1174,7 @@ predict_pg <- function(object, newdata, type, re_formula, allow_new_levels,
 build_prediction_data_pg <- function(object, newdata, re_formula, allow_new_levels) {
   formula <- object$formula
 
-  # Build design matrix matching the original X dimensions
-  X_orig <- object$.internal$X
-  if (!is.null(X_orig)) {
-    colnames_orig <- colnames(X_orig)
-    # Try to use stored formula terms
-    num_terms <- formula$numerator$terms
-    if (!is.null(num_terms)) {
-      X <- model.matrix(num_terms, data = newdata)
-    } else {
-      # Fall back to using X column names
-      X <- model.matrix(~ 1, data = newdata)
-      if (ncol(X) != length(colnames_orig)) {
-        pred_vars <- setdiff(colnames_orig, "(Intercept)")
-        if (length(pred_vars) > 0 && all(pred_vars %in% names(newdata))) {
-          fmla <- as.formula(paste("~", paste(pred_vars, collapse = " + ")))
-          X <- model.matrix(fmla, data = newdata)
-        }
-      }
-    }
-    # Ensure column alignment
-    if (ncol(X) != ncol(X_orig)) {
-      # Reorder/subset to match original columns
-      common_cols <- intersect(colnames(X), colnames_orig)
-      if (length(common_cols) < length(colnames_orig)) {
-        # Add missing columns as zeros
-        X_new <- matrix(0, nrow(X), length(colnames_orig))
-        colnames(X_new) <- colnames_orig
-        for (col in common_cols) {
-          X_new[, col] <- X[, col]
-        }
-        X <- X_new
-      } else {
-        X <- X[, colnames_orig, drop = FALSE]
-      }
-    }
-  } else {
-    # No original X stored, use formula directly
-    X <- model.matrix(formula$numerator$terms %||% ~ 1, data = newdata)
-  }
+  X <- design_matrix_newdata(formula$numerator$design, newdata)
 
   # Handle random effects
   include_re <- !isTRUE(is.na(re_formula)) && !identical(re_formula, ~ 0)
@@ -1510,13 +1375,8 @@ predict_gibbs <- function(object, newdata, type, re_formula, allow_new_levels,
 
   has_denom <- !(family_str == "binomial")
   if (has_denom) {
-    formula <- object$formula
-    denom_terms <- formula$denominator$terms
-    if (!is.null(denom_terms)) {
-      X_denom_new <- model.matrix(denom_terms, data = newdata)
-    } else {
-      X_denom_new <- model.matrix(~ 1, data = newdata)
-    }
+    X_denom_new <- design_matrix_newdata(object$formula$denominator$design,
+                                         newdata)
     p_denom <- ncol(X_denom_new)
     beta_denom_cols <- p_num + seq_len(p_denom)
     beta_denom <- draws_mat[, beta_denom_cols, drop = FALSE]
@@ -1748,11 +1608,9 @@ compute_predictions_hmc <- function(object, pred_data, type, w_pred = NULL,
 }
 
 
-#' Print method for ratiod_fitted
-#'
+#' @rdname fitted.ratiod_fit
 #' @param x A ratiod_fitted object
 #' @param n Number of rows to print
-#' @param ... Additional arguments passed to print.data.frame
 #'
 #' @export
 print.ratiod_fitted <- function(x, n = 10, ...) {
@@ -1770,11 +1628,9 @@ print.ratiod_fitted <- function(x, n = 10, ...) {
 }
 
 
-#' Print method for ratiod_prediction
-#'
+#' @rdname predict.ratiod_fit
 #' @param x A ratiod_prediction object
 #' @param n Number of rows to print
-#' @param ... Additional arguments passed to print.data.frame
 #'
 #' @export
 print.ratiod_prediction <- function(x, n = 10, ...) {
@@ -1797,7 +1653,7 @@ print.ratiod_prediction <- function(x, n = 10, ...) {
 # Tidy draws
 # -----------------------------------------------------------------------------
 
-#' Convert ratiod_fit to posterior draws format
+#' Convert a Fitted Ratio Model to a Draws Object
 #'
 #' @description
 #' Convert a fitted ratio model to a format compatible with the
@@ -1836,7 +1692,7 @@ print.ratiod_prediction <- function(x, n = 10, ...) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Convert to draws format
@@ -1886,7 +1742,7 @@ as_draws.ratiod_fit <- function(x, ...) {
 }
 
 
-#' Draws for selected parameters, one column per parameter
+#' Draws for Selected Parameters in Wide Format
 #'
 #' @description
 #' Extract posterior draws for the named parameters into a wide data frame,
@@ -1923,7 +1779,7 @@ as_draws.ratiod_fit <- function(x, ...) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract fixed effects
@@ -2001,7 +1857,7 @@ draws_wide.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 }
 
 
-#' Draws for selected parameters, one row per parameter per draw
+#' Draws for Selected Parameters in Long Format
 #'
 #' @description
 #' The long counterpart of [draws_wide()]: one row per draw per parameter,
@@ -2033,7 +1889,7 @@ draws_wide.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Gather all fixed effects
@@ -2044,7 +1900,7 @@ draws_wide.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #'   library(ggplot2)
 #'   draws_long(fit, beta_num) |>
 #'     ggplot(aes(x = .value)) +
-#'     geom_histogram() +
+#'     geom_histogram(bins = 40) +
 #'     facet_wrap(~ .variable)
 #' }
 #' }
@@ -2085,7 +1941,7 @@ draws_long.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 }
 
 
-#' Point estimates and credible intervals for selected parameters
+#' Point Estimates and Credible Intervals for Selected Parameters
 #'
 #' @description
 #' Summarize the draws of the named parameters as a point estimate (median or
@@ -2120,7 +1976,7 @@ draws_long.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Get point estimates and 95% intervals

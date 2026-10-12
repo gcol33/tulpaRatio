@@ -254,14 +254,15 @@ parse_formula_components <- function(f, data) {
 
   # Build fixed effects matrix
   fixed_formula <- remove_random_effects(f)
-  X <- build_model_matrix(fixed_formula, data)
+  mm <- build_model_matrix(fixed_formula, data)
 
   list(
     response_var = response_var,
     response = response,
     full_formula = f,
     fixed_formula = fixed_formula,
-    X = X,
+    X = mm$X,
+    design = mm$design,
     random_effects = random_effects
   )
 }
@@ -536,70 +537,40 @@ extract_random_effects <- function(rhs_text, data) {
       # which will throw an error if variables don't exist
     }
 
-    # Check for nested syntax: (1 | a/b) expands to (1|a) + (1|a:b)
-    if (grepl("/", group_spec)) {
-      nested_vars <- trimws(strsplit(group_spec, "/")[[1]])
-
-      # Validate all variables exist
-      for (v in nested_vars) {
-        if (!v %in% names(data)) {
-          stop(sprintf("Grouping variable '%s' not found in data", v),
-               call. = FALSE)
-        }
-      }
-
-      # Create terms: first is the outer grouping, then nested interactions
-      cumulative <- nested_vars[1]
-      for (j in seq_along(nested_vars)) {
-        if (j == 1) {
-          group_var <- nested_vars[1]
-        } else {
-          cumulative <- paste(cumulative, nested_vars[j], sep = ":")
-          group_var <- cumulative
-        }
-
-        # Create the grouping factor for this term
-        if (j == 1) {
-          group_factor <- as.factor(data[[nested_vars[1]]])
-        } else {
-          # Create interaction factor
-          group_factor <- interaction(data[nested_vars[1:j]], drop = TRUE)
-        }
-
-        random_effects[[re_idx]] <- list(
-          group_var = group_var,
-          group = as.integer(group_factor),
-          n_groups = length(unique(group_factor)),
-          has_intercept = has_intercept,
-          slope_vars = slope_vars,
-          slope_vars_raw = slope_vars_raw,
-          slope_vars_clean = slope_vars_clean,
-          slope_matrix = slope_matrix,
-          correlated = !is_uncorrelated,  # || means uncorrelated
-          original = re_text,
-          nested_level = j,
-          nested_vars = nested_vars[1:j]
-        )
-        re_idx <- re_idx + 1
-      }
-    } else {
-      # Simple single grouping variable
-      if (!group_spec %in% names(data)) {
-        stop(sprintf("Grouping variable '%s' not found in data", group_spec),
+    # Grouping terms: (1 | a/b) is (1 | a) + (1 | a:b), and a:b groups by
+    # the interaction of a and b
+    group_vars_all <- trimws(strsplit(group_spec, "[/:]")[[1]])
+    for (v in group_vars_all) {
+      if (!v %in% names(data)) {
+        stop(sprintf("Grouping variable '%s' not found in data", v),
              call. = FALSE)
+      }
+    }
+    term_vars <- if (grepl("/", group_spec)) {
+      lapply(seq_along(group_vars_all), function(j) group_vars_all[seq_len(j)])
+    } else {
+      list(group_vars_all)
+    }
+
+    for (tv in term_vars) {
+      group_factor <- if (length(tv) == 1L) {
+        as.factor(data[[tv]])
+      } else {
+        interaction(data[tv], drop = TRUE)
       }
 
       random_effects[[re_idx]] <- list(
-        group_var = group_spec,
-        group = as.integer(as.factor(data[[group_spec]])),
-        n_groups = length(unique(data[[group_spec]])),
+        group_var = paste(tv, collapse = ":"),
+        group = as.integer(group_factor),
+        n_groups = nlevels(group_factor),
         has_intercept = has_intercept,
         slope_vars = slope_vars,
         slope_vars_raw = slope_vars_raw,
         slope_vars_clean = slope_vars_clean,
         slope_matrix = slope_matrix,
         correlated = !is_uncorrelated,  # || means uncorrelated
-        original = re_text
+        original = re_text,
+        nested_vars = tv
       )
       re_idx <- re_idx + 1
     }
@@ -800,11 +771,34 @@ remove_random_effects <- function(f) {
 #'
 #' @param f Formula (response ~ fixed effects)
 #' @param data Data frame
-#' @return Model matrix X
+#' @return List with the model matrix `X` and its `design`: the terms without
+#'   response, the factor levels and the contrasts it was built with, which
+#'   `design_matrix_newdata()` reuses so new data get the same columns.
 #' @keywords internal
 build_model_matrix <- function(f, data) {
   mf <- model.frame(f, data = data, na.action = na.pass)
-  model.matrix(f, data = mf)
+  tt <- terms(mf)
+  X <- model.matrix(tt, data = mf)
+  list(X = X,
+       design = list(terms = delete.response(tt),
+                     xlevels = .getXlevels(tt, mf),
+                     contrasts = attr(X, "contrasts")))
+}
+
+#' Fixed-effects design matrix for new data
+#'
+#' Rebuilds the columns the fit was estimated with: factors take the training
+#' levels and contrasts, so a level absent from `newdata` still has its column
+#' and an unseen level is an error.
+#'
+#' @param design The `design` list `build_model_matrix()` recorded.
+#' @param newdata Data frame holding the predictor variables.
+#' @return Model matrix with the training column layout.
+#' @keywords internal
+design_matrix_newdata <- function(design, newdata) {
+  mf <- model.frame(design$terms, newdata, xlev = design$xlevels,
+                    na.action = na.pass)
+  model.matrix(design$terms, mf, contrasts.arg = design$contrasts)
 }
 
 #' Parse shared formula specification

@@ -2,7 +2,8 @@
 % Please edit documentation in R/ratio.R
 \name{ratio_contrast}
 \alias{ratio_contrast}
-\title{Compute contrasts between ratio conditions}
+\alias{print.ratiod_contrast}
+\title{Contrasts Between Ratio Conditions}
 \usage{
 ratio_contrast(
   object,
@@ -11,6 +12,8 @@ ratio_contrast(
   ref = NULL,
   ...
 )
+
+\method{print}{ratiod_contrast}(x, ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object}
@@ -22,6 +25,8 @@ ratio_contrast(
 \item{ref}{Reference level for factor contrasts (default: first level)}
 
 \item{...}{Ignored}
+
+\item{x}{A ratiod_contrast object}
 }
 \value{
 A data frame with posterior summaries of contrasts
@@ -47,7 +52,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Compare CPUE between seasons

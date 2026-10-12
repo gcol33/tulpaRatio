@@ -2,7 +2,7 @@
 % Please edit documentation in R/ratio.R
 \name{as_draws.ratiod_fit}
 \alias{as_draws.ratiod_fit}
-\title{Convert ratiod_fit to posterior draws format}
+\title{Convert a Fitted Ratio Model to a Draws Object}
 \usage{
 \method{as_draws}{ratiod_fit}(x, ...)
 }
@@ -48,7 +48,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Convert to draws format

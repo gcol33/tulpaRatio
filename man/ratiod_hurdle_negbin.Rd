@@ -2,7 +2,7 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_hurdle_negbin}
 \alias{ratiod_hurdle_negbin}
-\title{Hurdle negative binomial family}
+\title{Hurdle Negative Binomial Family}
 \usage{
 ratiod_hurdle_negbin(
   link_num = "log",
@@ -66,14 +66,15 @@ df <- data.frame(
   site = factor(rep(1:10, each = n/10))
 )
 
-\dontrun{
-# Fit model (not run - hurdle models require specialized backend support)
+\donttest{
+# Fit model
 fit <- tratio(
   count | total ~ habitat + (1 | site),
   data = df,
   family = ratiod_hurdle_negbin(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

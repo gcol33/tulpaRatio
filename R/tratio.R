@@ -1,4 +1,4 @@
-#' Fit a ratio, rate, or proportion model
+#' Fit a Ratio, Rate, or Proportion Model
 #'
 #' @description
 #' Fit a Bayesian hierarchical model for ratios, rates, or proportions.
@@ -85,7 +85,8 @@
 #'   - `thin`: thinning interval (default 1).
 #'   - `cores`: cores for parallel chains (default `getOption("mc.cores", chains)`).
 #'   - `seed`: random seed for reproducibility.
-#'   - `verbose`: print progress messages during fitting (default `TRUE`).
+#'   - `verbose`: print progress messages and sampler adaptation traces
+#'     during fitting (default `FALSE`).
 #'
 #'   NUTS / HMC (`mode = "hmc"`):
 #'   - `adapt_delta`: target average acceptance probability for step-size
@@ -159,7 +160,7 @@
 #'   catch | effort ~ depth + season + (1 | site),
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Different predictors for each process
@@ -169,7 +170,7 @@
 #'   formula_denom = ~ season,
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract ratio posteriors
@@ -222,13 +223,6 @@ tratio <- function(formula,
   max_treedepth <- ctrl$max_treedepth
   walnuts       <- ctrl$walnuts
   L             <- as.integer(ctrl$L %||% 0L)
-
-  # Test suites silence fit chatter to keep it out of the output buffer; an
-  # explicit control$verbose still wins.
-  if (isTRUE(getOption("tulpaRatio.test_mode")) &&
-      !("verbose" %in% names(control))) {
-    verbose <- FALSE
-  }
 
   # Validate temporal specification
   if (!is.null(temporal)) {
@@ -467,6 +461,7 @@ tratio <- function(formula,
       message(sprintf("  Cores: %d", cores))
     }
 
+    pg_priors <- sampler_priors(priors, get_hmc_model_type(family))
     result <- fit_pg_binomial(
       formula = formula_spec,
       data = data,
@@ -479,10 +474,10 @@ tratio <- function(formula,
       thin = thin,
       cores = cores,
       seed = seed,
-      prior_beta_sd = priors$beta_sd %||% 10,
-      prior_sigma_scale = priors$sigma_scale %||% 2.5,
-      prior_tau_shape = priors$tau_shape %||% 1,
-      prior_tau_rate = priors$tau_rate %||% 0.01,
+      prior_beta_sd = pg_priors$sigma_beta,
+      prior_sigma_scale = pg_priors$sigma_re_scale,
+      prior_tau_shape = pg_priors$tau_spatial_shape,
+      prior_tau_rate = pg_priors$tau_spatial_rate,
       verbose = verbose
     )
 
@@ -846,106 +841,94 @@ select_backend <- function(family, n_obs, has_spatial = FALSE, has_temporal = FA
 }
 
 
-#' Print method for ratiod_fit
-#'
-#' @param x A ratiod_fit object
-#' @param ... Ignored
+#' @rdname summary.ratiod_fit
 #' @export
 print.ratiod_fit <- function(x, ...) {
-  cat("ratio model fit\n")
-  cat("===============\n\n")
-
-  # Inference mode information (always visible)
   tier <- x$inference_tier %||% NA
-  tier_name <- x$inference_tier_name %||% "Unknown"
   backend <- x$backend %||% "unknown"
+  tier_note <- c("credible intervals are posterior uncertainty",
+                 "inference conditional on structural assumptions",
+                 "uncertainty may be underestimated")
 
+  cat("ratio model fit:", paste(deparse(formula(x)), collapse = " "), "\n")
+  cat(sprintf("Family: %s (%s)\n", x$family$name, x$family$description))
   if (!is.na(tier)) {
-    cat(sprintf("Inference: %s (Tier %d)\n", tier_name, tier))
+    cat(sprintf("Inference: %s (Tier %d) via %s; %s\n",
+                x$inference_tier_name %||% "Unknown", tier, backend,
+                tier_note[tier]))
   } else {
-    cat(sprintf("Backend: %s\n", backend))
+    cat("Inference:", backend, "\n")
   }
 
-  cat("Family:", x$family$name, "\n")
-  cat("  ", x$family$description, "\n\n")
-
-  cat("Data:\n")
-  cat("  Observations:", nrow(x$data), "\n")
-  cat("  Numerator:", x$formula$numerator$response_var, "\n")
-  cat("  Denominator:", x$formula$denominator$response_var, "\n\n")
-
-  cat("Structure:\n")
-  cat("  Num fixed effects:", ncol(x$formula$numerator$X), "\n")
-  cat("  Denom fixed effects:", ncol(x$formula$denominator$X), "\n")
-
-  n_re <- x$stan_data$n_re_groups %||% 0L
+  structure_line <- sprintf("Observations: %d", nrow(x$data))
+  n_re <- x$.internal$hmc_data$n_re_groups %||% 0L
   if (length(n_re) > 0 && n_re > 0) {
-    cat("  Random effect groups:", n_re, "\n")
-    if (x$formula$shared$type %in% c("inferred", "explicit")) {
-      cat("  Shared structure:", x$formula$shared$type, "\n")
-    }
+    structure_line <- sprintf("%s; random effect groups: %d (%s)",
+                              structure_line, n_re, x$formula$shared$type)
   }
-
-  if (isTRUE(x$stan_data$use_spatial)) {
-    cat("  Spatial:", "Yes\n")
+  spatial_type <- detect_spatial_type(x)
+  if (!is.null(spatial_type)) {
+    structure_line <- paste0(structure_line, "; spatial: ", spatial_type)
   }
-
-  # Tier-specific notes
-  if (!is.na(tier)) {
-    cat("\n")
-    if (tier == 1) {
-      cat("Tier 1: Credible intervals are posterior uncertainty\n")
-    } else if (tier == 2) {
-      cat("Tier 2: Inference conditional on structural assumptions\n")
-    } else if (tier == 3) {
-      cat("Tier 3: Uncertainty may be underestimated\n")
-    }
-  }
-
-  cat("\nUse summary() for parameter estimates\n")
-  cat("Use ratio() to extract ratio posteriors\n")
+  cat(structure_line, "\n")
+  cat("Use summary() for estimates and ratio() for ratio posteriors.\n")
 
   invisible(x)
 }
 
-#' Summary method for ratiod_fit
+#' Summarise, Print and Plot a Fitted Ratio Model
 #'
 #' @description
-#' Provides a summary of the fitted model including parameter estimates,
-#' credible intervals, and MCMC diagnostics. Works with all backends
-#' (HMC, PG, Laplace).
+#' `print()` gives a short description of a fit: how it was inferred, the
+#' family and the data. `summary()` returns the full report: posterior mean,
+#' sd and credible interval of every main parameter with its convergence
+#' diagnostics, which its `print()` method lays out. `coef()` returns the
+#' posterior means of the fixed effects and `vcov()` their posterior
+#' covariance; `coef(summary(fit))` returns the summary table itself.
+#' `nobs()` and `formula()` return the number of observations and the model
+#' formula.
 #'
 #' @param object A ratiod_fit object
 #' @param prob Probability mass for credible intervals (default 0.95)
 #' @param ... Ignored
+#' @return `summary()`: a `summary.ratiod_fit` object. `coef()`: a named
+#'   vector, numerator coefficients prefixed `num:` and denominator ones
+#'   `denom:`. `vcov()`: the matching covariance matrix.
 #' @export
 summary.ratiod_fit <- function(object, prob = 0.95, ...) {
-  cat("ratio model summary\n")
-  cat("===================\n\n")
-
-  # Inference mode information
-  tier <- object$inference_tier %||% NA
-  tier_name <- object$inference_tier_name %||% "Unknown"
   backend <- object$backend %||% "unknown"
-
-  if (!is.na(tier)) {
-    cat(sprintf("Inference: %s (Tier %d) via %s\n", tier_name, tier, backend))
-  } else {
-    cat("Backend:", backend, "\n")
-  }
-  cat("Family:", object$family$name, "\n\n")
 
   # Calculate quantile probabilities
   alpha <- (1 - prob) / 2
   probs <- c(alpha, 0.5, 1 - alpha)
   ci_names <- paste0(c(alpha * 100, 50, (1 - alpha) * 100), "%")
 
-  # Get draws
+  out <- list(
+    backend = backend,
+    tier = object$inference_tier %||% NA,
+    tier_name = object$inference_tier_name %||% "Unknown",
+    family = object$family$name,
+    prob = prob,
+    ci_names = ci_names,
+    fixed = object$fixed_columns,
+    coefficients = NULL,
+    run = list(
+      backend = backend,
+      diagnostics = object$diagnostics,
+      chains = object$chains,
+      iter = object$iter,
+      warmup = object$warmup,
+      thin = object$thin,
+      n_save = object$n_save,
+      batch_size = object$batch_size,
+      laplace_result = object$laplace_result %||% object$.internal[
+        intersect(c("converged", "log_marginal"), names(object$.internal))]
+    )
+  )
+  class(out) <- "summary.ratiod_fit"
+
   draws <- object$draws
-  if (is.null(draws)) {
-    cat("No draws available\n")
-    return(invisible(object))
-  }
+  if (is.null(draws)) return(out)
 
   # Compute summary statistics
   summ <- compute_param_summary(draws, probs)
@@ -967,16 +950,87 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
 
   # Select main parameters (exclude high-dimensional)
   main_pars <- select_main_params(summ$parameter)
-  summ_main <- summ[summ$parameter %in% main_pars, ]
+  out$coefficients <- summ[summ$parameter %in% main_pars, ]
+  rownames(out$coefficients) <- NULL
+  out
+}
 
-  # Categorize and print parameters
-  print_param_summary(summ_main, object$family$name, ci_names,
-                      fixed = object$fixed_columns)
 
-  # Print diagnostics summary
-  print_diagnostics_summary(object)
+#' @rdname summary.ratiod_fit
+#' @export
+print.summary.ratiod_fit <- function(x, ...) {
+  cat("ratio model summary\n")
+  cat("===================\n\n")
+  if (!is.na(x$tier)) {
+    cat(sprintf("Inference: %s (Tier %d) via %s\n", x$tier_name, x$tier, x$backend))
+  } else {
+    cat("Backend:", x$backend, "\n")
+  }
+  cat("Family:", x$family, "\n\n")
+  if (is.null(x$coefficients)) {
+    cat("No draws available\n")
+    return(invisible(x))
+  }
+  print_param_summary(x$coefficients, x$family, x$ci_names, fixed = x$fixed)
+  print_diagnostics_summary(x$run)
+  invisible(x)
+}
 
-  invisible(object)
+
+#' @rdname summary.ratiod_fit
+#' @export
+coef.summary.ratiod_fit <- function(object, ...) {
+  object$coefficients
+}
+
+
+#' @rdname summary.ratiod_fit
+#' @export
+coef.ratiod_fit <- function(object, ...) {
+  colMeans(fixed_effect_draws(object))
+}
+
+
+#' @rdname summary.ratiod_fit
+#' @export
+vcov.ratiod_fit <- function(object, ...) {
+  stats::cov(fixed_effect_draws(object))
+}
+
+
+#' @rdname summary.ratiod_fit
+#' @export
+nobs.ratiod_fit <- function(object, ...) {
+  nrow(object$data)
+}
+
+
+#' @rdname summary.ratiod_fit
+#' @export
+formula.ratiod_fit <- function(x, ...) {
+  x$formula$original_formula
+}
+
+
+#' Fixed-effect draws named by design column
+#'
+#' The `beta_num[j]` and `beta_denom[j]` draw columns, named by the design
+#' columns they multiply: `num:` and `denom:` prefixes on the column names.
+#'
+#' @keywords internal
+fixed_effect_draws <- function(object) {
+  draws <- as.matrix(object$draws)
+  pieces <- list(c("beta_num", "num", "numerator"),
+                 c("beta_denom", "denom", "denominator"))
+  cols <- lapply(pieces, function(pc) {
+    X <- object$formula[[pc[3]]]$X
+    idx <- paste0(pc[1], "[", seq_len(ncol(X %||% matrix(nrow = 0, ncol = 0))), "]")
+    idx <- idx[idx %in% colnames(draws)]
+    m <- draws[, idx, drop = FALSE]
+    colnames(m) <- paste0(pc[2], ":", colnames(X)[seq_along(idx)])
+    m
+  })
+  do.call(cbind, cols)
 }
 
 
@@ -1145,29 +1199,34 @@ print_diagnostics_summary <- function(object) {
   }
 }
 
-#' Extract posterior draws from ratiod_fit
+#' Posterior Draws of a Fitted Ratio Model as a Data Frame
 #'
 #' @param x A ratiod_fit object
-#' @param ... Passed to posterior::as_draws_df
-#' @return A draws_df object
+#' @param ... Ignored.
+#' @return A `draws_df` data frame: one row per posterior draw, one column per
+#'   parameter, plus the `.chain`, `.iteration` and `.draw` columns.
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' draws <- as.data.frame(fit)
+#' dim(draws)
+#' names(draws)[1:6]
+#' }
+#'
 #' @export
 as.data.frame.ratiod_fit <- function(x, ...) {
-  posterior::as_draws_df(x$fit$draws(...))
+  posterior::as_draws_df(as_draws(x))
 }
 
 
-#' Plot method for ratiod_fit
-#'
-#' @description
-#' Creates diagnostic plots for ratio model fits including trace plots
-#' and optional density plots. Works with all backends (HMC, PG, Laplace).
-#'
-#' @param x A ratiod_fit object
+#' @rdname summary.ratiod_fit
 #' @param pars Character vector of parameter names to plot. If NULL (default),
-#'   plots main parameters (fixed effects, variance components).
+#'   plots the first 12 main parameters (fixed effects, variance components).
 #' @param type Type of plot: "trace" (default), "dens" (density), or "both".
 #' @param n_col Number of columns in the plot grid (default: auto).
-#' @param ... Additional arguments (currently ignored).
 #'
 #' @return Invisibly returns the plot object (base graphics or ggplot2).
 #'
@@ -1205,8 +1264,8 @@ plot.ratiod_fit <- function(x, pars = NULL, type = c("trace", "dens", "both"),
   # Select parameters to plot
   all_pars <- dimnames(draws_array)[[3]]
   if (is.null(pars)) {
-    # Default: main parameters (exclude high-dimensional RE and spatial)
-    pars <- select_main_params(all_pars)
+    # Default: the first 12 main parameters (high-dimensional blocks excluded)
+    pars <- utils::head(select_main_params(all_pars), 12)
   } else {
     # Handle regex-like selection
     pars <- grep_params(pars, all_pars)
@@ -1294,15 +1353,7 @@ select_main_params <- function(all_pars) {
   # Exclude: re[...], spatial[...], phi_spatial[...], theta[...], phi_scaled[...]
   pattern <- "^(re|spatial|phi_spatial|theta|phi_scaled|ratio)\\["
   is_high_dim <- grepl(pattern, all_pars)
-  main_pars <- all_pars[!is_high_dim]
-
-  # Limit to reasonable number
-
-  if (length(main_pars) > 12) {
-    main_pars <- main_pars[1:12]
-  }
-
-  main_pars
+  all_pars[!is_high_dim]
 }
 
 
@@ -1414,7 +1465,7 @@ plot_with_base <- function(draws_array, type, n_chains, n_col = NULL) {
 }
 
 
-#' Posterior diagnostics for a ratiod_fit
+#' Posterior Diagnostics for a Fitted Ratio Model
 #'
 #' @description
 #' Computes per-parameter improved Rhat and bulk / tail effective sample size
@@ -1434,6 +1485,15 @@ plot_with_base <- function(draws_array, type, n_chains, n_col = NULL) {
 #' value.
 #'
 #' @param ... Ignored.
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' diagnostics(fit)
+#' }
+#'
 #' @exportS3Method tulpa::diagnostics
 diagnostics.ratiod_fit <- function(fit, pars = NULL, ...) {
   # Get draws in array format
@@ -1456,10 +1516,8 @@ diagnostics.ratiod_fit <- function(fit, pars = NULL, ...) {
   return(result)
 }
 
-#' Print method for ratiod_diagnostics
-#'
+#' @rdname diagnostics.ratiod_fit
 #' @param x A ratiod_diagnostics object
-#' @param ... Ignored
 #'
 #' @export
 print.ratiod_diagnostics <- function(x, ...) {
@@ -1491,7 +1549,7 @@ print.ratiod_diagnostics <- function(x, ...) {
 }
 
 
-#' Check MCMC diagnostics and print warnings
+#' Check MCMC Diagnostics and Report Problems
 #'
 #' @description
 #' Checks MCMC diagnostics (Rhat, ESS, divergences) and prints actionable
@@ -1506,6 +1564,15 @@ print.ratiod_diagnostics <- function(x, ...) {
 #'   \item{n_divergent}{Number of divergent transitions}
 #'   \item{n_bad_rhat}{Number of parameters with Rhat > 1.01}
 #'   \item{n_low_ess}{Number of parameters with ESS < 400}
+#' }
+#'
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' check_diagnostics(fit)
 #' }
 #'
 #' @export
@@ -1607,10 +1674,19 @@ check_diagnostics <- function(fit, quiet = FALSE) {
 }
 
 
-#' Get number of divergent transitions
+#' Number of Divergent Transitions
 #'
 #' @param fit A ratiod_fit object
 #' @return Integer count of divergent transitions
+#' @examples
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' n_divergent(fit)
+#' }
+#'
 #' @export
 n_divergent <- function(fit) {
   if (!inherits(fit, "ratiod_fit")) {

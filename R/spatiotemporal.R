@@ -1,4 +1,4 @@
-#' Spatiotemporal interaction specifications for tulpaRatio
+#' Spatiotemporal Interaction Specifications
 #'
 #' @description
 #' Functions to specify spatiotemporal interaction effects for ratio models.
@@ -145,8 +145,8 @@ NULL
 #' )
 #' print(st4)
 #'
-#' \dontrun{
-#' # Generate synthetic spatiotemporal data (not run - experimental)
+#' \donttest{
+#' # Generate synthetic spatiotemporal data
 #' set.seed(123)
 #' n_regions <- 10
 #' n_years <- 8
@@ -168,7 +168,7 @@ NULL
 #'     temporal = temporal_rw1("year"),
 #'     type = "IV"
 #'   ),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #' }
@@ -284,8 +284,7 @@ spatiotemporal <- function(spatial,
 }
 
 
-#' Print method for ratiod_spatiotemporal
-#'
+#' @rdname spatiotemporal
 #' @param x A ratiod_spatiotemporal object
 #' @param ... Ignored
 #'
@@ -776,10 +775,7 @@ prepare_spatial_precision <- function(spatial) {
     n_neighbors <- diff(row_ptr)
 
     # Compute Q_inv and L_Q for precision mass matrix
-    Q <- diag(n_neighbors) - adj
-    Q_reg <- Q + 0.01 * diag(n)
-    Q_inv <- solve(Q_reg)
-    L_Q_lower <- t(chol(Q_reg))  # Lower Cholesky
+    mass <- ridged_precision_factors(diag(n_neighbors) - adj)
 
     list(
       type = if (spatial$type == "bym2") "bym2" else "car",
@@ -789,8 +785,8 @@ prepare_spatial_precision <- function(spatial) {
       n_neighbors = n_neighbors,
       proper = isTRUE(spatial$proper),
       scale_factor = spatial$scale_factor,
-      Q_inv = as.numeric(Q_inv),
-      L_Q = as.numeric(L_Q_lower)
+      Q_inv = mass$Q_inv,
+      L_Q = mass$L
     )
   }
 }
@@ -839,11 +835,9 @@ prepare_temporal_precision <- function(temporal) {
       }
     }
     if (!is.null(Q_time)) {
-      Q_time_reg <- Q_time + 0.01 * diag(T)
-      Q_time_inv <- solve(Q_time_reg)
-      L_time_lower <- t(chol(Q_time_reg))
-      Q_time_inv_flat <- as.numeric(Q_time_inv)
-      L_time_flat <- as.numeric(L_time_lower)
+      mass <- ridged_precision_factors(Q_time)
+      Q_time_inv_flat <- mass$Q_inv
+      L_time_flat <- mass$L
     }
   }
 

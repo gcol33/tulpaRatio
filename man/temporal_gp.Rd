@@ -2,7 +2,8 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_gp}
 \alias{temporal_gp}
-\title{Gaussian Process temporal structure}
+\alias{print.ratiod_temporal_gp}
+\title{Gaussian Process Temporal Structure}
 \usage{
 temporal_gp(
   time_var,
@@ -14,6 +15,8 @@ temporal_gp(
   scale_coords = TRUE,
   parameterization = c("noncentered", "centered")
 )
+
+\method{print}{ratiod_temporal_gp}(x, ...)
 }
 \arguments{
 \item{time_var}{Name of the time variable in data. Can be a formula
@@ -48,6 +51,10 @@ unit variance before computing distances.}
 \code{"noncentered"} (default) stores z ~ N(0,1) and scales by covariance
 (better for weakly-informed effects);
 \code{"centered"} stores effects directly (better for strongly-informed effects).}
+
+\item{x}{A ratiod_temporal_gp object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_temporal_gp} object
@@ -90,8 +97,8 @@ temporal_gp("timestamp")
 temporal_gp("day", cov = "matern", nu = 1.5)
 temporal_gp("month", cov = "periodic", period = 12)
 
-\dontrun{
-# Irregularly-spaced time series (not run - GP temporal experimental)
+\donttest{
+# Irregularly-spaced time series
 set.seed(140)
 times <- sort(runif(30, 0, 100))
 df <- data.frame(
@@ -106,7 +113,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   temporal = temporal_gp("time"),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 }
 

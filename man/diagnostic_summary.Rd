@@ -2,14 +2,19 @@
 % Please edit documentation in R/plot_diagnostics.R
 \name{diagnostic_summary}
 \alias{diagnostic_summary}
-\title{Comprehensive Diagnostic Summary}
+\alias{print.ratiod_diagnostic_summary}
+\title{Diagnostic Summary of a Fitted Ratio Model}
 \usage{
-diagnostic_summary(fit, quiet = FALSE)
+diagnostic_summary(fit)
+
+\method{print}{ratiod_diagnostic_summary}(x, ...)
 }
 \arguments{
 \item{fit}{A \code{ratiod_fit} object.}
 
-\item{quiet}{Logical; if TRUE, suppress printed output (default: FALSE).}
+\item{x}{A ratiod_diagnostic_summary object.}
+
+\item{...}{Ignored.}
 }
 \value{
 A list with class \code{ratiod_diagnostic_summary} containing:
@@ -28,9 +33,13 @@ Provides a comprehensive diagnostic report for a ratio model, combining
 convergence metrics, divergence information, and actionable recommendations.
 }
 \examples{
-# See plot_rhat() examples for fitting a model
-# ds <- diagnostic_summary(fit)
-# print(ds)
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+diagnostic_summary(fit)
+}
 
 }
 \seealso{

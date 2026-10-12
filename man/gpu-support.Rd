@@ -7,3 +7,7 @@
 Functions to check GPU availability and capabilities for accelerated
 GP computations.
 }
+\examples{
+gpu_available()
+ratiod_threads()
+}

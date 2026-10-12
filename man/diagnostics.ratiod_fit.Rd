@@ -2,9 +2,12 @@
 % Please edit documentation in R/tratio.R
 \name{diagnostics.ratiod_fit}
 \alias{diagnostics.ratiod_fit}
-\title{Posterior diagnostics for a ratiod_fit}
+\alias{print.ratiod_diagnostics}
+\title{Posterior Diagnostics for a Fitted Ratio Model}
 \usage{
 \method{diagnostics}{ratiod_fit}(fit, pars = NULL, ...)
+
+\method{print}{ratiod_diagnostics}(x, ...)
 }
 \arguments{
 \item{fit}{A ratiod_fit object}
@@ -12,6 +15,8 @@
 \item{pars}{Character vector of parameter names (default: all).}
 
 \item{...}{Ignored.}
+
+\item{x}{A ratiod_diagnostics object}
 }
 \value{
 A data frame with columns: parameter, rhat, ess_bulk, ess_tail.
@@ -27,4 +32,14 @@ Rhat is the improved value of Vehtari et al. (2021): the maximum of
 rank-normalized split-Rhat and folded split-Rhat. Split-Rhat is defined for a
 single chain (the chain is split in half), so single-chain fits also get a
 value.
+}
+\examples{
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+diagnostics(fit)
+}
+
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{zoib}
 \alias{zoib}
-\title{Create a zero-and-one-inflated binomial (ZOIB) specification}
+\title{Zero-and-One-Inflated Binomial (ZOIB) Specification}
 \usage{
 zoib(zi_formula = NULL, oi_formula = NULL)
 }
@@ -17,7 +17,7 @@ If NULL, uses intercept-only model.}
 A \code{ratiod_zi} object
 }
 \description{
-Create a zero-and-one-inflated binomial (ZOIB) specification
+Zero-and-One-Inflated Binomial (ZOIB) Specification
 }
 \examples{
 # Intercept-only for both zero and one inflation

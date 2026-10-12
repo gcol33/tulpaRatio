@@ -2,8 +2,20 @@
 % Please edit documentation in R/validate.R
 \name{ratiod_validate}
 \alias{ratiod_validate}
-\title{Posterior predictive checks for ratio models}
+\title{Posterior Predictive Checks for Ratio Models}
 \description{
 Visual and numerical checks comparing observed data to posterior
 predictive distributions. Essential for assessing model fit.
+}
+\examples{
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  pp_check(fit, type = "dens_overlay")
+}
+loo(fit)
+}
 }

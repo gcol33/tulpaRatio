@@ -2,7 +2,7 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_car}
 \alias{spatial_car}
-\title{CAR spatial structure}
+\title{CAR Spatial Structure}
 \usage{
 spatial_car(
   adjacency,
@@ -126,7 +126,7 @@ fit_icar <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_car(adj, level = "group", group_var = "site"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Proper CAR model (estimate spatial autocorrelation)
@@ -137,7 +137,7 @@ fit_car <- tratio(
   spatial = spatial_car(adj, level = "group", group_var = "site",
                         proper = TRUE),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract rho from proper CAR

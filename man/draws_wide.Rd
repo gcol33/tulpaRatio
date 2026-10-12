@@ -3,7 +3,7 @@
 \name{draws_wide}
 \alias{draws_wide}
 \alias{draws_wide.ratiod_fit}
-\title{Draws for selected parameters, one column per parameter}
+\title{Draws for Selected Parameters in Wide Format}
 \usage{
 draws_wide(object, ..., regex = FALSE, ndraws = NULL)
 
@@ -49,7 +49,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract fixed effects

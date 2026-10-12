@@ -349,9 +349,8 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
                    "noncentered.", svc_param_str);
       }
       data.svc_noncentered = (svc_param_str == "noncentered");
-      if (data.svc_noncentered) {
-        data.svc_gp_view = ratiod_svc::make_svc_gp_view(data.svc_data);
-      }
+      // Both coordinates read each term as the single-scale NNGP on this view.
+      data.svc_gp_view = ratiod_svc::make_svc_gp_view(data.svc_data);
     }
 
     // Prior parameters

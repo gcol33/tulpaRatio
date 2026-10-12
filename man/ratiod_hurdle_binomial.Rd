@@ -2,7 +2,7 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_hurdle_binomial}
 \alias{ratiod_hurdle_binomial}
-\title{Hurdle binomial family}
+\title{Hurdle Binomial Family}
 \usage{
 ratiod_hurdle_binomial(link_num = "logit", link_hurdle = "logit")
 }

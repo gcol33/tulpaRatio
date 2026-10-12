@@ -2,9 +2,12 @@
 % Please edit documentation in R/latent.R
 \name{ratiod_latent}
 \alias{ratiod_latent}
-\title{Latent Factor Specification for Unmeasured Confounders}
+\title{Latent Factors for Unmeasured Confounders}
 \description{
 Specify latent factors to capture shared unmeasured confounders between
 numerator and denominator processes. Latent factors are particularly useful
 when you suspect that both processes are driven by common unmeasured variables.
+}
+\examples{
+latent_factor(n_factors = 2)
 }

@@ -2,7 +2,8 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_multiscale}
 \alias{temporal_multiscale}
-\title{Multi-Scale temporal structure}
+\alias{print.ratiod_temporal_multiscale}
+\title{Multi-Scale Temporal Structure}
 \usage{
 temporal_multiscale(
   time_var,
@@ -13,6 +14,8 @@ temporal_multiscale(
   shared = TRUE,
   parameterization = c("centered", "noncentered")
 )
+
+\method{print}{ratiod_temporal_multiscale}(x, ...)
 }
 \arguments{
 \item{time_var}{Name of the time variable in data. Can be a formula
@@ -46,6 +49,10 @@ fixture whose true trend is zero, the divergence count goes 30 of 2000 to
 the centred run reports a posterior median four times larger because it
 never reaches the small end. The short-term arm is proper and is the same
 block either way.}
+
+\item{x}{A ratiod_temporal_multiscale object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_temporal_multiscale} object
@@ -81,8 +88,8 @@ for identifiability with the intercept.
 temporal_multiscale("month_id", trend = "rw2", seasonal = 12, short_term = "ar1")
 temporal_multiscale("year", trend = "rw2", seasonal = NULL, short_term = "none")
 
-\dontrun{
-# Decompose into trend + seasonal + short-term (not run - experimental)
+\donttest{
+# Decompose into trend + seasonal + short-term
 set.seed(129)
 df <- data.frame(
   month_id = 1:48,
@@ -101,7 +108,7 @@ fit <- tratio(
     seasonal = 12,
     short_term = "ar1"
   ),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract and plot components

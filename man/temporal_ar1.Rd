@@ -2,7 +2,7 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_ar1}
 \alias{temporal_ar1}
-\title{AR1 temporal structure (First-order Autoregressive)}
+\title{AR1 Temporal Structure (First-Order Autoregressive)}
 \usage{
 temporal_ar1(
   time_var,
@@ -77,7 +77,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_ar1("year"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Panel data with group-specific AR1
@@ -96,7 +96,7 @@ fit2 <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_ar1("year", group_var = "site"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 }
 

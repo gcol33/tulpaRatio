@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate.R
 \name{pp_check.ratiod_fit}
 \alias{pp_check.ratiod_fit}
-\title{Posterior predictive check}
+\title{Posterior Predictive Check}
 \usage{
 \method{pp_check}{ratiod_fit}(
   object,
@@ -36,7 +36,7 @@ distribution.
 }
 \examples{
 \donttest{
-# Simulate data and fit model (slow, not run on CRAN)
+# Simulate data and fit model
 set.seed(123)
 n <- 50
 df <- data.frame(
@@ -49,7 +49,7 @@ fit <- tratio(
   count | total ~ x + (1 | site),
   data = df,
   family = ratiod_negbin_negbin(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 # Density overlay of replicated against observed numerators
 pp_check(fit, type = "dens_overlay")

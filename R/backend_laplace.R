@@ -52,7 +52,8 @@ LAPLACE_DISPERSION <- c(neg_binomial_2 = "phi", gamma = "shape")
 #' @param temporal Optional multi-scale temporal structure. See
 #'   `BACKEND_STRUCTURE_SUPPORT` for what this backend carries.
 #' @param priors Prior specification. A `prior_pc()` or `prior_half_normal()` on
-#'   `sigma` is carried to the random-effect standard deviations.
+#'   `sigma` is carried to the random-effect standard deviations; left
+#'   unspecified, `sigma` takes `prior_pc(U = 1, alpha = 0.01)`.
 #' @param n_samples Number of posterior samples to draw
 #' @param cores Number of threads for the engine
 #' @param verbose Print progress
@@ -131,7 +132,8 @@ laplace_engine <- function(model, priors, cores) {
     responses = model$arms$responses,
     prior = lapply(model$parts, `[[`, "block"),
     phi_grid = model$arms$phi_grid,
-    prior_sigma = laplace_sigma_prior(priors$sigma, model$parts),
+    prior_sigma = laplace_sigma_prior(priors$sigma %||% prior_pc(U = 1, alpha = 0.01),
+                                      model$parts),
     control = list(store_Q = TRUE, progress = FALSE,
                    integration = laplace_integration(model$parts),
                    n_threads = as.integer(cores %||% 1L))

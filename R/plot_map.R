@@ -1,4 +1,4 @@
-#' Plot spatial predictions as a map
+#' Plot Spatial Predictions as a Map
 #'
 #' @description
 #' Create publication-ready maps from tulpaRatio spatial predictions. Supports
@@ -51,33 +51,28 @@
 #' ```
 #'
 #' @examples
-#' # plot_map requires a fitted spatial ratio model
-#' # See spatial_car() examples for fitting spatial models
-#'
-#' \dontrun{
-#' # Fit spatial model (slow, not run on CRAN)
+#' \donttest{
+#' # Twenty sites on a chain, each visited three times
 #' set.seed(123)
 #' n_sites <- 20
-#' n <- 60
-#' df <- data.frame(
-#'   count = rpois(n, lambda = 8),
-#'   effort = rgamma(n, shape = 4, rate = 1),
-#'   elevation = rnorm(n),
-#'   site = factor(rep(1:n_sites, length.out = n)),
-#'   x = rep(runif(n_sites), length.out = n),
-#'   y = rep(runif(n_sites), length.out = n)
-#' )
-#' # Create simple adjacency matrix
+#' sites <- data.frame(site = factor(seq_len(n_sites)),
+#'                     x = sort(runif(n_sites)), y = runif(n_sites))
+#' df <- sites[rep(seq_len(n_sites), 3), ]
+#' df$count <- rpois(nrow(df), lambda = 8)
+#' df$effort <- rgamma(nrow(df), shape = 4, rate = 1)
+#' df$elevation <- rnorm(nrow(df))
 #' adj <- matrix(0, n_sites, n_sites)
-#' for (i in 1:(n_sites-1)) adj[i, i+1] <- adj[i+1, i] <- 1
+#' for (i in 1:(n_sites - 1)) adj[i, i + 1] <- adj[i + 1, i] <- 1
 #' fit <- tratio(
-#'   count | effort ~ elevation + (1 | site),
+#'   count | effort ~ elevation,
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_car(adj, group_var = "site"),
 #'   mode = "laplace"
 #' )
-#' # plot_map(fit)  # requires ggplot2
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   plot_map(fit, coords = df[, c("x", "y")])
+#' }
 #' }
 #'
 #' @seealso [ratio()] for extracting ratio posteriors,
@@ -315,26 +310,15 @@ extract_coords <- function(x) {
 #'
 #' @keywords internal
 extract_coords_from_fit <- function(fit) {
-
-  # Check various locations where coords might be stored
-  if (!is.null(fit$coords)) {
-    return(extract_coords(fit$coords))
+  # A point-referenced field names its coordinate columns; an areal fit has
+  # none, and its data are searched for conventionally named ones.
+  vars <- fit$.internal$spatial_spec$coord_vars %||%
+    if (is.list(fit$spatial)) fit$spatial$coord_vars
+  if (length(vars) == 2L && all(vars %in% names(fit$data))) {
+    return(data.frame(x = fit$data[[vars[1]]], y = fit$data[[vars[2]]]))
   }
-
-  if (!is.null(fit$data)) {
-    coords <- tryCatch(
-      extract_coords(fit$data),
-      error = function(e) NULL
-    )
-    if (!is.null(coords)) return(coords)
-  }
-
-  if (!is.null(fit$stan_data$coords)) {
-    return(extract_coords(fit$stan_data$coords))
-  }
-
-  # Return NULL if no coords found (will skip point overlay)
-  NULL
+  if (is.null(fit$data)) return(NULL)
+  tryCatch(extract_coords(fit$data), error = function(e) NULL)
 }
 
 
@@ -469,7 +453,7 @@ get_palette_scale <- function(palette, na_color, legend_title, geom = "fill") {
 }
 
 
-#' Plot multiple maps in a grid
+#' Plot Several Maps in a Grid
 #'
 #' @description
 #' Create a multi-panel figure with ratio estimate and uncertainty maps
@@ -483,9 +467,30 @@ get_palette_scale <- function(palette, na_color, legend_title, geom = "fill") {
 #' @return A patchwork object (if patchwork is installed) or a list of ggplots.
 #'
 #' @examples
-#' # See plot_map() examples for fitting a spatial model
-#' # plot_map_panel(fit)
-#' # plot_map_panel(fit, ncol = 1)
+#' \donttest{
+#' # Twenty sites on a chain, each visited three times
+#' set.seed(123)
+#' n_sites <- 20
+#' sites <- data.frame(site = factor(seq_len(n_sites)),
+#'                     x = sort(runif(n_sites)), y = runif(n_sites))
+#' df <- sites[rep(seq_len(n_sites), 3), ]
+#' df$count <- rpois(nrow(df), lambda = 8)
+#' df$effort <- rgamma(nrow(df), shape = 4, rate = 1)
+#' df$elevation <- rnorm(nrow(df))
+#' adj <- matrix(0, n_sites, n_sites)
+#' for (i in 1:(n_sites - 1)) adj[i, i + 1] <- adj[i + 1, i] <- 1
+#' fit <- tratio(
+#'   count | effort ~ elevation,
+#'   data = df,
+#'   family = ratiod_poisson_gamma(),
+#'   spatial = spatial_car(adj, group_var = "site"),
+#'   mode = "laplace"
+#' )
+#' if (requireNamespace("ggplot2", quietly = TRUE) &&
+#'     requireNamespace("patchwork", quietly = TRUE)) {
+#'   plot_map_panel(fit, coords = df[, c("x", "y")], ncol = 1)
+#' }
+#' }
 #'
 #' @export
 plot_map_panel <- function(x, newdata = NULL, ncol = 2, ...) {

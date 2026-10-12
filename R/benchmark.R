@@ -1,4 +1,4 @@
-#' Benchmark tulpaRatio performance
+#' Benchmark Sampler Performance
 #'
 #' @description
 #' Utilities for benchmarking ratio model fitting performance across
@@ -27,7 +27,7 @@ NULL
 #'
 #' @examples
 #' \donttest{
-#' # Quick benchmark (slow, not run on CRAN)
+#' # Quick benchmark
 #' bench <- ratiod_benchmark(N = 100, p = 3, n_iter = 200, n_warmup = 100)
 #' print(bench)
 #' }
@@ -156,8 +156,7 @@ ratiod_benchmark <- function(
 }
 
 
-#' Print benchmark results
-#'
+#' @rdname ratiod_benchmark
 #' @param x A ratiod_benchmark object
 #' @param ... Ignored
 #'
@@ -190,7 +189,7 @@ print.ratiod_benchmark <- function(x, ...) {
 }
 
 
-#' Compare benchmark across configurations
+#' Compare Benchmarks Across Configurations
 #'
 #' @description
 #' Run benchmarks across multiple configurations to compare performance.
@@ -204,7 +203,7 @@ print.ratiod_benchmark <- function(x, ...) {
 #'
 #' @examples
 #' \donttest{
-#' # Compare benchmarks (slow, not run on CRAN)
+#' # Compare benchmarks
 #' configs <- list(
 #'   list(N = 50, p = 2, n_groups = 0),
 #'   list(N = 100, p = 2, n_groups = 0)
@@ -248,7 +247,7 @@ ratiod_benchmark_compare <- function(
 }
 
 
-#' Get OpenMP thread count
+#' OpenMP Thread Count
 #'
 #' @description
 #' Returns the maximum number of OpenMP threads available.

@@ -2,7 +2,19 @@
 % Please edit documentation in R/zi.R
 \name{zi_specification}
 \alias{zi_specification}
+\alias{print.ratiod_zi}
 \title{Zero-Inflation and Hurdle Model Specifications}
+\usage{
+\method{print}{ratiod_zi}(x, ...)
+}
+\arguments{
+\item{x}{A ratiod_zi object}
+
+\item{...}{Additional arguments (ignored)}
+}
+\value{
+Invisibly returns the input
+}
 \description{
 Functions to specify zero-inflation or hurdle model components for ratio models.
 These handle excess zeros in count data where the standard count distribution
@@ -45,5 +57,9 @@ Hurdle models treat the process as:
 \item \code{hurdle_poisson()}: Zero hurdle with equidispersed positive counts
 \item \code{hurdle_negbin()}: Zero hurdle with overdispersed positive counts
 }
+}
+\examples{
+zi_poisson()
+hurdle_negbin()
 }
 \keyword{models}

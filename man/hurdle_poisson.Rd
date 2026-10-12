@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{hurdle_poisson}
 \alias{hurdle_poisson}
-\title{Create a hurdle Poisson specification}
+\title{Hurdle Poisson Specification}
 \usage{
 hurdle_poisson(formula = NULL)
 }
@@ -14,7 +14,7 @@ If NULL, uses intercept-only model.}
 A \code{ratiod_zi} object
 }
 \description{
-Create a hurdle Poisson specification
+Hurdle Poisson Specification
 }
 \examples{
 # Intercept-only hurdle

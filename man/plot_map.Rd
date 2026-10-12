@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_map.R
 \name{plot_map}
 \alias{plot_map}
-\title{Plot spatial predictions as a map}
+\title{Plot Spatial Predictions as a Map}
 \usage{
 plot_map(
   x,
@@ -89,33 +89,28 @@ are also needed. Install with:
 }
 
 \examples{
-# plot_map requires a fitted spatial ratio model
-# See spatial_car() examples for fitting spatial models
-
-\dontrun{
-# Fit spatial model (slow, not run on CRAN)
+\donttest{
+# Twenty sites on a chain, each visited three times
 set.seed(123)
 n_sites <- 20
-n <- 60
-df <- data.frame(
-  count = rpois(n, lambda = 8),
-  effort = rgamma(n, shape = 4, rate = 1),
-  elevation = rnorm(n),
-  site = factor(rep(1:n_sites, length.out = n)),
-  x = rep(runif(n_sites), length.out = n),
-  y = rep(runif(n_sites), length.out = n)
-)
-# Create simple adjacency matrix
+sites <- data.frame(site = factor(seq_len(n_sites)),
+                    x = sort(runif(n_sites)), y = runif(n_sites))
+df <- sites[rep(seq_len(n_sites), 3), ]
+df$count <- rpois(nrow(df), lambda = 8)
+df$effort <- rgamma(nrow(df), shape = 4, rate = 1)
+df$elevation <- rnorm(nrow(df))
 adj <- matrix(0, n_sites, n_sites)
-for (i in 1:(n_sites-1)) adj[i, i+1] <- adj[i+1, i] <- 1
+for (i in 1:(n_sites - 1)) adj[i, i + 1] <- adj[i + 1, i] <- 1
 fit <- tratio(
-  count | effort ~ elevation + (1 | site),
+  count | effort ~ elevation,
   data = df,
   family = ratiod_poisson_gamma(),
   spatial = spatial_car(adj, group_var = "site"),
   mode = "laplace"
 )
-# plot_map(fit)  # requires ggplot2
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  plot_map(fit, coords = df[, c("x", "y")])
+}
 }
 
 }

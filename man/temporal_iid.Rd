@@ -2,7 +2,7 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_iid}
 \alias{temporal_iid}
-\title{IID temporal structure (Independent Effects)}
+\title{IID Temporal Structure (Independent Effects)}
 \usage{
 temporal_iid(time_var, group_var = NULL, shared = TRUE)
 }
@@ -52,7 +52,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_iid("year"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 }
 

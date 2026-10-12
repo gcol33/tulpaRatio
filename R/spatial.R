@@ -1,4 +1,4 @@
-#' Spatial structure specifications for tulpaRatio
+#' Spatial Structure Specifications
 #'
 #' @description
 #' Functions to specify spatial random effects for ratio models.
@@ -6,10 +6,16 @@
 #' which helps prevent spurious ratio effects from spatially-structured
 #' unmeasured confounders.
 #'
+#' @examples
+#' adj <- matrix(0, 4, 4)
+#' adj[cbind(1:3, 2:4)] <- 1
+#' adj <- adj + t(adj)
+#' spatial_car(adj, group_var = "region")
+#' spatial_gp(coords = c("x", "y"))
 #' @name ratiod_spatial
 NULL
 
-#' CAR spatial structure
+#' CAR Spatial Structure
 #'
 #' @description
 #' Specify a conditional autoregressive (CAR) spatial random effect.
@@ -111,7 +117,7 @@ NULL
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_car(adj, level = "group", group_var = "site"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Proper CAR model (estimate spatial autocorrelation)
@@ -122,7 +128,7 @@ NULL
 #'   spatial = spatial_car(adj, level = "group", group_var = "site",
 #'                         proper = TRUE),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract rho from proper CAR
@@ -275,7 +281,7 @@ compute_car_rho_bounds <- function(adjacency) {
   c(lower = lower, upper = upper)
 }
 
-#' BYM2 spatial structure
+#' BYM2 Spatial Structure
 #'
 #' @description
 #' Specify a Besag-York-Mollie 2 (BYM2) spatial random effect.
@@ -310,8 +316,8 @@ compute_car_rho_bounds <- function(adjacency) {
 #' bym2 <- spatial_bym2(adj, level = "group", group_var = "region")
 #' print(bym2)
 #'
-#' \dontrun{
-#' # Generate synthetic epidemiological data (not run - requires laplace backend)
+#' \donttest{
+#' # Generate synthetic epidemiological data
 #' set.seed(456)
 #' n_regions <- 10
 #' epi_data <- data.frame(
@@ -425,8 +431,7 @@ compute_bym2_scale <- function(adjacency) {
   scale
 }
 
-#' Print method for ratiod_spatial
-#'
+#' @rdname ratiod_spatial
 #' @param x A ratiod_spatial object
 #' @param ... Ignored
 #'
@@ -504,7 +509,7 @@ is_connected <- function(adjacency) {
   all(visited)
 }
 
-#' Gaussian Process spatial structure
+#' Gaussian Process Spatial Structure
 #'
 #' @description
 #' Specify a Gaussian Process (GP) spatial random effect using coordinate-based
@@ -584,7 +589,7 @@ is_connected <- function(adjacency) {
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_gp(~ lon + lat),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #'
@@ -595,7 +600,7 @@ is_connected <- function(adjacency) {
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_gp(~ lon + lat, cov = "matern", nu = 1.5),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' }
 #'
@@ -679,8 +684,7 @@ spatial_gp <- function(coords,
 }
 
 
-#' Print method for ratiod_gp
-#'
+#' @rdname spatial_gp
 #' @param x A ratiod_gp object
 #' @param ... Ignored
 #'
@@ -707,7 +711,7 @@ print.ratiod_gp <- function(x, ...) {
 }
 
 
-#' Hilbert Space Gaussian Process (HSGP) spatial structure
+#' Hilbert Space Gaussian Process (HSGP) Spatial Structure
 #'
 #' @description
 #' Specify a Hilbert Space Gaussian Process approximation for spatial effects.
@@ -853,8 +857,7 @@ spatial_hsgp <- function(coords,
 }
 
 
-#' Print method for ratiod_hsgp
-#'
+#' @rdname spatial_hsgp
 #' @param x A ratiod_hsgp object
 #' @param ... Ignored
 #'
@@ -900,10 +903,10 @@ validate_hsgp <- function(spatial, data) {
     stop("Coordinate columns contain missing values", call. = FALSE)
   }
 
-  # Scale if requested
-  if (spatial$scale_coords) {
-    coords <- scale(coords)
-  }
+  scaled <- gp_scale_coords(coords, spatial$scale_coords)
+  coords <- scaled$coords
+  spatial$coord_center <- scaled$center
+  spatial$coord_scale <- scaled$scale
 
   # Store validated data
   spatial$n_obs <- nrow(coords)
@@ -913,7 +916,7 @@ validate_hsgp <- function(spatial, data) {
 }
 
 
-#' Multi-Scale Gaussian Process spatial structure
+#' Multi-Scale Gaussian Process Spatial Structure
 #'
 #' @description
 #' Specify a multi-scale spatial random effect that decomposes spatial
@@ -1014,7 +1017,7 @@ validate_hsgp <- function(spatial, data) {
 #'     range_local = c(0.1, 0.5),
 #'     range_regional = c(1, 5)
 #'   ),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #' }
@@ -1137,8 +1140,7 @@ spatial_multiscale <- function(coords,
 }
 
 
-#' Print method for ratiod_multiscale
-#'
+#' @rdname spatial_multiscale
 #' @param x A ratiod_multiscale object
 #' @param ... Ignored
 #'
@@ -1214,17 +1216,10 @@ validate_gp <- function(gp, data) {
     stop("Coordinate columns contain missing values", call. = FALSE)
   }
 
-  # Scale coordinates if requested. The centre and scale are kept: a fit made
-  # on scaled coordinates has to read prediction coordinates in the same units,
-  # and scale() puts them on an attribute that subsetting the matrix drops.
-  gp$coord_center <- NULL
-  gp$coord_scale <- NULL
-  if (gp$scale_coords) {
-    coords <- scale(coords)
-    gp$coord_center <- as.numeric(attr(coords, "scaled:center"))
-    gp$coord_scale <- as.numeric(attr(coords, "scaled:scale"))
-    coords <- matrix(as.numeric(coords), nrow(coords), ncol(coords))
-  }
+  scaled <- gp_scale_coords(coords, gp$scale_coords)
+  coords <- scaled$coords
+  gp$coord_center <- scaled$center
+  gp$coord_scale <- scaled$scale
 
   # Detect unique coordinates (NNGP requires unique locations)
   coord_key <- paste(coords[, 1], coords[, 2], sep = ",")
@@ -1278,7 +1273,7 @@ validate_gp <- function(gp, data) {
 svc_default_range <- function() c(0.3, 30)
 
 
-#' Spatially-Varying Coefficients (SVC)
+#' Spatially Varying Coefficients (SVC)
 #'
 #' @description
 #' Specify spatially-varying coefficients for ratio models. SVCs allow
@@ -1364,8 +1359,8 @@ svc_default_range <- function() c(0.3, 30)
 #' svc_spec <- spatial_svc(~ lon + lat, terms = 1)
 #' print(svc_spec)
 #'
-#' \dontrun{
-#' # Generate synthetic spatial data (not run - SVC not fully supported)
+#' \donttest{
+#' # Generate synthetic spatial data
 #' set.seed(202)
 #' n <- 40
 #' df <- data.frame(
@@ -1383,13 +1378,13 @@ svc_default_range <- function() c(0.3, 30)
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_svc(~ lon + lat, terms = 1),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #'
 #' # Extract and plot the spatially-varying coefficients
 #' svc_effects <- svc(fit)
-#' plot(svc_effects, "depth")
+#' plot(svc_effects)
 #' }
 #'
 #' @references
@@ -1520,8 +1515,7 @@ spatial_svc <- function(coords,
 }
 
 
-#' Print method for ratiod_svc
-#'
+#' @rdname spatial_svc
 #' @param x A ratiod_svc object
 #' @param ... Ignored
 #'
@@ -1704,20 +1698,38 @@ cov_type_code <- function(cov) {
 }
 
 
-#' Put new coordinates in the units a GP fit was made in
+#' Coordinate units of a GP fit
 #'
 #' @description
-#' `spatial_gp(scale_coords = TRUE)` centres and scales the coordinates before
-#' the neighbour structure is built, so the fitted field lives in those units.
-#' Prediction coordinates arrive raw and are put in the same units here. A fit
-#' made without scaling returns them unchanged.
+#' `spatial_gp(scale_coords = TRUE)` (and the HSGP and multi-scale
+#' constructors) centre and scale the coordinates before the field is built,
+#' so the fitted field lives in those units. `gp_scale_coords()` scales the
+#' training coordinates and returns the centre and scale it used;
+#' `gp_scale_new_coords()` puts prediction coordinates, which arrive raw, in
+#' the same units. A fit made without scaling leaves them unchanged.
 #'
-#' @param gp A validated spatial object
-#' @param coords Matrix of new coordinates
+#' @param coords Matrix of coordinates.
+#' @param scale_coords Logical; scale the training coordinates.
+#' @param gp A validated spatial object carrying `coord_center` and
+#'   `coord_scale`.
 #'
-#' @return `coords` in the fit's own units
+#' @return `gp_scale_coords()`: a list with `coords`, `center` and `scale`
+#'   (`NULL` when unscaled). `gp_scale_new_coords()`: `coords` in the fit's
+#'   own units.
 #'
 #' @keywords internal
+gp_scale_coords <- function(coords, scale_coords) {
+  coords <- as.matrix(coords)
+  if (!isTRUE(scale_coords)) {
+    return(list(coords = coords, center = NULL, scale = NULL))
+  }
+  s <- scale(coords)
+  list(coords = matrix(as.numeric(s), nrow(s), ncol(s)),
+       center = as.numeric(attr(s, "scaled:center")),
+       scale = as.numeric(attr(s, "scaled:scale")))
+}
+
+#' @rdname gp_scale_coords
 gp_scale_new_coords <- function(gp, coords) {
   coords <- as.matrix(coords)
   center <- gp$coord_center
@@ -1818,7 +1830,7 @@ compute_nngp_neighbors <- function(coords, k) {
 }
 
 
-#' Extract spatially-varying coefficients from a fitted model
+#' Spatially Varying Coefficients of a Fitted Model
 #'
 #' @description
 #' Extract posterior distributions of spatially-varying coefficients (SVCs)
@@ -1837,8 +1849,8 @@ compute_nngp_neighbors <- function(coords, k) {
 #' - `term_names`: Names of SVC terms
 #'
 #' @examples
-#' \dontrun{
-#' # Generate synthetic spatial data (not run - SVC not fully supported)
+#' \donttest{
+#' # Generate synthetic spatial data
 #' set.seed(303)
 #' n <- 40
 #' df <- data.frame(
@@ -1855,7 +1867,7 @@ compute_nngp_neighbors <- function(coords, k) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_svc(~ lon + lat, terms = c(1, 2)),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract SVC posteriors
@@ -1936,11 +1948,7 @@ svc.ratiod_fit <- function(object, terms = NULL, summary = FALSE,
 }
 
 
-#' Summary method for ratiod_svc_posterior
-#'
-#' @param object A ratiod_svc_posterior object
-#' @param probs Quantiles to compute
-#' @param ... Ignored
+#' @rdname svc
 #'
 #' @export
 summary.ratiod_svc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
@@ -1980,10 +1988,8 @@ summary.ratiod_svc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), .
 }
 
 
-#' Print method for ratiod_svc_posterior
-#'
+#' @rdname svc
 #' @param x A ratiod_svc_posterior object
-#' @param ... Ignored
 #'
 #' @export
 print.ratiod_svc_posterior <- function(x, ...) {
@@ -1999,12 +2005,9 @@ print.ratiod_svc_posterior <- function(x, ...) {
 }
 
 
-#' Plot method for ratiod_svc_posterior
-#'
-#' @param x A ratiod_svc_posterior object
+#' @rdname svc
 #' @param term Which term to plot (name or index). Default: first term.
 #' @param type Plot type: "mean" (default), "sd", or quantile (e.g., "q50")
-#' @param ... Additional arguments passed to plotting functions
 #'
 #' @export
 plot.ratiod_svc_posterior <- function(x, term = 1, type = "mean", ...) {
@@ -2211,7 +2214,7 @@ validate_spatial <- function(spatial, data) {
 #'   family = ratiod_poisson_gamma(),
 #'   spatial = spatial_gp(~ lon + lat),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # RSR to protect depth and temp coefficients
@@ -2224,7 +2227,7 @@ validate_spatial <- function(spatial, data) {
 #'     restrict_to = ~ depth + temp
 #'   ),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Compare coefficient estimates
@@ -2265,8 +2268,7 @@ spatial_rsr <- function(spatial, restrict_to) {
 }
 
 
-#' Print method for ratiod_rsr
-#'
+#' @rdname spatial_rsr
 #' @param x A ratiod_rsr object
 #' @param ... Passed to underlying print method
 #'

@@ -2,7 +2,7 @@
 % Please edit documentation in R/family.R
 \name{ratiod_gamma_gamma}
 \alias{ratiod_gamma_gamma}
-\title{Gamma-Gamma family for continuous ratio data}
+\title{Gamma-Gamma Family for Continuous Ratio Data}
 \usage{
 ratiod_gamma_gamma(link_num = "log", link_denom = "log")
 }
@@ -49,14 +49,15 @@ df <- data.frame(
   site = factor(rep(1:10, each = n/10))
 )
 
-\dontrun{
-# Fit model (slow, not run on CRAN)
+\donttest{
+# Fit model
 fit <- tratio(
   species_biomass | total_biomass ~ habitat + (1 | site),
   data = df,
   family = ratiod_gamma_gamma(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate.R
 \name{ratiod_compare}
 \alias{ratiod_compare}
-\title{Compare ratio models}
+\title{Compare Ratio Models}
 \usage{
 ratiod_compare(..., criterion = c("loo", "waic"))
 }
@@ -19,23 +19,14 @@ Compare multiple ratio models using LOO-CV or WAIC.
 }
 \examples{
 \donttest{
-# Fit models with different structures (slow, not run on CRAN)
-set.seed(123)
-n <- 50
-df <- data.frame(
-  y_num = rnbinom(n, size = 5, mu = 15),
-  y_denom = rnbinom(n, size = 8, mu = 100),
-  x = rnorm(n),
-  z = rnorm(n)
-)
-fit1 <- tratio(y_num | y_denom ~ x, data = df,
-              family = ratiod_negbin_negbin(),
-              control = list(iter = 200, warmup = 100, chains = 1))
-fit2 <- tratio(y_num | y_denom ~ x + z, data = df,
-              family = ratiod_negbin_negbin(),
-              control = list(iter = 200, warmup = 100, chains = 1))
-# Compare (requires loo package)
-# ratiod_compare(fit1, fit2)
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+               family = ratiod_poisson_gamma(),
+               control = list(iter = 1000, chains = 2, seed = 1))
+ratiod_compare(fit0, fit)
 }
 
 }

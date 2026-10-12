@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{hurdle_negbin}
 \alias{hurdle_negbin}
-\title{Create a hurdle negative binomial specification}
+\title{Hurdle Negative Binomial Specification}
 \usage{
 hurdle_negbin(formula = NULL)
 }
@@ -14,7 +14,7 @@ If NULL, uses intercept-only model.}
 A \code{ratiod_zi} object
 }
 \description{
-Create a hurdle negative binomial specification
+Hurdle Negative Binomial Specification
 }
 \examples{
 # Intercept-only hurdle

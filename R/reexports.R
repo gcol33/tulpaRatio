@@ -21,3 +21,11 @@ tulpa::latent_factors
 #' @importFrom tulpa spatiotemporal_effects
 #' @export
 tulpa::spatiotemporal_effects
+
+#' @importFrom loo loo
+#' @export
+loo::loo
+
+#' @importFrom loo waic
+#' @export
+loo::waic

@@ -2,7 +2,8 @@
 % Please edit documentation in R/spatial.R
 \name{spatial_gp}
 \alias{spatial_gp}
-\title{Gaussian Process spatial structure}
+\alias{print.ratiod_gp}
+\title{Gaussian Process Spatial Structure}
 \usage{
 spatial_gp(
   coords,
@@ -13,6 +14,8 @@ spatial_gp(
   scale_coords = TRUE,
   parameterization = c("centered", "noncentered", "collapsed")
 )
+
+\method{print}{ratiod_gp}(x, ...)
 }
 \arguments{
 \item{coords}{A one-sided formula specifying coordinate columns (e.g.,
@@ -43,6 +46,10 @@ unit variance before computing distances.}
 \code{"centered"} (default), \code{"noncentered"} (Matt trick, better for diffuse
 prior regimes), or \code{"collapsed"} (marginalize spatial variance for
 improved mixing). Centered is robust for informative priors.}
+
+\item{x}{A ratiod_gp object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_gp} object
@@ -103,7 +110,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_gp(~ lon + lat),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 summary(fit)
 
@@ -114,7 +121,7 @@ fit2 <- tratio(
   family = ratiod_poisson_gamma(),
   spatial = spatial_gp(~ lon + lat, cov = "matern", nu = 1.5),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 }
 

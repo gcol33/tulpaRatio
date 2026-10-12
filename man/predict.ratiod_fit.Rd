@@ -2,7 +2,8 @@
 % Please edit documentation in R/ratio.R
 \name{predict.ratiod_fit}
 \alias{predict.ratiod_fit}
-\title{Predict method for ratio models}
+\alias{print.ratiod_prediction}
+\title{Predictions from a Ratio Model}
 \usage{
 \method{predict}{ratiod_fit}(
   object,
@@ -19,6 +20,8 @@
   n_samples = NULL,
   ...
 )
+
+\method{print}{ratiod_prediction}(x, n = 10, ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object}
@@ -59,6 +62,10 @@ don't store samples directly (e.g., Laplace, VI). Default uses all
 available samples for HMC/PG.}
 
 \item{...}{Ignored}
+
+\item{x}{A ratiod_prediction object}
+
+\item{n}{Number of rows to print}
 }
 \value{
 If \code{summary = TRUE}, a data frame with posterior summaries.
@@ -69,62 +76,42 @@ If \code{return_spatial = TRUE}, returns a list with \code{predictions} and \cod
 Compute posterior predictions for new data from a fitted ratio model.
 }
 \examples{
-\dontrun{
-# Generate synthetic data
+\donttest{
 set.seed(321)
-n <- 50
+n <- 60
 df <- data.frame(
   count = rpois(n, lambda = 18),
   effort = rgamma(n, shape = 9, rate = 1),
   depth = rnorm(n),
-  season = sample(c("summer", "winter"), n, replace = TRUE)
+  season = factor(sample(c("summer", "winter"), n, replace = TRUE)),
+  x = runif(n),
+  y = runif(n)
 )
-
-# Fit model
 fit <- tratio(
   count | effort ~ depth + season,
   data = df,
   family = ratiod_poisson_gamma(),
-  mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
-# Predict for new data
-new_df <- data.frame(depth = c(10, 20, 30), season = "summer")
+# Predict for new data; levels of `season` follow the training data
+new_df <- data.frame(depth = c(-1, 0, 1), season = "summer")
 predict(fit, newdata = new_df)
 
-# Population-level prediction (no random effects)
-predict(fit, newdata = new_df, re_formula = NA)
+# Full posterior draws of the predicted ratio (draws x rows)
+dim(predict(fit, newdata = new_df, summary = FALSE)$ratio)
 
-# Get full posterior draws
-predict(fit, newdata = new_df, summary = FALSE)
-
-# --- Spatial prediction example (GP) ---
-# Fit model with GP spatial effects
-df$x <- runif(n)
-df$y <- runif(n)
+# Spatial prediction at new locations (kriging) from a GP fit
 fit_gp <- tratio(
   count | effort ~ depth,
   data = df,
   spatial = spatial_gp(coords = c("x", "y")),
   family = ratiod_poisson_gamma(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
-
-# Predict at new locations (kriging)
-new_coords <- matrix(runif(20), ncol = 2)
-new_df <- data.frame(depth = rnorm(10))
-pred <- predict(fit_gp, newdata = new_df, coords.0 = new_coords)
-
-# Return spatial effect samples (like spOccupancy)
-pred_spatial <- predict(fit_gp, newdata = new_df, coords.0 = new_coords,
-                        return_spatial = TRUE)
-str(pred_spatial$w.0.samples)  # [n_samples, n_new]
-
-# --- Areal spatial prediction (ICAR/BYM2) ---
-# Predict for existing regions (lookup)
-new_df <- data.frame(region = c("A", "B"), depth = c(1, 2))
-predict(fit_icar, newdata = new_df)
+new_coords <- matrix(runif(10), ncol = 2)
+predict(fit_gp, newdata = data.frame(depth = rnorm(5)),
+        coords.0 = new_coords)
 }
 
 }

@@ -56,6 +56,7 @@ fit_gibbs <- function(formula,
                       seed = NULL,
                       verbose = TRUE) {
 
+  sp <- sampler_priors(priors, get_hmc_model_type(family))
   chains <- as.integer(chains)
   if (is.na(chains) || chains < 1L) {
     stop("`chains` must be a positive integer.", call. = FALSE)
@@ -163,12 +164,12 @@ fit_gibbs <- function(formula,
     seed = as.integer(seed %% .Machine$integer.max),
     verbose = verbose,
     family = family_str,
-    # Same names and same defaults the HMC backend reads, so the spatial model
-    # is the one compute_log_post() scores regardless of which backend runs.
-    sigma_beta = priors$sigma_beta %||% 10.0,
-    sigma_re_scale = priors$sigma_re_scale %||% 2.5,
-    tau_spatial_shape = priors$tau_spatial_shape %||% 1.0,
-    tau_spatial_rate = priors$tau_spatial_rate %||% 0.01
+    # The priors the HMC backend reads, so the spatial model is the one
+    # compute_log_post() scores regardless of which backend runs.
+    sigma_beta = sp$sigma_beta,
+    sigma_re_scale = sp$sigma_re_scale,
+    tau_spatial_shape = sp$tau_spatial_shape,
+    tau_spatial_rate = sp$tau_spatial_rate
   )
 
   # Add denominator data

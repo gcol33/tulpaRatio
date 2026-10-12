@@ -2,7 +2,7 @@
 % Please edit documentation in R/family.R
 \name{ratiod_binomial}
 \alias{ratiod_binomial}
-\title{Binomial family for trial-based ratios}
+\title{Binomial Family for Trial-Based Ratios}
 \usage{
 ratiod_binomial(link = "logit", denominator_known = TRUE)
 }
@@ -42,14 +42,15 @@ df <- data.frame(
   site = factor(rep(1:10, each = 5))
 )
 
-\dontrun{
-# Fit model (slow, not run on CRAN)
+\donttest{
+# Fit model
 fit <- tratio(
   detections | trials ~ effort + (1 | site),
   data = df,
   family = ratiod_binomial(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

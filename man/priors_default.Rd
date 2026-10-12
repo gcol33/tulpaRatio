@@ -2,58 +2,43 @@
 % Please edit documentation in R/priors.R
 \name{priors_default}
 \alias{priors_default}
-\title{Show default priors for a tulpaRatio family}
+\title{Default Priors for a Model Family}
 \usage{
 priors_default(family = NULL, spatial = FALSE, temporal = FALSE)
 }
 \arguments{
 \item{family}{A tulpaRatio family object (e.g., \code{ratiod_negbin_negbin()}).
-If NULL (default), shows defaults for all families.}
+If NULL (default), shows the dispersion default of every family.}
 
-\item{spatial}{Logical; if TRUE, include spatial priors. Default FALSE.}
+\item{spatial}{Logical; if TRUE, include the BYM2 mixing prior.}
 
-\item{temporal}{Logical; if TRUE, include temporal priors. Default FALSE.}
+\item{temporal}{Logical; if TRUE, include the AR1 correlation prior.}
 }
 \value{
-Invisibly returns a \code{ratiod_priors} object with the defaults.
-Primarily called for its side effect of printing.
+Invisibly, a \code{ratiod_priors} object holding the defaults (for
+\code{family = NULL}, with the negative binomial dispersion default).
 }
 \description{
-Display the default prior specifications used for each model family.
-Useful for understanding what priors are applied before fitting
-and as a starting point for customization.
+Display the priors a fit uses for every component \code{\link[=ratiod_priors]{ratiod_priors()}} leaves
+unspecified, as a starting point for customization.
 }
 \details{
-Default priors in tulpaRatio follow these principles:
 \itemize{
-\item \strong{Fixed effects (beta)}: Normal(0, 2.5) - weakly informative, allows
-coefficients roughly in [-5, 5] on the link scale.
-\item \strong{Random effect SD (sigma)}: PC prior with P(sigma > 1) = 0.01 - favors
-simpler models with smaller variance components.
-\item \strong{Overdispersion (phi)}: PC prior with P(phi > 10) = 0.01 - regularizes
-toward Poisson (phi -> Inf means less overdispersion in NB2).
-\item \strong{Temporal correlation (rho)}: Beta(2, 2) on \code{(rho + 1) / 2}, i.e.
-symmetric about \code{rho = 0} on (-1, 1), appropriate for AR(1) correlation.
-\item \strong{Spatial mixing (rho_spatial)}: Beta(1, 1) = Uniform(0, 1) - no
-prior preference for structured vs. unstructured spatial variation.
+\item \strong{Fixed effects (beta)}: Normal(0, 10) on the link scale.
+\item \strong{Random effect SD (sigma)}: Half-Cauchy(2.5); the Laplace backend uses
+a PC prior with P(sigma > 1) = 0.01.
+\item \strong{Dispersion (phi)}: Gamma(2, 2) for the lognormal log-scale SD,
+Gamma(2, 0.5) for a Gamma shape (gamma_gamma, poisson_gamma), Gamma(2, 0.1)
+for a negative binomial size or beta-binomial precision.
+\item \strong{Temporal correlation (rho)}: Beta(2, 2) on \code{(rho + 1) / 2}, symmetric
+about \code{rho = 0}.
+\item \strong{Spatial mixing (rho_spatial)}: Beta(1, 1), uniform on (0, 1).
 }
 }
 \examples{
-# Show defaults for negbin_negbin family
 priors_default(ratiod_negbin_negbin())
-
-# Show defaults for binomial family
-priors_default(ratiod_binomial())
-
-# Show defaults including spatial parameters
-priors_default(ratiod_negbin_negbin(), spatial = TRUE)
-
-# Show defaults for all families
+priors_default(ratiod_poisson_gamma(), spatial = TRUE, temporal = TRUE)
 priors_default()
-
-# Use as starting point for customization
-my_priors <- priors_default(ratiod_poisson_gamma())
-my_priors$beta <- prior_normal(0, 1)  # Tighter prior on fixed effects
 
 }
 \seealso{

@@ -2,7 +2,7 @@
 % Please edit documentation in R/benchmark.R
 \name{ratiod_threads}
 \alias{ratiod_threads}
-\title{Get OpenMP thread count}
+\title{OpenMP Thread Count}
 \usage{
 ratiod_threads()
 }

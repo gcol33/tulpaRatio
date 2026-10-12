@@ -2,7 +2,7 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_rw2}
 \alias{temporal_rw2}
-\title{RW2 temporal structure (Second-order Random Walk)}
+\title{RW2 Temporal Structure (Second-Order Random Walk)}
 \usage{
 temporal_rw2(
   time_var,
@@ -76,7 +76,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw2("year"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 }
 

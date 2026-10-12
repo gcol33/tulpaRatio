@@ -2,18 +2,31 @@
 % Please edit documentation in R/tratio.R
 \name{as.data.frame.ratiod_fit}
 \alias{as.data.frame.ratiod_fit}
-\title{Extract posterior draws from ratiod_fit}
+\title{Posterior Draws of a Fitted Ratio Model as a Data Frame}
 \usage{
 \method{as.data.frame}{ratiod_fit}(x, ...)
 }
 \arguments{
 \item{x}{A ratiod_fit object}
 
-\item{...}{Passed to posterior::as_draws_df}
+\item{...}{Ignored.}
 }
 \value{
-A draws_df object
+A \code{draws_df} data frame: one row per posterior draw, one column per
+parameter, plus the \code{.chain}, \code{.iteration} and \code{.draw} columns.
 }
 \description{
-Extract posterior draws from ratiod_fit
+Posterior Draws of a Fitted Ratio Model as a Data Frame
+}
+\examples{
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+draws <- as.data.frame(fit)
+dim(draws)
+names(draws)[1:6]
+}
+
 }

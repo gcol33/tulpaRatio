@@ -6,7 +6,7 @@ test_that("defaults reproduce the documented values", {
   expect_equal(d$chains, 4L)
   expect_equal(d$iter, 2000L)
   expect_equal(d$thin, 1L)
-  expect_true(d$verbose)
+  expect_false(d$verbose)
   expect_equal(d$metric, "auto")
   expect_equal(d$gradient_mode, "auto")
   expect_equal(d$re_param, "noncentered")

@@ -2,8 +2,21 @@
 % Please edit documentation in R/family.R
 \name{ratiod_families}
 \alias{ratiod_families}
-\title{Model families for tulpaRatio}
+\alias{print.ratiod_family}
+\title{Model Families}
+\usage{
+\method{print}{ratiod_family}(x, ...)
+}
+\arguments{
+\item{x}{A ratiod_family object}
+
+\item{...}{Ignored}
+}
 \description{
 Distribution families for the numerator and denominator processes.
 Each family specifies the likelihood structure for joint modelling.
+}
+\examples{
+ratiod_poisson_gamma()
+ratiod_binomial()
 }

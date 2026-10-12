@@ -72,7 +72,7 @@ fit_one <- function(spec, use_specs, seed_val) {
     mode = "hmc",
     control = list(iter = 2000L, warmup = 500L, chains = 1L, seed = seed_val, verbose = FALSE, gradient_mode = "A_r")
   )
-  colMeans(fit$draws)
+  list(mean = colMeans(fit$draws), sd = apply(fit$draws, 2, stats::sd))
 }
 
 # poisson_gamma is handled separately below as a recovery test (gcol33/tulpa#24):
@@ -87,14 +87,14 @@ for (fam in families_b1b) {
     test_that(sprintf("B1b spec path matches legacy for %s within MC noise", f), {
       skip_on_cran()
       spec <- simulate_for_family(f)
-      legacy42 <- fit_one(spec, FALSE, 42L)
-      specs42  <- fit_one(spec, TRUE,  42L)
-      legacy43 <- fit_one(spec, FALSE, 43L)
+      legacy <- fit_one(spec, FALSE, 42L)
+      specs  <- fit_one(spec, TRUE,  42L)
 
-      expect_named(specs42, names(legacy42))
-      cross  <- max(abs(legacy42 - specs42))
-      within <- max(abs(legacy42 - legacy43))
-      expect_lt(cross, max(4 * within, 5e-3))
+      # The two samplers estimate one posterior: their means differ by Monte
+      # Carlo error, a small fraction of a posterior SD. A wrong likelihood or
+      # gradient moves a mean by several.
+      expect_named(specs$mean, names(legacy$mean))
+      expect_lt(max(abs(legacy$mean - specs$mean) / legacy$sd), 0.25)
     })
   })
 }
@@ -119,8 +119,8 @@ test_that("B1b poisson_gamma: legacy and spec backends both recover truth (gcol3
   # on betas, ~0.05 on shape) so the test asserts recovery, not bit-precision.
   tol   <- c(0.20, 0.20, 0.20, 0.20, 0.20, 0.20, 0.60)
 
-  legacy <- fit_one(spec, FALSE, 42L)
-  specs  <- fit_one(spec, TRUE,  42L)
+  legacy <- fit_one(spec, FALSE, 42L)$mean
+  specs  <- fit_one(spec, TRUE,  42L)$mean
 
   expect_named(specs, names(legacy))
   expect_equal(length(legacy), length(truth))

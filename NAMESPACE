@@ -2,13 +2,17 @@
 
 S3method(as.data.frame,ratiod_fit)
 S3method(as_draws,ratiod_fit)
+S3method(coef,ratiod_fit)
+S3method(coef,summary.ratiod_fit)
 S3method(draws_interval,ratiod_fit)
 S3method(draws_long,ratiod_fit)
 S3method(draws_wide,ratiod_fit)
 S3method(fitted,ratiod_average)
 S3method(fitted,ratiod_fit)
+S3method(formula,ratiod_fit)
 S3method(loo::loo,ratiod_fit)
 S3method(loo::waic,ratiod_fit)
+S3method(nobs,ratiod_fit)
 S3method(plot,ratiod_fit)
 S3method(plot,ratiod_svc_posterior)
 S3method(plot,ratiod_temporal_posterior)
@@ -57,6 +61,7 @@ S3method(print,ratiod_tvc_posterior)
 S3method(print,ratiod_vi)
 S3method(print,ratiod_zi)
 S3method(print,summary.ratiod_ess)
+S3method(print,summary.ratiod_fit)
 S3method(print,summary.ratiod_vi)
 S3method(print,tulpaRatio_gpu_info)
 S3method(ratio,ratiod_fit)
@@ -70,7 +75,9 @@ S3method(summary,ratiod_vi)
 S3method(svc,ratiod_fit)
 S3method(temporal,ratiod_fit)
 S3method(tulpa::diagnostics,ratiod_fit)
+S3method(tulpa::latent_factors,ratiod_fit)
 S3method(tvc,ratiod_fit)
+S3method(vcov,ratiod_fit)
 S3method(weights,ratiod_average)
 export(as_draws)
 export(check_diagnostics)
@@ -88,6 +95,7 @@ export(hurdle_poisson)
 export(inference_mode_info)
 export(latent_factor)
 export(latent_factors)
+export(loo)
 export(n_divergent)
 export(oi_binomial)
 export(plot_acf)
@@ -128,7 +136,6 @@ export(ratiod_negbin_negbin)
 export(ratiod_oibinomial)
 export(ratiod_poisson_gamma)
 export(ratiod_priors)
-export(ratiod_priors_legacy)
 export(ratiod_threads)
 export(ratiod_zibinomial)
 export(ratiod_zinegbin)
@@ -158,6 +165,7 @@ export(temporal_tvc)
 export(tratio)
 export(tvc)
 export(validate_mode)
+export(waic)
 export(zi_binomial)
 export(zi_negbin)
 export(zi_poisson)
@@ -181,12 +189,15 @@ importFrom(posterior,as_draws)
 importFrom(stats,
   ar,
   as.formula,
+  coef,
   cor,
   fitted,
+  formula,
   median,
   model.frame,
   model.matrix,
   na.pass,
+  nobs,
   optim,
   pnorm,
   predict,
@@ -203,6 +214,7 @@ importFrom(stats,
   sd,
   terms,
   var,
+  vcov,
   weights
 )
 importFrom(tulpa,

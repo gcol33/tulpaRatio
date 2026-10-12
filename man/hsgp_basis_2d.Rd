@@ -4,7 +4,12 @@
 \alias{hsgp_basis_2d}
 \title{Laplacian eigenbasis on a rectangle}
 \usage{
-hsgp_basis_2d(coords, m, c_boundary)
+hsgp_basis_2d(
+  coords,
+  m,
+  c_boundary,
+  domain = hsgp_domain_2d(coords, c_boundary)
+)
 }
 \description{
 Mirrors \code{setup_hsgp_data()} in \code{src/hmc_hsgp.h}: boundary \code{L = c * range / 2}

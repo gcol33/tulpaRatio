@@ -2,7 +2,7 @@
 % Please edit documentation in R/posterior_predict.R
 \name{posterior_predict.ratiod_fit}
 \alias{posterior_predict.ratiod_fit}
-\title{Posterior predictive draws}
+\title{Posterior Predictive Draws}
 \usage{
 \method{posterior_predict}{ratiod_fit}(object, ndraws = NULL, ...)
 }
@@ -38,7 +38,7 @@ df <- data.frame(
 )
 fit <- tratio(count | total ~ x, data = df,
               family = ratiod_poisson_gamma(),
-              control = list(iter = 200, warmup = 100, chains = 1))
+              control = list(iter = 400, chains = 1, seed = 1))
 rep <- posterior_predict(fit, ndraws = 50)
 dim(rep$y_num_rep)
 }

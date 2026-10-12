@@ -94,6 +94,12 @@ inline T icar_quadratic_form_t(const T* phi, int J, const ModelData& data) {
 struct LogPostOptions {
     bool skip_obs_loop = false;
     const double* precomputed_tgp_log_prior = nullptr;
+    // The centred spatial GP's NNGP log-density, from a gradient pass that
+    // computed it. Only passed alongside skip_obs_loop, so the field itself
+    // is not needed either.
+    const double* precomputed_gp_log_prior = nullptr;
+    // The centred SVC terms' summed NNGP log-density, likewise.
+    const double* precomputed_svc_log_prior = nullptr;
 };
 
 // ============================================================================
@@ -487,7 +493,8 @@ T compute_log_post_impl(
             // built by the NNGP autoregression. The NNGP prior on w and the
             // Jacobian |dw/dz| cancel exactly, so what remains of the field's
             // own density is N(0, I) on z; both hyperparameters reach eta
-            // through the transform instead.
+            // through the transform instead, so a caller that has already
+            // walked the observations needs no transform.
             std::vector<T> z_gp(n_gp);
             T z_sq_sum = T(0.0);
             for (int k = 0; k < n_gp; k++) {
@@ -496,10 +503,14 @@ T compute_log_post_impl(
             }
             log_post = log_post - T(0.5) * z_sq_sum;
 
-            ratiod_gp::NNGPNCWorkspaceT<T>& nc_ws = ratiod_gp::nngp_nc_ws<T>();
-            ratiod_gp::nngp_nc_forward(z_gp.data(), sigma2_gp, phi_gp,
-                                       data.gp_data, nc_ws);
-            gp_w.assign(nc_ws.w.begin(), nc_ws.w.begin() + n_gp);
+            if (!opts.skip_obs_loop) {
+                ratiod_gp::NNGPNCWorkspaceT<T>& nc_ws = ratiod_gp::nngp_nc_ws<T>();
+                ratiod_gp::nngp_nc_forward(z_gp.data(), sigma2_gp, phi_gp,
+                                           data.gp_data, nc_ws);
+                gp_w.assign(nc_ws.w.begin(), nc_ws.w.begin() + n_gp);
+            }
+        } else if (opts.precomputed_gp_log_prior) {
+            log_post = log_post + T(*opts.precomputed_gp_log_prior);
         } else {
             // Centred: the slot holds w, which carries the NNGP prior directly.
             const int n_gp = layout.gp_w_end - layout.gp_w_start;
@@ -1101,11 +1112,16 @@ T compute_log_post_impl(
             for (int k = 0; k < n_svc_params; k++) {
                 svc_block[k] = params[layout.svc_w_start + k];
             }
-            svc_w_flat.resize(n_svc_params);
-            ratiod_svc::svc_field<ratiod_svc::SVC_DENSITY_SLOT>(svc_block.data(), svc_sigma2.data(),
-                                  svc_phi.data(), data.svc_data,
-                                  data.svc_gp_view, data.svc_noncentered,
-                                  svc_w_flat.data());
+            // Non-centred, the field enters only through eta, so a caller that
+            // has already walked the observations needs no transform at all.
+            const bool need_field = !(data.svc_noncentered && opts.skip_obs_loop);
+            if (need_field) {
+                svc_w_flat.resize(n_svc_params);
+                ratiod_svc::svc_field<ratiod_svc::SVC_DENSITY_SLOT>(svc_block.data(), svc_sigma2.data(),
+                                      svc_phi.data(), data.svc_data,
+                                      data.svc_gp_view, data.svc_noncentered,
+                                      svc_w_flat.data());
+            }
 
             if (data.svc_noncentered) {
                 // The NNGP prior on w and the Jacobian |dw/dz| cancel, so the
@@ -1114,14 +1130,18 @@ T compute_log_post_impl(
                 for (int k = 0; k < n_svc_params; k++)
                     z_sq_sum = z_sq_sum + svc_block[k] * svc_block[k];
                 log_post = log_post - T(0.5) * z_sq_sum;
+            } else if (opts.precomputed_svc_log_prior) {
+                log_post = log_post + T(*opts.precomputed_svc_log_prior);
             } else {
-                // NNGP prior on each SVC term
+                // NNGP prior on each SVC term: the single-scale GP density on
+                // the SVC neighbour structure
                 for (int j = 0; j < n_svc; j++) {
                     std::vector<T> w_j(n_obs);
                     for (int k = 0; k < n_obs; k++) {
                         w_j[k] = svc_w_flat[j * n_obs + k];
                     }
-                    log_post = log_post + ratiod_svc_ad::nngp_log_lik(w_j, svc_sigma2[j], svc_phi[j], data.svc_data);
+                    log_post = log_post + ratiod_gp::gp_nngp_log_lik_t(
+                        w_j, svc_sigma2[j], svc_phi[j], data.svc_gp_view);
                 }
             }
 
@@ -1129,7 +1149,9 @@ T compute_log_post_impl(
             // the NNGP prior above is already proper on the constant
             // direction, so what the alias with beta_j needs is that direction
             // removed from the likelihood, not a second prior stiffening it.
-            ratiod_svc_ad::svc_center_eta(svc_w_flat, data.svc_data, svc_eta);
+            if (need_field) {
+                ratiod_svc_ad::svc_center_eta(svc_w_flat, data.svc_data, svc_eta);
+            }
         }
     }
 

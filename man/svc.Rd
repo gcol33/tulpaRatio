@@ -3,11 +3,20 @@
 \name{svc}
 \alias{svc}
 \alias{svc.ratiod_fit}
-\title{Extract spatially-varying coefficients from a fitted model}
+\alias{summary.ratiod_svc_posterior}
+\alias{print.ratiod_svc_posterior}
+\alias{plot.ratiod_svc_posterior}
+\title{Spatially Varying Coefficients of a Fitted Model}
 \usage{
 svc(object, terms = NULL, summary = FALSE, probs = c(0.025, 0.5, 0.975), ...)
 
 \method{svc}{ratiod_fit}(object, terms = NULL, summary = FALSE, probs = c(0.025, 0.5, 0.975), ...)
+
+\method{summary}{ratiod_svc_posterior}(object, probs = c(0.025, 0.5, 0.975), ...)
+
+\method{print}{ratiod_svc_posterior}(x, ...)
+
+\method{plot}{ratiod_svc_posterior}(x, term = 1, type = "mean", ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object fitted with \code{svc} argument}
@@ -20,6 +29,12 @@ full posterior draws.}
 \item{probs}{Quantiles to compute if \code{summary = TRUE}.}
 
 \item{...}{Ignored}
+
+\item{x}{A ratiod_svc_posterior object}
+
+\item{term}{Which term to plot (name or index). Default: first term.}
+
+\item{type}{Plot type: "mean" (default), "sd", or quantile (e.g., "q50")}
 }
 \value{
 A \code{ratiod_svc_posterior} object containing:
@@ -34,8 +49,8 @@ Extract posterior distributions of spatially-varying coefficients (SVCs)
 from a fitted ratio model with SVC specification.
 }
 \examples{
-\dontrun{
-# Generate synthetic spatial data (not run - SVC not fully supported)
+\donttest{
+# Generate synthetic spatial data
 set.seed(303)
 n <- 40
 df <- data.frame(
@@ -52,7 +67,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   spatial = spatial_svc(~ lon + lat, terms = c(1, 2)),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract SVC posteriors

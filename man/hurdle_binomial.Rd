@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{hurdle_binomial}
 \alias{hurdle_binomial}
-\title{Create a hurdle binomial specification}
+\title{Hurdle Binomial Specification}
 \usage{
 hurdle_binomial(formula = NULL)
 }
@@ -14,7 +14,7 @@ If NULL, uses intercept-only model.}
 A \code{ratiod_zi} object
 }
 \description{
-Create a hurdle binomial specification
+Hurdle Binomial Specification
 }
 \examples{
 # Intercept-only hurdle

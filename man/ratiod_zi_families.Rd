@@ -2,7 +2,16 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_zi_families}
 \alias{ratiod_zi_families}
-\title{Zero-inflated model families for tulpaRatio}
+\alias{print.ratiod_family_zi}
+\title{Zero-Inflated Model Families}
+\usage{
+\method{print}{ratiod_family_zi}(x, ...)
+}
+\arguments{
+\item{x}{A ratiod_family_zi object}
+
+\item{...}{Ignored}
+}
 \description{
 Distribution families for handling excess zeros in count data.
 Zero-inflation occurs when there are more zeros than expected
@@ -13,4 +22,8 @@ Two model types are available:
 \item \strong{Zero-inflated (ZI)}: Mixture of point mass at zero and count distribution
 \item \strong{Hurdle}: Separate processes for zero vs positive counts
 }
+}
+\examples{
+ratiod_zipois()
+ratiod_hurdle_negbin()
 }

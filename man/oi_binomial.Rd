@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{oi_binomial}
 \alias{oi_binomial}
-\title{Create a one-inflated binomial specification}
+\title{One-Inflated Binomial Specification}
 \usage{
 oi_binomial(formula = NULL)
 }
@@ -14,7 +14,7 @@ oi_binomial(formula = NULL)
 A \code{ratiod_zi} object
 }
 \description{
-Create a one-inflated binomial specification
+One-Inflated Binomial Specification
 }
 \examples{
 # Intercept-only OI

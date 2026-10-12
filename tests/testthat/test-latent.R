@@ -116,3 +116,29 @@ test_that("print.ratiod_latent produces output", {
   expect_true(any(grepl("Number of factors: 2", output)))
   expect_true(any(grepl("Shared: Yes", output)))
 })
+
+test_that("latent_factors() reads a fitted model's factor scores", {
+  skip_on_cran()
+  set.seed(1)
+  n <- 40
+  df <- data.frame(
+    y = rnbinom(n, size = 5, mu = 15),
+    total = rnbinom(n, size = 8, mu = 100),
+    x = rnorm(n)
+  )
+  fit <- tratio(y | total ~ x, data = df, family = ratiod_negbin_negbin(),
+                latent = latent_factor(n_factors = 1),
+                control = list(iter = 200, chains = 1, seed = 1))
+  scores <- fit$.internal$latent_draws
+  s <- latent_factors(fit)
+  expect_equal(nrow(s), n)
+  expect_equal(s$observation, seq_len(n))
+  expect_equal(s$mean, colMeans(scores[, , 1]))
+  d <- latent_factors(fit, summary = FALSE)
+  expect_equal(dim(d), c(dim(scores)[1], n))
+  expect_equal(unname(d[, 3]), scores[, 3, 1])
+  expect_error(latent_factors(tratio(y | total ~ x, data = df,
+                                     family = ratiod_negbin_negbin(),
+                                     mode = "laplace")),
+               "latent factors")
+})

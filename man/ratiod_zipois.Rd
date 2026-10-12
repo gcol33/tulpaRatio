@@ -2,7 +2,7 @@
 % Please edit documentation in R/family_zi.R
 \name{ratiod_zipois}
 \alias{ratiod_zipois}
-\title{Zero-inflated Poisson family}
+\title{Zero-Inflated Poisson Family}
 \usage{
 ratiod_zipois(
   link_num = "log",
@@ -55,14 +55,15 @@ df <- data.frame(
   vessel = factor(rep(1:6, each = n/6))
 )
 
-\dontrun{
-# Fit model (not run - ZI models require specialized backend support)
+\donttest{
+# Fit model
 fit <- tratio(
   catch | effort ~ depth + (1 | vessel),
   data = df,
   family = ratiod_zipois(denom_family = "gamma"),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

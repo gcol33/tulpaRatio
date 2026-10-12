@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate.R
 \name{waic.ratiod_fit}
 \alias{waic.ratiod_fit}
-\title{WAIC computation}
+\title{Widely Applicable Information Criterion (WAIC)}
 \usage{
 \method{waic}{ratiod_fit}(x, ...)
 }
@@ -21,4 +21,14 @@ Compute Widely Applicable Information Criterion (WAIC).
 Uses the same reconstructed pointwise log-likelihood as \code{\link[=loo.ratiod_fit]{loo.ratiod_fit()}};
 supported on the hmc, ess, sghmc, and vi backends and conditional on the
 fixed-effect linear predictor.
+}
+\examples{
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+waic(fit)
+}
+
 }

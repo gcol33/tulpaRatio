@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{zi_negbin}
 \alias{zi_negbin}
-\title{Create a zero-inflated negative binomial specification}
+\title{Zero-Inflated Negative Binomial Specification}
 \usage{
 zi_negbin(formula = NULL)
 }
@@ -14,7 +14,7 @@ If NULL, uses intercept-only model for P(structural zero).}
 A \code{ratiod_zi} object
 }
 \description{
-Create a zero-inflated negative binomial specification
+Zero-Inflated Negative Binomial Specification
 }
 \examples{
 # Intercept-only ZI

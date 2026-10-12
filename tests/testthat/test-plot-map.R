@@ -98,10 +98,10 @@ test_that("extract_coords_from_fit returns NULL when no coords", {
   expect_null(result)
 })
 
-test_that("extract_coords_from_fit extracts from fit$coords", {
+test_that("extract_coords_from_fit reads the fit's coordinate variables", {
   fit <- list(
-    coords = data.frame(x = 1:5, y = 6:10),
-    data = data.frame(count = 1:5)
+    .internal = list(spatial_spec = list(coord_vars = c("lon", "lat"))),
+    data = data.frame(count = 1:5, lon = 1:5, lat = 6:10)
   )
   class(fit) <- "ratiod_fit"
 

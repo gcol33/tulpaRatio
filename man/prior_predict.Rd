@@ -2,9 +2,12 @@
 % Please edit documentation in R/prior_predict.R
 \name{prior_predict}
 \alias{prior_predict}
-\title{Prior predictive simulation}
+\alias{print.ratiod_priorpred}
+\title{Prior Predictive Simulation}
 \usage{
 prior_predict(formula, family, data, priors = NULL, n = 100)
+
+\method{print}{ratiod_priorpred}(x, ...)
 }
 \arguments{
 \item{formula}{A model formula, using the combined \code{num | denom ~ x} syntax
@@ -21,6 +24,10 @@ the prior predictive distribution depends on the observed response.}
 \item{priors}{A \code{ratiod_priors} object. Defaults to \code{ratiod_priors()}.}
 
 \item{n}{Number of prior predictive draws.}
+
+\item{x}{A \code{ratiod_priorpred} object}
+
+\item{...}{Ignored}
 }
 \value{
 An object of class \code{ratiod_priorpred}: a list with the \code{n} x \code{N}
@@ -28,6 +35,8 @@ matrices \code{y_num}, \code{y_denom}, \code{ratio}, \code{mu_num} and \code{mu_
 coefficients \code{beta_num} and \code{beta_denom}, the drawn random-effect scales
 \code{sigma}, the drawn dispersions \code{phi_num} and \code{phi_denom}, and the \code{family}
 and \code{data} the draws were taken on.
+
+\code{x}, invisibly
 }
 \description{
 Simulate numerator and denominator responses from the prior predictive

@@ -2,9 +2,12 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_rtr}
 \alias{temporal_rtr}
+\alias{print.ratiod_rtr}
 \title{Restricted Temporal Regression (RTR)}
 \usage{
 temporal_rtr(temporal, restrict_to)
+
+\method{print}{ratiod_rtr}(x, ...)
 }
 \arguments{
 \item{temporal}{A temporal specification (\code{temporal_rw1}, \code{temporal_gp}, etc.)}
@@ -12,6 +15,10 @@ temporal_rtr(temporal, restrict_to)
 \item{restrict_to}{Formula specifying which covariates to orthogonalize
 against (e.g., \code{~ year_effect + trend}). The temporal effect will be
 constrained to be orthogonal to the column space of these covariates.}
+
+\item{x}{A ratiod_rtr object}
+
+\item{...}{Passed to underlying print method}
 }
 \value{
 A modified temporal specification with RTR enabled
@@ -57,8 +64,8 @@ rtr <- temporal_rtr(
 )
 print(rtr)
 
-\dontrun{
-# Generate data with temporal confounding (not run - RTR experimental)
+\donttest{
+# Generate data with temporal confounding
 set.seed(170)
 years <- 2000:2023
 n_per_year <- 4
@@ -78,7 +85,7 @@ fit1 <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw2("year"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # RTR to protect temperature coefficient
@@ -91,7 +98,7 @@ fit2 <- tratio(
     restrict_to = ~ temperature
   ),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Compare coefficient estimates

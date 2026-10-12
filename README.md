@@ -29,10 +29,20 @@ pak::pak("gcol33/tulpaRatio")
 ```r
 library(tulpaRatio)
 
+# simulated trawl survey: 12 sites, 10 hauls each
+set.seed(1)
+trawl <- data.frame(
+  site   = factor(rep(1:12, each = 10)),
+  depth  = rnorm(120),
+  season = factor(rep(c("summer", "winter"), 60))
+)
+trawl$effort <- rgamma(120, shape = 6, rate = 1)
+trawl$catch  <- rpois(120, trawl$effort * exp(0.5 + 0.3 * trawl$depth))
+
 # catch-per-unit-effort: model catch and effort, derive CPUE
 fit <- tratio(
   catch | effort ~ depth + season + (1 | site),
-  data   = trawl_data,
+  data   = trawl,
   family = ratiod_poisson_gamma()
 )
 
@@ -87,8 +97,7 @@ available for the relevant families.
 - **Spatial**: `spatial_car()`, `spatial_bym2()`, and Gaussian-process priors
   for areal or point-referenced data.
 - **Temporal**: `temporal_ar1()`, `temporal_rw1()`, `temporal_rw2()`.
-- **Spatiotemporal**: `spatiotemporal()` for Knorr-Held Type I-IV interactions
-  and `spatiotemporal_gp()` for non-separable space-time GPs.
+- **Spatiotemporal**: `spatiotemporal()` for Knorr-Held Type I-IV interactions.
 
 ## Inference backends and tiers
 
@@ -102,7 +111,7 @@ silently drops to an approximation that lacks a convergence guarantee.
   available by explicit opt-in only.
 
 LOO and WAIC are provided for model comparison. See
-[inference_mode_info()] for the tier system.
+`inference_mode_info()` for the tier system.
 
 ## Process-specific predictors
 
@@ -142,7 +151,7 @@ It helps with my coffee addiction.
 
 ## License
 
-MIT (see the LICENSE.md file)
+MIT (see the LICENSE file)
 
 ## Citation
 

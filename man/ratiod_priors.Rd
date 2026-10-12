@@ -2,7 +2,9 @@
 % Please edit documentation in R/priors.R
 \name{ratiod_priors}
 \alias{ratiod_priors}
-\title{Prior specification for ratio models}
+\alias{print.ratiod_priors}
+\alias{print.ratiod_prior}
+\title{Prior Specification for Ratio Models}
 \usage{
 ratiod_priors(
   beta = NULL,
@@ -11,15 +13,20 @@ ratiod_priors(
   rho_temporal = NULL,
   rho_spatial = NULL
 )
+
+\method{print}{ratiod_priors}(x, ...)
+
+\method{print}{ratiod_prior}(x, ...)
 }
 \arguments{
-\item{beta}{Prior for fixed effects. Default: \code{prior_normal(0, 2.5)}.}
+\item{beta}{Prior for fixed effects. Default: \code{prior_normal(0, 10)}.}
 
-\item{sigma}{Prior for random effect SDs. Default: PC prior with
-P(sigma > 1) = 0.01.}
+\item{sigma}{Prior for random effect SDs. Default: \code{prior_half_cauchy(2.5)}
+(the Laplace backend: \code{prior_pc(U = 1, alpha = 0.01)}).}
 
-\item{phi}{Prior for overdispersion parameter. Default: PC prior with
-P(phi > 10) = 0.01.}
+\item{phi}{Prior for the dispersion parameter. Default: a Gamma prior set
+by family: \code{prior_gamma(2, 2)} for lognormal, \code{prior_gamma(2, 0.5)} for
+gamma_gamma and poisson_gamma, \code{prior_gamma(2, 0.1)} otherwise.}
 
 \item{rho_temporal}{Prior for a temporal autocorrelation, placed on
 \code{(rho + 1) / 2} so \code{rho} lives on (-1, 1). Default: \code{prior_beta(2, 2)},
@@ -29,25 +36,30 @@ multi-scale short-term arm; each block's own \code{rho_prior} overrides it.}
 
 \item{rho_spatial}{Prior for spatial proportion (BYM2). Default:
 \code{prior_beta(1, 1)} (uniform).}
+
+\item{x}{A \code{ratiod_priors} object from \code{\link[=ratiod_priors]{ratiod_priors()}}, or a single
+\code{ratiod_prior} from a \verb{prior_*()} constructor.}
+
+\item{...}{Ignored}
 }
 \value{
-A \code{ratiod_priors} object
+A \code{ratiod_priors} object. A component left \code{NULL} takes its
+default, the same for every sampler and for \code{\link[=prior_predict]{prior_predict()}}.
 }
 \description{
 Specify priors for model parameters. Supports both PC (penalized complexity)
 priors for variance components and standard distributions for other parameters.
 }
 \details{
-PC priors (Simpson et al., 2017) provide principled regularization that:
-\itemize{
-\item Favors simpler models (smaller variance components)
-\item Has interpretable parameters (tail probabilities)
-\item Prevents overfitting with sparse data
-}
-
-For other parameters, standard distributions are available via helper
-functions: \code{prior_normal()}, \code{prior_half_normal()}, \code{prior_half_cauchy()},
-\code{prior_gamma()}, \code{prior_beta()}, \code{prior_exponential()}.
+The MCMC samplers (\code{mode = "hmc"}, \code{"ess"}, \code{"pg"}, \code{"gibbs"}, \code{"vi"},
+\code{"sghmc"}, \code{"sgld"}) evaluate a Normal prior with mean 0 on fixed effects,
+a Half-Cauchy prior on random-effect SDs and a Gamma prior on the dispersion
+parameter; a component specified with another family is refused when the
+model is fitted. The Laplace backend takes \code{prior_pc()} or
+\code{prior_half_normal()} on \code{sigma}. The constructors \code{prior_normal()},
+\code{prior_half_normal()}, \code{prior_half_cauchy()}, \code{prior_gamma()},
+\code{prior_beta()}, \code{prior_exponential()} and \code{prior_pc()} build each
+component; \code{\link[=prior_predict]{prior_predict()}} draws from any of them.
 }
 \examples{
 # Default priors
@@ -57,10 +69,10 @@ ratiod_priors()
 ratiod_priors(beta = prior_normal(0, 1))
 
 # Tighter random effect prior
-ratiod_priors(sigma = prior_pc(U = 0.5, alpha = 0.01))
+ratiod_priors(sigma = prior_half_cauchy(0.5))
 
-# Half-Cauchy for random effect SD
-ratiod_priors(sigma = prior_half_cauchy(2.5))
+# PC prior on the random effect SD (Laplace backend, prior_predict())
+ratiod_priors(sigma = prior_pc(U = 0.5, alpha = 0.01))
 
 # Informative prior for temporal correlation
 ratiod_priors(rho_temporal = prior_beta(5, 2))  # Prior mode at ~0.8

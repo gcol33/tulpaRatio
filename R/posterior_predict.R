@@ -1,4 +1,4 @@
-#' Posterior predictive draws
+#' Posterior Predictive Draws
 #'
 #' @description
 #' Draw replicated numerator and denominator responses from the posterior
@@ -28,7 +28,7 @@
 #' )
 #' fit <- tratio(count | total ~ x, data = df,
 #'               family = ratiod_poisson_gamma(),
-#'               control = list(iter = 200, warmup = 100, chains = 1))
+#'               control = list(iter = 400, chains = 1, seed = 1))
 #' rep <- posterior_predict(fit, ndraws = 50)
 #' dim(rep$y_num_rep)
 #' }

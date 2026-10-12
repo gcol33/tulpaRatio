@@ -2,7 +2,7 @@
 % Please edit documentation in R/family.R
 \name{ratiod_beta_binomial}
 \alias{ratiod_beta_binomial}
-\title{Beta-binomial family for overdispersed proportions}
+\title{Beta-Binomial Family for Overdispersed Proportions}
 \usage{
 ratiod_beta_binomial(link = "logit", denominator_known = TRUE)
 }
@@ -55,14 +55,15 @@ df <- data.frame(
   site = factor(rep(1:8, each = n/8))
 )
 
-\dontrun{
-# Fit model (slow, not run on CRAN)
+\donttest{
+# Fit model
 fit <- tratio(
   infected | tested ~ treatment + (1 | site),
   data = df,
   family = ratiod_beta_binomial(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
+summary(fit)
 }
 
 }

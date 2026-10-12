@@ -100,7 +100,8 @@ test_that("the fixed-denominator families use the trial counts as data", {
   expect_true(all(pp$y_denom == 10))
   expect_true(all(pp$y_num >= 0 & pp$y_num <= 10))
   # The reported ratio is the modelled probability, not successes over trials.
-  expect_true(all(pp$ratio > 0 & pp$ratio < 1))
+  expect_true(all(pp$ratio >= 0 & pp$ratio <= 1))
+  expect_false(isTRUE(all.equal(pp$ratio, pp$y_num / pp$y_denom)))
   expect_equal(ncol(pp$beta_denom), 0L)
 
   set.seed(17)

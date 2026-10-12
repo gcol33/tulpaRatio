@@ -2,10 +2,23 @@
 % Please edit documentation in R/temporal.R
 \name{ratiod_temporal}
 \alias{ratiod_temporal}
-\title{Temporal structure specifications for tulpaRatio}
+\alias{print.ratiod_temporal}
+\title{Temporal Structure Specifications}
+\usage{
+\method{print}{ratiod_temporal}(x, ...)
+}
+\arguments{
+\item{x}{A ratiod_temporal object}
+
+\item{...}{Ignored}
+}
 \description{
 Functions to specify temporal random effects for ratio models.
 Temporal effects are shared between numerator and denominator by default,
 which helps prevent spurious ratio effects from temporally-structured
 unmeasured confounders.
+}
+\examples{
+temporal_rw1("year")
+temporal_ar1("year")
 }

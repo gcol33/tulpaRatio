@@ -787,6 +787,16 @@ struct NUTSWorkspace {
   }
 };
 
+// Stan's windowed-adaptation shrinkage of an estimated covariance toward a
+// small multiple of the identity: with n warmup draws, Sigma is replaced by
+// n / (n + 5) * Sigma + 1e-3 * 5 / (n + 5) * I. A window in which a parameter
+// barely moved then still leaves it a usable mass. `diag` adds the identity
+// part; an off-diagonal entry takes the scaling alone.
+inline double shrink_warmup_cov(double cov, int n, bool diag) {
+  const double w = (n < 2) ? 0.0 : static_cast<double>(n) / (n + 5.0);
+  return w * cov + (diag ? 1e-3 * (5.0 / (n + 5.0)) : 0.0);
+}
+
 // =====================================================================
 // Block-diagonal mass block (max 4×4, stack-allocated)
 // =====================================================================
@@ -849,14 +859,14 @@ struct MassBlock {
   bool update_from_welford() {
     if (welford_n < 10) return false;
 
-    // Compute sample covariance with small regularization
+    // Sample covariance, shrunk as the diagonal metric's variances are
     double cov[16] = {};
     double scale = 1.0 / (welford_n - 1);
     for (int i = 0; i < size; i++) {
       for (int j = 0; j < size; j++) {
-        cov[i * 4 + j] = welford_M2[j * 4 + i] * scale;  // Note: M2 is col-major with stride 4
+        cov[i * 4 + j] = shrink_warmup_cov(welford_M2[j * 4 + i] * scale,  // M2 is col-major, stride 4
+                                           welford_n, i == j);
       }
-      cov[i * 4 + i] += 1e-8;  // Regularization
     }
 
     // Try Cholesky decomposition
@@ -1788,6 +1798,7 @@ struct HMCResultCpp {
   std::vector<double> samples_flat;  // n_sample × n_params, row-major contiguous
   int n_params_stored = 0;
   std::vector<double> log_prob;
+  std::vector<double> energy;     // Hamiltonian after the momentum draw, per iteration
   std::vector<double> accept_prob;
   std::vector<int> n_leapfrog;
   std::vector<int> divergent;
@@ -1815,6 +1826,7 @@ struct HMCResultCpp {
 struct HMCResult {
   Rcpp::NumericMatrix samples;
   Rcpp::NumericVector log_prob;
+  Rcpp::NumericVector energy;
   Rcpp::NumericVector accept_prob;
   Rcpp::IntegerVector n_leapfrog;
   Rcpp::IntegerVector treedepth;
@@ -1838,6 +1850,7 @@ inline HMCResult cpp_to_r_result(const HMCResultCpp& cpp_result, int n_params) {
   HMCResult r_result;
   r_result.samples = Rcpp::NumericMatrix(cpp_result.n_sample, n_params);
   r_result.log_prob = Rcpp::NumericVector(cpp_result.n_sample);
+  r_result.energy = Rcpp::NumericVector(cpp_result.n_sample);
   r_result.accept_prob = Rcpp::NumericVector(cpp_result.n_sample);
   r_result.n_leapfrog = Rcpp::IntegerVector(cpp_result.n_sample);
   r_result.treedepth = Rcpp::IntegerVector(cpp_result.n_sample);
@@ -1854,6 +1867,7 @@ inline HMCResult cpp_to_r_result(const HMCResultCpp& cpp_result, int n_params) {
       r_result.samples(i, j) = row[j];
     }
     r_result.log_prob[i] = cpp_result.log_prob[i];
+    r_result.energy[i] = cpp_result.energy[i];
     r_result.accept_prob[i] = cpp_result.accept_prob[i];
     r_result.n_leapfrog[i] = cpp_result.n_leapfrog[i];
     r_result.treedepth[i] = cpp_result.treedepth[i];

@@ -2,7 +2,8 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_tvc}
 \alias{temporal_tvc}
-\title{Temporally-Varying Coefficients (TVC)}
+\alias{print.ratiod_tvc}
+\title{Temporally Varying Coefficients (TVC)}
 \usage{
 temporal_tvc(
   time_var,
@@ -11,6 +12,8 @@ temporal_tvc(
   group_var = NULL,
   shared = TRUE
 )
+
+\method{print}{ratiod_tvc}(x, ...)
 }
 \arguments{
 \item{time_var}{Name of the time variable in data. Can be a formula
@@ -38,6 +41,10 @@ implemented; \code{temporal_tvc()} errors if selected.
 \item{shared}{Logical; if TRUE (default), TVC effects enter both
 numerator and denominator. Set to FALSE for process-specific TVCs
 (triggers warning about potential confounding).}
+
+\item{x}{A ratiod_tvc object}
+
+\item{...}{Ignored}
 }
 \value{
 A \code{ratiod_tvc} object
@@ -74,8 +81,8 @@ the time-varying component from the global effect.
 tvc <- temporal_tvc("year", terms = 1)
 print(tvc)
 
-\dontrun{
-# Generate synthetic data with time-varying effect (not run - TVC experimental)
+\donttest{
+# Generate synthetic data with time-varying effect
 set.seed(150)
 df <- data.frame(
   year = rep(2010:2025, each = 5),
@@ -91,7 +98,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_tvc("year", terms = 1),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 summary(fit)
 
@@ -102,7 +109,7 @@ fit2 <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_tvc("year", terms = c("(Intercept)", "x"), structure = "rw2"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract and plot the time-varying coefficients

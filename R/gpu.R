@@ -3,10 +3,13 @@
 #' Functions to check GPU availability and capabilities for accelerated
 #' GP computations.
 #'
+#' @examples
+#' gpu_available()
+#' ratiod_threads()
 #' @name gpu-support
 NULL
 
-#' Check if GPU support is available
+#' Check Whether GPU Support Is Available
 #'
 #' @description
 #' Checks whether tulpaRatio was compiled with GPU support (CUDA or OpenCL)
@@ -43,7 +46,7 @@ gpu_available <- function() {
   })
 }
 
-#' Get GPU device information
+#' GPU Device Information
 #'
 #' @description
 #' Returns information about available GPU devices including name, memory,
@@ -88,8 +91,7 @@ gpu_info <- function() {
   })
 }
 
-#' Print GPU information
-#'
+#' @rdname gpu_info
 #' @param x GPU info object from [gpu_info()]
 #' @param ... Ignored
 #' @export

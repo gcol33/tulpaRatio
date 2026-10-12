@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_diagnostics.R
 \name{plot_energy}
 \alias{plot_energy}
-\title{Plot Energy Diagnostic (E-BFMI)}
+\title{Plot the Energy Diagnostic (E-BFMI)}
 \usage{
 plot_energy(fit)
 }
@@ -20,11 +20,19 @@ of the posterior.
 \details{
 E-BFMI (Energy Bayesian Fraction of Missing Information) compares the
 distribution of energy levels to energy transitions. Values below 0.3
-indicate the sampler may not be exploring the full posterior.
+indicate the sampler may not be exploring the full posterior. The energy
+is the Hamiltonian after each iteration's momentum draw; it is centred and
+differenced within each chain, and the subtitle reports the lowest
+per-chain E-BFMI (\code{\link[tulpa:energy_bfmi]{tulpa::energy_bfmi()}}).
 }
 \examples{
-# See plot_rhat() examples for fitting a model
-# plot_energy(fit)
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+plot_energy(fit)
+}
 
 }
 \seealso{

@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_diagnostics.R
 \name{plot_ess}
 \alias{plot_ess}
-\title{Plot Effective Sample Size Diagnostic}
+\title{Plot the Effective Sample Size Diagnostic}
 \usage{
 plot_ess(fit, type = c("bulk", "tail"), threshold = 400, pars = NULL)
 }
@@ -32,9 +32,13 @@ ESS/iter ratio interpretation:
 }
 }
 \examples{
-# See plot_rhat() examples for fitting a model
-# plot_ess(fit)
-# plot_ess(fit, type = "tail")
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+plot_ess(fit)
+}
 
 }
 \seealso{

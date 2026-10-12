@@ -7,6 +7,8 @@
 predict_spatial_gp(object, coords.0, return_spatial)
 }
 \description{
-Predict GP spatial effects at new locations (kriging)
+Krigs each posterior draw of the field at the training locations onto
+\code{coords.0}, put in the units the fit was made in, under that draw's
+variance and range.
 }
 \keyword{internal}

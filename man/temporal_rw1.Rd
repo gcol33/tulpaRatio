@@ -2,7 +2,7 @@
 % Please edit documentation in R/temporal.R
 \name{temporal_rw1}
 \alias{temporal_rw1}
-\title{RW1 temporal structure (First-order Random Walk)}
+\title{RW1 Temporal Structure (First-Order Random Walk)}
 \usage{
 temporal_rw1(
   time_var,
@@ -82,7 +82,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw1("year"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Panel data: separate trends per site
@@ -101,7 +101,7 @@ fit2 <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw1("year", group_var = "site"),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Cyclic for monthly seasonal data
@@ -119,7 +119,7 @@ fit3 <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw1("month", cyclic = TRUE),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 }
 

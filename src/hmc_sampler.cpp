@@ -3253,7 +3253,10 @@ void compute_gradient_gp_handcoded(
     double sigma2_gp = std::exp(params[layout.log_sigma2_gp_idx]);
     double phi_gp = std::exp(params[layout.log_phi_gp_idx]);
 
+    // Outside the range prior's support the density is zero: a caller reading
+    // the fused log-posterior must see -Inf there, not the value it held.
     if (phi_gp < data.gp_phi_prior_lower || phi_gp > data.gp_phi_prior_upper) {
+        if (log_post_out) *log_post_out = -INFINITY;
         return;
     }
 
@@ -3291,11 +3294,11 @@ void compute_gradient_gp_handcoded(
 
     // NC: no Jacobian gradient needed (cancels with NNGP normalizing constant)
 
+    ratiod_gp::NNGPGradients nngp_grads;
     if (!use_nc) {
         // =====================================================================
         // Centered: NNGP prior gradients on w
         // =====================================================================
-        ratiod_gp::NNGPGradients nngp_grads;
         ratiod_gp::gp_nngp_gradients(gp_w, sigma2_gp, phi_gp, data.gp_data, nngp_grads);
 
         for (int i = 0; i < N_gp; i++) {
@@ -3410,14 +3413,16 @@ void compute_gradient_gp_handcoded(
 
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
 
-    // Log-posterior computation
+    // Log-posterior: the observation likelihood was accumulated above, and the
+    // centred field's NNGP density in the same pass as its gradient.
     if (fuse_lp) {
-        if (use_nc) {
-            // NC: use full compute_log_post to ensure perfect consistency
-            *log_post_out = compute_log_post(params, data, layout);
-        } else {
-            *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true) + obs_log_lik;
+        ratiod::LogPostOptions opts;
+        opts.skip_obs_loop = true;
+        if (!use_nc && nngp_grads.log_lik_valid) {
+            opts.precomputed_gp_log_prior = &nngp_grads.log_lik;
         }
+        *log_post_out = ratiod::compute_log_post_impl<double>(params, data, layout, opts)
+                        + obs_log_lik;
     }
 
 }
@@ -4725,6 +4730,7 @@ void compute_gradient_msgp_temporal_handcoded(
         phi_local > data.multiscale_gp_data.range_local_upper ||
         phi_regional < data.multiscale_gp_data.range_regional_lower ||
         phi_regional > data.multiscale_gp_data.range_regional_upper) {
+        if (log_post_out) *log_post_out = -INFINITY;
         return;
     }
 
@@ -4839,7 +4845,7 @@ void compute_gradient_msgp_temporal_handcoded(
 
 // =====================================================================
 // SVC gradient (hand-coded, ~3x faster than autodiff)
-// Uses analytical gradients from svc_nngp_gradients for NNGP prior
+// Uses the spatial GP's analytical NNGP gradients for the field prior
 // =====================================================================
 
 // The NNGP range slots hold u with phi = svc_range(u). Every gradient term for
@@ -4924,9 +4930,10 @@ void compute_gradient_svc_handcoded(
     // NNGP field prior (centred: on w; non-centred: N(0, I) on z, seeded by
     // svc_field_accumulate below)
     // =========================================================================
+    double svc_log_prior = std::numeric_limits<double>::quiet_NaN();
     if (!data.svc_noncentered) {
-        ratiod_svc::svc_nngp_prior_grads(
-            svc_w_flat, svc_sigma2, svc_phi, data.svc_data,
+        svc_log_prior = ratiod_svc::svc_nngp_prior_grads(
+            svc_w_flat, svc_sigma2, svc_phi, data.svc_data, data.svc_gp_view,
             layout.svc_w_start, layout.log_sigma2_svc_start, layout.range_svc_start,
             svc_scratch, grad.data());
     }
@@ -5014,7 +5021,13 @@ void compute_gradient_svc_handcoded(
     // Non-centered RE chain rule transformation
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
 
-    if (fuse_lp) *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true) + obs_log_lik;
+    if (fuse_lp) {
+        ratiod::LogPostOptions opts;
+        opts.skip_obs_loop = true;
+        if (std::isfinite(svc_log_prior)) opts.precomputed_svc_log_prior = &svc_log_prior;
+        *log_post_out = ratiod::compute_log_post_impl<double>(params, data, layout, opts)
+                        + obs_log_lik;
+    }
 }
 
 // =====================================================================
@@ -5751,7 +5764,8 @@ void compute_gradient_msgp_handcoded(
         phi_local > data.multiscale_gp_data.range_local_upper ||
         phi_regional < data.multiscale_gp_data.range_regional_lower ||
         phi_regional > data.multiscale_gp_data.range_regional_upper) {
-        return; // Out of bounds - return zero gradient
+        if (log_post_out) *log_post_out = -INFINITY;
+        return;
     }
 
     // The field, in whichever coordinate it is sampled in
@@ -7432,7 +7446,7 @@ void compute_gradient_composite(
             svc_scratch.resize(n_svc, N_svc);
             ratiod_svc::svc_nngp_prior_grads(
                 svc_w_nngp.data(), svc_sigma2_c.data(), svc_phi_c.data(),
-                data.svc_data, layout.svc_w_start, layout.log_sigma2_svc_start,
+                data.svc_data, data.svc_gp_view, layout.svc_w_start, layout.log_sigma2_svc_start,
                 layout.range_svc_start, svc_scratch, grad.data());
         }
     }
@@ -8495,9 +8509,8 @@ public:
   // extreme mass matrix entries from small sample sizes
   std::vector<double> inv_mass() const {
     auto var = variance();
-    double shrink = (n < 2) ? 0.0 : (double)n / (n + 5.0);
     for (size_t i = 0; i < var.size(); i++) {
-      var[i] = shrink * var[i] + 1e-3 * (5.0 / (n + 5.0));
+      var[i] = shrink_warmup_cov(var[i], n, true);
       // Safety clamp for extreme values
       var[i] = std::max(1e-3, std::min(var[i], 1e3));
     }
@@ -9477,6 +9490,7 @@ HMCResultCpp run_hmc_chain_cpp(
   result.n_params_stored = n_params;
   result.samples_flat.resize(static_cast<size_t>(n_sample) * n_params);
   result.log_prob.resize(n_sample);
+  result.energy.resize(n_sample, NA_REAL);
   result.accept_prob.resize(n_sample);
   result.n_leapfrog.resize(n_sample, L);
   result.divergent.resize(n_sample, 0);
@@ -10276,6 +10290,7 @@ HMCResultCpp run_hmc_chain_cpp(
     bool divergent = false;
     int iter_n_leapfrog = L;
     int iter_treedepth = 0;
+    double iter_energy = NA_REAL;
 
     if (use_nuts && !(use_lbfgs && !lbfgs_warmup_done)) {
       if (use_walnuts) {
@@ -10288,6 +10303,7 @@ HMCResultCpp run_hmc_chain_cpp(
         divergent = w.divergent;
         iter_n_leapfrog = w.n_grad;
         iter_treedepth = w.depth;
+        iter_energy = w.H0;
       } else {
       // -----------------------------------------------------------------
       // NUTS: No-U-Turn Sampler (optimized zero-allocation path)
@@ -10311,6 +10327,7 @@ HMCResultCpp run_hmc_chain_cpp(
       double H0 = nuts_compute_hamiltonian_fast(
         log_prob_current, p.data(), mass, n_params
       );
+      iter_energy = H0;
       double delta_max = 1000.0;
 
       // Load current state into workspace persistent slots
@@ -10823,6 +10840,7 @@ HMCResultCpp run_hmc_chain_cpp(
         kinetic_prop = mass.kinetic_energy(p_prop.data());
       }
       double H_prop = -log_prob_prop + kinetic_prop;
+      iter_energy = H_current;
 
       // Metropolis accept/reject
       alpha = std::min(1.0, std::exp(H_current - H_prop));
@@ -10986,6 +11004,7 @@ HMCResultCpp run_hmc_chain_cpp(
           }
       }
       result.log_prob[sample_idx] = log_prob_current;
+      result.energy[sample_idx] = iter_energy;
       result.accept_prob[sample_idx] = alpha;
       result.n_leapfrog[sample_idx] = iter_n_leapfrog;
       result.divergent[sample_idx] = divergent ? 1 : 0;
@@ -11460,6 +11479,7 @@ Rcpp::List cpp_hmc_fit(
     Rcpp::List ret = Rcpp::List::create(
       Rcpp::Named("samples") = result.samples,
       Rcpp::Named("log_prob") = result.log_prob,
+      Rcpp::Named("energy") = result.energy,
       Rcpp::Named("accept_prob") = result.accept_prob,
       Rcpp::Named("n_leapfrog") = result.n_leapfrog,
       Rcpp::Named("treedepth") = result.treedepth,
@@ -11494,6 +11514,7 @@ Rcpp::List cpp_hmc_fit(
 
     Rcpp::List samples_list(n_chains);
     Rcpp::List log_prob_list(n_chains);
+    Rcpp::List energy_list(n_chains);
     Rcpp::List accept_prob_list(n_chains);
     Rcpp::List n_leapfrog_list(n_chains);
     Rcpp::List treedepth_list(n_chains);
@@ -11505,6 +11526,7 @@ Rcpp::List cpp_hmc_fit(
     for (int c = 0; c < n_chains; c++) {
       samples_list[c] = results[c].samples;
       log_prob_list[c] = results[c].log_prob;
+      energy_list[c] = results[c].energy;
       accept_prob_list[c] = results[c].accept_prob;
       n_leapfrog_list[c] = results[c].n_leapfrog;
       treedepth_list[c] = results[c].treedepth;
@@ -11518,6 +11540,7 @@ Rcpp::List cpp_hmc_fit(
     return Rcpp::List::create(
       Rcpp::Named("samples") = samples_list,
       Rcpp::Named("log_prob") = log_prob_list,
+      Rcpp::Named("energy") = energy_list,
       Rcpp::Named("accept_prob") = accept_prob_list,
       Rcpp::Named("n_leapfrog") = n_leapfrog_list,
       Rcpp::Named("treedepth") = treedepth_list,
@@ -12015,6 +12038,7 @@ Rcpp::List cpp_hmc_fit_gp(
     return Rcpp::List::create(
       Rcpp::Named("samples") = result.samples,
       Rcpp::Named("log_prob") = result.log_prob,
+      Rcpp::Named("energy") = result.energy,
       Rcpp::Named("accept_prob") = result.accept_prob,
       Rcpp::Named("n_leapfrog") = result.n_leapfrog,
       Rcpp::Named("treedepth") = result.treedepth,
@@ -12040,6 +12064,7 @@ Rcpp::List cpp_hmc_fit_gp(
 
     Rcpp::List samples_list(n_chains);
     Rcpp::List log_prob_list(n_chains);
+    Rcpp::List energy_list(n_chains);
     Rcpp::List accept_prob_list(n_chains);
     Rcpp::List n_leapfrog_list(n_chains);
     Rcpp::List treedepth_list(n_chains);
@@ -12050,6 +12075,7 @@ Rcpp::List cpp_hmc_fit_gp(
     for (int c = 0; c < n_chains; c++) {
       samples_list[c] = results[c].samples;
       log_prob_list[c] = results[c].log_prob;
+      energy_list[c] = results[c].energy;
       accept_prob_list[c] = results[c].accept_prob;
       n_leapfrog_list[c] = results[c].n_leapfrog;
       treedepth_list[c] = results[c].treedepth;
@@ -12063,6 +12089,7 @@ Rcpp::List cpp_hmc_fit_gp(
     return Rcpp::List::create(
       Rcpp::Named("samples") = samples_list,
       Rcpp::Named("log_prob") = log_prob_list,
+      Rcpp::Named("energy") = energy_list,
       Rcpp::Named("accept_prob") = accept_prob_list,
       Rcpp::Named("n_leapfrog") = n_leapfrog_list,
       Rcpp::Named("treedepth") = treedepth_list,

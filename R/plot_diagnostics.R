@@ -27,7 +27,7 @@ theme_ratiod <- function() {
 }
 
 
-#' Plot Rhat Convergence Diagnostic
+#' Plot the Rhat Convergence Diagnostic
 #'
 #' @description
 #' Creates a visual display of Rhat values for all parameters, with color-coding
@@ -48,23 +48,12 @@ theme_ratiod <- function() {
 #' - Red: Rhat >= 1.05 (not converged)
 #'
 #' @examples
-#' # Diagnostic plots require a fitted ratio model
-#' # See tratio() examples for fitting models
-#'
 #' \donttest{
-#' # Fit a model (slow, not run on CRAN)
-#' set.seed(123)
-#' n <- 50
-#' df <- data.frame(
-#'   count = rpois(n, lambda = 8),
-#'   effort = rgamma(n, shape = 4, rate = 1),
-#'   depth = rnorm(n),
-#'   site = factor(rep(1:10, each = 5))
-#' )
-#' fit <- tratio(count | effort ~ depth + (1|site), data = df,
-#'              family = ratiod_poisson_gamma(),
-#'              control = list(iter = 200, warmup = 100, chains = 1))
-#' # plot_rhat(fit)
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' plot_rhat(fit)
 #' }
 #'
 #' @seealso [plot_ess()], [diagnostic_summary()], [diagnostics()]
@@ -159,7 +148,7 @@ plot_rhat_base <- function(diag, threshold) {
 }
 
 
-#' Plot Effective Sample Size Diagnostic
+#' Plot the Effective Sample Size Diagnostic
 #'
 #' @description
 #' Creates a visual display of effective sample size (ESS) for all parameters,
@@ -180,9 +169,13 @@ plot_rhat_base <- function(diag, threshold) {
 #' - Red: ESS < threshold/2
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # plot_ess(fit)
-#' # plot_ess(fit, type = "tail")
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' plot_ess(fit)
+#' }
 #'
 #' @seealso [plot_rhat()], [diagnostic_summary()], [diagnostics()]
 #' @export
@@ -295,9 +288,14 @@ plot_ess_base <- function(diag, threshold, type) {
 #' poor mixing.
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # plot_acf(fit)
-#' # plot_acf(fit, pars = c("beta_num[1]", "sigma_re"))
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' plot_acf(fit)
+#' plot_acf(fit, pars = c("beta_num[2]", "sigma_re"))
+#' }
 #'
 #' @seealso [plot_ess()], [diagnostics()]
 #' @export
@@ -418,9 +416,13 @@ plot_acf_base <- function(draws, pars, lags) {
 #' - Regions where divergences cluster (indicating problematic geometry)
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # plot_pairs(fit)
-#' # plot_pairs(fit, pars = c("sigma_re", "phi_num", "phi_denom"))
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' plot_pairs(fit, pars = c("beta_num[1]", "beta_num[2]", "sigma_re"))
+#' }
 #'
 #' @seealso [plot_divergences()], [diagnostics()]
 #' @export
@@ -560,9 +562,14 @@ plot_pairs_base <- function(draws_df, pars, has_divergent, alpha) {
 #' - Multi-modality
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # plot_divergences(fit)
-#' # plot_divergences(fit, type = "scatter")
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' n_divergent(fit)
+#' plot_divergences(fit)
+#' }
 #'
 #' @seealso [plot_pairs()], [n_divergent()]
 #' @export
@@ -744,7 +751,7 @@ plot_divergences_scatter <- function(draws_df, pars) {
 }
 
 
-#' Plot Energy Diagnostic (E-BFMI)
+#' Plot the Energy Diagnostic (E-BFMI)
 #'
 #' @description
 #' Creates overlaid histograms of marginal energy and energy transition,
@@ -758,11 +765,19 @@ plot_divergences_scatter <- function(draws_df, pars) {
 #' @details
 #' E-BFMI (Energy Bayesian Fraction of Missing Information) compares the
 #' distribution of energy levels to energy transitions. Values below 0.3
-#' indicate the sampler may not be exploring the full posterior.
+#' indicate the sampler may not be exploring the full posterior. The energy
+#' is the Hamiltonian after each iteration's momentum draw; it is centred and
+#' differenced within each chain, and the subtitle reports the lowest
+#' per-chain E-BFMI ([tulpa::energy_bfmi()]).
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # plot_energy(fit)
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' plot_energy(fit)
+#' }
 #'
 #' @seealso [diagnostic_summary()], [check_diagnostics()]
 #' @export
@@ -784,15 +799,15 @@ plot_energy <- function(fit) {
     return(invisible(NULL))
   }
 
-  # Compute E-BFMI
-  energy_diff <- diff(energy)
-  e_bfmi <- var(energy_diff) / var(energy)
+  bfmi <- tulpa::energy_bfmi(energy, diag$energy_chain)
+  e_bfmi <- bfmi$value
+  energy <- bfmi$energy_centred
+  energy_diff <- bfmi$energy_diff
 
-  # Create data for plotting
-  n <- length(energy)
   plot_data <- data.frame(
     value = c(energy, energy_diff),
-    type = rep(c("Marginal E", "E transition"), c(n, n - 1))
+    type = rep(c("Marginal E", "E transition"),
+               c(length(energy), length(energy_diff)))
   )
 
   # Status message
@@ -868,14 +883,13 @@ plot_energy_base <- function(energy, energy_diff, e_bfmi, status) {
 }
 
 
-#' Comprehensive Diagnostic Summary
+#' Diagnostic Summary of a Fitted Ratio Model
 #'
 #' @description
 #' Provides a comprehensive diagnostic report for a ratio model, combining
 #' convergence metrics, divergence information, and actionable recommendations.
 #'
 #' @param fit A `ratiod_fit` object.
-#' @param quiet Logical; if TRUE, suppress printed output (default: FALSE).
 #'
 #' @return A list with class `ratiod_diagnostic_summary` containing:
 #' \describe{
@@ -889,13 +903,17 @@ plot_energy_base <- function(energy, energy_diff, e_bfmi, status) {
 #' }
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # ds <- diagnostic_summary(fit)
-#' # print(ds)
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' diagnostic_summary(fit)
+#' }
 #'
 #' @seealso [check_diagnostics()], [diagnostics()], [plot_diagnostics()]
 #' @export
-diagnostic_summary <- function(fit, quiet = FALSE) {
+diagnostic_summary <- function(fit) {
   if (!inherits(fit, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
@@ -977,8 +995,8 @@ diagnostic_summary <- function(fit, quiet = FALSE) {
     # E-BFMI
     energy <- fit$diagnostics$energy
     if (!is.null(energy) && length(energy) > 10) {
-      energy_diff <- diff(energy)
-      result$e_bfmi <- var(energy_diff) / var(energy)
+      result$e_bfmi <- tulpa::energy_bfmi(energy,
+                                          fit$diagnostics$energy_chain)$value
 
       if (result$e_bfmi < 0.3) {
         status <- if (status == "FAIL") "FAIL" else "WARN"
@@ -1006,39 +1024,21 @@ diagnostic_summary <- function(fit, quiet = FALSE) {
   result$status <- status
 
   class(result) <- c("ratiod_diagnostic_summary", "list")
-
-  # Print if not quiet
-
-if (!quiet) {
-    print(result)
-  }
-
-  invisible(result)
+  result
 }
 
 
-#' Print method for diagnostic summary
-#'
+#' @rdname diagnostic_summary
 #' @param x A ratiod_diagnostic_summary object.
 #' @param ... Ignored.
 #'
 #' @export
 print.ratiod_diagnostic_summary <- function(x, ...) {
-  # Status color (ANSI codes)
-  status_color <- switch(
-    x$status,
-    "PASS" = "\033[32m",  # green
-    "WARN" = "\033[33m",  # yellow
-    "FAIL" = "\033[31m",  # red
-    ""
-  )
-  reset <- "\033[0m"
-
   cat("\n")
   cat("=== tulpaRatio Diagnostic Summary ===\n")
   cat("\n")
   cat("Backend:", x$backend, "\n")
-  cat("Status: ", status_color, x$status, reset, "\n", sep = "")
+  cat("Status: ", x$status, "\n", sep = "")
   cat("\n")
 
   # Divergences
@@ -1208,8 +1208,13 @@ plot_diagnostics <- function(fit, pars = NULL) {
 #' converged.
 #'
 #' @examples
-#' # See plot_rhat() examples for fitting a model
-#' # geweke_test(fit)
+#' \donttest{
+#' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#'               family = ratiod_poisson_gamma(),
+#'               control = list(iter = 1000, chains = 2, seed = 1))
+#' geweke_test(fit)
+#' }
 #'
 #' @seealso [diagnostics()], [check_diagnostics()]
 #' @export
@@ -1287,8 +1292,7 @@ spectrum0_ar <- function(x) {
 }
 
 
-#' Print method for Geweke test
-#'
+#' @rdname geweke_test
 #' @param x A ratiod_geweke object.
 #' @param ... Ignored.
 #'

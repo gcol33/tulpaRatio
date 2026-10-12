@@ -1,14 +1,15 @@
-#' Prior specification for ratio models
+#' Prior Specification for Ratio Models
 #'
 #' @description
 #' Specify priors for model parameters. Supports both PC (penalized complexity)
 #' priors for variance components and standard distributions for other parameters.
 #'
-#' @param beta Prior for fixed effects. Default: `prior_normal(0, 2.5)`.
-#' @param sigma Prior for random effect SDs. Default: PC prior with
-#'   P(sigma > 1) = 0.01.
-#' @param phi Prior for overdispersion parameter. Default: PC prior with
-#'   P(phi > 10) = 0.01.
+#' @param beta Prior for fixed effects. Default: `prior_normal(0, 10)`.
+#' @param sigma Prior for random effect SDs. Default: `prior_half_cauchy(2.5)`
+#'   (the Laplace backend: `prior_pc(U = 1, alpha = 0.01)`).
+#' @param phi Prior for the dispersion parameter. Default: a Gamma prior set
+#'   by family: `prior_gamma(2, 2)` for lognormal, `prior_gamma(2, 0.5)` for
+#'   gamma_gamma and poisson_gamma, `prior_gamma(2, 0.1)` otherwise.
 #' @param rho_temporal Prior for a temporal autocorrelation, placed on
 #'   `(rho + 1) / 2` so `rho` lives on (-1, 1). Default: `prior_beta(2, 2)`,
 #'   symmetric about `rho = 0`. Applies to `temporal_ar1()`, a
@@ -17,17 +18,19 @@
 #' @param rho_spatial Prior for spatial proportion (BYM2). Default:
 #'   `prior_beta(1, 1)` (uniform).
 #'
-#' @return A `ratiod_priors` object
+#' @return A `ratiod_priors` object. A component left `NULL` takes its
+#'   default, the same for every sampler and for [prior_predict()].
 #'
 #' @details
-#' PC priors (Simpson et al., 2017) provide principled regularization that:
-#' - Favors simpler models (smaller variance components)
-#' - Has interpretable parameters (tail probabilities)
-#' - Prevents overfitting with sparse data
-#'
-#' For other parameters, standard distributions are available via helper
-#' functions: `prior_normal()`, `prior_half_normal()`, `prior_half_cauchy()`,
-#' `prior_gamma()`, `prior_beta()`, `prior_exponential()`.
+#' The MCMC samplers (`mode = "hmc"`, `"ess"`, `"pg"`, `"gibbs"`, `"vi"`,
+#' `"sghmc"`, `"sgld"`) evaluate a Normal prior with mean 0 on fixed effects,
+#' a Half-Cauchy prior on random-effect SDs and a Gamma prior on the dispersion
+#' parameter; a component specified with another family is refused when the
+#' model is fitted. The Laplace backend takes `prior_pc()` or
+#' `prior_half_normal()` on `sigma`. The constructors `prior_normal()`,
+#' `prior_half_normal()`, `prior_half_cauchy()`, `prior_gamma()`,
+#' `prior_beta()`, `prior_exponential()` and `prior_pc()` build each
+#' component; [prior_predict()] draws from any of them.
 #'
 #' @references
 #' Simpson, D., Rue, H., Riebler, A., Martins, T. G., & Sorbye, S. H. (2017).
@@ -42,10 +45,10 @@
 #' ratiod_priors(beta = prior_normal(0, 1))
 #'
 #' # Tighter random effect prior
-#' ratiod_priors(sigma = prior_pc(U = 0.5, alpha = 0.01))
+#' ratiod_priors(sigma = prior_half_cauchy(0.5))
 #'
-#' # Half-Cauchy for random effect SD
-#' ratiod_priors(sigma = prior_half_cauchy(2.5))
+#' # PC prior on the random effect SD (Laplace backend, prior_predict())
+#' ratiod_priors(sigma = prior_pc(U = 0.5, alpha = 0.01))
 #'
 #' # Informative prior for temporal correlation
 #' ratiod_priors(rho_temporal = prior_beta(5, 2))  # Prior mode at ~0.8
@@ -59,19 +62,12 @@ ratiod_priors <- function(
     rho_spatial = NULL
 ) {
 
-  # Set defaults
-  if (is.null(beta)) beta <- prior_normal(0, 2.5)
-  if (is.null(sigma)) sigma <- prior_pc(U = 1.0, alpha = 0.01)
-  if (is.null(phi)) phi <- prior_pc(U = 10.0, alpha = 0.01)
-  if (is.null(rho_temporal)) rho_temporal <- prior_beta(2, 2)
-  if (is.null(rho_spatial)) rho_spatial <- prior_beta(1, 1)
-
-  # Validate each prior
-  validate_prior(beta, "beta")
-  validate_prior(sigma, "sigma")
-  validate_prior(phi, "phi")
-  validate_prior(rho_temporal, "rho_temporal")
-  validate_prior(rho_spatial, "rho_spatial")
+  # Validate each prior given; NULL keeps the default
+  if (!is.null(beta)) validate_prior(beta, "beta")
+  if (!is.null(sigma)) validate_prior(sigma, "sigma")
+  if (!is.null(phi)) validate_prior(phi, "phi")
+  if (!is.null(rho_temporal)) validate_prior(rho_temporal, "rho_temporal")
+  if (!is.null(rho_spatial)) validate_prior(rho_spatial, "rho_spatial")
 
   structure(
     list(
@@ -99,7 +95,7 @@ validate_prior <- function(prior, name) {
 }
 
 
-#' Normal prior
+#' Normal Prior
 #'
 #' @description
 #' Specify a normal prior for a parameter.
@@ -127,7 +123,7 @@ prior_normal <- function(mean = 0, sd = 2.5) {
 }
 
 
-#' Half-normal prior
+#' Half-Normal Prior
 #'
 #' @description
 #' Specify a half-normal (truncated at 0) prior for a positive parameter.
@@ -152,7 +148,7 @@ prior_half_normal <- function(sd = 1) {
 }
 
 
-#' Half-Cauchy prior
+#' Half-Cauchy Prior
 #'
 #' @description
 #' Specify a half-Cauchy prior for a positive parameter.
@@ -178,7 +174,7 @@ prior_half_cauchy <- function(scale = 2.5) {
 }
 
 
-#' Gamma prior
+#' Gamma Prior
 #'
 #' @description
 #' Specify a gamma prior for a positive parameter.
@@ -210,7 +206,7 @@ prior_gamma <- function(shape = 2, rate = 0.1) {
 }
 
 
-#' Exponential prior
+#' Exponential Prior
 #'
 #' @description
 #' Specify an exponential prior for a positive parameter.
@@ -235,7 +231,7 @@ prior_exponential <- function(rate = 1) {
 }
 
 
-#' Beta prior
+#' Beta Prior
 #'
 #' @description
 #' Specify a beta prior for a parameter bounded in (0, 1).
@@ -310,7 +306,7 @@ rho_prior_anchors <- function(block_prior, default_prior = NULL) {
 }
 
 
-#' Penalized complexity (PC) prior
+#' Penalized Complexity (PC) Prior
 #'
 #' @description
 #' Specify a PC prior for a positive parameter (typically a standard deviation).
@@ -359,48 +355,105 @@ prior_pc <- function(U = 1, alpha = 0.01) {
 #' Legacy prior specification (deprecated)
 #'
 #' @description
-#' Old-style prior specification for backwards compatibility.
-#' Use `ratiod_priors()` with `prior_*()` functions instead.
+#' Default prior of a model component
 #'
-#' @param sigma_U Upper bound for random effect SD.
-#' @param sigma_alpha Tail probability.
-#' @param phi_U Upper bound for overdispersion.
-#' @param phi_alpha Tail probability for overdispersion.
-#' @param beta_sd SD for normal prior on fixed effects.
+#' The prior every sampler, [prior_predict()] and [sim_ratiod_sbc()] applies
+#' when [ratiod_priors()] leaves the component `NULL`. The dispersion default
+#' depends on what the parameter is in the family: a log-scale SD (lognormal),
+#' a Gamma shape (gamma_gamma, poisson_gamma) or an overdispersion / precision
+#' (the negative binomial and beta-binomial families).
 #'
-#' @return A `ratiod_priors` object
-#'
+#' @param component One of `"beta"`, `"sigma"`, `"phi"`, `"rho_temporal"`,
+#'   `"rho_spatial"`.
+#' @param model_type The family's model type, as `get_hmc_model_type()`
+#'   returns it.
+#' @return A `ratiod_prior` object.
 #' @keywords internal
-#' @export
-ratiod_priors_legacy <- function(
-    sigma_U = 1.0,
-    sigma_alpha = 0.01,
-    phi_U = 10.0,
-    phi_alpha = 0.01,
-    beta_sd = 2.5
-) {
-
-  # Validate
-  if (sigma_U <= 0) stop("sigma_U must be positive", call. = FALSE)
-  if (sigma_alpha <= 0 || sigma_alpha >= 1) {
-    stop("sigma_alpha must be in (0, 1)", call. = FALSE)
-  }
-  if (phi_U <= 0) stop("phi_U must be positive", call. = FALSE)
-  if (phi_alpha <= 0 || phi_alpha >= 1) {
-    stop("phi_alpha must be in (0, 1)", call. = FALSE)
-  }
-  if (beta_sd <= 0) stop("beta_sd must be positive", call. = FALSE)
-
-  ratiod_priors(
-    beta = prior_normal(0, beta_sd),
-    sigma = prior_pc(U = sigma_U, alpha = sigma_alpha),
-    phi = prior_pc(U = phi_U, alpha = phi_alpha)
+default_prior <- function(component, model_type = NULL) {
+  switch(
+    component,
+    beta = prior_normal(0, 10),
+    sigma = prior_half_cauchy(2.5),
+    phi = switch(
+      model_type %||% "",
+      lognormal = prior_gamma(2, 2),
+      gamma_gamma = ,
+      poisson_gamma = prior_gamma(2, 0.5),
+      prior_gamma(2, 0.1)
+    ),
+    rho_temporal = prior_beta(2, 2),
+    rho_spatial = prior_beta(1, 1),
+    stop(sprintf("Unknown prior component '%s'", component), call. = FALSE)
   )
 }
 
-#' Print method for ratiod_priors
+#' A prior specification with every component filled
 #'
-#' @param x A ratiod_priors object
+#' @param priors A `ratiod_priors` object or `NULL`.
+#' @param model_type The family's model type.
+#' @return A `ratiod_priors` object whose `NULL` components hold
+#'   `default_prior()`.
+#' @keywords internal
+fill_priors <- function(priors, model_type = NULL) {
+  priors <- priors %||% ratiod_priors()
+  for (nm in c("beta", "sigma", "phi", "rho_temporal", "rho_spatial")) {
+    if (is.null(priors[[nm]])) priors[[nm]] <- default_prior(nm, model_type)
+  }
+  priors
+}
+
+#' Prior parameters the samplers evaluate
+#'
+#' Translates a [ratiod_priors()] specification into the scalars the MCMC
+#' samplers take: the Normal SD on fixed effects (mean 0), the Half-Cauchy
+#' scale on random-effect SDs and the Gamma shape and rate on the dispersion
+#' parameter, plus the fixed precision and zero-inflation priors. A component
+#' in a family the samplers do not implement is refused, since fitting under
+#' another prior than the one asked for would go unnoticed.
+#'
+#' @param priors A `ratiod_priors` object or `NULL`.
+#' @param model_type The family's model type.
+#' @return A named list of prior parameters.
+#' @keywords internal
+sampler_priors <- function(priors, model_type) {
+  p <- fill_priors(priors, model_type)
+  refuse <- function(component, accepted) {
+    stop(sprintf(paste0("The MCMC samplers take %s on `%s`; the %s prior given ",
+                        "is not one. Use it with mode = \"laplace\" or ",
+                        "prior_predict(), or choose %s."),
+                 accepted, component, p[[component]]$distribution, accepted),
+         call. = FALSE)
+  }
+  if (!identical(p$beta$distribution, "normal") || p$beta$mean != 0) {
+    refuse("beta", "prior_normal(0, sd)")
+  }
+  if (!identical(p$sigma$distribution, "half_cauchy")) {
+    refuse("sigma", "prior_half_cauchy(scale)")
+  }
+  if (!identical(p$phi$distribution, "gamma")) {
+    refuse("phi", "prior_gamma(shape, rate)")
+  }
+  if (!identical(p$rho_spatial$distribution, "beta") ||
+      p$rho_spatial$alpha != 1 || p$rho_spatial$beta != 1) {
+    refuse("rho_spatial", "prior_beta(1, 1)")
+  }
+  list(
+    sigma_beta = p$beta$sd,
+    sigma_re_scale = p$sigma$scale,
+    phi_shape = p$phi$shape,
+    phi_rate = p$phi$rate,
+    rho_temporal = p$rho_temporal,
+    tau_spatial_shape = 1.0,
+    tau_spatial_rate = 0.01,
+    tau_temporal_shape = 1.0,
+    tau_temporal_rate = 0.01,
+    zi_prior_sd = 10.0
+  )
+}
+
+#' @rdname ratiod_priors
+#' @param x A `ratiod_priors` object from [ratiod_priors()], or a single
+#'   `ratiod_prior` from a `prior_*()` constructor.
 #' @param ... Ignored
 #'
 #' @export
@@ -426,15 +479,13 @@ print.ratiod_priors <- function(x, ...) {
 
   cat("Spatial proportion (rho_spatial):\n")
   print_prior(x$rho_spatial, indent = "  ")
+  cat("\nComponents marked default take default_prior() when fitted.\n")
 
   invisible(x)
 }
 
 
-#' Print method for ratiod_prior
-#'
-#' @param x A ratiod_prior object
-#' @param ... Ignored
+#' @rdname ratiod_priors
 #'
 #' @export
 print.ratiod_prior <- function(x, ...) {
@@ -449,6 +500,10 @@ print.ratiod_prior <- function(x, ...) {
 #' @param indent Indentation string
 #' @keywords internal
 print_prior <- function(prior, indent = "") {
+  if (is.null(prior)) {
+    cat(sprintf("%sdefault\n", indent))
+    return(invisible(NULL))
+  }
 
   dist <- prior$distribution
 
@@ -477,160 +532,82 @@ print_prior <- function(prior, indent = "") {
 }
 
 
-#' Show default priors for a tulpaRatio family
+#' Default Priors for a Model Family
 #'
 #' @description
-#' Display the default prior specifications used for each model family.
-#' Useful for understanding what priors are applied before fitting
-#' and as a starting point for customization.
+#' Display the priors a fit uses for every component [ratiod_priors()] leaves
+#' unspecified, as a starting point for customization.
 #'
 #' @param family A tulpaRatio family object (e.g., `ratiod_negbin_negbin()`).
-#'   If NULL (default), shows defaults for all families.
-#' @param spatial Logical; if TRUE, include spatial priors. Default FALSE.
-#' @param temporal Logical; if TRUE, include temporal priors. Default FALSE.
+#'   If NULL (default), shows the dispersion default of every family.
+#' @param spatial Logical; if TRUE, include the BYM2 mixing prior.
+#' @param temporal Logical; if TRUE, include the AR1 correlation prior.
 #'
-#' @return Invisibly returns a `ratiod_priors` object with the defaults.
-#'   Primarily called for its side effect of printing.
+#' @return Invisibly, a `ratiod_priors` object holding the defaults (for
+#'   `family = NULL`, with the negative binomial dispersion default).
 #'
 #' @details
-#' Default priors in tulpaRatio follow these principles:
-#'
-#' - **Fixed effects (beta)**: Normal(0, 2.5) - weakly informative, allows
-#'   coefficients roughly in \[-5, 5\] on the link scale.
-#'
-#' - **Random effect SD (sigma)**: PC prior with P(sigma > 1) = 0.01 - favors
-#'   simpler models with smaller variance components.
-#'
-#' - **Overdispersion (phi)**: PC prior with P(phi > 10) = 0.01 - regularizes
-#'   toward Poisson (phi -> Inf means less overdispersion in NB2).
-#'
-#' - **Temporal correlation (rho)**: Beta(2, 2) on `(rho + 1) / 2`, i.e.
-#'   symmetric about `rho = 0` on (-1, 1), appropriate for AR(1) correlation.
-#'
-#' - **Spatial mixing (rho_spatial)**: Beta(1, 1) = Uniform(0, 1) - no
-#'   prior preference for structured vs. unstructured spatial variation.
+#' - **Fixed effects (beta)**: Normal(0, 10) on the link scale.
+#' - **Random effect SD (sigma)**: Half-Cauchy(2.5); the Laplace backend uses
+#'   a PC prior with P(sigma > 1) = 0.01.
+#' - **Dispersion (phi)**: Gamma(2, 2) for the lognormal log-scale SD,
+#'   Gamma(2, 0.5) for a Gamma shape (gamma_gamma, poisson_gamma), Gamma(2, 0.1)
+#'   for a negative binomial size or beta-binomial precision.
+#' - **Temporal correlation (rho)**: Beta(2, 2) on `(rho + 1) / 2`, symmetric
+#'   about `rho = 0`.
+#' - **Spatial mixing (rho_spatial)**: Beta(1, 1), uniform on (0, 1).
 #'
 #' @examples
-#' # Show defaults for negbin_negbin family
 #' priors_default(ratiod_negbin_negbin())
-#'
-#' # Show defaults for binomial family
-#' priors_default(ratiod_binomial())
-#'
-#' # Show defaults including spatial parameters
-#' priors_default(ratiod_negbin_negbin(), spatial = TRUE)
-#'
-#' # Show defaults for all families
+#' priors_default(ratiod_poisson_gamma(), spatial = TRUE, temporal = TRUE)
 #' priors_default()
-#'
-#' # Use as starting point for customization
-#' my_priors <- priors_default(ratiod_poisson_gamma())
-#' my_priors$beta <- prior_normal(0, 1)  # Tighter prior on fixed effects
 #'
 #' @seealso [ratiod_priors()] for creating custom priors
 #'
 #' @export
 priors_default <- function(family = NULL, spatial = FALSE, temporal = FALSE) {
-
-  # Get default priors
-  defaults <- ratiod_priors()
-
-  if (is.null(family)) {
-    # Show defaults for all families
-    cat("Default priors for ratio models\n")
-    cat("================================\n\n")
-
-    cat("These defaults apply to all families unless overridden.\n\n")
-
-    cat("Fixed effects (beta):\n")
-    cat("  Normal(0, 2.5)\n")
-    cat("  Interpretation: Coefficients roughly in [-5, 5] on link scale\n")
-    cat("  Customization: prior_normal(mean, sd)\n\n")
-
-    cat("Random effect SD (sigma):\n")
-    cat("  PC prior: P(sigma > 1) = 0.01\n")
-    cat("  Interpretation: Favors smaller variance components\n")
-    cat("  Customization: prior_pc(U, alpha) or prior_half_normal(sd)\n\n")
-
-    cat("Overdispersion (phi) [negbin/poisson_gamma only]:\n")
-    cat("  PC prior: P(phi > 10) = 0.01\n")
-    cat("  Interpretation: Regularizes toward Poisson\n")
-    cat("  Customization: prior_pc(U, alpha) or prior_gamma(shape, rate)\n\n")
-
-    if (temporal) {
-      cat("Temporal autocorrelation (rho_temporal) [AR models only]:\n")
-      cat("  Beta(2, 2)\n")
-      cat("  Interpretation: Symmetric, centered at 0.5\n")
-      cat("  Customization: prior_beta(alpha, beta)\n\n")
-    }
-
-    if (spatial) {
-      cat("Spatial mixing (rho_spatial) [BYM2 only]:\n")
-      cat("  Beta(1, 1) = Uniform(0, 1)\n")
-      cat("  Interpretation: No preference for structured vs. unstructured\n")
-      cat("  Customization: prior_beta(alpha, beta)\n\n")
-    }
-
-    cat("Family-specific notes:\n")
-    cat("  negbin_negbin: Uses phi for both numerator and denominator\n")
-    cat("  binomial: No overdispersion parameter (unless beta_binomial)\n")
-    cat("  poisson_gamma: Uses phi for gamma shape parameter\n")
-
-  } else {
-    # Show defaults for specific family
+  model_type <- NULL
+  if (!is.null(family)) {
     if (!inherits(family, "ratiod_family")) {
       stop("`family` must be a ratiod_family object", call. = FALSE)
     }
+    model_type <- get_hmc_model_type(family)
+  }
+  defaults <- fill_priors(NULL, model_type %||% "negbin_negbin")
 
-    family_name <- family$name
+  title <- if (is.null(family)) "Default priors" else
+    sprintf("Default priors for the %s family", family$name)
+  cat(title, "\n", strrep("=", nchar(title)), "\n\n", sep = "")
 
-    cat(sprintf("Default priors for %s family\n", family_name))
-    cat(paste(rep("=", nchar(family_name) + 24), collapse = ""), "\n\n")
+  cat("Fixed effects (beta):\n")
+  print_prior(defaults$beta, indent = "  ")
+  cat("Random effect SD (sigma):\n")
+  print_prior(defaults$sigma, indent = "  ")
+  cat("  (Laplace backend: PC prior, P(sigma > 1) = 0.01)\n")
 
-    cat("Fixed effects (beta):\n")
-    print_prior(defaults$beta, indent = "  ")
-    cat("  Used for: All regression coefficients in numerator and denominator\n\n")
-
-    cat("Random effect SD (sigma):\n")
-    print_prior(defaults$sigma, indent = "  ")
-    cat("  Used for: Standard deviation of group-level effects\n\n")
-
-    # Family-specific parameters
-    if (family_name %in% c("negbin_negbin", "negbin_gamma", "poisson_gamma", "gamma_gamma")) {
-      cat("Overdispersion (phi):\n")
-      print_prior(defaults$phi, indent = "  ")
-      if (family_name %in% c("negbin_negbin", "negbin_gamma")) {
-        cat("  Used for: NB2 size parameter (larger = less overdispersion)\n\n")
-      } else if (family_name == "poisson_gamma") {
-        cat("  Used for: Gamma shape parameter for effort/exposure\n\n")
-      } else {
-        cat("  Used for: Gamma shape parameters for both processes\n\n")
-      }
+  cat("Dispersion (phi):\n")
+  if (is.null(family)) {
+    groups <- list(
+      "lognormal" = "lognormal",
+      "gamma_gamma, poisson_gamma" = "poisson_gamma",
+      "negbin_negbin, negbin_gamma, beta_binomial" = "negbin_negbin")
+    for (nm in names(groups)) {
+      cat(sprintf("  %s: ", nm))
+      print_prior(default_prior("phi", groups[[nm]]))
     }
+  } else if (identical(family$name, "binomial")) {
+    cat("  none (binomial)\n")
+  } else {
+    print_prior(defaults$phi, indent = "  ")
+  }
 
-    if (family_name %in% c("beta_binomial_fixed", "beta_binomial")) {
-      cat("Overdispersion (phi):\n")
-      print_prior(defaults$phi, indent = "  ")
-      cat("  Used for: Beta-binomial concentration parameter\n\n")
-    }
-
-    if (temporal) {
-      cat("Temporal autocorrelation (rho_temporal):\n")
-      print_prior(defaults$rho_temporal, indent = "  ")
-      cat("  Used for: AR(1) correlation coefficient\n\n")
-    }
-
-    if (spatial) {
-      cat("Spatial mixing (rho_spatial):\n")
-      print_prior(defaults$rho_spatial, indent = "  ")
-      cat("  Used for: BYM2 mixing proportion (structured vs. unstructured)\n\n")
-    }
-
-    cat("To customize, use ratiod_priors():\n")
-    cat("  priors <- ratiod_priors(\n")
-    cat("    beta = prior_normal(0, 1),\n")
-    cat("    sigma = prior_pc(U = 0.5, alpha = 0.01)\n")
-    cat("  )\n")
+  if (temporal) {
+    cat("Temporal autocorrelation (rho_temporal):\n")
+    print_prior(defaults$rho_temporal, indent = "  ")
+  }
+  if (spatial) {
+    cat("Spatial mixing (rho_spatial):\n")
+    print_prior(defaults$rho_spatial, indent = "  ")
   }
 
   invisible(defaults)

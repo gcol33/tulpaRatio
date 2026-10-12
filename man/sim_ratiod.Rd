@@ -2,7 +2,8 @@
 % Please edit documentation in R/simulate.R
 \name{sim_ratiod}
 \alias{sim_ratiod}
-\title{Simulate data from ratio models}
+\alias{print.ratiod_simdata}
+\title{Simulate Data from Ratio Models}
 \usage{
 sim_ratiod(
   n = 100,
@@ -18,6 +19,8 @@ sim_ratiod(
   spatial = NULL,
   seed = NULL
 )
+
+\method{print}{ratiod_simdata}(x, ...)
 }
 \arguments{
 \item{n}{Number of observations to simulate.}
@@ -46,6 +49,10 @@ If NULL, drawn from prior.}
 \item{spatial}{Optional spatial structure specification.}
 
 \item{seed}{Random seed for reproducibility.}
+
+\item{x}{A ratiod_simdata object}
+
+\item{...}{Ignored}
 }
 \value{
 A list with class \code{ratiod_simdata} containing:
@@ -113,12 +120,12 @@ sim_binom <- sim_ratiod(
 )
 
 \donttest{
-# Fit model to simulated data (slow, not run on CRAN)
+# Fit model to simulated data
 fit <- tratio(
   y_num | y_denom ~ x1 + (1 | group),
   data = sim$data,
   family = ratiod_poisson_gamma(),
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 # Compare estimated vs. true parameters
 # summary(fit)

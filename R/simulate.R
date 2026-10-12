@@ -1,7 +1,7 @@
 #' @importFrom stats rbinom rpois rgamma rexp terms
 NULL
 
-#' Simulate data from ratio models
+#' Simulate Data from Ratio Models
 #'
 #' @description
 #' Generate simulated datasets from prior or posterior predictive distributions.
@@ -78,12 +78,12 @@ NULL
 #' )
 #'
 #' \donttest{
-#' # Fit model to simulated data (slow, not run on CRAN)
+#' # Fit model to simulated data
 #' fit <- tratio(
 #'   y_num | y_denom ~ x1 + (1 | group),
 #'   data = sim$data,
 #'   family = ratiod_poisson_gamma(),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' # Compare estimated vs. true parameters
 #' # summary(fit)
@@ -262,8 +262,7 @@ sim_ratiod <- function(n = 100,
 }
 
 
-#' Print method for ratiod_simdata
-#'
+#' @rdname sim_ratiod
 #' @param x A ratiod_simdata object
 #' @param ... Ignored
 #'
@@ -298,7 +297,7 @@ print.ratiod_simdata <- function(x, ...) {
 }
 
 
-#' Simulate multiple datasets for SBC
+#' Simulate Datasets for Simulation-Based Calibration
 #'
 #' @description
 #' Generate multiple simulated datasets for simulation-based calibration (SBC).
@@ -324,12 +323,12 @@ print.ratiod_simdata <- function(x, ...) {
 #' print(sims)
 #'
 #' \donttest{
-#' # Fit model to each simulation (slow, not run on CRAN)
+#' # Fit model to each simulation
 #' # ranks <- lapply(sims, function(sim) {
 #' #   fit <- tratio(y_num | y_denom ~ x1 + (1 | group),
 #' #                data = sim$data,
 #' #                family = ratiod_negbin_negbin(),
-#' #                control = list(iter = 200, warmup = 100, chains = 1))
+#' #                control = list(iter = 400, chains = 1, seed = 1))
 #' #   sum(as.matrix(fit$draws)[, "beta_num[1]"] < sim$true_params$beta_num[1])
 #' # })
 #' }
@@ -346,27 +345,22 @@ sim_ratiod_sbc <- function(n_sims = 100,
 
   if (!is.null(seed)) set.seed(seed)
 
-  if (is.null(priors)) {
-    priors <- ratiod_priors()
-  }
+  priors <- fill_priors(priors, get_hmc_model_type(family))
 
   family_name <- family$name
 
   sims <- vector("list", n_sims)
 
   for (i in seq_len(n_sims)) {
-    # Draw parameters from prior
-    # Fixed effects: Normal(0, 2.5) by default
-    beta_num <- rnorm(2, mean = priors$beta$mean, sd = priors$beta$sd)
-    beta_denom <- rnorm(2, mean = priors$beta$mean, sd = priors$beta$sd)
-
-    # Random effect SD: exponential (PC prior)
-    sigma_re <- rexp(1, rate = priors$sigma$rate)
+    # Draw parameters from the priors the fit uses
+    beta_num <- pp_draw_prior(priors$beta, 2)
+    beta_denom <- pp_draw_prior(priors$beta, 2)
+    sigma_re <- pp_draw_prior(priors$sigma, 1)
 
     # Overdispersion
     if (family_name %in% c("negbin_negbin", "negbin_gamma", "poisson_gamma", "gamma_gamma")) {
-      phi_num <- rexp(1, rate = priors$phi$rate) + 1  # Ensure > 1
-      phi_denom <- rexp(1, rate = priors$phi$rate) + 1
+      phi_num <- pp_draw_prior(priors$phi, 1)
+      phi_denom <- pp_draw_prior(priors$phi, 1)
     } else {
       phi_num <- 5
       phi_denom <- 5
@@ -394,8 +388,7 @@ sim_ratiod_sbc <- function(n_sims = 100,
 }
 
 
-#' Print method for ratiod_sbc_sims
-#'
+#' @rdname sim_ratiod_sbc
 #' @param x A ratiod_sbc_sims object
 #' @param ... Ignored
 #'

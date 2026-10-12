@@ -1,4 +1,4 @@
-#' Temporal structure specifications for tulpaRatio
+#' Temporal Structure Specifications
 #'
 #' @description
 #' Functions to specify temporal random effects for ratio models.
@@ -6,6 +6,9 @@
 #' which helps prevent spurious ratio effects from temporally-structured
 #' unmeasured confounders.
 #'
+#' @examples
+#' temporal_rw1("year")
+#' temporal_ar1("year")
 #' @name ratiod_temporal
 NULL
 
@@ -95,7 +98,7 @@ temporal_var_name <- function(x, arg) {
 }
 
 
-#' RW1 temporal structure (First-order Random Walk)
+#' RW1 Temporal Structure (First-Order Random Walk)
 #'
 #' @description
 #' Specify a first-order random walk temporal random effect.
@@ -161,7 +164,7 @@ temporal_var_name <- function(x, arg) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw1("year"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Panel data: separate trends per site
@@ -180,7 +183,7 @@ temporal_var_name <- function(x, arg) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw1("year", group_var = "site"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Cyclic for monthly seasonal data
@@ -198,7 +201,7 @@ temporal_var_name <- function(x, arg) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw1("month", cyclic = TRUE),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' }
 #'
@@ -213,7 +216,7 @@ temporal_rw1 <- function(time_var, group_var = NULL, cyclic = FALSE,
 }
 
 
-#' RW2 temporal structure (Second-order Random Walk)
+#' RW2 Temporal Structure (Second-Order Random Walk)
 #'
 #' @description
 #' Specify a second-order random walk temporal random effect.
@@ -251,7 +254,7 @@ temporal_rw1 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw2("year"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' }
 #'
@@ -266,7 +269,7 @@ temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
 }
 
 
-#' AR1 temporal structure (First-order Autoregressive)
+#' AR1 Temporal Structure (First-Order Autoregressive)
 #'
 #' @description
 #' Specify a first-order autoregressive temporal random effect.
@@ -322,7 +325,7 @@ temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_ar1("year"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Panel data with group-specific AR1
@@ -341,7 +344,7 @@ temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_ar1("year", group_var = "site"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' }
 #'
@@ -364,7 +367,7 @@ temporal_ar1 <- function(time_var, group_var = NULL, shared = TRUE,
 }
 
 
-#' IID temporal structure (Independent Effects)
+#' IID Temporal Structure (Independent Effects)
 #'
 #' @description
 #' Specify an independent temporal random effect: each time point gets its own
@@ -403,7 +406,7 @@ temporal_ar1 <- function(time_var, group_var = NULL, shared = TRUE,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_iid("year"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' }
 #'
@@ -414,8 +417,7 @@ temporal_iid <- function(time_var, group_var = NULL, shared = TRUE) {
 }
 
 
-#' Print method for ratiod_temporal
-#'
+#' @rdname ratiod_temporal
 #' @param x A ratiod_temporal object
 #' @param ... Ignored
 #'
@@ -708,7 +710,7 @@ build_ar1_precision <- function(T, rho, tau = 1) {
 }
 
 
-#' Multi-Scale temporal structure
+#' Multi-Scale Temporal Structure
 #'
 #' @description
 #' Specify a multi-scale temporal random effect that decomposes temporal
@@ -767,8 +769,8 @@ build_ar1_precision <- function(T, rho, tau = 1) {
 #' temporal_multiscale("month_id", trend = "rw2", seasonal = 12, short_term = "ar1")
 #' temporal_multiscale("year", trend = "rw2", seasonal = NULL, short_term = "none")
 #'
-#' \dontrun{
-#' # Decompose into trend + seasonal + short-term (not run - experimental)
+#' \donttest{
+#' # Decompose into trend + seasonal + short-term
 #' set.seed(129)
 #' df <- data.frame(
 #'   month_id = 1:48,
@@ -787,7 +789,7 @@ build_ar1_precision <- function(T, rho, tau = 1) {
 #'     seasonal = 12,
 #'     short_term = "ar1"
 #'   ),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract and plot components
@@ -865,8 +867,7 @@ temporal_multiscale <- function(time_var,
 }
 
 
-#' Print method for ratiod_temporal_multiscale
-#'
+#' @rdname temporal_multiscale
 #' @param x A ratiod_temporal_multiscale object
 #' @param ... Ignored
 #'
@@ -1038,7 +1039,7 @@ validate_temporal_multiscale <- function(temporal, data) {
 # Gaussian Process Temporal Structure
 # =============================================================================
 
-#' Gaussian Process temporal structure
+#' Gaussian Process Temporal Structure
 #'
 #' @description
 #' Specify a Gaussian Process (GP) temporal random effect for irregularly-spaced
@@ -1101,8 +1102,8 @@ validate_temporal_multiscale <- function(temporal, data) {
 #' temporal_gp("day", cov = "matern", nu = 1.5)
 #' temporal_gp("month", cov = "periodic", period = 12)
 #'
-#' \dontrun{
-#' # Irregularly-spaced time series (not run - GP temporal experimental)
+#' \donttest{
+#' # Irregularly-spaced time series
 #' set.seed(140)
 #' times <- sort(runif(30, 0, 100))
 #' df <- data.frame(
@@ -1117,7 +1118,7 @@ validate_temporal_multiscale <- function(temporal, data) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_gp("time"),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' }
 #'
@@ -1198,8 +1199,7 @@ temporal_gp <- function(time_var,
 }
 
 
-#' Print method for ratiod_temporal_gp
-#'
+#' @rdname temporal_gp
 #' @param x A ratiod_temporal_gp object
 #' @param ... Ignored
 #'
@@ -1323,7 +1323,7 @@ validate_temporal_gp <- function(temporal, data) {
 # Temporally-Varying Coefficients (TVC)
 # =============================================================================
 
-#' Temporally-Varying Coefficients (TVC)
+#' Temporally Varying Coefficients (TVC)
 #'
 #' @description
 #' Specify temporally-varying coefficients for ratio models. TVCs allow
@@ -1375,8 +1375,8 @@ validate_temporal_gp <- function(temporal, data) {
 #' tvc <- temporal_tvc("year", terms = 1)
 #' print(tvc)
 #'
-#' \dontrun{
-#' # Generate synthetic data with time-varying effect (not run - TVC experimental)
+#' \donttest{
+#' # Generate synthetic data with time-varying effect
 #' set.seed(150)
 #' df <- data.frame(
 #'   year = rep(2010:2025, each = 5),
@@ -1392,7 +1392,7 @@ validate_temporal_gp <- function(temporal, data) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_tvc("year", terms = 1),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #'
@@ -1403,7 +1403,7 @@ validate_temporal_gp <- function(temporal, data) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_tvc("year", terms = c("(Intercept)", "x"), structure = "rw2"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract and plot the time-varying coefficients
@@ -1483,8 +1483,7 @@ temporal_tvc <- function(time_var,
 }
 
 
-#' Print method for ratiod_tvc
-#'
+#' @rdname temporal_tvc
 #' @param x A ratiod_tvc object
 #' @param ... Ignored
 #'
@@ -1639,7 +1638,7 @@ validate_tvc <- function(tvc, data, X) {
 }
 
 
-#' Extract temporally-varying coefficients from a fitted model
+#' Temporally Varying Coefficients of a Fitted Model
 #'
 #' @description
 #' Extract posterior distributions of temporally-varying coefficients (TVCs)
@@ -1660,8 +1659,8 @@ validate_tvc <- function(tvc, data, X) {
 #' - `term_names`: Names of TVC terms
 #'
 #' @examples
-#' \dontrun{
-#' # Generate synthetic data (not run - TVC experimental)
+#' \donttest{
+#' # Generate synthetic data
 #' set.seed(160)
 #' df <- data.frame(
 #'   year = rep(2015:2024, each = 5),
@@ -1677,7 +1676,7 @@ validate_tvc <- function(tvc, data, X) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_tvc("year", terms = c(1, 2)),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract TVC posteriors
@@ -1771,10 +1770,8 @@ tvc.ratiod_fit <- function(object, terms = NULL, group = 1L, summary = FALSE,
 }
 
 
-#' Print method for ratiod_tvc_posterior
-#'
+#' @rdname tvc
 #' @param x A ratiod_tvc_posterior object
-#' @param ... Ignored
 #'
 #' @export
 print.ratiod_tvc_posterior <- function(x, ...) {
@@ -1790,11 +1787,7 @@ print.ratiod_tvc_posterior <- function(x, ...) {
 }
 
 
-#' Summary method for ratiod_tvc_posterior
-#'
-#' @param object A ratiod_tvc_posterior object
-#' @param probs Quantiles to compute
-#' @param ... Ignored
+#' @rdname tvc
 #'
 #' @export
 summary.ratiod_tvc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
@@ -1833,12 +1826,9 @@ summary.ratiod_tvc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), .
 }
 
 
-#' Plot method for ratiod_tvc_posterior
-#'
-#' @param x A ratiod_tvc_posterior object
+#' @rdname tvc
 #' @param term Which term to plot (name or index). Default: first term.
 #' @param type Plot type: "ribbon" (default) or "line"
-#' @param ... Additional arguments passed to plotting functions
 #'
 #' @export
 plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
@@ -1958,8 +1948,8 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #' )
 #' print(rtr)
 #'
-#' \dontrun{
-#' # Generate data with temporal confounding (not run - RTR experimental)
+#' \donttest{
+#' # Generate data with temporal confounding
 #' set.seed(170)
 #' years <- 2000:2023
 #' n_per_year <- 4
@@ -1979,7 +1969,7 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw2("year"),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # RTR to protect temperature coefficient
@@ -1992,7 +1982,7 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #'     restrict_to = ~ temperature
 #'   ),
 #'   mode = "hmc",
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Compare coefficient estimates
@@ -2030,8 +2020,7 @@ temporal_rtr <- function(temporal, restrict_to) {
 }
 
 
-#' Print method for ratiod_rtr (temporal)
-#'
+#' @rdname temporal_rtr
 #' @param x A ratiod_rtr object
 #' @param ... Passed to underlying print method
 #'
@@ -2131,7 +2120,7 @@ apply_rtr_projection <- function(f, P_perp) {
 }
 
 
-#' Extract temporal effects from a fitted model
+#' Temporal Effects of a Fitted Model
 #'
 #' @description
 #' Extract posterior distributions of temporal effects from a fitted tulpaRatio
@@ -2148,8 +2137,8 @@ apply_rtr_projection <- function(f, P_perp) {
 #' @return A `ratiod_temporal_posterior` object
 #'
 #' @examples
-#' \dontrun{
-#' # Fit model with multi-scale temporal effects (not run - experimental)
+#' \donttest{
+#' # Fit model with multi-scale temporal effects
 #' set.seed(131)
 #' df <- data.frame(
 #'   year = 1:40,
@@ -2163,7 +2152,7 @@ apply_rtr_projection <- function(f, P_perp) {
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_multiscale("year", trend = "rw2", seasonal = 12),
-#'   control = list(iter = 200, warmup = 100, chains = 1)
+#'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
 #' # Extract all temporal effects
@@ -2240,10 +2229,8 @@ temporal.ratiod_fit <- function(object, component = "all", summary = FALSE,
 }
 
 
-#' Print method for ratiod_temporal_posterior
-#'
+#' @rdname temporal
 #' @param x A ratiod_temporal_posterior object
-#' @param ... Ignored
 #'
 #' @export
 print.ratiod_temporal_posterior <- function(x, ...) {
@@ -2271,11 +2258,7 @@ print.ratiod_temporal_posterior <- function(x, ...) {
 }
 
 
-#' Summary method for ratiod_temporal_posterior
-#'
-#' @param object A ratiod_temporal_posterior object
-#' @param probs Quantiles to compute
-#' @param ... Ignored
+#' @rdname temporal
 #'
 #' @export
 summary.ratiod_temporal_posterior <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
@@ -2328,12 +2311,8 @@ summary.ratiod_temporal_posterior <- function(object, probs = c(0.025, 0.5, 0.97
 }
 
 
-#' Plot method for ratiod_temporal_posterior
-#'
-#' @param x A ratiod_temporal_posterior object
-#' @param component Which component to plot (for multi-scale). Default: first.
+#' @rdname temporal
 #' @param type Plot type: "ribbon" (default) or "line"
-#' @param ... Additional arguments passed to plotting functions
 #'
 #' @export
 plot.ratiod_temporal_posterior <- function(x, component = NULL, type = "ribbon", ...) {

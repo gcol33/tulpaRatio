@@ -3,7 +3,7 @@
 \name{draws_long}
 \alias{draws_long}
 \alias{draws_long.ratiod_fit}
-\title{Draws for selected parameters, one row per parameter per draw}
+\title{Draws for Selected Parameters in Long Format}
 \usage{
 draws_long(object, ..., regex = FALSE, ndraws = NULL)
 
@@ -44,7 +44,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Gather all fixed effects
@@ -55,7 +55,7 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
   library(ggplot2)
   draws_long(fit, beta_num) |>
     ggplot(aes(x = .value)) +
-    geom_histogram() +
+    geom_histogram(bins = 40) +
     facet_wrap(~ .variable)
 }
 }

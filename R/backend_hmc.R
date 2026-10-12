@@ -212,41 +212,16 @@ fit_hmc <- function(formula,
   # Prepare SVC structure (if spatial is an SVC specification)
   svc_info <- prepare_svc_for_hmc(spatial, data, hmc_data$N, hmc_data$X_num)
 
-  # Get prior parameters
-  priors <- priors %||% ratiod_priors()
-  sigma_beta <- priors$sigma_beta %||% 10.0
-  sigma_re_scale <- priors$sigma_re_scale %||% 2.5
+  # Prior parameters the sampler evaluates
+  sp <- sampler_priors(priors, model_type)
+  priors <- fill_priors(priors, model_type)
+  sigma_beta <- sp$sigma_beta
+  sigma_re_scale <- sp$sigma_re_scale
+  phi_shape <- sp$phi_shape
+  phi_rate <- sp$phi_rate
 
-  # Family-specific priors for phi parameter
-  # - negbin_negbin: phi is overdispersion, use Gamma(2, 0.1) with mode=10
-  # - lognormal: phi is sigma (log-scale SD), use Gamma(2, 2) with mode=0.5
-  # - gamma_gamma: phi is shape, use Gamma(2, 0.5) with mode=2
-  # - poisson_gamma: phi is shape of gamma denominator, use Gamma(2, 0.5) with mode=2
-  # - beta_binomial: phi is precision (alpha+beta), use Gamma(2, 0.1) with mode=10
-  if (!is.null(priors$phi_shape) && !is.null(priors$phi_rate)) {
-    # User explicitly specified priors
-    phi_shape <- priors$phi_shape
-    phi_rate <- priors$phi_rate
-  } else if (model_type == "lognormal") {
-    # Lognormal: sigma typically 0.1-2, use Gamma(2, 2) with mode=0.5, mean=1
-    phi_shape <- priors$phi_shape %||% 2.0
-    phi_rate <- priors$phi_rate %||% 2.0
-  } else if (model_type == "gamma_gamma") {
-    # Gamma-Gamma: shape typically 1-10, use Gamma(2, 0.5) with mode=2, mean=4
-    phi_shape <- priors$phi_shape %||% 2.0
-    phi_rate <- priors$phi_rate %||% 0.5
-  } else if (model_type == "poisson_gamma") {
-    # Poisson-Gamma: shape typically 1-10, use Gamma(2, 0.5) with mode=2, mean=4
-    phi_shape <- priors$phi_shape %||% 2.0
-    phi_rate <- priors$phi_rate %||% 0.5
-  } else {
-    # Default (negbin_negbin, beta_binomial): overdispersion/precision, mode=10
-    phi_shape <- priors$phi_shape %||% 2.0
-    phi_rate <- priors$phi_rate %||% 0.1
-  }
-
-  tau_spatial_shape <- priors$tau_spatial_shape %||% 1.0
-  tau_spatial_rate <- priors$tau_spatial_rate %||% 0.01
+  tau_spatial_shape <- sp$tau_spatial_shape
+  tau_spatial_rate <- sp$tau_spatial_rate
 
 
   # Initialize parameters
@@ -287,8 +262,8 @@ fit_hmc <- function(formula,
   n_threads_within <- as.integer(cores %/% concurrent_chains)
 
   # Get temporal prior parameters
-  tau_temporal_shape <- priors$tau_temporal_shape %||% 1.0
-  tau_temporal_rate <- priors$tau_temporal_rate %||% 0.01
+  tau_temporal_shape <- sp$tau_temporal_shape
+  tau_temporal_rate <- sp$tau_temporal_rate
   # Beta anchors on u = (rho + 1) / 2 for an AR1 correlation. The block's own
   # rho_prior wins over the model-wide one; both default to Beta(2, 2).
   rho_temporal_ab <- rho_prior_anchors(temporal_info$rho_prior,
@@ -623,7 +598,7 @@ fit_hmc <- function(formula,
       # Zero-inflation
       zi_type_str = zi_info$type,
       X_zi = zi_info$X_zi,
-      zi_prior_sd = priors$zi_prior_sd %||% 10.0,
+      zi_prior_sd = sp$zi_prior_sd,
       # Sampler
       n_iter = as.integer(iter),
       n_warmup = as.integer(warmup),
@@ -671,11 +646,11 @@ fit_hmc <- function(formula,
       type = zi_info$type,
       X = zi_info$X_zi,
       p_zi = zi_info$p_zi %||% as.integer(ncol(zi_info$X_zi)),  # Explicit p_zi for OI-only models
-      prior_sd = priors$zi_prior_sd %||% 10.0,
+      prior_sd = sp$zi_prior_sd,
       # OI info for OI-binomial and ZOIB models
       X_oi = zi_info$X_oi,
       p_oi = zi_info$p_oi %||% 0L,
-      oi_prior_sd = priors$oi_prior_sd %||% priors$zi_prior_sd %||% 10.0
+      oi_prior_sd = sp$zi_prior_sd
     )
 
 
@@ -755,8 +730,8 @@ fit_hmc <- function(formula,
       # switch does not silently change the prior (the bridge defaults to
       # tulpa's engine default of 2.5 otherwise; legacy default is 10.0).
       if (has_zi_block || has_oi_block) {
-        cfg$zi_prior_sd <- priors$zi_prior_sd %||% 10.0
-        cfg$oi_prior_sd <- priors$oi_prior_sd %||% cfg$zi_prior_sd
+        cfg$zi_prior_sd <- sp$zi_prior_sd
+        cfg$oi_prior_sd <- sp$zi_prior_sd
       }
       # X_list carries one design matrix per process. Single-process families
       # (binomial / beta_binomial) pass length-1; two-process families append
@@ -1018,6 +993,9 @@ fit_hmc <- function(formula,
     chains = chains,
     re_param = re_param
   )
+  # The validated GP specification: coordinates, their scaling and the
+  # neighbour structure prediction at new locations reads.
+  fit$.internal$spatial_spec <- gp_info$spec
 
   return(fit)
 }
@@ -1416,14 +1394,9 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
   Q_inv_flat <- NULL
   L_Q_flat <- NULL
   if (spatial_type %in% c("icar", "bym2", "car", "car_proper") && n_units >= 5) {
-    Q <- diag(n_neighbors) - adj
-    Q_reg <- Q + 0.01 * diag(n_units)  # Regularize rank-deficient Q
-    Q_inv <- solve(Q_reg)
-    L_Q <- chol(Q_reg)  # Upper Cholesky: L^T * L = Q_reg
-    # Convert to lower Cholesky (column-major): L * L^T = Q_reg
-    L_Q_lower <- t(L_Q)
-    Q_inv_flat <- as.numeric(Q_inv)      # Column-major flat [S x S]
-    L_Q_flat <- as.numeric(L_Q_lower)    # Column-major flat [S x S]
+    mass <- ridged_precision_factors(diag(n_neighbors) - adj)
+    Q_inv_flat <- mass$Q_inv
+    L_Q_flat <- mass$L
   }
 
   rho_bounds <- spatial$rho_bounds
@@ -2173,6 +2146,8 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
     all_n_leapfrog <- unlist(fit_raw$n_leapfrog)
     all_treedepth <- unlist(fit_raw$treedepth)
     all_divergent <- unlist(fit_raw$divergent)
+    all_energy <- unlist(fit_raw$energy)
+    energy_chain <- rep(seq_along(fit_raw$log_prob), lengths(fit_raw$log_prob))
     epsilon <- mean(fit_raw$epsilon)
   } else {
     all_samples <- fit_raw$samples
@@ -2181,6 +2156,8 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
     all_n_leapfrog <- fit_raw$n_leapfrog
     all_treedepth <- fit_raw$treedepth
     all_divergent <- fit_raw$divergent
+    all_energy <- fit_raw$energy
+    energy_chain <- rep(1L, length(all_log_prob))
     epsilon <- fit_raw$epsilon
   }
 
@@ -2285,7 +2262,9 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
       n_leapfrog = all_n_leapfrog,
       treedepth = all_treedepth,
       divergent = all_divergent,
-      log_posterior = all_log_prob
+      log_posterior = all_log_prob,
+      energy = all_energy,
+      energy_chain = if (!is.null(all_energy)) energy_chain
     ),
     log_prob = all_log_prob,
     .internal = c(
@@ -2383,6 +2362,7 @@ prepare_gp_for_hmc <- function(gp, data, N) {
 
     return(list(
       gp_type = "hsgp",
+      spec = validated,
       coords = coords_flat,
       hsgp_m = as.integer(gp$m),
       hsgp_c = gp$c,
@@ -2427,6 +2407,7 @@ prepare_gp_for_hmc <- function(gp, data, N) {
 
     return(list(
       gp_type = "multiscale_gp",
+      spec = validated_hsgp,
       msgp_approx = "hsgp",
       hsgp_m = as.integer(gp$m),
       hsgp_c = gp$c_boundary,
@@ -2475,6 +2456,7 @@ prepare_gp_for_hmc <- function(gp, data, N) {
 
     list(
       gp_type = "multiscale_gp",
+      spec = validated,
       coords = coords_flat,
       # Single-scale params (not used for multiscale)
       nn_idx = integer(0),
@@ -2529,6 +2511,7 @@ prepare_gp_for_hmc <- function(gp, data, N) {
 
     list(
       gp_type = "gp",
+      spec = validated,
       coords = coords_flat,
       nn_idx = as.integer(as.vector(t(nn_info$nn_idx))),
       nn_dist = as.vector(t(nn_info$nn_dist)),

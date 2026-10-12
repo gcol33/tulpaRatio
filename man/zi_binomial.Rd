@@ -2,7 +2,7 @@
 % Please edit documentation in R/zi.R
 \name{zi_binomial}
 \alias{zi_binomial}
-\title{Create a zero-inflated binomial specification}
+\title{Zero-Inflated Binomial Specification}
 \usage{
 zi_binomial(formula = NULL)
 }
@@ -14,7 +14,7 @@ If NULL, uses intercept-only model for P(structural zero).}
 A \code{ratiod_zi} object
 }
 \description{
-Create a zero-inflated binomial specification
+Zero-Inflated Binomial Specification
 }
 \examples{
 # Intercept-only ZI

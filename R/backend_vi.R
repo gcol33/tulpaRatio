@@ -111,15 +111,16 @@ fit_vi <- function(formula,
   zi_info <- prepare_zi_for_hmc(zi, data, hmc_data$N, family)
 
   # Prior parameters
-  if (is.null(priors)) priors <- list()
-  sigma_beta <- priors$sigma_beta %||% 10.0
-  sigma_re_scale <- priors$sigma_re_scale %||% 2.5
-  phi_shape <- priors$phi_shape %||% 2.0
-  phi_rate <- priors$phi_rate %||% 0.1
-  tau_temporal_shape <- priors$tau_temporal_shape %||% 2.0
-  tau_temporal_rate <- priors$tau_temporal_rate %||% 0.5
-  tau_spatial_shape <- priors$tau_spatial_shape %||% 1.0
-  tau_spatial_rate <- priors$tau_spatial_rate %||% 0.01
+  sp <- sampler_priors(priors, model_type)
+  priors <- fill_priors(priors, model_type)
+  sigma_beta <- sp$sigma_beta
+  sigma_re_scale <- sp$sigma_re_scale
+  phi_shape <- sp$phi_shape
+  phi_rate <- sp$phi_rate
+  tau_temporal_shape <- sp$tau_temporal_shape
+  tau_temporal_rate <- sp$tau_temporal_rate
+  tau_spatial_shape <- sp$tau_spatial_shape
+  tau_spatial_rate <- sp$tau_spatial_rate
 
   # Bundle parameters
   re_params <- list(
@@ -164,11 +165,11 @@ fit_vi <- function(formula,
     type = zi_info$type,
     X = zi_info$X_zi,
     p_zi = zi_info$p_zi %||% as.integer(ncol(zi_info$X_zi)),  # Explicit p_zi for OI-only models
-    prior_sd = priors$zi_prior_sd %||% 10.0,
+    prior_sd = sp$zi_prior_sd,
     # OI info for OI-binomial and ZOIB models
     X_oi = zi_info$X_oi,
     p_oi = zi_info$p_oi %||% 0L,
-    oi_prior_sd = priors$oi_prior_sd %||% priors$zi_prior_sd %||% 10.0
+    oi_prior_sd = sp$zi_prior_sd
   )
 
   latent_params <- list(
@@ -373,11 +374,7 @@ get_param_names_vi <- function(hmc_data, spatial_info, temporal_info, zi_info, m
 }
 
 
-#' Print method for ratiod_vi objects
-#'
-#' @param x A `ratiod_vi` fit object.
-#' @param digits Number of significant digits to print (default 3).
-#' @param ... Additional arguments passed to [print()].
+#' @rdname summary.ratiod_fit
 #'
 #' @export
 print.ratiod_vi <- function(x, digits = 3, ...) {
@@ -432,11 +429,7 @@ print.ratiod_vi <- function(x, digits = 3, ...) {
 }
 
 
-#' Summary method for ratiod_vi objects
-#'
-#' @param object A `ratiod_vi` fit object.
-#' @param prob Probability mass for credible intervals (default 0.95).
-#' @param ... Unused, for S3 consistency.
+#' @rdname summary.ratiod_fit
 #' @return An object of class `summary.ratiod_vi`.
 #' @export
 summary.ratiod_vi <- function(object, prob = 0.95, ...) {
@@ -467,11 +460,7 @@ summary.ratiod_vi <- function(object, prob = 0.95, ...) {
 }
 
 
-#' Print method for summary.ratiod_vi
-#'
-#' @param x A `summary.ratiod_vi` object.
-#' @param digits Number of significant digits to print (default 3).
-#' @param ... Unused, for S3 consistency.
+#' @rdname summary.ratiod_fit
 #' @return The input `x`, invisibly.
 #' @export
 print.summary.ratiod_vi <- function(x, digits = 3, ...) {

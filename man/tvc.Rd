@@ -3,7 +3,10 @@
 \name{tvc}
 \alias{tvc}
 \alias{tvc.ratiod_fit}
-\title{Extract temporally-varying coefficients from a fitted model}
+\alias{print.ratiod_tvc_posterior}
+\alias{summary.ratiod_tvc_posterior}
+\alias{plot.ratiod_tvc_posterior}
+\title{Temporally Varying Coefficients of a Fitted Model}
 \usage{
 tvc(
   object,
@@ -22,6 +25,12 @@ tvc(
   probs = c(0.025, 0.5, 0.975),
   ...
 )
+
+\method{print}{ratiod_tvc_posterior}(x, ...)
+
+\method{summary}{ratiod_tvc_posterior}(object, probs = c(0.025, 0.5, 0.975), ...)
+
+\method{plot}{ratiod_tvc_posterior}(x, term = 1, type = "ribbon", ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object fitted with \code{tvc} argument}
@@ -37,6 +46,12 @@ full posterior draws.}
 \item{probs}{Quantiles to compute if \code{summary = TRUE}.}
 
 \item{...}{Ignored}
+
+\item{x}{A ratiod_tvc_posterior object}
+
+\item{term}{Which term to plot (name or index). Default: first term.}
+
+\item{type}{Plot type: "ribbon" (default) or "line"}
 }
 \value{
 A \code{ratiod_tvc_posterior} object containing:
@@ -51,8 +66,8 @@ Extract posterior distributions of temporally-varying coefficients (TVCs)
 from a fitted ratio model with TVC specification.
 }
 \examples{
-\dontrun{
-# Generate synthetic data (not run - TVC experimental)
+\donttest{
+# Generate synthetic data
 set.seed(160)
 df <- data.frame(
   year = rep(2015:2024, each = 5),
@@ -68,7 +83,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   temporal = temporal_tvc("year", terms = c(1, 2)),
   mode = "hmc",
-  control = list(iter = 200, warmup = 100, chains = 1)
+  control = list(iter = 400, chains = 1, seed = 1)
 )
 
 # Extract TVC posteriors

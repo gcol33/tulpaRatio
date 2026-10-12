@@ -825,6 +825,20 @@ svc_hsgp_basis <- function(spatial_info) {
 }
 
 
+#' Rectangle an HSGP basis lives on
+#'
+#' The centre and half-widths `L = c * range / 2` (floored at 0.1) of the
+#' training coordinates. A basis evaluated at new coordinates has to use the
+#' training rectangle, or its eigenfunctions are other functions.
+#'
+#' @keywords internal
+hsgp_domain_2d <- function(coords, c_boundary) {
+  rng <- apply(as.matrix(coords)[, 1:2, drop = FALSE], 2, range)
+  list(center = (rng[1, ] + rng[2, ]) / 2,
+       L = pmax(c_boundary * (rng[2, ] - rng[1, ]) / 2, 0.1))
+}
+
+
 #' Laplacian eigenbasis on a rectangle
 #'
 #' Mirrors `setup_hsgp_data()` in `src/hmc_hsgp.h`: boundary `L = c * range / 2`
@@ -832,18 +846,17 @@ svc_hsgp_basis <- function(spatial_info) {
 #' and the basis indexed `(j1 - 1) * m + j2`.
 #'
 #' @keywords internal
-hsgp_basis_2d <- function(coords, m, c_boundary) {
+hsgp_basis_2d <- function(coords, m, c_boundary,
+                          domain = hsgp_domain_2d(coords, c_boundary)) {
   coords <- as.matrix(coords)
-  x <- coords[, 1]
-  y <- coords[, 2]
-  L1 <- max(c_boundary * (max(x) - min(x)) / 2, 0.1)
-  L2 <- max(c_boundary * (max(y) - min(y)) / 2, 0.1)
-  x_c <- x - (max(x) + min(x)) / 2
-  y_c <- y - (max(y) + min(y)) / 2
+  L1 <- domain$L[1]
+  L2 <- domain$L[2]
+  x_c <- coords[, 1] - domain$center[1]
+  y_c <- coords[, 2] - domain$center[2]
 
   m_total <- m * m
   eigenvalues <- numeric(m_total)
-  phi <- matrix(0, length(x), m_total)
+  phi <- matrix(0, nrow(coords), m_total)
   for (j1 in seq_len(m)) {
     phi_x <- sin(pi * j1 * (x_c + L1) / (2 * L1)) / sqrt(L1)
     for (j2 in seq_len(m)) {

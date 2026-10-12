@@ -2,7 +2,7 @@
 % Please edit documentation in R/gpu.R
 \name{gpu_available}
 \alias{gpu_available}
-\title{Check if GPU support is available}
+\title{Check Whether GPU Support Is Available}
 \usage{
 gpu_available()
 }

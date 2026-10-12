@@ -127,7 +127,7 @@ pp_has_dispersion <- function(distribution) {
   distribution %in% c("neg_binomial_2", "gamma", "lognormal", "beta_binomial")
 }
 
-#' Prior predictive simulation
+#' Prior Predictive Simulation
 #'
 #' @description
 #' Simulate numerator and denominator responses from the prior predictive
@@ -202,11 +202,11 @@ prior_predict <- function(formula, family, data, priors = NULL, n = 100) {
   if (length(n) != 1L || is.na(n) || n < 1L) {
     stop("`n` must be a single positive integer", call. = FALSE)
   }
-  if (is.null(priors)) priors <- ratiod_priors()
-  if (!inherits(priors, "ratiod_priors")) {
+  if (!is.null(priors) && !inherits(priors, "ratiod_priors")) {
     stop("`priors` must be a ratiod_priors object (see ratiod_priors())",
          call. = FALSE)
   }
+  priors <- fill_priors(priors, get_hmc_model_type(family))
 
   # The parser reads the response columns to size and name things. Nothing
   # about the prior predictive distribution depends on their values, so a
@@ -332,8 +332,7 @@ prior_predict <- function(formula, family, data, priors = NULL, n = 100) {
   )
 }
 
-#' Print method for prior predictive draws
-#'
+#' @rdname prior_predict
 #' @param x A `ratiod_priorpred` object
 #' @param ... Ignored
 #' @return `x`, invisibly

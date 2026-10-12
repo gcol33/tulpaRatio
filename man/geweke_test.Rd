@@ -2,9 +2,12 @@
 % Please edit documentation in R/plot_diagnostics.R
 \name{geweke_test}
 \alias{geweke_test}
+\alias{print.ratiod_geweke}
 \title{Geweke Convergence Test}
 \usage{
 geweke_test(fit, frac1 = 0.1, frac2 = 0.5, pars = NULL)
+
+\method{print}{ratiod_geweke}(x, ...)
 }
 \arguments{
 \item{fit}{A \code{ratiod_fit} object.}
@@ -14,6 +17,10 @@ geweke_test(fit, frac1 = 0.1, frac2 = 0.5, pars = NULL)
 \item{frac2}{Fraction of chain for second window (default: 0.5).}
 
 \item{pars}{Character vector of parameter names (default: all main params).}
+
+\item{x}{A ratiod_geweke object.}
+
+\item{...}{Ignored.}
 }
 \value{
 A data frame with columns: parameter, z_score, p_value.
@@ -28,8 +35,13 @@ portions of a chain. Large z-scores (|z| > 2) indicate the chain has not
 converged.
 }
 \examples{
-# See plot_rhat() examples for fitting a model
-# geweke_test(fit)
+\donttest{
+sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+              family = ratiod_poisson_gamma(),
+              control = list(iter = 1000, chains = 2, seed = 1))
+geweke_test(fit)
+}
 
 }
 \seealso{

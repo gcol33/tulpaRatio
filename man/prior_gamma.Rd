@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_gamma}
 \alias{prior_gamma}
-\title{Gamma prior}
+\title{Gamma Prior}
 \usage{
 prior_gamma(shape = 2, rate = 0.1)
 }
