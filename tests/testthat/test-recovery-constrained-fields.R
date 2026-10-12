@@ -248,7 +248,6 @@ test_that("a spatiotemporal interaction recovers the intercept", {
 test_that("proper CAR recovers rho and the intercept (gcol33/tulpaRatio#31)", {
   skip_on_cran()
   skip_if_not_installed("posterior")
-  skip_if_not_installed("MASS")
 
   # Simulate directly from Q(rho) = D - rho*W so the field itself, not just
   # the regression coefficients, carries a known truth to recover. rho_true
@@ -264,7 +263,12 @@ test_that("proper CAR recovers rho and the intercept (gcol33/tulpaRatio#31)", {
   tau_true <- 3.0
   set.seed(44)
   Q <- D - rho_true * A
-  phi_true <- as.numeric(MASS::mvrnorm(1, mu = rep(0, S), Sigma = solve(tau_true * Q)))
+  # A draw through the Cholesky factor is the same on every platform, which
+  # an eigendecomposition (MASS::mvrnorm) is not
+  phi_true <- backsolve(chol(tau_true * Q), rnorm(S))
+  # The field is centred in eta, so the intercept is the level of the
+  # linear predictor: the true intercept plus the drawn field's mean
+  level_true <- TRUE_INTERCEPT + mean(phi_true)
 
   n_per <- 25L
   N <- S * n_per
@@ -312,10 +316,10 @@ test_that("proper CAR recovers rho and the intercept (gcol33/tulpaRatio#31)", {
   expect_gt(r_int$ess, 1000)
 
   expect_lt(r_rho$rhat, 1.1)
-  expect_equal(r_int$mean, TRUE_INTERCEPT, tolerance = 0.15)
+  expect_equal(r_int$mean, level_true, tolerance = 0.15)
   # Within three posterior SD: one seed's 95% interval misses the truth in
   # about one run in twenty by construction
-  expect_lt(abs(r_int$mean - TRUE_INTERCEPT) / sd(dr[, "beta_num[1]"]), 3)
+  expect_lt(abs(r_int$mean - level_true) / sd(dr[, "beta_num[1]"]), 3)
 
   # rho is weakly identified even at this size (a well-known property of
   # proper CAR, not specific to this implementation), so the interval, not
@@ -508,16 +512,14 @@ test_that("multiscale RW2 divergences stay in the sigma2_trend funnel neck", {
 test_that("centring a proper CAR field moves the level onto the intercept", {
   skip_on_cran()
   skip_if_not_installed("posterior")
-  skip_if_not_installed("MASS")
 
   S <- 36L
   A <- grid_adj(S)
   rho_true <- 0.5
   tau_true <- 3.0
   set.seed(44)
-  phi_true <- as.numeric(MASS::mvrnorm(
-    1, mu = rep(0, S),
-    Sigma = solve(tau_true * (diag(rowSums(A)) - rho_true * A))))
+  phi_true <- backsolve(chol(tau_true * (diag(rowSums(A)) - rho_true * A)),
+                        rnorm(S))
 
   n_per <- 25L
   N <- S * n_per
