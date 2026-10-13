@@ -17,7 +17,7 @@ temporal_ar1(
 (e.g., \code{~ year}) or a character string (e.g., \code{"year"}).}
 
 \item{group_var}{Optional name of grouping variable for panel data.
-If provided, separate random walks are estimated for each group.}
+If provided, a separate AR1 process is estimated for each group.}
 
 \item{shared}{Logical; if TRUE (default), temporal effect enters both
 numerator and denominator linear predictors identically.}

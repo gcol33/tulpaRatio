@@ -134,8 +134,7 @@ fit_hmc <- function(formula,
     # HSGP basis for reconstructing the field from its coefficients, built
     # from the coordinates the sampler itself was handed
     hsgp_basis <- NULL
-    if (isTRUE(gp_info$msgp_approx == "hsgp") ||
-        identical(gp_info$gp_type, "hsgp")) {
+    if (gp_info$gp_type %in% c("multiscale_gp", "hsgp")) {
       hsgp_basis <- hsgp_basis_2d(
         coords = matrix(gp_info$coords, ncol = 2, byrow = TRUE),
         m = as.integer(gp_info$hsgp_m %||% 6L),
@@ -149,7 +148,6 @@ fit_hmc <- function(formula,
                          bym2_scale = 1.0,
                          hsgp_m = gp_info$hsgp_m,  # HSGP: basis functions per dim
                          hsgp_c = gp_info$hsgp_c,
-                         msgp_approx = gp_info$msgp_approx,
                          shared = gp_info$shared %||% TRUE,
                          msgp_hsgp_Phi = hsgp_basis$phi,
                          msgp_hsgp_eigenvalues = hsgp_basis$eigenvalues,
@@ -197,8 +195,10 @@ fit_hmc <- function(formula,
   # ratiod_zinegbin()) when `zi` is not given.
   zi_info <- prepare_zi_for_hmc(zi, data, hmc_data$N, family)
 
-  # Prepare latent factor structure
+  # Prepare latent factor structure. A binomial family has no denominator
+  # predictor, so a shared factor loads on the numerator alone.
   latent_info <- prepare_latent_for_hmc(latent, hmc_data$N)
+  if (model_type %in% c("binomial", "beta_binomial")) latent_info$shared <- FALSE
 
   # Prepare spatiotemporal structure
   spatiotemporal_info <- prepare_spatiotemporal_for_hmc(spatiotemporal, data)
@@ -362,9 +362,9 @@ fit_hmc <- function(formula,
     has_latent = latent_info$type != "none",
     n_factors = as.integer(latent_info$n_factors),
     shared = latent_info$shared,
-    scale = latent_info$scale %||% TRUE,
     constraint = as.integer(ifelse(latent_info$constraint == "sum_to_zero", 0L, 1L)),
-    sigma_prior_rate = latent_info$sigma_prior_rate
+    sigma_prior_rate = latent_info$sigma_prior_rate,
+    offdiag_sd = latent_info$offdiag_sd %||% 1
   )
 
   st_is_hsgp <- isTRUE(spatiotemporal_info$spatial_is_hsgp)
@@ -515,25 +515,11 @@ fit_hmc <- function(formula,
       gp_obs_to_loc = as.integer(gp_info$gp_obs_to_loc),
       n_unique = as.integer(gp_info$n_unique),
       # GP parameterization
-      parameterization = gp_info$parameterization %||% "centered",
-      # HSGP-MSGP flag
-      msgp_approx = gp_info$msgp_approx %||% "nngp"
+      parameterization = gp_info$parameterization %||% "centered"
     )
 
     # Bundle multiscale GP parameters
     ms_gp_params <- list(
-      nn_idx_local = as.integer(gp_info$nn_idx_local),
-      nn_dist_local = gp_info$nn_dist_local,
-      nn_order_local = as.integer(gp_info$nn_order_local),
-      nn_order_inv_local = as.integer(gp_info$nn_order_inv_local),
-      nn_local = as.integer(gp_info$nn_local),
-      nn_neighbor_dist_local = gp_info$nn_neighbor_dist_local,  # Phase 1.3
-      nn_idx_regional = as.integer(gp_info$nn_idx_regional),
-      nn_dist_regional = gp_info$nn_dist_regional,
-      nn_order_regional = as.integer(gp_info$nn_order_regional),
-      nn_order_inv_regional = as.integer(gp_info$nn_order_inv_regional),
-      nn_regional = as.integer(gp_info$nn_regional),
-      nn_neighbor_dist_regional = gp_info$nn_neighbor_dist_regional,  # Phase 1.3
       range_local_lower = gp_info$range_local_lower,
       range_local_upper = gp_info$range_local_upper,
       range_regional_lower = gp_info$range_regional_lower,
@@ -1902,15 +1888,9 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
     log_phi_local_init <- log(sqrt(range_local_lower * range_local_upper))
     log_phi_regional_init <- log(sqrt(range_regional_lower * range_regional_upper))
 
-    msgp_approx <- spatial_info$msgp_approx %||% "nngp"
-    if (msgp_approx == "hsgp") {
-      # HSGP-MSGP: m^2 basis coefficients per scale
-      hsgp_m <- spatial_info$hsgp_m %||% 6L
-      n_per_scale <- hsgp_m * hsgp_m
-    } else {
-      # NNGP-MSGP: N spatial effects per scale
-      n_per_scale <- spatial_info$n_units
-    }
+    # m^2 basis coefficients per scale
+    hsgp_m <- spatial_info$hsgp_m %||% 6L
+    n_per_scale <- hsgp_m * hsgp_m
 
     # Layout: log_sigma2_local, log_ls_local, beta_local[n], log_sigma2_regional, log_ls_regional, beta_regional[n]
     q_init <- c(q_init,
@@ -1995,7 +1975,8 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
   if (!is.null(latent_info) && latent_info$type != "none") {
     K <- latent_info$n_factors
     N <- latent_info$n_obs
-    q_init <- c(q_init, rep(0.0, K + N * K))
+    n_proc <- if (isTRUE(latent_info$shared)) 2L else 1L
+    q_init <- c(q_init, rep(0.0, latent_n_loadings(n_proc, K) + N * K))
   }
 
   # Spatiotemporal interaction (Knorr-Held Type I-IV)
@@ -2022,8 +2003,10 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
         q_init <- c(q_init, 0.0, 0.0)  # log_phi_space, log_phi_time
       }
 
-      # ST interaction effects delta[S*T]
-      q_init <- c(q_init, rep(0.0, n_st_delta))
+      # ST interaction effects delta[S*T], unless integrated out
+      if (!identical(spatiotemporal_info$parameterization, "collapsed")) {
+        q_init <- c(q_init, rep(0.0, n_st_delta))
+      }
     }
   }
 
@@ -2112,6 +2095,7 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
   gp_w_star <- star("gp_w_star")
   icar_phi_star <- star("icar_phi_star")
   bym2_theta_star <- star("bym2_theta_star")
+  st_delta_draws <- star("st_delta_draws")
 
   unpack <- function(samples, chain = NULL) {
     hmc_unpack_draws(
@@ -2122,7 +2106,8 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
       ms_temporal_info = ms_temporal_info,
       gp_w_star = star("gp_w_star", chain),
       icar_phi_star = star("icar_phi_star", chain),
-      bym2_theta_star = star("bym2_theta_star", chain)
+      bym2_theta_star = star("bym2_theta_star", chain),
+      st_delta_draws = star("st_delta_draws", chain)
     )
   }
 
@@ -2210,7 +2195,8 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
         eta_dropped = eta$dropped,
         gp_w_star = gp_w_star,
         icar_phi_star = icar_phi_star,
-        bym2_theta_star = bym2_theta_star
+        bym2_theta_star = bym2_theta_star,
+        st_delta_draws = st_delta_draws
       ),
       structure_draws
     )
@@ -2261,18 +2247,6 @@ prepare_gp_for_hmc <- function(gp, data, N) {
       nn_order_inv = integer(0),
       nn_neighbor_dist = numeric(0),  # Phase 1.3
       nn = 0L,
-      nn_idx_local = integer(0),
-      nn_dist_local = numeric(0),
-      nn_order_local = integer(0),
-      nn_order_inv_local = integer(0),
-      nn_local = 0L,
-      nn_neighbor_dist_local = numeric(0),  # Phase 1.3
-      nn_idx_regional = integer(0),
-      nn_dist_regional = numeric(0),
-      nn_order_regional = integer(0),
-      nn_order_inv_regional = integer(0),
-      nn_regional = 0L,
-      nn_neighbor_dist_regional = numeric(0),  # Phase 1.3
       range_local_lower = 0,
       range_local_upper = 1,
       range_regional_lower = 1,
@@ -2306,18 +2280,6 @@ prepare_gp_for_hmc <- function(gp, data, N) {
       nn_order_inv = integer(0),
       nn_neighbor_dist = numeric(0),  # Phase 1.3
       nn = 0L,
-      nn_idx_local = integer(0),
-      nn_dist_local = numeric(0),
-      nn_order_local = integer(0),
-      nn_order_inv_local = integer(0),
-      nn_local = 0L,
-      nn_neighbor_dist_local = numeric(0),  # Phase 1.3
-      nn_idx_regional = integer(0),
-      nn_dist_regional = numeric(0),
-      nn_order_regional = integer(0),
-      nn_order_inv_regional = integer(0),
-      nn_regional = 0L,
-      nn_neighbor_dist_regional = numeric(0),  # Phase 1.3
       range_local_lower = 0,
       range_local_upper = 1,
       range_regional_lower = 1,
@@ -2331,16 +2293,15 @@ prepare_gp_for_hmc <- function(gp, data, N) {
     ))
   }
 
-  if (inherits(gp, "ratiod_multiscale") && isTRUE(gp$approx == "hsgp")) {
-    # HSGP-MSGP: two HSGP evaluations over a shared basis. The basis is built
-    # from the observation coordinates, so no neighbour structure is computed.
+  if (inherits(gp, "ratiod_multiscale")) {
+    # Two HSGP evaluations over a shared basis. The basis is built from the
+    # observation coordinates, so no neighbour structure is computed.
     validated_hsgp <- validate_hsgp(gp, data)
     coords_flat_hsgp <- as.vector(t(validated_hsgp$coords_matrix))
 
     return(list(
       gp_type = "multiscale_gp",
       spec = validated_hsgp,
-      msgp_approx = "hsgp",
       hsgp_m = as.integer(gp$m),
       hsgp_c = gp$c_boundary,
       coords = coords_flat_hsgp,
@@ -2359,12 +2320,6 @@ prepare_gp_for_hmc <- function(gp, data, N) {
       nn_idx = integer(0), nn_dist = numeric(0),
       nn_order = integer(0), nn_order_inv = integer(0),
       nn_neighbor_dist = numeric(0), nn = 0L,
-      nn_idx_local = integer(0), nn_dist_local = numeric(0),
-      nn_order_local = integer(0), nn_order_inv_local = integer(0),
-      nn_local = 0L, nn_neighbor_dist_local = numeric(0),
-      nn_idx_regional = integer(0), nn_dist_regional = numeric(0),
-      nn_order_regional = integer(0), nn_order_inv_regional = integer(0),
-      nn_regional = 0L, nn_neighbor_dist_regional = numeric(0),
       gp_obs_to_loc = integer(0),
       n_unique = 0L
     ))
@@ -2377,108 +2332,43 @@ prepare_gp_for_hmc <- function(gp, data, N) {
   coords_mat <- validated$unique_coords
   coords_flat <- as.vector(t(coords_mat))  # Row-major flatten
 
-  if (inherits(gp, "ratiod_multiscale")) {
-    # NNGP-MSGP: standard neighbor-based multi-scale GP
-    local_info <- validated$neighbor_info_local
-    regional_info <- validated$neighbor_info_regional
+  nn_info <- validated$neighbor_info
 
-    # Phase 1.3: Flatten nn_neighbor_dist arrays for C++ row-major access
-    nn_neighbor_dist_local_flat <- as.vector(aperm(local_info$nn_neighbor_dist, c(3, 2, 1)))
-    nn_neighbor_dist_regional_flat <- as.vector(aperm(regional_info$nn_neighbor_dist, c(3, 2, 1)))
+  # Phase 1.3: Flatten nn_neighbor_dist from N x nn x nn for C++ row-major access
+  # C++ accesses as: i * nn * nn + j1 * nn + j2 (0-indexed, i slowest, j2 fastest)
+  # R stores column-major: arr[i, j1, j2] at index (j2-1)*N*nn + (j1-1)*N + i (1-indexed)
+  # Use C++ helper for fast flattening
+  nn <- validated$nn
+  N_gp <- nrow(nn_info$nn_idx)
+  nn_neighbor_dist_flat <- cpp_flatten_3d_rowmajor(
+    as.vector(nn_info$nn_neighbor_dist), N_gp, nn, nn
+  )
 
-    list(
-      gp_type = "multiscale_gp",
-      spec = validated,
-      coords = coords_flat,
-      # Single-scale params (not used for multiscale)
-      nn_idx = integer(0),
-      nn_dist = numeric(0),
-      nn_order = integer(0),
-      nn_order_inv = integer(0),
-      nn_neighbor_dist = numeric(0),  # Phase 1.3
-      nn = 0L,
-      # Local scale
-      nn_idx_local = as.integer(as.vector(t(local_info$nn_idx))),
-      nn_dist_local = as.vector(t(local_info$nn_dist)),
-      nn_order_local = as.integer(local_info$nn_order),
-      nn_order_inv_local = as.integer(local_info$nn_order_inv),
-      nn_local = as.integer(validated$nn_local),
-      nn_neighbor_dist_local = nn_neighbor_dist_local_flat,  # Phase 1.3
-      # Regional scale
-      nn_idx_regional = as.integer(as.vector(t(regional_info$nn_idx))),
-      nn_dist_regional = as.vector(t(regional_info$nn_dist)),
-      nn_order_regional = as.integer(regional_info$nn_order),
-      nn_order_inv_regional = as.integer(regional_info$nn_order_inv),
-      nn_regional = as.integer(validated$nn_regional),
-      nn_neighbor_dist_regional = nn_neighbor_dist_regional_flat,  # Phase 1.3
-      # Range constraints
-      range_local_lower = gp$range_local[1],
-      range_local_upper = gp$range_local[2],
-      range_regional_lower = gp$range_regional[1],
-      range_regional_upper = gp$range_regional[2],
-      # Common params
-      cov_type = gp$cov,
-      nu = gp$nu,
-      shared = gp$shared,
-      sampler = gp$sampler %||% "auto",
-      parameterization = gp$parameterization %||% "centered",
-      # Solver config (multiscale uses Cholesky by default)
-      # Observation-to-location mapping (1-based)
-      gp_obs_to_loc = as.integer(validated$obs_to_loc),
-      n_unique = validated$n_unique
-    )
-  } else {
-    # Single-scale GP
-    nn_info <- validated$neighbor_info
-
-    # Phase 1.3: Flatten nn_neighbor_dist from N x nn x nn for C++ row-major access
-    # C++ accesses as: i * nn * nn + j1 * nn + j2 (0-indexed, i slowest, j2 fastest)
-    # R stores column-major: arr[i, j1, j2] at index (j2-1)*N*nn + (j1-1)*N + i (1-indexed)
-    # Use C++ helper for fast flattening
-    nn <- validated$nn
-    N_gp <- nrow(nn_info$nn_idx)
-    nn_neighbor_dist_flat <- cpp_flatten_3d_rowmajor(
-      as.vector(nn_info$nn_neighbor_dist), N_gp, nn, nn
-    )
-
-    list(
-      gp_type = "gp",
-      spec = validated,
-      coords = coords_flat,
-      nn_idx = as.integer(as.vector(t(nn_info$nn_idx))),
-      nn_dist = as.vector(t(nn_info$nn_dist)),
-      nn_order = as.integer(nn_info$nn_order),
-      nn_order_inv = as.integer(nn_info$nn_order_inv),
-      nn_neighbor_dist = nn_neighbor_dist_flat,  # Phase 1.3: cached pairwise distances
-      nn = as.integer(validated$nn),
-      # Multi-scale params (not used for single-scale)
-      nn_idx_local = integer(0),
-      nn_dist_local = numeric(0),
-      nn_order_local = integer(0),
-      nn_order_inv_local = integer(0),
-      nn_local = 0L,
-      nn_neighbor_dist_local = numeric(0),  # Phase 1.3
-      nn_idx_regional = integer(0),
-      nn_dist_regional = numeric(0),
-      nn_order_regional = integer(0),
-      nn_order_inv_regional = integer(0),
-      nn_regional = 0L,
-      nn_neighbor_dist_regional = numeric(0),  # Phase 1.3
-      range_local_lower = 0,
-      range_local_upper = 1,
-      range_regional_lower = 1,
-      range_regional_upper = 10,
-      # Common params
-      cov_type = gp$cov,
-      nu = gp$nu,
-      shared = gp$shared,
-      parameterization = gp$parameterization %||% "centered",
-      # Solver config
-      # Observation-to-location mapping (1-based)
-      gp_obs_to_loc = as.integer(validated$obs_to_loc),
-      n_unique = validated$n_unique
-    )
-  }
+  list(
+    gp_type = "gp",
+    spec = validated,
+    coords = coords_flat,
+    nn_idx = as.integer(as.vector(t(nn_info$nn_idx))),
+    nn_dist = as.vector(t(nn_info$nn_dist)),
+    nn_order = as.integer(nn_info$nn_order),
+    nn_order_inv = as.integer(nn_info$nn_order_inv),
+    nn_neighbor_dist = nn_neighbor_dist_flat,  # Phase 1.3: cached pairwise distances
+    nn = as.integer(validated$nn),
+    # Multi-scale params (not used for single-scale)
+    range_local_lower = 0,
+    range_local_upper = 1,
+    range_regional_lower = 1,
+    range_regional_upper = 10,
+    # Common params
+    cov_type = gp$cov,
+    nu = gp$nu,
+    shared = gp$shared,
+    parameterization = gp$parameterization %||% "centered",
+    # Solver config
+    # Observation-to-location mapping (1-based)
+    gp_obs_to_loc = as.integer(validated$obs_to_loc),
+    n_unique = validated$n_unique
+  )
 }
 
 #' Prepare multiscale temporal structure for HMC

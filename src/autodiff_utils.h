@@ -41,10 +41,15 @@ struct is_arena_var : std::false_type {};
 template<>
 struct is_arena_var<arena::Var> : std::true_type {};
 
+// A univariate Taylor jet (taylor_jet.h specializes this)
+template<typename T>
+struct is_jet : std::false_type {};
+
 // Helper: is any autodiff type
 template<typename T>
 struct is_autodiff : std::integral_constant<bool,
-    is_ad_var<T>::value || is_fwd_dual<T>::value || is_arena_var<T>::value> {};
+    is_ad_var<T>::value || is_fwd_dual<T>::value || is_arena_var<T>::value ||
+    is_jet<T>::value> {};
 
 // ============================================================================
 // Basic math functions - dispatch to std:: or ad::

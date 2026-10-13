@@ -8,6 +8,7 @@
 
 #include <Rcpp.h>
 #include <vector>
+#include <chrono>
 #include <cmath>
 #include <random>
 #include <algorithm>
@@ -138,7 +139,7 @@ const char* const KNOWN_FIELDS[] = {
   "st4_ar1_nc", "st2", "st2_rw2", "st2_ar1", "st3", "icar_st_nc", "st2_nc",
   "st2_rw2_nc", "st2_ar1_nc", "st2_cyclic", "st2_cyclic_nc", "st3_nc",
   "stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
-  "stgp_nc", "stgp_gneiting_nc",
+  "stgp_nc", "stgp_gneiting_nc", "stgp_collapsed", "stgp_gneiting_collapsed",
   "icar_collapsed", "bym2_collapsed",
   "icar_collapsed_rw1", "bym2_collapsed_rw1",
   "hsgp",
@@ -148,9 +149,10 @@ const char* const KNOWN_FIELDS[] = {
   "re", "re_crossed", "re_slopes", "re_slopes_corr",
   "gp", "gp_matern", "gp_gaussian", "gp_spherical",
   "gp_nc", "gp_collapsed", "gp_temporal",
-  "msgp", "msgp_nc", "msgp_temporal", "msgp_hsgp",
+  "msgp_temporal", "msgp_hsgp",
   "svc", "svc_hsgp", "svc_nc",
-  "temporal_gp", "ms_temporal", "latent",
+  "temporal_gp", "ms_temporal", "latent", "latent2", "latent_num",
+  "latent2_first_zero", "stgp_latent2",
   // Combinations a specialized gradient used to be selected for while writing
   // none of the second block. Each is routed by its feature mask now, and each
   // of these is what says the function it lands on writes both blocks.
@@ -313,14 +315,19 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   std::normal_distribution<double> rnorm(0.0, 1.0);
   std::uniform_int_distribution<int> rtrials(10, 50);
 
-  const bool is_binomial = (family == "binomial");
+  // beta_binomial reads the same trials and successes
+  const bool is_binomial = (family == "binomial" || family == "beta_binomial");
   // The negative binomial denominators are counts; a known exposure is data
   // and carries no coefficients; the other families carry a continuous Gamma
   // denominator.
   const bool denom_is_count = (family == "negbin_negbin" || family == "poisson_negbin");
   const bool fixed_exposure = (family == "poisson_fixed" || family == "negbin_fixed" ||
                                family == "lognormal_fixed");
-  const bool num_is_continuous = (family == "lognormal_fixed");
+  // gamma_gamma and lognormal read a continuous numerator beside their
+  // continuous denominator
+  const bool num_is_continuous = (family == "lognormal_fixed" ||
+                                  family == "gamma_gamma" ||
+                                  family == "lognormal");
   const ZIType zi_type = ratiod_zi::parse_zi_type(zi);
   const bool has_zi = (zi_type != ZIType::NONE);
   const bool has_oi = (zi_type == ZIType::OI_BINOMIAL || zi_type == ZIType::ZOIB);
@@ -371,7 +378,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // two callers of that branch, both arbitrated.
   const bool want_stgp = (field == "stgp" || field == "stgp_matern" ||
                           field == "stgp_gneiting" || field == "stgp_latent" ||
+                          field == "stgp_latent2" ||
                           field == "stgp_nc" || field == "stgp_gneiting_nc" ||
+                          field == "stgp_collapsed" ||
+                          field == "stgp_gneiting_collapsed" ||
                           field == "gp_stgp");
   // icar_collapsed_rw1 / bym2_collapsed_rw1 pair a collapsed spatial field
   // with a companion temporal RW1 term -- the combination the specialized
@@ -442,18 +452,12 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                         field == "gp_temporal_st4" || field == "gp_tgp" ||
                         field == "gp_slopes" || field == "gp_slopes_corr" ||
                         field == "gp_crossed");
-  // spatial_multiscale(parameterization = "noncentered"): each scale's block
-  // holds z ~ N(0, I) and its field is w = L(sigma2, phi) z, so all four
-  // hyperparameters reach eta through the transforms as well as through the
-  // priors.
-  const bool want_msgp_nc = (field == "msgp_nc");
-  const bool want_msgp = (field == "msgp" || field == "msgp_temporal" ||
-                          field == "msgp_st4" || field == "msgp_hsgp" ||
-                          want_msgp_nc);
-  // The multi-scale field on a shared spectral basis rather than two neighbour
-  // sets, with a PC prior on each scale's sigma and a LogNormal on its
-  // lengthscale in place of an NNGP density.
-  const bool want_msgp_hsgp = (field == "msgp_hsgp");
+  // The multi-scale field: two scales on one shared spectral basis, with a PC
+  // prior on each scale's sigma and a LogNormal on its lengthscale.
+  // msgp_temporal pairs it with a temporal walk, msgp_st4 with a space-time
+  // interaction, which no specialized function carries.
+  const bool want_msgp = (field == "msgp_temporal" || field == "msgp_st4" ||
+                          field == "msgp_hsgp");
   const bool want_svc_hsgp = (field == "svc_hsgp");
   // svc_nc / svc_ms_nc sample each term in the non-centred coordinate;
   // svc_nc carries two terms so each one's transform reads its own workspace.
@@ -463,7 +467,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   const bool want_temporal_gp = (field == "temporal_gp" ||
                                  field == "temporal_gp_st4" ||
                                  field == "gp_tgp");
-  const bool want_latent = (field == "latent" || field == "stgp_latent");
+  const bool want_latent = (field == "latent" || field == "stgp_latent" ||
+                             field == "latent2" || field == "latent_num" ||
+                             field == "latent2_first_zero" ||
+                             field == "stgp_latent2");
   // Random slopes route through a parameter layout the single-term path does
   // not use: one sigma per coefficient, and for the correlated variant a
   // tanh-Cholesky factor with an LKJ prior and re = diag(sigma) L z.
@@ -532,8 +539,13 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       const double z = rnorm(rng);
       data.X_denom_flat[static_cast<size_t>(i) * 2 + 0] = 1.0;
       data.X_denom_flat[static_cast<size_t>(i) * 2 + 1] = z;
-      std::poisson_distribution<int> rpois(std::exp(0.5 + 0.3 * x));
-      data.y_num[i] = rpois(rng);
+      if (num_is_continuous) {
+        data.y_num_cont[i] = std::exp(0.5 + 0.3 * x + 0.4 * rnorm(rng));
+        data.y_num[i] = 0;
+      } else {
+        std::poisson_distribution<int> rpois(std::exp(0.5 + 0.3 * x));
+        data.y_num[i] = rpois(rng);
+      }
       if (denom_is_count) {
         std::poisson_distribution<int> rpois_d(std::exp(0.4 + 0.2 * z));
         data.y_denom[i] = rpois_d(rng);
@@ -725,55 +737,25 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     } else {
       data.spatial_type = SpatialType::MULTISCALE_GP;
       data.has_multiscale_gp = true;
-      data.msgp_is_hsgp = want_msgp_hsgp;
       auto& ms = data.multiscale_gp_data;
-      ms.n_obs = want_msgp_hsgp ? n_obs : n_units;
-      ms.coords = gp_coords;
-      ms.obs_to_loc = obs_to_loc;
-      ms.nn_local = nn;
-      ms.nn_idx_local = nb.nn_idx;
-      ms.nn_dist_local = nb.nn_dist;
-      ms.nn_neighbor_dist_local = nb.nn_neighbor_dist;
-      ms.nn_order_local = nb.nn_order;
-      ms.nn_order_inv_local = nb.nn_order_inv;
-      ms.nn_regional = nn;
-      ms.nn_idx_regional = nb.nn_idx;
-      ms.nn_dist_regional = nb.nn_dist;
-      ms.nn_neighbor_dist_regional = nb.nn_neighbor_dist;
-      ms.nn_order_regional = nb.nn_order;
-      ms.nn_order_inv_regional = nb.nn_order_inv;
-      // Both ranges have to contain the point the sweep evaluates at, or the
-      // uniform prior returns -inf and the difference measures nothing.
-      ms.range_local_lower = 0.001;
-      ms.range_local_upper = 100.0;
-      ms.range_regional_lower = 0.001;
-      ms.range_regional_upper = 100.0;
-      ms.cov_type = cov;
-      ms.nu = 1.5;
+      ms.n_obs = n_obs;
       ms.shared = true;
       ms.sampler = ratiod_gp::MSGPSampler::AUTO;
-      // spatial_multiscale() offers "centered" and "noncentered" and defaults
-      // to centered, which is the coordinate these fields build; msgp_nc is
-      // the non-centred one.
-      data.msgp_parameterization = want_msgp_nc ? 1 : 0;
 
-      if (want_msgp_hsgp) {
-        // Both scales read one basis built over the observation locations, so
-        // the field is m_total coefficients per scale rather than one value
-        // per location.
-        std::vector<double> hs_coords(static_cast<size_t>(n_obs) * 2);
-        std::uniform_real_distribution<double> runif_h(0.0, 1.0);
-        for (int i = 0; i < n_obs; i++) {
-          hs_coords[static_cast<size_t>(i) * 2 + 0] = runif_h(rng);
-          hs_coords[static_cast<size_t>(i) * 2 + 1] = runif_h(rng);
-        }
-        ratiod_hsgp::setup_hsgp_2d(hs_coords, n_obs, 3, 1.5, /*shared=*/true,
-                                   data.msgp_hsgp_data);
-        data.ms_log_ls_local_mean = std::log(0.1);
-        data.ms_log_ls_local_sd = 0.5;
-        data.ms_log_ls_regional_mean = std::log(1.0);
-        data.ms_log_ls_regional_sd = 0.5;
+      // Both scales read one basis built over the observation locations, so
+      // the field is m_total coefficients per scale.
+      std::vector<double> hs_coords(static_cast<size_t>(n_obs) * 2);
+      std::uniform_real_distribution<double> runif_h(0.0, 1.0);
+      for (int i = 0; i < n_obs; i++) {
+        hs_coords[static_cast<size_t>(i) * 2 + 0] = runif_h(rng);
+        hs_coords[static_cast<size_t>(i) * 2 + 1] = runif_h(rng);
       }
+      ratiod_hsgp::setup_hsgp_2d(hs_coords, n_obs, 3, 1.5, /*shared=*/true,
+                                 data.msgp_hsgp_data);
+      data.ms_log_ls_local_mean = std::log(0.1);
+      data.ms_log_ls_local_sd = 0.5;
+      data.ms_log_ls_regional_mean = std::log(1.0);
+      data.ms_log_ls_regional_sd = 0.5;
     }
     data.n_spatial_units = 0;
     data.bym2_scale_factor = 1.0;
@@ -835,15 +817,19 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     data.svc_phi_prior_upper = 100.0;
   }
 
-  // Latent factors: observation-level effects shared by both arms, which is
-  // the only structure compute_gradient_latent_handcoded serves.
+  // Latent factors: observation-level scores with process-specific loadings.
+  // latent2 and stgp_latent2 fill the whole lower-triangular loading matrix,
+  // latent_num loads on the numerator alone, and latent2_first_zero reads the
+  // scores through the first-zero shift instead of centring.
   if (want_latent) {
+    const bool two = (field == "latent2" || field == "latent2_first_zero" ||
+                      field == "stgp_latent2");
     data.has_latent = true;
-    data.latent_n_factors = 1;
-    data.latent_shared = true;
-    data.latent_scale = true;
-    data.latent_constraint = 0;  // sum-to-zero
+    data.latent_n_factors = two ? 2 : 1;
+    data.latent_shared = (field != "latent_num");
+    data.latent_constraint = (field == "latent2_first_zero") ? 1 : 0;
     data.latent_sigma_prior_rate = 1.0;
+    data.latent_offdiag_sd = 0.7;
   }
 
   // TVC: one RW1 trajectory per (group, term) over the time axis.
@@ -918,11 +904,9 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
          field == "rw1_cyclic_nc" || field == "rw1_nc_panel" ||
          field == "rw2_nc_panel" || field == "rw1_cyclic_nc_panel") ? 1 : 0;
     data.n_times = n_times;
-    // Panel data: G disconnected walks under ONE augmented global constant, so
-    // the G - 1 group contrasts are improper and the level of each group is
-    // the likelihood's to identify. The non-centred coordinate re-mixes its
-    // per-group sum coordinates to reach that; the centred one is the same
-    // model in the other coordinate and pairs against it here.
+    // Panel data: G disconnected walks, each centred on its own with its own
+    // augmented constant. The centred and non-centred coordinates are the same
+    // model and pair against each other here.
     const bool temporal_panel =
         (field == "rw1_panel" || field == "rw1_nc_panel" ||
          field == "rw2_nc_panel" || field == "rw1_cyclic_nc_panel");
@@ -1049,7 +1033,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // carries.
   if (want_stgp) {
     auto& st = data.spatiotemporal_data;
-    st.type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc")
+    st.type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc" ||
+               field == "stgp_gneiting_collapsed")
                   ? ratiod_spatiotemporal::STType::NONSEP_GP
                   : ratiod_spatiotemporal::STType::SEPARABLE;
     st.shared = true;
@@ -1106,15 +1091,21 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     st.cov_space = (field == "stgp_matern") ? ratiod_svc::CovType::MATERN
                                             : ratiod_svc::CovType::EXPONENTIAL;
     st.cov_time = st.cov_space;
-    st.nonsep_type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc")
+    st.nonsep_type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc" ||
+                      field == "stgp_gneiting_collapsed")
                          ? ratiod_spatiotemporal::NonsepType::GNEITING
                          : ratiod_spatiotemporal::NonsepType::PRODUCT;
 
     data.has_spatiotemporal = true;
     data.st_is_hsgp = false;
-    // The *_nc fields sample z, delta the NNGP autoregression run from it
-    data.st_parameterization =
-        (field.size() > 3 && field.compare(field.size() - 3, 3, "_nc") == 0) ? 1 : 0;
+    // The *_nc fields sample z, delta the NNGP autoregression run from it;
+    // the *_collapsed fields integrate delta out (st_gp_laplace.h)
+    const auto ends_with = [&](const char* suffix) {
+      const std::string sfx(suffix);
+      return field.size() > sfx.size() &&
+             field.compare(field.size() - sfx.size(), sfx.size(), sfx) == 0;
+    };
+    data.st_parameterization = ends_with("_nc") ? 1 : ends_with("_collapsed") ? 2 : 0;
   }
 
   data.zi_type = zi_type;
@@ -1430,6 +1421,7 @@ double cpp_gradient_race(std::string field,
     serial[k].assign(n_params, 0.0);
     collapsed_gp_reset_warm_start();
     collapsed_icar_reset_warm_start();
+    ratiod_st_laplace::reset_warm_start();
     fn(points[k], data, layout, serial[k], nullptr);
   }
 
@@ -1444,6 +1436,7 @@ double cpp_gradient_race(std::string field,
     for (int k = 0; k < n_points; k++) {
       collapsed_gp_reset_warm_start();
       collapsed_icar_reset_warm_start();
+      ratiod_st_laplace::reset_warm_start();
       fn(points[k], data, layout, concurrent[k], nullptr);
     }
 
@@ -1455,6 +1448,31 @@ double cpp_gradient_race(std::string field,
     }
   }
   return max_dev;
+}
+
+// Milliseconds per gradient evaluation (with its fused log posterior) of the
+// default gradient path, over `n_rep` evaluations at points a small step
+// apart, as a leapfrog trajectory visits them.
+// [[Rcpp::export]]
+double cpp_time_gradient(std::string field, int n_rep = 50, int n_obs = 400,
+                         int n_units = 25, int n_times = 10,
+                         unsigned int seed = 42,
+                         std::string family = "poisson_gamma") {
+  ModelData data = make_model(field, n_obs, n_units, n_times, seed, family);
+  ParamLayout layout = compute_param_layout(data);
+  const int n_params = get_n_params(data);
+  set_gradient_mode(GradientMode::HANDCODED);
+  std::vector<double> params = draw_params(data, layout, n_params, seed);
+  std::vector<double> grad(n_params, 0.0);
+  double lp = 0.0;
+  compute_gradient(params, data, layout, grad, &lp);
+  const auto t0 = std::chrono::steady_clock::now();
+  for (int r = 0; r < n_rep; r++) {
+    for (int k = 0; k < n_params; k++) params[k] += 1e-3 * grad[k] / (1.0 + std::abs(grad[k]));
+    compute_gradient(params, data, layout, grad, &lp);
+  }
+  const auto t1 = std::chrono::steady_clock::now();
+  return std::chrono::duration<double, std::milli>(t1 - t0).count() / n_rep;
 }
 
 // Evaluates the log posterior at a shared point so the analytic and autodiff
@@ -1479,71 +1497,10 @@ double cpp_logpost_at(std::string field,
   return compute_log_post(params, data, layout);
 }
 
-// The two coordinates of the multi-scale field describe one posterior.
-//
-// With w = L(sigma2, phi) z the NNGP density and the Jacobian satisfy
-// log N(z; 0, I) = log NNGP(w; sigma2, phi) + log|det L|, and log|det L| is a
-// function of the hyperparameters alone. So at fixed hyperparameters the
-// difference between the non-centred density at z and the centred density at
-// w(z) is the same number for every z, and this returns how far apart those
-// numbers are across several draws.
-//
-// Finite differences cannot see this: a transform that built some other field
-// would leave the non-centred density self-consistent, and its gradient would
-// still match its own difference quotient. What that would break is the
-// posterior, which is what this reads.
-// [[Rcpp::export]]
-double cpp_msgp_nc_coordinate_spread(int n_obs = 400,
-                                     int n_units = 25,
-                                     int n_draws = 5,
-                                     unsigned int seed = 42) {
-  ModelData data_nc = make_model("msgp_nc", n_obs, n_units, 10, seed);
-  ModelData data_c = make_model("msgp", n_obs, n_units, 10, seed);
-  ParamLayout layout = compute_param_layout(data_nc);
-  const int n_params = get_n_params(data_nc);
-  const int n_loc = data_nc.multiscale_gp_data.n_obs;
-
-  std::mt19937 rng(seed + 2000u);
-  std::normal_distribution<double> rnorm(0.0, 0.35);
-  std::vector<double> params_nc(n_params);
-  for (int i = 0; i < n_params; i++) params_nc[i] = rnorm(rng);
-
-  double lo = R_PosInf, hi = R_NegInf;
-  for (int d = 0; d < n_draws; d++) {
-    // The hyperparameters stay where the first draw put them; only the field
-    // blocks move, since it is their coordinate that is under test.
-    for (int i = 0; i < n_loc; i++) {
-      params_nc[layout.gp_local_start + i] = rnorm(rng);
-      params_nc[layout.gp_regional_start + i] = rnorm(rng);
-    }
-    const double lp_nc = compute_log_post(params_nc, data_nc, layout);
-
-    ratiod_gp::MultiscaleGPFieldT<double, 5> field;
-    field.read(&params_nc[layout.gp_local_start],
-               &params_nc[layout.gp_regional_start],
-               std::exp(params_nc[layout.log_sigma2_gp_local_idx]),
-               std::exp(params_nc[layout.log_phi_gp_local_idx]),
-               std::exp(params_nc[layout.log_sigma2_gp_regional_idx]),
-               std::exp(params_nc[layout.log_phi_gp_regional_idx]),
-               data_nc.multiscale_gp_data, /*nc=*/true);
-
-    std::vector<double> params_c = params_nc;
-    for (int i = 0; i < n_loc; i++) {
-      params_c[layout.gp_local_start + i] = field.local[i];
-      params_c[layout.gp_regional_start + i] = field.regional[i];
-    }
-    const double diff = lp_nc - compute_log_post(params_c, data_c, layout);
-    lo = std::min(lo, diff);
-    hi = std::max(hi, diff);
-  }
-  return hi - lo;
-}
-
 // The two coordinates of the GP space-time interaction describe one
-// posterior, by the same argument as cpp_msgp_nc_coordinate_spread: at fixed
-// hyperparameters the non-centred density at z minus the centred density at
-// delta(z) is log|d delta / dz|, a function of the hyperparameters alone, so
-// it is the same number for every z. Returns its spread across draws of z.
+// posterior: at fixed hyperparameters the non-centred density at z minus the
+// centred density at delta(z) is log|d delta / dz|, a function of the
+// hyperparameters alone, so it is the same number for every z. Returns its spread across draws of z.
 // [[Rcpp::export]]
 double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
                                       int n_draws = 5,
@@ -1579,26 +1536,71 @@ double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
   return hi - lo;
 }
 
-// The centred density the transform claims to carry, for G walks under one
-// augmented global constant: each group's own quadratic form, the single
-// augmented direction taken over the whole field, and a rank that counts the
-// per-group ranks plus that one direction. G = 1 is rw1_log_lik / rw2_log_lik
-// with `augment`.
+// For a likelihood Gaussian in the interaction (lognormal), the collapsed
+// interaction's Laplace step is exact: p(y, delta | rest) =
+// p(y | rest) N(delta; dh, H^-1) for every delta. So the centred density at
+// any delta, less log N(delta; dh, H^-1), is the collapsed density whatever
+// delta is; a missing normalizer, penalty or correction term shows as a gap.
+// Returns the largest absolute gap over draws of delta.
+// [[Rcpp::export]]
+double cpp_st_collapsed_exactness(std::string field = "stgp_collapsed",
+                                  int n_draws = 4, unsigned int seed = 42,
+                                  int n_obs = 200, int n_units = 9,
+                                  int n_times = 4) {
+  const std::string suffix = "_collapsed";
+  const std::string centred_field = field.substr(0, field.size() - suffix.size());
+  ModelData data_l = make_model(field, n_obs, n_units, n_times, seed, "lognormal");
+  ModelData data_c = make_model(centred_field, n_obs, n_units, n_times, seed,
+                                "lognormal");
+  ParamLayout lay_l = compute_param_layout(data_l);
+  ParamLayout lay_c = compute_param_layout(data_c);
+  std::vector<double> p_l = draw_params(data_l, lay_l, get_n_params(data_l), seed);
+  const double lp_l = compute_log_post(p_l, data_l, lay_l);
+  if (!std::isfinite(lp_l)) Rcpp::stop("cpp_st_collapsed_exactness: no mode");
+
+  const auto& ws = ratiod_st_laplace::workspace();
+  const int n = data_l.spatiotemporal_data.n_params;
+  const double log_det_H = ratiod_st_laplace::log_det_factor(ws);
+
+  std::mt19937 rng(seed + 5000u);
+  std::normal_distribution<double> rnorm(0.0, 0.3);
+  std::vector<double> e(n), buf(n);
+  double worst = 0.0;
+  for (int d = 0; d < n_draws; d++) {
+    std::vector<double> p_c(p_l.begin(), p_l.begin() + lay_c.st_delta_start);
+    for (int k = 0; k < n; k++) {
+      e[k] = rnorm(rng);
+      p_c.push_back(ws.delta[k] + e[k]);
+    }
+    p_c.insert(p_c.end(), p_l.begin() + lay_c.st_delta_start, p_l.end());
+    double eHe = ratiod_st_laplace::prior_quad(data_l, ws.fac, e.data(), buf.data());
+    for (int k = 0; k < n; k++) eHe += ws.W[k] * e[k] * e[k];
+    const double log_normal = -0.5 * n * std::log(2.0 * M_PI) + 0.5 * log_det_H -
+                              0.5 * eHe;
+    const double gap = compute_log_post(p_c, data_c, lay_c) - log_normal - lp_l;
+    worst = std::max(worst, std::abs(gap));
+  }
+  return worst;
+}
+
+// The centred density the transform claims to carry, for G walks each with
+// its own augmented constant: each group's quadratic form and augmented
+// direction, and a rank that counts the per-group ranks plus one direction per
+// group. G = 1 is rw1_log_lik / rw2_log_lik with `augment`.
 inline double nc_reference_log_prior(const double* phi, int n, int n_groups,
                                      int order, bool cyclic, double sigma2) {
-  const int n_total = n * n_groups;
   double quad = 0.0;
   for (int g = 0; g < n_groups; g++) {
     quad += (order == 2)
                 ? ratiod_temporal::rw2_quadratic_form(phi + g * n, n, cyclic)
                 : ratiod_temporal::rw1_quadratic_form(phi + g * n, n, cyclic);
+    const double s = tulpa::s2z_component_sum(phi, g * n, n);
+    quad += tulpa::s2z_aug_coef(1.0, n) * s * s;
   }
-  const double s = tulpa::s2z_component_sum(phi, 0, n_total);
-  quad += tulpa::s2z_aug_coef(1.0, n_total) * s * s;
 
   const int rank_g = (order == 2) ? tulpa::rw2_rank(n, cyclic)
                                   : tulpa::rw1_rank(n, cyclic);
-  const int rank = tulpa::s2z_aug_rank(rank_g * n_groups, 1);
+  const int rank = tulpa::s2z_aug_rank(rank_g * n_groups, n_groups);
   return -0.5 * quad / sigma2 - 0.5 * rank * std::log(2.0 * M_PI * sigma2);
 }
 
@@ -1616,7 +1618,7 @@ inline double nc_reference_log_prior(const double* phi, int n, int n_groups,
 // claims to.
 //
 // With `n_groups` above 1 the centred side is the grouped density: each
-// group's own quadratic form and ONE augmented global direction.
+// group's own quadratic form and its own augmented constant.
 //
 // [[Rcpp::export]]
 double cpp_ms_temporal_nc_coordinate_spread(std::string field = "ms_temporal_nc",
@@ -1654,69 +1656,13 @@ double cpp_ms_temporal_nc_coordinate_spread(std::string field = "ms_temporal_nc"
   return worst;
 }
 
-// What the spread above cannot separate: whether the G - 1 group contrasts are
-// still improper. Augmenting per group instead of once would put a proper
-// N(0, 1/tau) prior on them and shrink the group levels, which is a different
-// model, and both coordinates would still be consistent with THAT model.
-//
-// So this perturbs the contrast directions alone -- the group sum coordinates
-// moved by a mean-zero w -- and asks for the two things that say the model is
-// the intended one: the prior does not move, and group g's field moves by
-// exactly the unscaled w_g / sqrt(n), no more (a transform that dropped the
-// contrasts would leave the field alone and pass a flatness check by itself).
-// The returned number is the worst violation of either.
-//
+
+// The portable polygamma psi^(n)(x), for comparison with R's psigamma().
 // [[Rcpp::export]]
-double cpp_ms_temporal_nc_group_contrast_flat(
-    std::string field = "ms_temporal_nc", int n = 12, int n_groups = 3,
-    double sigma2 = 0.25, int n_draws = 6, unsigned int seed = 42) {
-  int order = 1;
-  bool cyclic = false;
-  if (field == "ms_temporal_rw2_nc") order = 2;
-  if (field == "ms_temporal_seasonal_nc") cyclic = true;
-
-  std::mt19937 rng(seed + 9100u);
-  std::normal_distribution<double> rnorm(0.0, 1.0);
-  const double sigma = std::sqrt(sigma2);
-  const int n_total = n * n_groups;
-  const double sqrt_n = std::sqrt(static_cast<double>(n));
-
-  double worst = 0.0;
-  for (int d = 0; d < n_draws; d++) {
-    std::vector<double> z(n_total), z2(n_total), phi(n_total), phi2(n_total);
-    for (int k = 0; k < n_total; k++) z[k] = rnorm(rng);
-
-    std::vector<double> w(n_groups);
-    double wbar = 0.0;
-    for (int g = 0; g < n_groups; g++) { w[g] = rnorm(rng); wbar += w[g]; }
-    wbar /= static_cast<double>(n_groups);
-    for (int g = 0; g < n_groups; g++) w[g] -= wbar;
-
-    for (int g = 0; g < n_groups; g++) {
-      const double c = ratiod_temporal_nc::nc_sum_coord(z.data() + g * n, n,
-                                                        order, cyclic);
-      ratiod_temporal_nc::nc_with_sum_coord(z.data() + g * n, n, order, cyclic,
-                                            c + w[g], z2.data() + g * n);
-    }
-
-    ratiod_temporal_nc::rw_nc_grouped_forward(z.data(), n, n_groups, order,
-                                              cyclic, sigma, phi.data());
-    ratiod_temporal_nc::rw_nc_grouped_forward(z2.data(), n, n_groups, order,
-                                              cyclic, sigma, phi2.data());
-
-    worst = std::max(
-        worst,
-        std::abs(ratiod_temporal_nc::rw_nc_grouped_log_prior(
-                     z2.data(), n, n_groups, order, cyclic) -
-                 ratiod_temporal_nc::rw_nc_grouped_log_prior(
-                     z.data(), n, n_groups, order, cyclic)));
-
-    for (int g = 0; g < n_groups; g++) {
-      for (int t = 0; t < n; t++) {
-        const double moved = phi2[g * n + t] - phi[g * n + t];
-        worst = std::max(worst, std::abs(moved - w[g] / sqrt_n));
-      }
-    }
+Rcpp::NumericVector cpp_polygamma(int n, Rcpp::NumericVector x) {
+  Rcpp::NumericVector out(x.size());
+  for (R_xlen_t i = 0; i < x.size(); i++) {
+    out[i] = ratiod::math::portable_polygamma(n, x[i]);
   }
-  return worst;
+  return out;
 }

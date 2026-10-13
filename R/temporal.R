@@ -111,7 +111,9 @@ temporal_var_name <- function(x, arg) {
 #' @param time_var Name of the time variable in data. Can be a formula
 #'   (e.g., `~ year`) or a character string (e.g., `"year"`).
 #' @param group_var Optional name of grouping variable for panel data.
-#'   If provided, separate random walks are estimated for each group.
+#'   If provided, separate random walks are estimated for each group. Each
+#'   group's walk sums to zero over time, so it carries the group's trend and
+#'   not its level; add a group intercept such as `(1 | site)` for the levels.
 #' @param cyclic Logical; if TRUE, the random walk wraps around (first and
 #'   last time points are neighbors). Useful for seasonal data.
 #' @param shared Logical; if TRUE (default), temporal effect enters both
@@ -170,8 +172,7 @@ temporal_var_name <- function(x, arg) {
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #'
-#' # Panel data: separate trends per site, each walk starting from its
-#' # own site level
+#' # Panel data: separate trends per site around each site's level
 #' set.seed(124)
 #' site <- rep(paste0("site", 1:5), times = 12)
 #' s <- match(site, paste0("site", 1:5))
@@ -187,9 +188,9 @@ temporal_var_name <- function(x, arg) {
 #'   effort = rgamma(60, shape = 3, rate = exp(-eff))
 #' )
 #'
-#' # The per-site walks carry the site levels, so no (1 | site) term
+#' # The per-site walks carry the trends, (1 | site) the site levels
 #' fit2 <- tratio(
-#'   count | effort ~ x,
+#'   count | effort ~ x + (1 | site),
 #'   data = df_panel,
 #'   family = ratiod_poisson_gamma(),
 #'   temporal = temporal_rw1("year", group_var = "site"),
@@ -294,6 +295,8 @@ temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #' autocorrelation parameter rho.
 #'
 #' @inheritParams temporal_rw1
+#' @param group_var Optional name of grouping variable for panel data.
+#'   If provided, a separate AR1 process is estimated for each group.
 #' @param parameterization Coordinate the field is sampled in. `"centered"`
 #'   (default) samples the effects themselves; `"noncentered"` samples the
 #'   `N(0, I)` innovations the AR1 recursion builds the effects from, so both

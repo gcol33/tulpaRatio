@@ -6,7 +6,6 @@ test_that("latent_factor creates valid object", {
   expect_equal(lf$n_factors, 1L)
   expect_true(lf$shared)
   expect_equal(lf$constraint, "sum_to_zero")
-  expect_true(lf$scale)
 })
 
 test_that("latent_factor validates n_factors", {
@@ -14,8 +13,17 @@ test_that("latent_factor validates n_factors", {
   expect_error(latent_factor(n_factors = -1), "positive integer")
   expect_error(latent_factor(n_factors = 1.5), "positive integer")
 
-  lf <- latent_factor(n_factors = 3)
-  expect_equal(lf$n_factors, 3L)
+  lf <- latent_factor(n_factors = 2)
+  expect_equal(lf$n_factors, 2L)
+})
+
+# Two processes have a 2 x 2 residual covariance, which two factors with
+# lower-triangular loadings fill; a third has nothing left to identify, and a
+# numerator-only factor has one process (gcol33/tulpaRatio#134).
+test_that("latent_factor refuses factors the processes cannot identify", {
+  expect_error(latent_factor(n_factors = 3), "at most 2 are identified")
+  expect_error(latent_factor(n_factors = 2, shared = FALSE),
+               "at most 1 are identified")
 })
 
 test_that("latent_factor validates prior", {
@@ -47,21 +55,12 @@ test_that("latent_factor validates constraint", {
 })
 
 test_that("validate_latent checks n_factors vs observations", {
-  lf <- latent_factor(n_factors = 10)
+  lf <- latent_factor(n_factors = 2)
 
-  # Should work with more observations than factors
   validated <- validate_latent(lf, N = 100)
   expect_equal(validated$n_obs, 100)
 
-  # Should fail with fewer observations than factors
-  expect_error(validate_latent(lf, N = 5), "less than number of observations")
-})
-
-test_that("validate_latent warns for many factors", {
-  lf <- latent_factor(n_factors = 20)
-
-  # Should warn when n_factors > sqrt(N)
-  expect_warning(validate_latent(lf, N = 100), "large relative to data size")
+  expect_error(validate_latent(lf, N = 2), "less than number of observations")
 })
 
 test_that("prepare_latent_for_hmc handles NULL", {
@@ -81,31 +80,9 @@ test_that("prepare_latent_for_hmc prepares valid info", {
   expect_true(info$shared)
   expect_equal(info$constraint, "sum_to_zero")
   expect_true(info$sigma_prior_rate > 0)
-})
-
-test_that("initialize_latent_params returns correct dimensions", {
-  info <- list(
-    type = "latent",
-    n_factors = 2L,
-    n_obs = 50L,
-    shared = TRUE,
-    constraint = "sum_to_zero",
-    scale = TRUE,
-    sigma_prior_rate = 4.6  # -log(0.01)/1
-  )
-
-  params <- initialize_latent_params(info, seed = 123)
-
-  # Should have K log_sigma + N*K factor scores
-  expected_length <- 2 + 50 * 2
-  expect_equal(length(params), expected_length)
-})
-
-test_that("initialize_latent_params returns empty for no factors", {
-  info <- list(type = "none", n_factors = 0L)
-
-  params <- initialize_latent_params(info)
-  expect_equal(length(params), 0)
+  # |off-diagonal| shares the diagonal prior's 99% quantile
+  q99 <- -log(0.01) / info$sigma_prior_rate
+  expect_equal(2 * stats::pnorm(-q99 / info$offdiag_sd), 0.01)
 })
 
 test_that("print.ratiod_latent produces output", {

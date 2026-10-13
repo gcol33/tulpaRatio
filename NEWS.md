@@ -1,5 +1,69 @@
 # tulpaRatio 1.7.3
 
+* `latent_factor()` gives each process its own loading on each factor (#134).
+  The loading matrix is lower triangular with a positive diagonal, so one
+  factor adds a rank-one and two factors a full residual covariance between
+  the numerator and denominator predictors; more factors than processes are
+  refused, since the extra ones are not identified. Before, every factor
+  loaded with one sigma on both processes, so K factors were one effect and
+  `n_factors = 2` gave about 80 divergences. The factor scores carry their
+  N(0, 1) prior on the sampled scale, which keeps the direction the
+  sum-to-zero constraint removes proper. Draws are named
+  `lambda_latent[process,factor]`; the `scale` argument, which nothing read,
+  is gone.
+
+* A per-group temporal walk (`temporal_rw1(group_var = )`,
+  `temporal_rw2(group_var = )`) sums to zero within each group (#135), so it
+  carries the group's trend and a group intercept such as `(1 | site)` its
+  level. Before, only the global mean was removed and the walk levels lay
+  along the intercept's direction: 25 divergences at 1000 iterations with
+  `(1 | site)`, 95 in the non-centred coordinate; now 0 to 9 and 0.
+
+* `spatial_multiscale()` represents both scales on one Hilbert-space basis
+  (#136). Two nearest-neighbour GP fields over the same locations leave the
+  split of their variance to the priors, and NUTS diverged on most draws there
+  in both coordinates (100 to 190 of 200 on the 40-location fixture, also
+  with the variances sampled as a total and a share); the basis samples the
+  same fixture without divergences. `approx`, `nn_local`, `nn_regional`,
+  `parameterization`, `cov` and `nu` are gone (the basis is squared
+  exponential, and `cov` was ignored on it), and `sampler = "lbfgs"` now
+  reaches the field.
+
+* The PC prior on an HSGP field's sd is proper (#146). On the log-variance
+  coordinate it lacked the `d sigma / d log sigma^2` Jacobian, so its density
+  tended to a constant as sigma went to zero (single-scale and multi-scale
+  HSGP).
+
+* A multi-scale field combined with anything beyond a temporal walk (a
+  space-time interaction, latent factors, a varying coefficient) receives its
+  gradient (#147); the composite gradient left all of its parameters at zero.
+
+* `spatiotemporal(parameterization = "collapsed")` integrates a GP space-time
+  interaction (`type = "separable"` or `"nonsep_gp"`) out with a Laplace
+  approximation inside HMC (#143; Margossian et al. 2020): the sampler moves
+  the interaction's three hyperparameters and every other block, its gradient
+  follows from the implicit function theorem with one adjoint solve, and the
+  interaction is drawn from its Gaussian approximation at each saved
+  iteration. The soft margin constraints enter as a low-rank term through a
+  quasi-definite augmented system, so one sparse factorization serves every
+  solve. On the spatial-temporal vignette's model (25 regions x 4 years,
+  Gneiting, `nn = 15`) NUTS takes about 20 leapfrog steps per draw instead of
+  about 390, and 400 iterations of one chain take about 2 minutes where 200
+  centred ones took 10. For a likelihood Gaussian in the interaction the
+  approximation is exact, and a test checks the density against the centred
+  one there to 1e-8. It needs a log-concave family with canonical links and
+  no inflation.
+
+* The composite and latent-factor gradients read an observation's residuals
+  and dispersion derivatives from the log posterior's own per-observation
+  density (#148). Each carried its own family algebra: on gamma-gamma and
+  lognormal both were off by order one, beta-binomial dispersions got no
+  gradient, and neither carried zero or one inflation. A collapsed GP or
+  areal field refuses the families and inflation its inner Laplace is not
+  written for (gamma-gamma, lognormal, beta-binomial; negative
+  binomial-gamma for the GP). The gradient sweep now runs every hand-coded
+  family and inflation structure through these paths.
+
 * An intrinsic CAR or BYM2 field on a disconnected map (#141) is centred on
   each connected component rather than over the whole graph, an island gets a
   unit-variance prior instead of none, and BYM2 carries tulpa's per-component

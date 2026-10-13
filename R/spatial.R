@@ -987,10 +987,8 @@ validate_hsgp <- function(spatial, data) {
 #' @description
 #' Specify a multi-scale spatial random effect that decomposes spatial
 #' variation into local (fine-scale) and regional (broad-scale) components.
-#' Each scale has its own range and variance parameters.
-#'
-#' This is particularly useful for large datasets (>100k observations) where
-#' spatial patterns exist at multiple scales.
+#' Each scale has its own range and variance parameters, and both are
+#' expanded on one Hilbert-space basis (Solin and Sarkka 2020).
 #'
 #' @param coords A one-sided formula specifying coordinate columns (e.g.,
 #'   `~ lon + lat`), or a character vector of length 2 with column names.
@@ -999,23 +997,10 @@ validate_hsgp <- function(spatial, data) {
 #'   coordinate units. Default: `c(0.01, 1)` (after scaling).
 #' @param range_regional Prior range for regional scale as `c(lower, upper)`.
 #'   Default: `c(1, 10)` (after scaling).
-#' @param cov Covariance function: `"exponential"` (default), `"matern"`,
-#'   `"gaussian"`, or `"spherical"`.
-#' @param nu Smoothness parameter for Matern covariance.
-#' @param approx Approximation for the two fields: `"nngp"` (default), a
-#'   nearest-neighbour Gaussian process per scale, or `"hsgp"`, a Hilbert-space
-#'   basis expansion shared by both scales. The basis costs `m^2` coefficients
-#'   per scale regardless of how many locations there are, so it is the cheaper
-#'   of the two once locations outnumber basis functions; the neighbour sets
-#'   follow the data more closely at short ranges.
-#' @param nn_local Number of nearest neighbors for local scale. Default 10.
-#'   Used when `approx = "nngp"`.
-#' @param nn_regional Number of nearest neighbors for regional scale. Default 30.
-#'   Used when `approx = "nngp"`.
-#' @param m Basis functions per dimension when `approx = "hsgp"`, giving `m^2`
-#'   coefficients per scale. Default 10.
-#' @param c_boundary Boundary factor when `approx = "hsgp"`: the domain is
-#'   extended by this multiple before the basis is built. Default 1.5.
+#' @param m Basis functions per dimension, giving `m^2` coefficients per
+#'   scale. Default 10.
+#' @param c_boundary Boundary factor: the domain is extended by this multiple
+#'   before the basis is built. Default 1.5.
 #' @param shared Logical; if TRUE (default), spatial effects enter both
 #'   numerator and denominator.
 #' @param scale_coords Logical; if TRUE (default), coordinates are scaled to
@@ -1023,13 +1008,6 @@ validate_hsgp <- function(spatial, data) {
 #' @param sampler Warmup mass-matrix adaptation for the two GP blocks:
 #'   `"auto"` (default) leaves the sampler's own adaptation in place, `"lbfgs"`
 #'   runs an L-BFGS pass during warmup to initialize it.
-#' @param parameterization Coordinate the two fields are sampled in. One of
-#'   `"centered"` (default), where each block holds the effects themselves, or
-#'   `"noncentered"`, where each block holds \eqn{z \sim N(0, I)} and its scale's
-#'   effects are \eqn{w = L(\sigma^2, \phi) z}. Both scales carry a variance
-#'   parameter over the same locations, so the non-centred coordinate is worth
-#'   trying when the variances are weakly informed by the data. Ignored for
-#'   `approx = "hsgp"`, whose basis coefficients are already that coordinate.
 #'
 #' @return A `ratiod_multiscale` object
 #'
@@ -1038,16 +1016,24 @@ validate_hsgp <- function(spatial, data) {
 #'
 #' \deqn{\eta(s) = X\beta + w_{local}(s) + w_{regional}(s)}
 #'
-#' where each component follows an independent Gaussian process:
-#' \deqn{w_{local}(s) \sim GP(0, \sigma^2_{local} C(\phi_{local}))}
-#' \deqn{w_{regional}(s) \sim GP(0, \sigma^2_{regional} C(\phi_{regional}))}
+#' where each component follows an independent Gaussian process with a
+#' squared-exponential covariance:
+#' \deqn{w_{local}(s) \sim GP(0, \sigma^2_{local} C(\ell_{local}))}
+#' \deqn{w_{regional}(s) \sim GP(0, \sigma^2_{regional} C(\ell_{regional}))}
 #'
-#' **Identifiability**: With sufficient data (>500 locations), the two scales
-#' are typically well-identified when prior ranges are non-overlapping.
-#' PC priors on variance components help prevent overfitting.
+#' The range priors centre each scale's lengthscale prior.
 #'
-#' **Computational cost**: Approximately 1.5-2x the cost of single-scale GP,
-#' as two NNGP likelihoods must be evaluated.
+#' Each field is the expansion of `m^2` basis functions of the domain with
+#' standard normal coefficients scaled by the covariance's spectral density,
+#' so its cost does not grow with the number of locations.
+#'
+#' **Identifiability**: the data inform the sum of the two fields, and the
+#' priors on the variances and ranges decide how it is split between them.
+#' Non-overlapping range priors give each scale its own band of the spectrum.
+#' A field with one value per location for each scale (a nearest-neighbour
+#' GP per scale) leaves that split along a ridge in as many dimensions as
+#' there are locations, which NUTS does not traverse, so the basis is the
+#' only representation offered.
 #'
 #' @examples
 #' # Create multi-scale spatial structure
@@ -1057,9 +1043,6 @@ validate_hsgp <- function(spatial, data) {
 #'   range_regional = c(1, 5)
 #' )
 #' print(ms)
-#'
-#' # On a shared spectral basis rather than two neighbour sets
-#' spatial_multiscale(~ lon + lat, approx = "hsgp", m = 8)
 #'
 #' \donttest{
 #' # A regional trend plus local variation, shared by count and effort
@@ -1088,13 +1071,16 @@ validate_hsgp <- function(spatial, data) {
 #'     ~ lon + lat,
 #'     range_local = c(0.1, 0.5),
 #'     range_regional = c(1, 5),
-#'     approx = "hsgp",
 #'     m = 6
 #'   ),
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #' }
+#'
+#' @references
+#' Solin, A. and Sarkka, S. (2020). Hilbert space methods for reduced-rank
+#' Gaussian process regression. Statistics and Computing, 30(2), 419-446.
 #'
 #' @seealso [spatial_gp()] for single-scale GP, [temporal_multiscale()] for
 #'   multi-scale temporal effects
@@ -1104,22 +1090,13 @@ spatial_multiscale <- function(coords,
                                scales = c("local", "regional"),
                                range_local = c(0.01, 1),
                                range_regional = c(1, 10),
-                               cov = c("exponential", "matern", "gaussian", "spherical"),
-                               nu = 1.5,
-                               approx = c("nngp", "hsgp"),
-                               nn_local = 10,
-                               nn_regional = 30,
                                m = 10,
                                c_boundary = 1.5,
                                shared = TRUE,
                                scale_coords = TRUE,
-                               sampler = c("auto", "lbfgs"),
-                               parameterization = c("centered", "noncentered")) {
+                               sampler = c("auto", "lbfgs")) {
 
-  cov <- match.arg(cov)
-  approx <- match.arg(approx)
   sampler <- match.arg(sampler)
-  parameterization <- match.arg(parameterization)
 
   # Parse coordinate specification
   if (inherits(coords, "formula")) {
@@ -1159,15 +1136,7 @@ spatial_multiscale <- function(coords,
     )
   }
 
-  # Validate nn
-  if (!is.numeric(nn_local) || nn_local < 1) {
-    stop("`nn_local` must be a positive integer", call. = FALSE)
-  }
-  if (!is.numeric(nn_regional) || nn_regional < 1) {
-    stop("`nn_regional` must be a positive integer", call. = FALSE)
-  }
-
-  # Validate the HSGP basis
+  # Validate the basis
   if (!is.numeric(m) || length(m) != 1 || m < 1) {
     stop("`m` must be a positive integer", call. = FALSE)
   }
@@ -1191,23 +1160,16 @@ spatial_multiscale <- function(coords,
       scales = scales,
       range_local = range_local,
       range_regional = range_regional,
-      cov = cov,
-      nu = if (cov == "matern") nu else NULL,
-      approx = approx,
-      nn_local = as.integer(nn_local),
-      nn_regional = as.integer(nn_regional),
+      approx = "hsgp",
       m = m,
       c_boundary = c_boundary,
       shared = shared,
       scale_coords = scale_coords,
       sampler = sampler,
-      parameterization = parameterization,
       # Filled in during validation
       n_obs = NULL,
       n_spatial = NULL,
-      coords_matrix = NULL,
-      neighbor_info_local = NULL,
-      neighbor_info_regional = NULL
+      coords_matrix = NULL
     ),
     class = c("ratiod_multiscale", "ratiod_spatial", "list")
   )
@@ -1226,28 +1188,15 @@ print.ratiod_multiscale <- function(x, ...) {
   cat("Coordinates:", paste(x$coord_vars, collapse = ", "), "\n")
   cat("Scales:", paste(x$scales, collapse = " + "), "\n\n")
 
-  is_hsgp <- identical(x$approx %||% "nngp", "hsgp")
-
   cat("Local scale:\n")
   cat("  Range prior: [", x$range_local[1], ", ", x$range_local[2], "]\n", sep = "")
-  if (!is_hsgp) cat("  Neighbors:", x$nn_local, "\n")
 
   cat("\nRegional scale:\n")
   cat("  Range prior: [", x$range_regional[1], ", ", x$range_regional[2], "]\n", sep = "")
-  if (!is_hsgp) cat("  Neighbors:", x$nn_regional, "\n")
 
-  if (is_hsgp) {
-    cat("\nApproximation: HSGP,", x$m, "basis functions per dim (",
-        x$m^2, "per scale ), boundary factor", x$c_boundary, "\n")
-  } else {
-    cat("\nApproximation: NNGP\n")
-  }
-
-  cov_str <- x$cov
-  if (x$cov == "matern" && !is.null(x$nu)) {
-    cov_str <- sprintf("%s (nu = %.1f)", x$cov, x$nu)
-  }
-  cat("\nCovariance:", cov_str, "\n")
+  cat("\nApproximation: HSGP,", x$m, "basis functions per dim (",
+      x$m^2, "per scale ), boundary factor", x$c_boundary, "\n")
+  cat("Covariance: squared exponential\n")
   cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
 
   if (!is.null(x$n_obs)) {
@@ -1316,20 +1265,9 @@ validate_gp <- function(gp, data) {
   # Compute neighbors on unique coordinates only
   # Store clamped nn values back so prepare_gp_for_hmc passes correct sizes to C++
   if (inherits(gp, "ratiod_gp")) {
-    # Single-scale GP
     nn <- min(gp$nn, n_unique - 1)
     gp$nn <- nn
     gp$neighbor_info <- compute_nngp_neighbors(unique_coords, nn)
-
-  } else if (inherits(gp, "ratiod_multiscale")) {
-    # Multi-scale: separate neighbor structures for each scale
-    nn_local <- min(gp$nn_local, n_unique - 1)
-    nn_regional <- min(gp$nn_regional, n_unique - 1)
-    gp$nn_local <- nn_local
-    gp$nn_regional <- nn_regional
-
-    gp$neighbor_info_local <- compute_nngp_neighbors(unique_coords, nn_local)
-    gp$neighbor_info_regional <- compute_nngp_neighbors(unique_coords, nn_regional)
   }
 
   gp

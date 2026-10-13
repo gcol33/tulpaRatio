@@ -10,17 +10,11 @@ spatial_multiscale(
   scales = c("local", "regional"),
   range_local = c(0.01, 1),
   range_regional = c(1, 10),
-  cov = c("exponential", "matern", "gaussian", "spherical"),
-  nu = 1.5,
-  approx = c("nngp", "hsgp"),
-  nn_local = 10,
-  nn_regional = 30,
   m = 10,
   c_boundary = 1.5,
   shared = TRUE,
   scale_coords = TRUE,
-  sampler = c("auto", "lbfgs"),
-  parameterization = c("centered", "noncentered")
+  sampler = c("auto", "lbfgs")
 )
 
 \method{print}{ratiod_multiscale}(x, ...)
@@ -37,29 +31,11 @@ coordinate units. Default: \code{c(0.01, 1)} (after scaling).}
 \item{range_regional}{Prior range for regional scale as \code{c(lower, upper)}.
 Default: \code{c(1, 10)} (after scaling).}
 
-\item{cov}{Covariance function: \code{"exponential"} (default), \code{"matern"},
-\code{"gaussian"}, or \code{"spherical"}.}
+\item{m}{Basis functions per dimension, giving \code{m^2} coefficients per
+scale. Default 10.}
 
-\item{nu}{Smoothness parameter for Matern covariance.}
-
-\item{approx}{Approximation for the two fields: \code{"nngp"} (default), a
-nearest-neighbour Gaussian process per scale, or \code{"hsgp"}, a Hilbert-space
-basis expansion shared by both scales. The basis costs \code{m^2} coefficients
-per scale regardless of how many locations there are, so it is the cheaper
-of the two once locations outnumber basis functions; the neighbour sets
-follow the data more closely at short ranges.}
-
-\item{nn_local}{Number of nearest neighbors for local scale. Default 10.
-Used when \code{approx = "nngp"}.}
-
-\item{nn_regional}{Number of nearest neighbors for regional scale. Default 30.
-Used when \code{approx = "nngp"}.}
-
-\item{m}{Basis functions per dimension when \code{approx = "hsgp"}, giving \code{m^2}
-coefficients per scale. Default 10.}
-
-\item{c_boundary}{Boundary factor when \code{approx = "hsgp"}: the domain is
-extended by this multiple before the basis is built. Default 1.5.}
+\item{c_boundary}{Boundary factor: the domain is extended by this multiple
+before the basis is built. Default 1.5.}
 
 \item{shared}{Logical; if TRUE (default), spatial effects enter both
 numerator and denominator.}
@@ -71,14 +47,6 @@ unit variance before computing distances.}
 \code{"auto"} (default) leaves the sampler's own adaptation in place, \code{"lbfgs"}
 runs an L-BFGS pass during warmup to initialize it.}
 
-\item{parameterization}{Coordinate the two fields are sampled in. One of
-\code{"centered"} (default), where each block holds the effects themselves, or
-\code{"noncentered"}, where each block holds \eqn{z \sim N(0, I)} and its scale's
-effects are \eqn{w = L(\sigma^2, \phi) z}. Both scales carry a variance
-parameter over the same locations, so the non-centred coordinate is worth
-trying when the variances are weakly informed by the data. Ignored for
-\code{approx = "hsgp"}, whose basis coefficients are already that coordinate.}
-
 \item{x}{A ratiod_multiscale object}
 
 \item{...}{Ignored}
@@ -89,26 +57,32 @@ A \code{ratiod_multiscale} object
 \description{
 Specify a multi-scale spatial random effect that decomposes spatial
 variation into local (fine-scale) and regional (broad-scale) components.
-Each scale has its own range and variance parameters.
-
-This is particularly useful for large datasets (>100k observations) where
-spatial patterns exist at multiple scales.
+Each scale has its own range and variance parameters, and both are
+expanded on one Hilbert-space basis (Solin and Sarkka 2020).
 }
 \details{
 The multi-scale model decomposes spatial variation additively:
 
 \deqn{\eta(s) = X\beta + w_{local}(s) + w_{regional}(s)}
 
-where each component follows an independent Gaussian process:
-\deqn{w_{local}(s) \sim GP(0, \sigma^2_{local} C(\phi_{local}))}
-\deqn{w_{regional}(s) \sim GP(0, \sigma^2_{regional} C(\phi_{regional}))}
+where each component follows an independent Gaussian process with a
+squared-exponential covariance:
+\deqn{w_{local}(s) \sim GP(0, \sigma^2_{local} C(\ell_{local}))}
+\deqn{w_{regional}(s) \sim GP(0, \sigma^2_{regional} C(\ell_{regional}))}
 
-\strong{Identifiability}: With sufficient data (>500 locations), the two scales
-are typically well-identified when prior ranges are non-overlapping.
-PC priors on variance components help prevent overfitting.
+The range priors centre each scale's lengthscale prior.
 
-\strong{Computational cost}: Approximately 1.5-2x the cost of single-scale GP,
-as two NNGP likelihoods must be evaluated.
+Each field is the expansion of \code{m^2} basis functions of the domain with
+standard normal coefficients scaled by the covariance's spectral density,
+so its cost does not grow with the number of locations.
+
+\strong{Identifiability}: the data inform the sum of the two fields, and the
+priors on the variances and ranges decide how it is split between them.
+Non-overlapping range priors give each scale its own band of the spectrum.
+A field with one value per location for each scale (a nearest-neighbour
+GP per scale) leaves that split along a ridge in as many dimensions as
+there are locations, which NUTS does not traverse, so the basis is the
+only representation offered.
 }
 \examples{
 # Create multi-scale spatial structure
@@ -118,9 +92,6 @@ ms <- spatial_multiscale(
   range_regional = c(1, 5)
 )
 print(ms)
-
-# On a shared spectral basis rather than two neighbour sets
-spatial_multiscale(~ lon + lat, approx = "hsgp", m = 8)
 
 \donttest{
 # A regional trend plus local variation, shared by count and effort
@@ -149,7 +120,6 @@ fit <- tratio(
     ~ lon + lat,
     range_local = c(0.1, 0.5),
     range_regional = c(1, 5),
-    approx = "hsgp",
     m = 6
   ),
   control = list(iter = 400, chains = 1, seed = 1)
@@ -157,6 +127,10 @@ fit <- tratio(
 summary(fit)
 }
 
+}
+\references{
+Solin, A. and Sarkka, S. (2020). Hilbert space methods for reduced-rank
+Gaussian process regression. Statistics and Computing, 30(2), 419-446.
 }
 \seealso{
 \code{\link[=spatial_gp]{spatial_gp()}} for single-scale GP, \code{\link[=temporal_multiscale]{temporal_multiscale()}} for

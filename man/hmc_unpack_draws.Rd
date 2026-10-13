@@ -17,7 +17,8 @@ hmc_unpack_draws(
   ms_temporal_info = NULL,
   gp_w_star = NULL,
   icar_phi_star = NULL,
-  bym2_theta_star = NULL
+  bym2_theta_star = NULL,
+  st_delta_draws = NULL
 )
 }
 \arguments{
@@ -35,6 +36,8 @@ hmc_unpack_draws(
 
 \item{gp_w_star, icar_phi_star, bym2_theta_star}{Fields from the inner Laplace
 optimization of a collapsed parameterization}
+
+\item{st_delta_draws}{Draws of a collapsed GP interaction}
 }
 \value{
 A list with one entry per structure, each holding the draws on the

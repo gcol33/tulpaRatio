@@ -293,15 +293,9 @@ layout_msgp_block <- function(cur, spatial_info) {
   if (!identical(spatial_info$type %||% "none", "multiscale_gp")) {
     return(list(type = "none"))
   }
-  is_hsgp <- identical(spatial_info$msgp_approx %||% "nngp", "hsgp")
-  n_per_scale <- if (is_hsgp) {
-    (spatial_info$hsgp_m %||% 6L)^2
-  } else {
-    spatial_info$n_units
-  }
+  n_per_scale <- (spatial_info$hsgp_m %||% 6L)^2
   list(
     type = "multiscale_gp",
-    is_hsgp = is_hsgp,
     local = list(log_sigma2 = cur$one(), log_phi = cur$one(),
                  w = cur$take(n_per_scale)),
     regional = list(log_sigma2 = cur$one(), log_phi = cur$one(),
@@ -373,13 +367,21 @@ layout_latent_block <- function(cur, latent_info) {
     return(list(type = "none"))
   }
   n_obs <- latent_info$n_obs
+  n_proc <- if (isTRUE(latent_info$shared)) 2L else 1L
   list(
     type = "latent",
     n_factors = n_factors,
     n_obs = n_obs,
-    log_sigma = cur$take(n_factors),
+    n_processes = n_proc,
+    loadings = cur$take(latent_n_loadings(n_proc, n_factors)),
     factors = cur$take(n_obs * n_factors)
   )
+}
+
+#' Free loadings of a lower-triangular `n_proc` x `n_factors` matrix
+#' @keywords internal
+latent_n_loadings <- function(n_proc, n_factors) {
+  sum(n_proc - seq_len(n_factors) + 1L)
 }
 
 
@@ -395,8 +397,12 @@ layout_st_block <- function(cur, st_info) {
   # A non-centred Knorr-Held interaction stores z with delta = z / sqrt(tau)
   noncentered <- st_info$type %in% c("I", "II", "III", "IV") && !is_hsgp &&
     identical(st_info$parameterization, "noncentered")
+  # A collapsed GP interaction is integrated out and has no slots; its draws
+  # come from the sampler separately
+  collapsed <- is_gp && identical(st_info$parameterization, "collapsed")
   out <- list(type = st_info$type, is_gp = is_gp, is_hsgp = is_hsgp,
-              noncentered = noncentered, log_tau = cur$one())
+              noncentered = noncentered, collapsed = collapsed,
+              log_tau = cur$one())
   out$logit_rho <- if (st_has_rho(st_info)) cur$one() else integer(0)
   if (is_gp) {
     out$log_phi_space <- cur$one()
@@ -406,7 +412,7 @@ layout_st_block <- function(cur, st_info) {
     out$log_sigma2_hsgp <- cur$one()
     out$log_lengthscale_hsgp <- cur$one()
   }
-  out$delta <- cur$take(st_info$n_params)
+  out$delta <- if (collapsed) integer(0) else cur$take(st_info$n_params)
   out
 }
 
@@ -486,6 +492,7 @@ inv_logit <- function(x) 1 / (1 + exp(-x))
 #' @param latent_info,st_info,ms_temporal_info Optional info lists
 #' @param gp_w_star,icar_phi_star,bym2_theta_star Fields from the inner Laplace
 #'   optimization of a collapsed parameterization
+#' @param st_delta_draws Draws of a collapsed GP interaction
 #'
 #' @return A list with one entry per structure, each holding the draws on the
 #'   natural scale.
@@ -496,7 +503,7 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
                              latent_info = NULL, st_info = NULL,
                              ms_temporal_info = NULL,
                              gp_w_star = NULL, icar_phi_star = NULL,
-                             bym2_theta_star = NULL) {
+                             bym2_theta_star = NULL, st_delta_draws = NULL) {
   n_samples <- nrow(samples)
   out <- list(n_samples = n_samples)
 
@@ -524,7 +531,7 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
   out$ms_temporal <- unpack_ms_temporal(samples, layout$ms_temporal)
   out$svc <- unpack_svc(samples, layout$svc, spatial_info)
   out$latent <- unpack_latent(samples, layout$latent, latent_info)
-  out$st <- unpack_st(samples, layout$st)
+  out$st <- unpack_st(samples, layout$st, st_delta_draws)
   out$hsgp <- unpack_hsgp(samples, layout$hsgp, spatial_info)
   out$tvc <- unpack_tvc(samples, layout$tvc)
 
@@ -741,7 +748,7 @@ unpack_gp <- function(samples, lay, gp_w_star = NULL) {
 #' @keywords internal
 unpack_msgp <- function(samples, lay, spatial_info) {
   if (identical(lay$type, "none")) return(NULL)
-  out <- list(type = "multiscale_gp", is_hsgp = lay$is_hsgp)
+  out <- list(type = "multiscale_gp")
   out$sigma2_local <- exp(samples[, lay$local$log_sigma2])
   out$phi_local <- exp(samples[, lay$local$log_phi])
   out$w_local <- block_draws(samples, lay$local$w)
@@ -749,19 +756,15 @@ unpack_msgp <- function(samples, lay, spatial_info) {
   out$phi_regional <- exp(samples[, lay$regional$log_phi])
   out$w_regional <- block_draws(samples, lay$regional$w)
 
-  if (lay$is_hsgp) {
-    Phi <- spatial_info$msgp_hsgp_Phi
-    eigenvalues <- spatial_info$msgp_hsgp_eigenvalues
-    if (is.null(Phi) || is.null(eigenvalues)) {
-      out$field <- NULL
-      out$field_reason <- "hsgp_basis_unavailable"
-    } else {
-      out$field <-
-        hsgp_field(out$w_local, out$sigma2_local, out$phi_local, Phi, eigenvalues) +
-        hsgp_field(out$w_regional, out$sigma2_regional, out$phi_regional, Phi, eigenvalues)
-    }
+  Phi <- spatial_info$msgp_hsgp_Phi
+  eigenvalues <- spatial_info$msgp_hsgp_eigenvalues
+  if (is.null(Phi) || is.null(eigenvalues)) {
+    out$field <- NULL
+    out$field_reason <- "hsgp_basis_unavailable"
   } else {
-    out$field <- out$w_local + out$w_regional
+    out$field <-
+      hsgp_field(out$w_local, out$sigma2_local, out$phi_local, Phi, eigenvalues) +
+      hsgp_field(out$w_regional, out$sigma2_regional, out$phi_regional, Phi, eigenvalues)
   }
   out
 }
@@ -928,13 +931,29 @@ unpack_latent <- function(samples, lay, latent_info) {
   if (identical(lay$type, "none")) return(NULL)
   K <- lay$n_factors
   N <- lay$n_obs
-  sigma <- exp(samples[, lay$log_sigma, drop = FALSE])
+  P <- lay$n_processes
+  theta <- samples[, lay$loadings, drop = FALSE]
   factors <- block_draws(samples, lay$factors)
+
+  # Loadings, factor by factor: factor k loads on processes k..P, its first
+  # (diagonal) loading on the log scale, as hmc_latent.h stores them
+  n_samples <- nrow(samples)
+  lambda <- list()
+  lam <- array(0, c(n_samples, P, K))
+  j <- 0L
+  for (k in seq_len(K)) {
+    for (p in k:P) {
+      j <- j + 1L
+      lam[, p, k] <- if (p == k) exp(theta[, j]) else theta[, j]
+      lambda[[length(lambda) + 1L]] <- list(
+        process = c("num", "denom")[p], factor = k, draws = lam[, p, k])
+    }
+  }
 
   # Identifiability constraint, applied as the sampler applies it
   constraint <- latent_info$constraint %||% "sum_to_zero"
-  n_samples <- nrow(samples)
-  eta <- matrix(0, n_samples, N)
+  eta_num <- matrix(0, n_samples, N)
+  eta_denom <- if (P > 1L) matrix(0, n_samples, N)
   factor_list <- vector("list", K)
   for (k in seq_len(K)) {
     # factors are stored observation-major: f[i, k] at (i - 1) * K + k
@@ -946,15 +965,17 @@ unpack_latent <- function(samples, lay, latent_info) {
       f_k - rowMeans(f_k)
     }
     factor_list[[k]] <- f_k
-    eta <- eta + f_k * sigma[, k]
+    eta_num <- eta_num + f_k * lam[, 1, k]
+    if (P > 1L) eta_denom <- eta_denom + f_k * lam[, 2, k]
   }
 
-  list(type = "latent", sigma = sigma, factors = factor_list, field = eta)
+  list(type = "latent", lambda = lambda, factors = factor_list,
+       field = eta_num, field_denom = eta_denom)
 }
 
 
 #' @keywords internal
-unpack_st <- function(samples, lay) {
+unpack_st <- function(samples, lay, st_delta_draws = NULL) {
   if (identical(lay$type, "none")) return(NULL)
   out <- list(type = lay$type, is_hsgp = lay$is_hsgp)
   out$tau <- exp(samples[, lay$log_tau])
@@ -969,7 +990,11 @@ unpack_st <- function(samples, lay) {
     out$sigma2_hsgp <- exp(samples[, lay$log_sigma2_hsgp])
     out$lengthscale_hsgp <- exp(samples[, lay$log_lengthscale_hsgp])
   }
-  out$field <- block_draws(samples, lay$delta)
+  out$field <- if (isTRUE(lay$collapsed)) {
+    st_delta_draws
+  } else {
+    block_draws(samples, lay$delta)
+  }
   if (isTRUE(lay$noncentered)) out$field <- out$field / sqrt(out$tau)
   out
 }
@@ -1067,7 +1092,8 @@ hmc_fit_unpack <- function(object) {
     ms_temporal_info = internal$ms_temporal_info,
     gp_w_star = internal$gp_w_star,
     icar_phi_star = internal$icar_phi_star,
-    bym2_theta_star = internal$bym2_theta_star
+    bym2_theta_star = internal$bym2_theta_star,
+    st_delta_draws = internal$st_delta_draws
   )
 }
 
@@ -1162,9 +1188,10 @@ hmc_structure_contributions <- function(unpacked, design) {
   temporal_info <- design$temporal_info
   contribs <- list()
 
-  add <- function(name, eta, shared, reason = NULL) {
+  add <- function(name, eta, shared, reason = NULL, eta_denom = NULL) {
     contribs[[length(contribs) + 1L]] <<- list(
-      name = name, eta = eta, shared = shared, reason = reason
+      name = name, eta = eta, shared = shared, reason = reason,
+      eta_denom = eta_denom
     )
   }
 
@@ -1199,13 +1226,7 @@ hmc_structure_contributions <- function(unpacked, design) {
 
   # Multi-scale GP
   if (!is.null(unpacked$msgp)) {
-    field <- unpacked$msgp$field
-    eta <- if (isTRUE(unpacked$msgp$is_hsgp)) {
-      field
-    } else {
-      spread_effect(field, spatial_info$group, N)
-    }
-    add("msgp", restrict(eta), spatial_info$shared %||% TRUE,
+    add("msgp", restrict(unpacked$msgp$field), spatial_info$shared %||% TRUE,
         unpacked$msgp$field_reason)
   }
 
@@ -1268,7 +1289,8 @@ hmc_structure_contributions <- function(unpacked, design) {
 
   # Latent factors
   if (!is.null(unpacked$latent)) {
-    add("latent", unpacked$latent$field, design$latent_info$shared %||% FALSE)
+    add("latent", unpacked$latent$field, FALSE,
+        eta_denom = unpacked$latent$field_denom)
   }
 
   # Spatiotemporal interaction
@@ -1382,7 +1404,9 @@ hmc_eta_draws <- function(unpacked, design) {
       next
     }
     eta_num <- eta_num + contrib$eta
-    if (isTRUE(contrib$shared)) {
+    if (!is.null(contrib$eta_denom)) {
+      eta_denom <- eta_denom + contrib$eta_denom
+    } else if (isTRUE(contrib$shared)) {
       eta_denom <- eta_denom + contrib$eta
     }
   }

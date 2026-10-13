@@ -85,10 +85,6 @@ cpp_pg_binomial_gibbs_temporal <- function(y, n, X, re_group, n_re_groups, time_
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_temporal`, y, n, X, re_group, n_re_groups, time_idx, n_times, seasonal_period, trend_type, short_type, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_trend_scale, prior_sigma_seasonal_scale, prior_sigma_short_scale, rho_short_init, store_eta, verbose, n_threads)
 }
 
-cpp_pg_binomial_gibbs_multiscale_gp <- function(y, n, X, re_group, n_re_groups, coords, nn_idx_local, nn_dist_local, nn_order_local, nn_local, nn_idx_regional, nn_dist_regional, nn_order_regional, nn_regional, obs_to_loc, n_spatial, sigma2_local_init, phi_local_init, sigma2_regional_init, phi_regional_init, cov_type, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_local_U = 1.0, prior_sigma_local_alpha = 0.01, prior_phi_local_lower = 0.01, prior_phi_local_upper = 5.0, prior_sigma_regional_U = 1.0, prior_sigma_regional_alpha = 0.01, prior_phi_regional_lower = 0.1, prior_phi_regional_upper = 20.0, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_multiscale_gp`, y, n, X, re_group, n_re_groups, coords, nn_idx_local, nn_dist_local, nn_order_local, nn_local, nn_idx_regional, nn_dist_regional, nn_order_regional, nn_regional, obs_to_loc, n_spatial, sigma2_local_init, phi_local_init, sigma2_regional_init, phi_regional_init, cov_type, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_local_U, prior_sigma_local_alpha, prior_phi_local_lower, prior_phi_local_upper, prior_sigma_regional_U, prior_sigma_regional_alpha, prior_phi_regional_lower, prior_phi_regional_upper, store_eta, verbose, n_threads)
-}
-
 cpp_pg_binomial_gibbs_rsr <- function(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_design, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_tau_shape = 1.0, prior_tau_rate = 0.01, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_rsr`, y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_design, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads)
 }
@@ -157,24 +153,28 @@ cpp_gradient_race <- function(field, n_points = 8L, n_threads = 4L, rounds = 8L,
     .Call(`_tulpaRatio_cpp_gradient_race`, field, n_points, n_threads, rounds, n_obs, n_units, n_times, seed, family, prime_other_model)
 }
 
-cpp_logpost_at <- function(field, n_obs = 400L, n_units = 25L, n_times = 10L, seed = 42L, family = "binomial", temporal_shared = TRUE, zi = "none") {
-    .Call(`_tulpaRatio_cpp_logpost_at`, field, n_obs, n_units, n_times, seed, family, temporal_shared, zi)
+cpp_time_gradient <- function(field, n_rep = 50L, n_obs = 400L, n_units = 25L, n_times = 10L, seed = 42L, family = "poisson_gamma") {
+    .Call(`_tulpaRatio_cpp_time_gradient`, field, n_rep, n_obs, n_units, n_times, seed, family)
 }
 
-cpp_msgp_nc_coordinate_spread <- function(n_obs = 400L, n_units = 25L, n_draws = 5L, seed = 42L) {
-    .Call(`_tulpaRatio_cpp_msgp_nc_coordinate_spread`, n_obs, n_units, n_draws, seed)
+cpp_logpost_at <- function(field, n_obs = 400L, n_units = 25L, n_times = 10L, seed = 42L, family = "binomial", temporal_shared = TRUE, zi = "none") {
+    .Call(`_tulpaRatio_cpp_logpost_at`, field, n_obs, n_units, n_times, seed, family, temporal_shared, zi)
 }
 
 cpp_st_gp_nc_coordinate_spread <- function(field = "stgp_nc", n_draws = 5L, seed = 42L) {
     .Call(`_tulpaRatio_cpp_st_gp_nc_coordinate_spread`, field, n_draws, seed)
 }
 
+cpp_st_collapsed_exactness <- function(field = "stgp_collapsed", n_draws = 4L, seed = 42L, n_obs = 200L, n_units = 9L, n_times = 4L) {
+    .Call(`_tulpaRatio_cpp_st_collapsed_exactness`, field, n_draws, seed, n_obs, n_units, n_times)
+}
+
 cpp_ms_temporal_nc_coordinate_spread <- function(field = "ms_temporal_nc", n = 12L, sigma2 = 0.25, n_draws = 6L, seed = 42L, n_groups = 1L) {
     .Call(`_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread`, field, n, sigma2, n_draws, seed, n_groups)
 }
 
-cpp_ms_temporal_nc_group_contrast_flat <- function(field = "ms_temporal_nc", n = 12L, n_groups = 3L, sigma2 = 0.25, n_draws = 6L, seed = 42L) {
-    .Call(`_tulpaRatio_cpp_ms_temporal_nc_group_contrast_flat`, field, n, n_groups, sigma2, n_draws, seed)
+cpp_polygamma <- function(n, x) {
+    .Call(`_tulpaRatio_cpp_polygamma`, n, x)
 }
 
 cpp_test_leapfrog <- function(q_init, p_init, epsilon, L) {

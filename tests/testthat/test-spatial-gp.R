@@ -74,8 +74,8 @@ test_that("spatial_multiscale creates valid object", {
   expect_equal(ms$type, "multiscale")
   expect_equal(ms$coord_vars, c("lon", "lat"))
   expect_equal(ms$scales, c("local", "regional"))
-  expect_equal(ms$nn_local, 10L)
-  expect_equal(ms$nn_regional, 30L)
+  expect_equal(ms$m, 10L)
+  expect_equal(ms$c_boundary, 1.5)
 })
 
 test_that("spatial_multiscale accepts custom range priors", {
@@ -141,24 +141,6 @@ test_that("validate_gp computes neighbor structure for GP", {
   expect_true(!is.null(validated$coords_matrix))
   expect_true(!is.null(validated$neighbor_info))
   expect_equal(validated$neighbor_info$k, 5)
-})
-
-test_that("validate_gp computes neighbor structures for multiscale", {
-  ms <- spatial_multiscale(~ x + y, nn_local = 3, nn_regional = 8)
-
-  set.seed(123)
-  df <- data.frame(
-    x = runif(20),
-    y = runif(20)
-  )
-
-  validated <- validate_gp(ms, df)
-
-  expect_equal(validated$n_obs, 20)
-  expect_true(!is.null(validated$neighbor_info_local))
-  expect_true(!is.null(validated$neighbor_info_regional))
-  expect_equal(validated$neighbor_info_local$k, 3)
-  expect_equal(validated$neighbor_info_regional$k, 8)
 })
 
 test_that("validate_gp errors for missing coordinate columns", {

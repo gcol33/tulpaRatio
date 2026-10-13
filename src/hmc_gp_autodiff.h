@@ -210,29 +210,6 @@ T gp_nngp_log_lik_t(
 }
 
 // =============================================================================
-// Templated multi-scale GP log-likelihood
-// =============================================================================
-
-template<typename T>
-T multiscale_gp_log_lik_t(
-    const std::vector<T>& w_local,
-    const std::vector<T>& w_regional,
-    const T& sigma2_local,
-    const T& phi_local,
-    const T& sigma2_regional,
-    const T& phi_regional,
-    const MultiscaleGPData& ms_data
-) {
-    auto [gp_local, gp_regional] = make_msgp_gp_views(ms_data);
-
-    // Compute log-likelihood for each scale
-    T ll_local = gp_nngp_log_lik_t(w_local, sigma2_local, phi_local, gp_local);
-    T ll_regional = gp_nngp_log_lik_t(w_regional, sigma2_regional, phi_regional, gp_regional);
-
-    return ll_local + ll_regional;
-}
-
-// =============================================================================
 // Templated GP priors
 // =============================================================================
 
@@ -244,6 +221,16 @@ T log_prior_sigma2_pc_t(const T& sigma2, double U, double alpha) {
     // p(sigma) = rate * exp(-rate * sigma)
     // Jacobian: d(sigma)/d(sigma2) = 1/(2*sigma)
     return T(std::log(rate)) - rate * sigma - safe_log(T(2.0) * sigma);
+}
+
+// PC prior on a marginal sd, sigma ~ Exponential(rate), written on the
+// coordinate theta = log(sigma^2) it is sampled in:
+//   log p(theta) = log(rate) - rate * sigma + log(d sigma / d theta),
+// with d sigma / d theta = sigma / 2.
+template<typename T>
+T log_prior_sd_pc_logvar_t(const T& theta, double rate) {
+    T sigma = safe_exp(T(0.5) * theta);
+    return T(std::log(rate) - std::log(2.0)) - T(rate) * sigma + T(0.5) * theta;
 }
 
 // Uniform prior on phi within bounds

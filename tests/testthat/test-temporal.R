@@ -174,50 +174,63 @@ test_that("HMC with temporal RW1 runs", {
 
 
 
-# A panel walk carries ONE augmented global constant, so the G - 1 group
-# contrasts stay improper and each group's level is the likelihood's to
-# identify. Augmenting per group instead would put a proper prior on those
-# contrasts and pull the group levels together -- a self-consistent density
-# whose gradient still matches its own difference quotient, so what separates
-# it is the field, which is what this pairs the two coordinates on
-# (gcol33/tulpaRatio#81).
-test_that("a panel walk's group levels do not depend on the coordinate", {
+# Each group's walk sums to zero over time, so it carries the group's trend
+# and a group intercept its level; the two no longer lie along the same
+# direction (gcol33/tulpaRatio#135). Both coordinates describe that model, so
+# they agree on the walks, the intercepts and the coefficients.
+test_that("a panel walk carries its group's trend and the intercept its level", {
   skip_on_cran()
 
-  set.seed(4242)
-  n_t <- 10L
-  sites <- c("a", "b", "c")
-  df <- expand.grid(year = seq_len(n_t), site = sites, rep = 1:5)
-  df$x <- rnorm(nrow(df))
-  level <- c(a = -0.4, b = 0.0, c = 0.5)
-  walk <- sapply(sites, function(s) cumsum(rnorm(n_t, 0, 0.15)))
-  eta <- -0.2 + 0.5 * df$x + level[as.character(df$site)] +
-    walk[cbind(df$year, match(df$site, sites))]
-  df$count <- rpois(nrow(df), exp(eta) * 30)
-  df$effort <- rgamma(nrow(df), shape = 6, rate = 6) * 30
+  set.seed(124)
+  n_t <- 12L
+  n_s <- 8L
+  site <- rep(paste0("site", seq_len(n_s)), times = n_t)
+  s <- match(site, paste0("site", seq_len(n_s)))
+  t <- rep(seq_len(n_t), each = n_s)
+  walks <- apply(matrix(rnorm(n_t * n_s, sd = 0.2), n_t, n_s), 2, cumsum)
+  level <- rnorm(n_s, sd = 0.5)
+  eff <- level[s] + walks[cbind(t, s)]
+  x <- rnorm(n_t * n_s)
+  df <- data.frame(year = 2014 + t, site = site, x = x,
+                   count = rpois(n_t * n_s, exp(2.5 + 0.3 * x + eff)),
+                   effort = rgamma(n_t * n_s, shape = 3, rate = exp(-eff)))
 
   fit_panel <- function(par) {
-    fit <- tratio(count | effort ~ x, data = df,
-                  family = ratiod_poisson_gamma(),
-                  temporal = temporal_rw1("year", group_var = "site",
-                                          parameterization = par),
-                  mode = "hmc",
-                  control = list(iter = 800, warmup = 400, chains = 1,
-                                 seed = 11, verbose = FALSE))
-    field <- colMeans(fit$.internal$temporal_draws)
+    fit <- suppressWarnings(
+      tratio(count | effort ~ x + (1 | site), data = df,
+             family = ratiod_poisson_gamma(),
+             temporal = temporal_rw1("year", group_var = "site",
+                                     parameterization = par),
+             mode = "hmc",
+             control = list(iter = 1000, chains = 1, seed = 2,
+                            verbose = FALSE)))
+    draws <- fit$.internal$temporal_draws
+    group <- rep(seq_len(n_s), each = n_t)
+    dr <- as.matrix(fit$draws)
     list(
-      levels = tapply(field, rep(seq_along(sites), each = n_t), mean),
-      beta = colMeans(as.matrix(fit$draws)[, c("beta_num[1]", "beta_num[2]")])
+      n_divergent = sum(unlist(fit$diagnostics$divergent)),
+      walk_sums = apply(draws, 1, function(d) tapply(d, group, sum)),
+      field = colMeans(draws),
+      # contrasts between sites: their common mean trades with the intercept
+      re = {
+        re <- colMeans(dr[, paste0("re[", seq_len(n_s), "]")])
+        re - mean(re)
+      },
+      slope = mean(dr[, "beta_num[2]"])
     )
   }
 
   cen <- fit_panel("centered")
   nc <- fit_panel("noncentered")
 
-  # the levels are spread, so agreement on them is worth asserting
-  expect_gt(diff(range(cen$levels)), 0.2)
-  expect_lt(max(abs(nc$levels - cen$levels)), 0.05)
-  expect_lt(max(abs(nc$beta - cen$beta)), 0.02)
+  expect_equal(nc$n_divergent, 0L)
+  expect_lt(max(abs(cen$walk_sums)), 1e-8)
+  expect_lt(max(abs(nc$walk_sums)), 1e-8)
+  # the site levels reach the intercepts
+  expect_gt(stats::cor(cen$re, level), 0.9)
+  expect_lt(max(abs(nc$field - cen$field)), 0.05)
+  expect_lt(max(abs(nc$re - cen$re)), 0.1)
+  expect_lt(abs(nc$slope - cen$slope), 0.02)
 })
 
 test_that("HMC with temporal AR1 runs", {

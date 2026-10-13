@@ -17,7 +17,9 @@ temporal_rw1(
 (e.g., \code{~ year}) or a character string (e.g., \code{"year"}).}
 
 \item{group_var}{Optional name of grouping variable for panel data.
-If provided, separate random walks are estimated for each group.}
+If provided, separate random walks are estimated for each group. Each
+group's walk sums to zero over time, so it carries the group's trend and
+not its level; add a group intercept such as \code{(1 | site)} for the levels.}
 
 \item{cyclic}{Logical; if TRUE, the random walk wraps around (first and
 last time points are neighbors). Useful for seasonal data.}
@@ -88,8 +90,7 @@ fit <- tratio(
   control = list(iter = 400, chains = 1, seed = 1)
 )
 
-# Panel data: separate trends per site, each walk starting from its
-# own site level
+# Panel data: separate trends per site around each site's level
 set.seed(124)
 site <- rep(paste0("site", 1:5), times = 12)
 s <- match(site, paste0("site", 1:5))
@@ -105,9 +106,9 @@ df_panel <- data.frame(
   effort = rgamma(60, shape = 3, rate = exp(-eff))
 )
 
-# The per-site walks carry the site levels, so no (1 | site) term
+# The per-site walks carry the trends, (1 | site) the site levels
 fit2 <- tratio(
-  count | effort ~ x,
+  count | effort ~ x + (1 | site),
   data = df_panel,
   family = ratiod_poisson_gamma(),
   temporal = temporal_rw1("year", group_var = "site"),

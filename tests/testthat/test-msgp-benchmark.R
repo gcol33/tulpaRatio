@@ -70,8 +70,7 @@ test_that("all MSGP sampler options run without error", {
     # Create spatial specification with sampler option
     ms <- spatial_multiscale(
       ~ x + y,
-      nn_local = 5,
-      nn_regional = 10,
+      m = 6,
       sampler = sampler
     )
 
@@ -105,7 +104,7 @@ test_that("MSGP samplers have acceptable divergence rates", {
   df <- generate_msgp_data(n = 40, seed = 123)
 
   # Test non-centered (current default, known to work well)
-  ms_nc <- spatial_multiscale(~ x + y, nn_local = 5, nn_regional = 10, sampler = "auto")
+  ms_nc <- spatial_multiscale(~ x + y, m = 6, sampler = "auto")
 
   fit_nc <- suppressWarnings(
     tratio(
@@ -140,7 +139,7 @@ test_that("MSGP sampler speed comparison", {
   results <- list()
 
   for (sampler in samplers_to_test) {
-    ms <- spatial_multiscale(~ x + y, nn_local = 5, nn_regional = 15, sampler = sampler)
+    ms <- spatial_multiscale(~ x + y, m = 6, sampler = sampler)
 
     start_time <- Sys.time()
 
@@ -194,7 +193,7 @@ test_that("MSGP is robust across seeds", {
   for (seed in seeds) {
     df <- generate_msgp_data(n = 35, seed = seed)
 
-    ms <- spatial_multiscale(~ x + y, nn_local = 5, nn_regional = 10, sampler = "auto")
+    ms <- spatial_multiscale(~ x + y, m = 6, sampler = "auto")
 
     fit <- tryCatch({
       suppressWarnings(

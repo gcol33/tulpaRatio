@@ -10,7 +10,7 @@ spatiotemporal(
   temporal,
   type = c("I", "II", "III", "IV", "iid", "separable", "nonsep_gp"),
   shared = TRUE,
-  parameterization = c("centered", "noncentered"),
+  parameterization = c("centered", "noncentered", "collapsed"),
   nonsep_type = c("product", "gneiting"),
   coords = NULL,
   cov_space = NULL,
@@ -52,8 +52,16 @@ the posterior for \code{tau} drifts toward large values and the centered
 field's conditional scale shrinks with it (a funnel), which NUTS cannot
 span with a single step size; \code{"noncentered"} decouples the two and should
 be tried first when \code{rhat} for the interaction (or an intercept sharing
-its geometry) will not drop with more warmup. An HSGP spatial margin is
-sampled centered. Ignored outside the HMC backend.}
+its geometry) will not drop with more warmup. \code{"collapsed"}, for the GP
+types, integrates the interaction out with a Laplace approximation
+inside HMC (Margossian et al. 2020): the sampler moves the
+hyperparameters and every other block, and the interaction is drawn from
+its Gaussian approximation at each saved iteration. That removes the
+interaction's field-against-hyperparameter funnel; the marginal it
+targets is an approximation, exact for a Gaussian likelihood. It needs a
+log-concave family with canonical links (binomial, Poisson-gamma,
+negative binomial, gamma-gamma, lognormal) without zero inflation. An
+HSGP spatial margin is sampled centered. Ignored outside the HMC backend.}
 
 \item{nonsep_type}{For \code{type = "nonsep_gp"}: \code{"product"} (the separable
 covariance) or \code{"gneiting"} (Gneiting 2002). An additive covariance is not
@@ -205,6 +213,15 @@ summary(fit)
 \references{
 Knorr-Held, L. (2000). Bayesian modelling of inseparable space-time variation
 in disease risk. Statistics in Medicine, 19(17-18), 2555-2567.
+
+Margossian, C. C., Vehtari, A., Simpson, D. and Agrawal, R. (2020).
+Hamiltonian Monte Carlo using an adjoint-differentiated Laplace
+approximation: Bayesian inference for latent Gaussian models and beyond.
+Advances in Neural Information Processing Systems 33.
+
+Rue, H., Martino, S. and Chopin, N. (2009). Approximate Bayesian inference
+for latent Gaussian models by using integrated nested Laplace
+approximations. Journal of the Royal Statistical Society B, 71(2), 319-392.
 }
 \seealso{
 \code{\link[=spatial_car]{spatial_car()}}, \code{\link[=spatial_gp]{spatial_gp()}}, \code{\link[=temporal_rw1]{temporal_rw1()}}, \code{\link[=temporal_ar1]{temporal_ar1()}}

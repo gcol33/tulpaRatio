@@ -11,7 +11,9 @@ temporal_iid(time_var, group_var = NULL, shared = TRUE)
 (e.g., \code{~ year}) or a character string (e.g., \code{"year"}).}
 
 \item{group_var}{Optional name of grouping variable for panel data.
-If provided, separate random walks are estimated for each group.}
+If provided, separate random walks are estimated for each group. Each
+group's walk sums to zero over time, so it carries the group's trend and
+not its level; add a group intercept such as \code{(1 | site)} for the levels.}
 
 \item{shared}{Logical; if TRUE (default), temporal effect enters both
 numerator and denominator linear predictors identically.}

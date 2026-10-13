@@ -267,7 +267,7 @@ fit <- tratio(
 
 ## Group-Specific Temporal Effects
 
-By default, temporal effects are shared across all groups. For group-specific trends:
+By default, temporal effects are shared across all groups. For group-specific trends, `group_var` gives each group its own walk. Each walk sums to zero over time, so it carries the group's trend, and a group intercept carries the group's level:
 
 ```{r}
 # Each site follows its own random-walk trend
@@ -278,9 +278,8 @@ eta_g <- rnorm(12, 0, 0.3)[df_g$site] +
 df_g$effort <- rgamma(nrow(df_g), shape = 5, rate = 1 / exp(eta_g))
 df_g$count <- rpois(nrow(df_g), exp(3 + eta_g))
 
-# The site walks carry each site's level, so no site intercept is added
 fit <- tratio(
-  count | effort ~ 1,
+  count | effort ~ 1 + (1 | site),
   temporal = temporal_rw1(
     time_var = "year",
     group_var = "site"
@@ -461,11 +460,22 @@ fit <- tratio(
     temporal = temporal_rw1("year"),
     type = "nonsep_gp",
     nonsep_type = "gneiting",
-    coords = ~ lon + lat
+    coords = ~ lon + lat,
+    parameterization = "collapsed"
   ),
-  control = list(seed = 1)
+  control = list(iter = 1000, chains = 2, seed = 1)
 )
 ```
+
+A GP interaction has one value per space-time cell, and with the field
+sampled alongside its precision and two ranges NUTS needs a small step size
+and deep trees. `parameterization = "collapsed"` integrates the interaction
+out with a Laplace approximation inside HMC, so the sampler moves only its
+three hyperparameters beside the other blocks, and the interaction is drawn
+from its Gaussian approximation at each saved iteration. On this model the
+two chains above take about five minutes on one core each and reach
+`rhat` of 1.00 for every hyperparameter, where the centred interaction takes
+about 390 leapfrog steps per draw.
 
 Non-separability types:
 

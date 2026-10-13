@@ -30,9 +30,16 @@ inline void apply_latent_params(ModelData& data, const Rcpp::List& latent_params
   data.has_latent = Rcpp::as<bool>(latent_params["has_latent"]);
   data.latent_n_factors = Rcpp::as<int>(latent_params["n_factors"]);
   data.latent_shared = Rcpp::as<bool>(latent_params["shared"]);
-  data.latent_scale = Rcpp::as<bool>(latent_params["scale"]);
   data.latent_constraint = Rcpp::as<int>(latent_params["constraint"]);
   data.latent_sigma_prior_rate = Rcpp::as<double>(latent_params["sigma_prior_rate"]);
+  if (data.has_latent) {
+    data.latent_offdiag_sd = Rcpp::as<double>(latent_params["offdiag_sd"]);
+    const int P = ratiod_latent::n_processes(data.latent_shared);
+    if (data.latent_n_factors > P) {
+      Rcpp::stop("%d latent factors on %d process(es): at most %d are identified.",
+                 data.latent_n_factors, P, P);
+    }
+  }
 }
 
 inline void apply_st_params(ModelData& data, const Rcpp::List& st_params) {
@@ -180,7 +187,9 @@ inline void apply_st_params(ModelData& data, const Rcpp::List& st_params) {
     data.st_parameterization = 0;  // Always centered for now
     if (st_params.containsElementNamed("parameterization")) {
       std::string st_param_str = Rcpp::as<std::string>(st_params["parameterization"]);
-      data.st_parameterization = (st_param_str == "centered") ? 0 : 1;
+      data.st_parameterization = (st_param_str == "centered")    ? 0
+                               : (st_param_str == "collapsed") ? 2
+                                                               : 1;
     }
 
     // Kronecker precision data for ST_IV (precomputed in R)

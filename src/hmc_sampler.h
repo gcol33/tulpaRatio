@@ -142,7 +142,7 @@ const char* gradient_fn_name(GradientFn fn);
 // Errors when the active gradient mode differentiates the templated log
 // posterior and the model carries a structure that density cannot express.
 // Call on the R thread, before sampling starts.
-void require_autodiff_supported(const ModelData& data, const ParamLayout& layout);
+void require_gradient_supported(const ModelData& data, const ParamLayout& layout);
 
 // Model data container with spatial support
 struct ModelData {
@@ -295,8 +295,6 @@ struct ModelData {
   // Multi-scale GP spatial structure
   MultiscaleGPData multiscale_gp_data;
   bool has_multiscale_gp = false;
-  bool msgp_is_hsgp = false;                    // HSGP approximation for MSGP
-  int msgp_parameterization = 0;                // 0=centered, 1=non-centered
   ratiod_hsgp::HSGPData msgp_hsgp_data;         // Shared HSGP basis for both scales
   double ms_sigma2_local_prior_U = 1.0;
   double ms_sigma2_local_prior_alpha = 0.01;
@@ -343,17 +341,17 @@ struct ModelData {
   // Latent factors for unmeasured confounders
   bool has_latent = false;
   int latent_n_factors = 0;             // Number of latent factors (K)
-  bool latent_shared = true;            // Whether factors enter both num and denom
-  bool latent_scale = true;             // Whether to standardize factors
+  bool latent_shared = true;            // Whether factors load on both num and denom
   int latent_constraint = 0;            // 0 = sum_to_zero, 1 = first_zero
-  double latent_sigma_prior_rate = 1.0; // Exponential rate for PC prior on sigma
+  double latent_sigma_prior_rate = 1.0; // Exponential rate of the PC prior on a diagonal loading
+  double latent_offdiag_sd = 1.0;       // Normal sd of an off-diagonal loading
 
   // Spatiotemporal interaction
   bool has_spatiotemporal = false;
   bool st_is_hsgp = false;                // HSGP-ST: spectral basis interaction
   SpatiotemporalData spatiotemporal_data;
   ratiod_hsgp::HSGPData st_hsgp_data;    // HSGP basis for ST interaction (separate from main HSGP)
-  int st_parameterization = 0;            // 0=centered, 1=non-centered (NC requires spectral decomposition)
+  int st_parameterization = 0;            // 0 centered, 1 non-centered, 2 collapsed (GP types)
   double st_sigma2_prior_U = 1.0;       // PC prior for interaction variance
   double st_sigma2_prior_alpha = 0.01;
   double st_phi_space_prior_lower = 0.01;  // Uniform bounds for spatial range
@@ -503,8 +501,8 @@ struct ParamLayout {
   int hsgp_beta_start, hsgp_beta_end;   // HSGP basis coefficients (m^2)
 
   // Latent factor parameters
-  int log_sigma_latent_start, log_sigma_latent_end;  // Log sigma per factor
-  int latent_factor_start, latent_factor_end;        // Factor scores (N x K)
+  int latent_loading_start, latent_loading_end;      // Loadings (hmc_latent.h)
+  int latent_factor_start, latent_factor_end;        // Raw factor scores (N x K)
 
   // Spatiotemporal interaction parameters
   int log_tau_st_idx;                                // Log precision for ST interaction
@@ -547,6 +545,7 @@ struct ParamLayout {
   bool has_latent = false;
   bool has_spatiotemporal = false;
   bool is_st_gp = false;
+  bool st_collapsed = false;  // GP interaction integrated out (st_gp_laplace.h)
   bool has_tvc = false;
 };
 
@@ -1903,6 +1902,8 @@ struct HMCResultCpp {
   std::vector<double> gp_w_star_flat;              // w* draws (n_sample x N_gp, row-major)
   std::vector<double> icar_phi_star_flat;          // phi* draws (n_sample x S, row-major)
   std::vector<double> bym2_theta_star_flat;        // theta* draws (n_sample x S, row-major)
+  int n_st_collapsed = 0;                          // cells of a collapsed GP interaction
+  std::vector<double> st_delta_flat;               // its draws (n_sample x cells, row-major)
 
   // Row access for flat storage
   double* sample_row(int i) { return &samples_flat[i * n_params_stored]; }
@@ -1930,6 +1931,8 @@ struct HMCResult {
   Rcpp::NumericMatrix gp_w_star;
   Rcpp::NumericMatrix icar_phi_star;
   Rcpp::NumericMatrix bym2_theta_star;
+  int n_st_collapsed = 0;
+  Rcpp::NumericMatrix st_delta;
 };
 
 // Convert C++ result to R result (call outside parallel region)
@@ -1969,6 +1972,18 @@ inline HMCResult cpp_to_r_result(const HMCResultCpp& cpp_result, int n_params) {
     for (int i = 0; i < cpp_result.n_sample; i++) {
       for (int j = 0; j < n_gp; j++) {
         r_result.gp_w_star(i, j) = cpp_result.gp_w_star_flat[i * n_gp + j];
+      }
+    }
+  }
+
+  // Collapsed GP interaction: copy its draws
+  if (cpp_result.n_st_collapsed > 0) {
+    const int n_st = cpp_result.n_st_collapsed;
+    r_result.n_st_collapsed = n_st;
+    r_result.st_delta = Rcpp::NumericMatrix(cpp_result.n_sample, n_st);
+    for (int i = 0; i < cpp_result.n_sample; i++) {
+      for (int j = 0; j < n_st; j++) {
+        r_result.st_delta(i, j) = cpp_result.st_delta_flat[i * n_st + j];
       }
     }
   }
@@ -2170,12 +2185,7 @@ inline bool temporal_ar1_nc(const ModelData& data, const ParamLayout& layout) {
 
 // Whether an intrinsic standalone walk is sampled in its non-centred
 // coordinate: the block holds z ~ N(0, I) and the effects are
-// sigma * A^{-1} z (hmc_temporal_nc.h).
-//
-// The prior augments ONE global constant whatever the number of groups, so
-// with several groups the transform carries the G - 1 improper group contrasts
-// beside the scaled directions rather than augmenting each group's own
-// constant.
+// sigma * A^{-1} z (hmc_temporal_nc.h), block by block over the groups.
 inline bool temporal_rw_nc(const ModelData& data, const ParamLayout& layout) {
   return layout.has_temporal && !layout.is_temporal_gp &&
          (data.temporal_type == TemporalType::RW1 ||
@@ -2193,12 +2203,11 @@ inline bool temporal_rw_nc(const ModelData& data, const ParamLayout& layout) {
 // into eta, the two halves of tulpa/sum_to_zero.h's construction. AR1, IID and
 // the temporal GP are proper and identify their own level.
 //
-// Exactly ONE direction is treated: the single GLOBAL constant. With several
-// groups the walks are disconnected, so the prior's null space is G constants,
-// but a per-group level shifts eta only for that group's observations and the
-// likelihood identifies it. Augmenting per group would put a proper
-// N(0, 1/tau) prior on those G - 1 contrasts and shrink them, which is a
-// different model.
+// With several groups the walks are disconnected and the prior's null space is
+// G constants, one per group. Each is treated: every group's walk is centred
+// on its own and its own constant augmented, so a walk carries its group's
+// trend and a group intercept, if the model has one, its level. A walk that
+// kept its level would lie along the same direction as that intercept.
 inline bool temporal_is_intrinsic(const ModelData& data,
                                   const ParamLayout& layout) {
   return layout.has_temporal && !layout.is_temporal_gp &&
@@ -2219,7 +2228,8 @@ inline bool temporal_effects_transformed(const ModelData& data,
 // The temporal effects at `params`: the values that enter the linear
 // predictor. Read in place when the sampled block already holds them,
 // reconstructed into `buf` when a non-centred AR1 holds innovations instead,
-// and centred into `buf` when an intrinsic walk's constant has to be removed.
+// and centred into `buf`, group by group, when an intrinsic walk's constant
+// has to be removed.
 // Every density and every gradient reads the effects, so the transform lives
 // here and nowhere else.
 inline const double* temporal_effects(
@@ -2241,14 +2251,14 @@ inline const double* temporal_effects(
         z, data.n_times, data.n_temporal_groups,
         data.temporal_type == TemporalType::RW2 ? 2 : 1,
         data.temporal_cyclic, sigma, buf.data());
-    (void)tulpa::s2z_centre_component(buf.data(), 0, n);
+    tulpa::s2z_centre_blocks(buf.data(), data.n_temporal_groups, data.n_times);
     return buf.data();
   }
 
   if (temporal_is_intrinsic(data, layout)) {
     const int n = layout.temporal_end - layout.temporal_start;
     buf.assign(z, z + n);
-    (void)tulpa::s2z_centre_component(buf.data(), 0, n);
+    tulpa::s2z_centre_blocks(buf.data(), data.n_temporal_groups, data.n_times);
     return buf.data();
   }
 
@@ -2269,14 +2279,14 @@ inline const double* temporal_effects(
 // The temporal block as a density or a gradient needs it: `phi`, the effects
 // that enter the linear predictor, and `z`, the coordinate the sampler moves
 // in. The two are the same pointer unless the field is non-centred or centred,
-// and the buffer backing either lives as long as the view does. `raw_sum`
-// carries the freed constant direction of an intrinsic walk, which the
-// augmented quadratic form needs and centring has removed from `phi`.
+// and the buffer backing either lives as long as the view does. `raw_sums`
+// carries each group's freed constant direction of an intrinsic walk, which
+// the augmented quadratic form needs and centring has removed from `phi`.
 struct TemporalView {
   std::vector<double> buf;
   const double* phi = nullptr;
   const double* z = nullptr;
-  double raw_sum = 0.0;
+  std::vector<double> raw_sums;
   bool centred = false;
   bool nc = false;
 
@@ -2286,114 +2296,115 @@ struct TemporalView {
     centred = temporal_is_intrinsic(data, layout);
     nc = temporal_rw_nc(data, layout);
     // In the non-centred coordinate the block is z, not the field, and the
-    // augmented quadratic that raw_sum feeds has already cancelled against the
-    // transform's Jacobian, so there is nothing for it to carry.
+    // augmented quadratic that raw_sums feeds has already cancelled against
+    // the transform's Jacobian, so there is nothing for it to carry.
+    raw_sums.clear();
     if (centred && !nc) {
-      raw_sum = tulpa::s2z_component_sum(
-          z, 0, layout.temporal_end - layout.temporal_start);
+      raw_sums.resize(data.n_temporal_groups);
+      for (int g = 0; g < data.n_temporal_groups; g++) {
+        raw_sums[g] = tulpa::s2z_component_sum(z, g * data.n_times, data.n_times);
+      }
     }
     phi = temporal_effects(params, data, layout, buf);
   }
 };
 
 // =====================================================================
-// The multi-scale GP field's effects
+// The multi-scale GP field
 // =====================================================================
 
-// Whether the multi-scale GP field is sampled in its non-centred coordinate:
-// each scale's parameter block holds z ~ N(0, I) rather than the effects. The
-// HSGP arm's basis coefficients are already such a coordinate, so the flag
-// governs the two-neighbour-set arm alone.
-inline bool msgp_nc(const ModelData& data, const ParamLayout& layout) {
-  return layout.is_multiscale_gp && data.has_multiscale_gp &&
-         !data.msgp_is_hsgp && data.msgp_parameterization == 1;
-}
-
-// The multi-scale field as a gradient path needs it: the effects each scale
-// contributes to eta, and the adjoint that carries the likelihood back onto
-// whichever coordinate is being sampled.
-//
-// The gradient slots (3, 4) are not the density's (1, 2): a fused gradient
-// evaluates the density once its own backward pass has read the cached
-// factors, and the two would otherwise share a workspace.
-struct MultiscaleGPView {
-  ratiod_gp::MultiscaleGPFieldT<double, 3> field;
-  const double* z_local = nullptr;
-  const double* z_regional = nullptr;
-  double sigma2_local = 0.0, phi_local = 0.0;
-  double sigma2_regional = 0.0, phi_regional = 0.0;
-
-  const double* local() const { return field.local; }
-  const double* regional() const { return field.regional; }
+// The multi-scale field on its shared Hilbert-space basis, as a gradient path
+// needs it: each scale's expansion f = Phi diag(sqrt(S(sigma2, ell))) beta,
+// their sum as the effect on eta, the field's prior gradient, and the
+// backward pass from dL/d(f). Both scales enter eta through the same sum, so
+// the likelihood's derivative with respect to either expansion is the one
+// vector dL/d(f).
+struct MultiscaleHSGPView {
+  ratiod_hsgp::HSGPWorkspace* ws_local = nullptr;
+  ratiod_hsgp::HSGPWorkspace* ws_regional = nullptr;
+  const double* beta_local = nullptr;
+  const double* beta_regional = nullptr;
+  double log_sigma2_local = 0.0, log_ls_local = 0.0;
+  double log_sigma2_regional = 0.0, log_ls_regional = 0.0;
+  bool shared = true;
 
   void read(const std::vector<double>& params, const ModelData& data,
-            const ParamLayout& layout) {
-    z_local = &params[layout.gp_local_start];
-    z_regional = &params[layout.gp_regional_start];
-    sigma2_local = std::exp(params[layout.log_sigma2_gp_local_idx]);
-    phi_local = std::exp(params[layout.log_phi_gp_local_idx]);
-    sigma2_regional = std::exp(params[layout.log_sigma2_gp_regional_idx]);
-    phi_regional = std::exp(params[layout.log_phi_gp_regional_idx]);
-    field.read(z_local, z_regional, sigma2_local, phi_local,
-               sigma2_regional, phi_regional, data.multiscale_gp_data,
-               msgp_nc(data, layout));
+            const ParamLayout& layout, ratiod_hsgp::HSGPWorkspace& local,
+            ratiod_hsgp::HSGPWorkspace& regional) {
+    ws_local = &local;
+    ws_regional = &regional;
+    const int m_total = data.msgp_hsgp_data.m_total;
+    ws_local->init(data.N, m_total);
+    ws_regional->init(data.N, m_total);
+    shared = data.multiscale_gp_data.shared;
+
+    log_sigma2_local = params[layout.log_sigma2_gp_local_idx];
+    log_ls_local = params[layout.log_phi_gp_local_idx];
+    log_sigma2_regional = params[layout.log_sigma2_gp_regional_idx];
+    log_ls_regional = params[layout.log_phi_gp_regional_idx];
+    beta_local = &params[layout.gp_local_start];
+    beta_regional = &params[layout.gp_regional_start];
+
+    ratiod_hsgp::hsgp_evaluate_ws(beta_local, std::exp(log_sigma2_local),
+                                  std::exp(log_ls_local), data.msgp_hsgp_data,
+                                  *ws_local);
+    ratiod_hsgp::hsgp_evaluate_ws(beta_regional, std::exp(log_sigma2_regional),
+                                  std::exp(log_ls_regional), data.msgp_hsgp_data,
+                                  *ws_regional);
   }
 
-  // The field's own prior and the likelihood's derivative with respect to the
-  // effects, onto the sampled coordinate.
-  //
-  // Both scales enter eta through the same sum w_local[loc] + w_regional[loc],
-  // so the likelihood's derivative with respect to either is the one vector
-  // `dL_dw`, indexed by location.
-  //
-  // Centred, that vector lands on each block and the NNGP density supplies the
-  // prior. Non-centred, each scale runs the same adjoint the single-scale
-  // field runs: it returns the FULL z gradient -- it seeds each entry with
-  // -z before adding the likelihood's -- and the two contributions the
-  // transform carries to that scale's variance and range.
-  void accumulate(const double* dL_dw, const ModelData& data,
-                  const ParamLayout& layout, double* grad) const {
-    const int n = data.multiscale_gp_data.n_obs;
-    if (field.noncentered) {
-      std::vector<double> grad_z(n, 0.0);
-      double grad_log_sigma2_lik = 0.0, grad_log_phi_lik = 0.0, grad_log_phi_jac = 0.0;
+  // The field at observation i.
+  double effect(int i) const {
+    return ws_local->hsgp_f[i] + ws_regional->hsgp_f[i];
+  }
 
-      ratiod_gp::nngp_nc_backward(z_local, sigma2_local, phi_local,
-                                  field.gp_local, field.ws_local(),
-                                  dL_dw, grad_z.data(),
-                                  grad_log_sigma2_lik, grad_log_phi_lik,
-                                  grad_log_phi_jac);
-      for (int i = 0; i < n; i++) grad[layout.gp_local_start + i] += grad_z[i];
-      grad[layout.log_sigma2_gp_local_idx] += grad_log_sigma2_lik;
-      grad[layout.log_phi_gp_local_idx] += grad_log_phi_lik;
-
-      std::fill(grad_z.begin(), grad_z.end(), 0.0);
-      ratiod_gp::nngp_nc_backward(z_regional, sigma2_regional, phi_regional,
-                                  field.gp_regional, field.ws_regional(),
-                                  dL_dw, grad_z.data(),
-                                  grad_log_sigma2_lik, grad_log_phi_lik,
-                                  grad_log_phi_jac);
-      for (int i = 0; i < n; i++) grad[layout.gp_regional_start + i] += grad_z[i];
-      grad[layout.log_sigma2_gp_regional_idx] += grad_log_sigma2_lik;
-      grad[layout.log_phi_gp_regional_idx] += grad_log_phi_lik;
-      return;
+  // The field's prior: a PC prior on each scale's sigma, a LogNormal on each
+  // lengthscale (written on the log scale it is sampled in), N(0, I) on the
+  // basis coefficients. Added to `grad`.
+  void add_prior_gradient(const ModelData& data, const ParamLayout& layout,
+                          double* grad) const {
+    grad[layout.log_sigma2_gp_local_idx] += ratiod_gp::log_prior_sd_pc_logvar_grad(
+        log_sigma2_local,
+        -std::log(data.ms_sigma2_local_prior_alpha) / data.ms_sigma2_local_prior_U);
+    grad[layout.log_sigma2_gp_regional_idx] += ratiod_gp::log_prior_sd_pc_logvar_grad(
+        log_sigma2_regional,
+        -std::log(data.ms_sigma2_regional_prior_alpha) / data.ms_sigma2_regional_prior_U);
+    grad[layout.log_phi_gp_local_idx] +=
+        -(log_ls_local - data.ms_log_ls_local_mean) /
+        (data.ms_log_ls_local_sd * data.ms_log_ls_local_sd);
+    grad[layout.log_phi_gp_regional_idx] +=
+        -(log_ls_regional - data.ms_log_ls_regional_mean) /
+        (data.ms_log_ls_regional_sd * data.ms_log_ls_regional_sd);
+    const int m_total = data.msgp_hsgp_data.m_total;
+    for (int j = 0; j < m_total; j++) {
+      grad[layout.gp_local_start + j] -= beta_local[j];
+      grad[layout.gp_regional_start + j] -= beta_regional[j];
     }
+  }
 
-    std::vector<double> w_local(field.local, field.local + n);
-    std::vector<double> w_regional(field.regional, field.regional + n);
-    ratiod_gp::NNGPGradients prior_local, prior_regional;
-    ratiod_gp::gp_nngp_gradients(w_local, sigma2_local, phi_local,
-                                 field.gp_local, prior_local);
-    ratiod_gp::gp_nngp_gradients(w_regional, sigma2_regional, phi_regional,
-                                 field.gp_regional, prior_regional);
-    for (int i = 0; i < n; i++) {
-      grad[layout.gp_local_start + i] += prior_local.grad_w[i] + dL_dw[i];
-      grad[layout.gp_regional_start + i] += prior_regional.grad_w[i] + dL_dw[i];
+  // The likelihood's gradient through both expansions, from dL/d(f) per
+  // observation. Added to `grad`.
+  void add_lik_gradient(const double* dL_df, const ModelData& data,
+                        const ParamLayout& layout, double* grad) const {
+    const int N = data.N;
+    std::copy(dL_df, dL_df + N, ws_local->grad_f.begin());
+    std::copy(dL_df, dL_df + N, ws_regional->grad_f.begin());
+    double g_s2 = 0.0, g_ls = 0.0;
+    ratiod_hsgp::hsgp_compute_gradients_ws(
+        beta_local, std::exp(log_sigma2_local), std::exp(log_ls_local),
+        data.msgp_hsgp_data, *ws_local, g_s2, g_ls);
+    grad[layout.log_sigma2_gp_local_idx] += g_s2;
+    grad[layout.log_phi_gp_local_idx] += g_ls;
+    ratiod_hsgp::hsgp_compute_gradients_ws(
+        beta_regional, std::exp(log_sigma2_regional), std::exp(log_ls_regional),
+        data.msgp_hsgp_data, *ws_regional, g_s2, g_ls);
+    grad[layout.log_sigma2_gp_regional_idx] += g_s2;
+    grad[layout.log_phi_gp_regional_idx] += g_ls;
+    const int m_total = data.msgp_hsgp_data.m_total;
+    for (int j = 0; j < m_total; j++) {
+      grad[layout.gp_local_start + j] += ws_local->grad_beta_out[j];
+      grad[layout.gp_regional_start + j] += ws_regional->grad_beta_out[j];
     }
-    grad[layout.log_sigma2_gp_local_idx] += prior_local.grad_log_sigma2;
-    grad[layout.log_phi_gp_local_idx] += prior_local.grad_log_phi;
-    grad[layout.log_sigma2_gp_regional_idx] += prior_regional.grad_log_sigma2;
-    grad[layout.log_phi_gp_regional_idx] += prior_regional.grad_log_phi;
   }
 };
 

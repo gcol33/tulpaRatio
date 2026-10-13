@@ -69,8 +69,16 @@ NULL
 #'   field's conditional scale shrinks with it (a funnel), which NUTS cannot
 #'   span with a single step size; `"noncentered"` decouples the two and should
 #'   be tried first when `rhat` for the interaction (or an intercept sharing
-#'   its geometry) will not drop with more warmup. An HSGP spatial margin is
-#'   sampled centered. Ignored outside the HMC backend.
+#'   its geometry) will not drop with more warmup. `"collapsed"`, for the GP
+#'   types, integrates the interaction out with a Laplace approximation
+#'   inside HMC (Margossian et al. 2020): the sampler moves the
+#'   hyperparameters and every other block, and the interaction is drawn from
+#'   its Gaussian approximation at each saved iteration. That removes the
+#'   interaction's field-against-hyperparameter funnel; the marginal it
+#'   targets is an approximation, exact for a Gaussian likelihood. It needs a
+#'   log-concave family with canonical links (binomial, Poisson-gamma,
+#'   negative binomial, gamma-gamma, lognormal) without zero inflation. An
+#'   HSGP spatial margin is sampled centered. Ignored outside the HMC backend.
 #' @param nonsep_type For `type = "nonsep_gp"`: `"product"` (the separable
 #'   covariance) or `"gneiting"` (Gneiting 2002). An additive covariance is not
 #'   among them: on a complete `S x T` grid its rank is `S + T - 1`, and the
@@ -178,13 +186,24 @@ NULL
 #'
 #' @seealso [spatial_car()], [spatial_gp()], [temporal_rw1()], [temporal_ar1()]
 #'
+#' @references
+#' Margossian, C. C., Vehtari, A., Simpson, D. and Agrawal, R. (2020).
+#' Hamiltonian Monte Carlo using an adjoint-differentiated Laplace
+#' approximation: Bayesian inference for latent Gaussian models and beyond.
+#' Advances in Neural Information Processing Systems 33.
+#'
+#' Rue, H., Martino, S. and Chopin, N. (2009). Approximate Bayesian inference
+#' for latent Gaussian models by using integrated nested Laplace
+#' approximations. Journal of the Royal Statistical Society B, 71(2), 319-392.
+#'
 #' @export
 spatiotemporal <- function(spatial,
                            temporal,
                            type = c("I", "II", "III", "IV", "iid", "separable",
                                     "nonsep_gp"),
                            shared = TRUE,
-                           parameterization = c("centered", "noncentered"),
+                           parameterization = c("centered", "noncentered",
+                                                "collapsed"),
                            nonsep_type = c("product", "gneiting"),
                            coords = NULL,
                            cov_space = NULL,
@@ -211,6 +230,10 @@ spatiotemporal <- function(spatial,
   parameterization <- match.arg(parameterization)
   nonsep_type <- match.arg(nonsep_type)
   is_gp_type <- type %in% c("separable", "nonsep_gp")
+  if (parameterization == "collapsed" && !is_gp_type) {
+    stop("parameterization = \"collapsed\" integrates out a GP interaction; ",
+         "use type = \"separable\" or \"nonsep_gp\".", call. = FALSE)
+  }
 
   # The GP types put a continuous covariance on the space-time grid, so the
   # interaction carries its own coordinates. They are the interaction's, not

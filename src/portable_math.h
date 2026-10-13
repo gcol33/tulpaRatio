@@ -119,6 +119,34 @@ inline double portable_trigamma(double x) {
     return result;
 }
 
+// Polygamma psi^(n)(x) for n >= 1, x > 0: the recurrence
+// psi^(n)(x) = psi^(n)(x + 1) + (-1)^(n+1) n! / x^(n+1) shifts x to 12 or
+// above, where the asymptotic series
+// (-1)^(n+1) [ (n-1)!/x^n + n!/(2 x^(n+1)) + sum_k B_2k (2k+n-1)! / ((2k)! x^(2k+n)) ]
+// is accurate to double precision with five Bernoulli terms.
+inline double portable_polygamma(int n, double x) {
+    if (x <= 0.0) return std::numeric_limits<double>::quiet_NaN();
+    double n_fact = 1.0;
+    for (int k = 2; k <= n; k++) n_fact *= k;
+    const double sign = (n % 2 == 1) ? 1.0 : -1.0;  // (-1)^(n+1)
+    double result = 0.0;
+    while (x < 12.0) {
+        result += sign * n_fact / std::pow(x, n + 1);
+        x += 1.0;
+    }
+    static const double bernoulli[5] = {1.0 / 6.0, -1.0 / 30.0, 1.0 / 42.0,
+                                        -1.0 / 30.0, 5.0 / 66.0};
+    double series = (n_fact / n) / std::pow(x, n) + 0.5 * n_fact / std::pow(x, n + 1);
+    double fact_num = n_fact / n;  // (n-1)!, grown to (2k+n-1)!
+    double fact_den = 1.0;         // (2k)!
+    for (int k = 1; k <= 5; k++) {
+        fact_num *= static_cast<double>(2 * k + n - 2) * (2 * k + n - 1);
+        fact_den *= static_cast<double>(2 * k - 1) * (2 * k);
+        series += bernoulli[k - 1] * fact_num / (fact_den * std::pow(x, 2 * k + n));
+    }
+    return result + sign * series;
+}
+
 // Portable lchoose: log(C(n,k)) = lgamma(n+1) - lgamma(k+1) - lgamma(n-k+1)
 inline double portable_lchoose(int n, int k) {
     if (k < 0 || k > n) return -std::numeric_limits<double>::infinity();

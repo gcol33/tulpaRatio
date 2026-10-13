@@ -399,21 +399,22 @@ fit_latent <- tratio(
 head(latent_factors(fit_latent))
 ```
 
-Latent factors are observation-level random effects that enter both linear predictors:
+Latent factors are observation-level scores on which each process loads with its own loading:
 
 $$
-\log(\mu_{\text{count}}) = \beta_0 + \beta_1 \cdot \text{depth} + b_{\text{site}} + f_i \cdot \sigma_f
+\log(\mu_{\text{count}}) = \beta_0 + \beta_1 \cdot \text{depth} + b_{\text{site}} + \lambda_1 f_i
 $$
 $$
-\log(\mu_{\text{effort}}) = \alpha_0 + b_{\text{site}} + f_i \cdot \sigma_f
+\log(\mu_{\text{effort}}) = \alpha_0 + b_{\text{site}} + \lambda_2 f_i
 $$
 
-where $f_i \sim \text{Normal}(0, 1)$ with sum-to-zero constraint.
+where $f_i \sim \text{Normal}(0, 1)$ with a sum-to-zero constraint and $\lambda_1 > 0$. The factor adds the covariance $\lambda_1 \lambda_2$ between an observation's two linear predictors and moves the ratio by $(\lambda_1 - \lambda_2) f_i$.
 
-## Multiple Latent Factors
+## Two Latent Factors
+
+Two factors with a lower-triangular loading matrix give the two linear predictors an unrestricted residual covariance. A third factor would have nothing left to identify, so `latent_factor()` stops at two (one when `shared = FALSE`).
 
 ```{r, eval = FALSE}
-# Multiple independent unmeasured confounders
 fit <- tratio(
   count | effort ~ depth,
   data = df,
@@ -447,7 +448,7 @@ fit <- tratio(
   family = ratiod_poisson_gamma(),
   latent = latent_factor(
     n_factors = 1,
-    prior = prior_pc(U = 0.5, alpha = 0.01)  # P(sigma > 0.5) = 0.01
+    prior = prior_pc(U = 0.5, alpha = 0.01)  # P(loading > 0.5) = 0.01
   ),
   control = list(seed = 1)
 )

@@ -3,6 +3,7 @@
 // Main entry point with variant selection and Rcpp exports
 
 #include "hmc_sampler.h"
+#include "hmc_model_data_blocks.h"
 #include "vi_types.h"
 #include "vi_optimizer.h"
 #include "vi_meanfield.h"
@@ -258,13 +259,7 @@ Rcpp::List cpp_vi_fit(
     data.oi_prior_sd = Rcpp::as<double>(oi_prior_sd_sexp);
   }
 
-  // Latent factors
-  data.has_latent = Rcpp::as<bool>(latent_params["has_latent"]);
-  data.latent_n_factors = Rcpp::as<int>(latent_params["n_factors"]);
-  data.latent_shared = Rcpp::as<bool>(latent_params["shared"]);
-  data.latent_scale = Rcpp::as<bool>(latent_params["scale"]);
-  data.latent_constraint = Rcpp::as<int>(latent_params["constraint"]);
-  data.latent_sigma_prior_rate = Rcpp::as<double>(latent_params["sigma_prior_rate"]);
+  ratiod_hmc::apply_latent_params(data, latent_params);
 
   // Spatiotemporal
   data.has_spatiotemporal = Rcpp::as<bool>(st_params["has_spatiotemporal"]);

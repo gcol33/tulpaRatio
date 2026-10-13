@@ -21,7 +21,7 @@
 #include "hmc_gp_autodiff.h"  // Templated GP/NNGP functions
 #include "hmc_svc_autodiff.h"  // Templated SVC functions
 #include "hmc_tvc_autodiff.h"  // Templated TVC functions
-#include "hmc_latent_autodiff.h"  // Templated latent factor functions
+#include "hmc_latent.h"
 #include "hmc_temporal_multiscale.h"  // Templated multiscale temporal functions
 #include "tls_workspace.h"
 #include "omp_sum.h"
@@ -29,6 +29,8 @@
 #include "hmc_gp_collapsed.h"     // Collapsed GP marginal (double only)
 #include "hmc_icar_collapsed.h"   // Collapsed ICAR/BYM2 marginal (double only)
 #include "hmc_car_proper.h"       // Proper CAR precision and log-determinant
+#include "ratio_obs_lik.h"         // One observation's log-likelihood
+#include "st_gp_laplace.h"         // Collapsed GP interaction (double only)
 
 // Expects these to be defined by including hmc_sampler.h first:
 // - ratiod_hmc::ModelData
@@ -62,6 +64,7 @@ inline const char* log_post_impl_gap(const ModelData& data,
     if (layout.is_icar_collapsed) return "collapsed ICAR";
     if (layout.is_bym2_collapsed) return "collapsed BYM2";
     if (data.gp_collapsed) return "collapsed GP";
+    if (layout.st_collapsed) return "collapsed GP interaction";
     // Proper CAR's log-determinant needs a dense Cholesky; not written here,
     // and not verified differentiable through autodiff either.
     if (layout.is_car_proper) return "proper CAR";
@@ -277,12 +280,12 @@ T compute_log_post_impl(
     // Temporal effects
     std::vector<T> phi_temporal;
     std::vector<T> z_temporal;  // Non-centred AR1's sampled block
-    // Intrinsic walks are centred on their way into eta and their single global
-    // constant direction is augmented in the prior; the analytic side decides
-    // the same thing in temporal_is_intrinsic().
+    // Intrinsic walks are centred group by group on their way into eta and each
+    // group's constant direction is augmented in the prior; the analytic side
+    // decides the same thing in temporal_is_intrinsic().
     bool center_temporal = false;
     const bool rw_nc_temporal = ratiod_hmc::temporal_rw_nc(data, layout);
-    T phi_temporal_mean = T(0.0);
+    std::vector<T> phi_temporal_mean;
     T tau_temporal = T(1.0);
     T rho_ar1 = T(0.0);
     T sigma2_temporal_gp = T(1.0);
@@ -358,8 +361,11 @@ T compute_log_post_impl(
             (data.temporal_type == TemporalType::RW1 ||
              data.temporal_type == TemporalType::RW2);
         if (center_temporal) {
-            phi_temporal_mean = tulpa::s2z_component_mean(
-                phi_temporal.data(), 0, static_cast<int>(phi_temporal.size()));
+            phi_temporal_mean.resize(data.n_temporal_groups);
+            for (int g = 0; g < data.n_temporal_groups; g++) {
+                phi_temporal_mean[g] = tulpa::s2z_component_mean(
+                    phi_temporal.data(), g * data.n_times, data.n_times);
+            }
         }
     }
 
@@ -556,14 +562,9 @@ T compute_log_post_impl(
         T sigma2_hsgp = safe_exp(log_sigma2_hsgp);
         T ls_hsgp = safe_exp(log_ls_hsgp);
 
-        // PC prior on sigma: P(sigma > 1) = 0.01 -> rate 4.6, plus the Jacobian
-        // d(sigma)/d(log_sigma2) = 0.5 * sigma.
-        T sigma_hsgp = safe_sqrt(sigma2_hsgp);
-        const double rate_sigma_hsgp = 4.6;
-        log_post = log_post + T(std::log(rate_sigma_hsgp))
-                            - T(rate_sigma_hsgp) * sigma_hsgp
-                            - safe_log(T(2.0) * sigma_hsgp)
-                            + T(0.5) * log_sigma2_hsgp;
+        // PC prior on sigma: P(sigma > 1) = 0.01 -> rate 4.6
+        log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
+            log_sigma2_hsgp, 4.6);
 
         // LogNormal(0, 1) on the lengthscale; the -log(ell) of the density and
         // the +log(ell) Jacobian of the log transform cancel.
@@ -581,14 +582,11 @@ T compute_log_post_impl(
     }
 
     // Multi-scale GP spatial parameters and priors
-    std::vector<T> ms_gp_w_local;
-    std::vector<T> ms_gp_w_regional;
     std::vector<T> ms_gp_effect;
 
-    if (layout.is_multiscale_gp && data.has_multiscale_gp && data.msgp_is_hsgp) {
-        // Both scales read one Hilbert-space basis rather than two neighbour
-        // sets, so each contributes a spectral expansion instead of an NNGP
-        // density: sigma carries a PC prior on its own scale, the lengthscale a
+    if (layout.is_multiscale_gp && data.has_multiscale_gp) {
+        // Both scales read one Hilbert-space basis, each a spectral expansion:
+        // sigma carries a PC prior on its own scale, the lengthscale a
         // LogNormal on the log scale it is parameterized on, and the basis
         // coefficients N(0, I).
         T log_sigma2_local = params[layout.log_sigma2_gp_local_idx];
@@ -601,16 +599,13 @@ T compute_log_post_impl(
         T sigma2_regional = safe_exp(log_sigma2_regional);
         T ls_regional = safe_exp(log_ls_regional);
 
-        // PC prior on sigma, with the d(sigma)/d(log sigma2) = 0.5 Jacobian.
-        log_post = log_post + ratiod_gp::log_prior_sigma2_pc_t(
-            sigma2_local, data.ms_sigma2_local_prior_U,
-            data.ms_sigma2_local_prior_alpha);
-        log_post = log_post + T(0.5) * log_sigma2_local;
-
-        log_post = log_post + ratiod_gp::log_prior_sigma2_pc_t(
-            sigma2_regional, data.ms_sigma2_regional_prior_U,
-            data.ms_sigma2_regional_prior_alpha);
-        log_post = log_post + T(0.5) * log_sigma2_regional;
+        // PC prior on each scale's sigma
+        log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
+            log_sigma2_local, -std::log(data.ms_sigma2_local_prior_alpha)
+                                  / data.ms_sigma2_local_prior_U);
+        log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
+            log_sigma2_regional, -std::log(data.ms_sigma2_regional_prior_alpha)
+                                     / data.ms_sigma2_regional_prior_U);
 
         // LogNormal on each lengthscale. No Jacobian: the prior is written on
         // the log scale the parameter already lives on.
@@ -643,96 +638,6 @@ T compute_log_post_impl(
         ms_gp_effect.resize(data.N);
         for (int ii = 0; ii < data.N; ii++) {
             ms_gp_effect[ii] = f_local[ii] + f_regional[ii];
-        }
-    } else if (layout.is_multiscale_gp && data.has_multiscale_gp) {
-        // Extract 4 hyperparameters from log-scale
-        T log_sigma2_local = params[layout.log_sigma2_gp_local_idx];
-        T log_phi_local = params[layout.log_phi_gp_local_idx];
-        T log_sigma2_regional = params[layout.log_sigma2_gp_regional_idx];
-        T log_phi_regional = params[layout.log_phi_gp_regional_idx];
-
-        T sigma2_local = safe_exp(log_sigma2_local);
-        T phi_local = safe_exp(log_phi_local);
-        T sigma2_regional = safe_exp(log_sigma2_regional);
-        T phi_regional = safe_exp(log_phi_regional);
-
-        // PC priors on sigma2 + Jacobians
-        log_post = log_post + ratiod_gp::log_prior_sigma2_pc_t(
-            sigma2_local, data.ms_sigma2_local_prior_U, data.ms_sigma2_local_prior_alpha);
-        log_post = log_post + log_sigma2_local;  // Jacobian
-
-        log_post = log_post + ratiod_gp::log_prior_sigma2_pc_t(
-            sigma2_regional, data.ms_sigma2_regional_prior_U, data.ms_sigma2_regional_prior_alpha);
-        log_post = log_post + log_sigma2_regional;  // Jacobian
-
-        // Uniform priors on phi (range) within bounds + Jacobians
-        double phi_local_val = get_value(phi_local);
-        if (phi_local_val < data.multiscale_gp_data.range_local_lower ||
-            phi_local_val > data.multiscale_gp_data.range_local_upper) {
-            return T(-INFINITY);
-        }
-        log_post = log_post + log_phi_local;  // Jacobian
-
-        double phi_regional_val = get_value(phi_regional);
-        if (phi_regional_val < data.multiscale_gp_data.range_regional_lower ||
-            phi_regional_val > data.multiscale_gp_data.range_regional_upper) {
-            return T(-INFINITY);
-        }
-        log_post = log_post + log_phi_regional;  // Jacobian
-
-        const int n_gp_local = layout.gp_local_end - layout.gp_local_start;
-        const int n_gp_regional = layout.gp_regional_end - layout.gp_regional_start;
-
-        if (ratiod_hmc::msgp_nc(data, layout)) {
-            // Non-centred: each block holds z, and that scale's field is
-            // w = L(sigma2, phi) z built by the NNGP autoregression. Per scale
-            // the NNGP prior on w and the Jacobian |dw/dz| cancel exactly, so
-            // what is left of the two fields' own density is N(0, I) on each
-            // block, and all four hyperparameters reach eta through the
-            // transforms instead.
-            std::vector<T> z_local(n_gp_local), z_regional(n_gp_regional);
-            T z_sq_sum = T(0.0);
-            for (int k = 0; k < n_gp_local; k++) {
-                z_local[k] = params[layout.gp_local_start + k];
-                z_sq_sum = z_sq_sum + z_local[k] * z_local[k];
-            }
-            for (int k = 0; k < n_gp_regional; k++) {
-                z_regional[k] = params[layout.gp_regional_start + k];
-                z_sq_sum = z_sq_sum + z_regional[k] * z_regional[k];
-            }
-            log_post = log_post - T(0.5) * z_sq_sum;
-
-            ratiod_gp::MultiscaleGPFieldT<T, 1> ms_field;
-            ms_field.read(z_local.data(), z_regional.data(),
-                          sigma2_local, phi_local, sigma2_regional, phi_regional,
-                          data.multiscale_gp_data, /*nc=*/true);
-            ms_gp_w_local.assign(ms_field.local, ms_field.local + n_gp_local);
-            ms_gp_w_regional.assign(ms_field.regional,
-                                    ms_field.regional + n_gp_regional);
-        } else {
-            // Centred: each block holds the effects, which carry that scale's
-            // NNGP prior directly.
-            ms_gp_w_local.resize(n_gp_local);
-            for (int k = 0; k < n_gp_local; k++) {
-                ms_gp_w_local[k] = params[layout.gp_local_start + k];
-            }
-            ms_gp_w_regional.resize(n_gp_regional);
-            for (int k = 0; k < n_gp_regional; k++) {
-                ms_gp_w_regional[k] = params[layout.gp_regional_start + k];
-            }
-
-            // Multiscale NNGP log-likelihood for both scales
-            log_post = log_post + ratiod_gp::multiscale_gp_log_lik_t(
-                ms_gp_w_local, ms_gp_w_regional,
-                sigma2_local, phi_local, sigma2_regional, phi_regional,
-                data.multiscale_gp_data);
-        }
-
-        // Precompute combined effect at observation level
-        ms_gp_effect.resize(data.N, T(0.0));
-        for (int ii = 0; ii < data.N; ii++) {
-            int loc = data.multiscale_gp_data.obs_to_loc[ii];
-            ms_gp_effect[ii] = ms_gp_w_local[loc] + ms_gp_w_regional[loc];
         }
     }
 
@@ -834,26 +739,26 @@ T compute_log_post_impl(
             T log_tau = params[layout.log_tau_temporal_idx];
             log_post = log_post + log_prior_gamma(log_tau, data.tau_temporal_shape, data.tau_temporal_rate);
 
-            // The augmented constant direction's contribution to the quadratic
-            // form. Exactly one global direction is filled, so the sum runs
-            // over the whole field rather than per group; see
-            // temporal_is_intrinsic() for why the group contrasts are left
-            // improper.
-            const auto global_aug_quad = [&]() -> T {
-                if (!center_temporal) return T(0.0);
-                const int n_total = static_cast<int>(phi_temporal.size());
-                const T s = tulpa::s2z_component_sum(phi_temporal.data(), 0, n_total);
-                return tulpa::s2z_aug_coef(T(1.0), n_total) * s * s;
+            // The augmented constant directions' contribution to the quadratic
+            // form, one per group; see temporal_is_intrinsic().
+            const auto group_aug_quad = [&]() -> T {
+                T q = T(0.0);
+                if (!center_temporal) return q;
+                for (int g = 0; g < data.n_temporal_groups; g++) {
+                    const T s = tulpa::s2z_component_sum(
+                        phi_temporal.data(), g * T_times, T_times);
+                    q = q + tulpa::s2z_aug_coef(T(1.0), T_times) * s * s;
+                }
+                return q;
             };
-            const int n_aug_pins = center_temporal ? 1 : 0;
+            const int n_aug_pins = center_temporal ? data.n_temporal_groups : 0;
 
             if (rw_nc_temporal) {
                 // The walk's quadratic form and the transform's Jacobian have
                 // already cancelled, so what is left is N(0, I) on the
                 // coordinates that carry it -- a non-cyclic RW2's free linear
-                // direction and the G - 1 group contrasts keep the flat prior
-                // they had -- and tau reaches the field through the transform
-                // alone.
+                // direction keeps the flat prior it had -- and tau reaches the
+                // field through the transform alone.
                 const int order_rw =
                     (data.temporal_type == TemporalType::RW2) ? 2 : 1;
                 log_post = log_post + ratiod_temporal_nc::rw_nc_grouped_log_prior(
@@ -874,9 +779,9 @@ T compute_log_post_impl(
                         quad_form = quad_form + diff_cyclic * diff_cyclic;
                     }
                 }
-                // Rank: T for cyclic, T-1 for non-cyclic, per group, plus the
-                // one global constant the augmentation fills.
-                quad_form = quad_form + global_aug_quad();
+                // Rank: T for cyclic, T-1 for non-cyclic, per group, plus each
+                // group's constant the augmentation fills.
+                quad_form = quad_form + group_aug_quad();
                 int rank_rw1 = tulpa::s2z_aug_rank(
                     tulpa::rw1_rank(T_times, data.temporal_cyclic)
                         * data.n_temporal_groups, n_aug_pins);
@@ -904,10 +809,10 @@ T compute_log_post_impl(
                         quad_form = quad_form + d2_a * d2_a + d2_b * d2_b;
                     }
                 }
-                // Rank: T for cyclic, T-2 for non-cyclic, per group, plus the
-                // one global constant. A non-cyclic RW2 also keeps its
-                // per-group LINEAR null direction, which this does not touch.
-                quad_form = quad_form + global_aug_quad();
+                // Rank: T for cyclic, T-2 for non-cyclic, per group, plus each
+                // group's constant. A non-cyclic RW2 also keeps its per-group
+                // LINEAR null direction, which this does not touch.
+                quad_form = quad_form + group_aug_quad();
                 int rank_rw2 = tulpa::s2z_aug_rank(
                     tulpa::rw2_rank(T_times, data.temporal_cyclic)
                         * data.n_temporal_groups, n_aug_pins);
@@ -1077,9 +982,8 @@ T compute_log_post_impl(
                 T sigma2_j = safe_exp(log_sigma2);
 
                 // PC prior on sigma
-                T sigma_j = safe_sqrt(sigma2_j);
-                double rate_sigma = 4.6;
-                log_post = log_post - rate_sigma * sigma_j + T(0.5) * log_sigma2;
+                log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
+                    log_sigma2, 4.6);
 
                 T log_ls = params[layout.range_svc_start + j];
                 T ls_j = safe_exp(log_ls);
@@ -1237,55 +1141,30 @@ T compute_log_post_impl(
         ratiod_tvc_ad::compute_tvc_eta(tvc_w_flat, data.tvc_data, tvc_eta);
     }
 
-    // Latent factors parameters and priors
-    std::vector<T> latent_sigma;
-    std::vector<T> latent_factors;
-    std::vector<T> latent_eta;
+    // Latent factors: loadings and raw scores carry the priors, the linear
+    // predictors read the constrained scores (hmc_latent.h)
+    std::vector<T> latent_eta_num;
+    std::vector<T> latent_eta_denom;
 
     if (layout.has_latent && data.latent_n_factors > 0) {
-        int K = data.latent_n_factors;
-        int N = data.N;
+        const int K = data.latent_n_factors;
+        const int N = data.N;
+        const int P = ratiod_latent::n_processes(data.latent_shared);
+        const auto constraint =
+            static_cast<ratiod_latent::LatentConstraint>(data.latent_constraint);
 
-        // Extract log_sigma parameters
-        std::vector<T> log_sigma_latent(K);
-        for (int k = 0; k < K; k++) {
-            log_sigma_latent[k] = params[layout.log_sigma_latent_start + k];
-        }
+        const T* theta = &params[layout.latent_loading_start];
+        const T* raw = &params[layout.latent_factor_start];
+        std::vector<T> lam, f;
+        ratiod_latent::loadings(theta, P, K, lam);
+        ratiod_latent::constrain_scores(raw, N, K, constraint, f);
 
-        // Compute sigma from log_sigma
-        latent_sigma.resize(K);
-        ratiod_latent_ad::extract_sigma(latent_sigma, log_sigma_latent);
+        log_post = log_post + ratiod_latent::loadings_log_prior(
+            theta, P, K, data.latent_sigma_prior_rate, data.latent_offdiag_sd);
+        log_post = log_post + ratiod_latent::scores_log_prior(raw, N * K);
 
-        // Extract factors and apply constraint
-        int n_factor_params = N * K;
-        latent_factors.resize(n_factor_params);
-        for (int j = 0; j < n_factor_params; j++) {
-            latent_factors[j] = params[layout.latent_factor_start + j];
-        }
-
-        // Apply identifiability constraint
-        if (data.latent_constraint == 0) {  // SUM_TO_ZERO
-            ratiod_latent_ad::apply_sum_to_zero(latent_factors, N, K);
-        } else {  // FIRST_ZERO
-            ratiod_latent_ad::apply_first_zero(latent_factors, N, K);
-        }
-
-        // Sigma prior: Exponential on sigma (PC prior)
-        log_post = log_post + ratiod_latent_ad::latent_sigma_log_prior(
-            log_sigma_latent, data.latent_sigma_prior_rate
-        );
-
-        // Factor prior: N(0, 1) on each factor score
-        ratiod_latent::LatentConstraint constraint =
-            (data.latent_constraint == 0) ? ratiod_latent::LatentConstraint::SUM_TO_ZERO
-                                          : ratiod_latent::LatentConstraint::FIRST_ZERO;
-        log_post = log_post + ratiod_latent_ad::latent_factor_log_prior(
-            latent_factors, N, K, constraint
-        );
-
-        // Precompute latent factor contribution to linear predictor
-        latent_eta.resize(N, T(0.0));
-        ratiod_latent_ad::latent_contributions_all(latent_eta, latent_factors, latent_sigma, N, K);
+        ratiod_latent::process_effects(f, lam, N, P, K, latent_eta_num,
+                                       latent_eta_denom);
     }
 
     // Spatiotemporal interaction priors
@@ -1339,139 +1218,147 @@ T compute_log_post_impl(
             log_post = log_post + log_phi_space + log_phi_time;  // Jacobians
         }
 
-        const T* z_or_delta = &params[layout.st_delta_start];
-
-        // NC reparameterization: store z, reconstruct delta
-        const bool st_use_nc = ratiod_spatiotemporal::st_noncentered_gmrf(
-            data.st_parameterization, data.st_is_hsgp, st_data);
-        const bool st_use_nc_gp = ratiod_spatiotemporal::st_noncentered_gp(
-            data.st_parameterization, data.st_is_hsgp, st_data);
-
-        if (st_use_nc_gp) {
-            // The GP interaction from z ~ N(0, I) through the NNGP
-            // autoregression: the field's density is N(0, I) on z, and the
-            // soft sum-to-zero with the normalizer of the subspace it leaves
-            // stays on delta, as in the centred coordinate.
-            st_delta_nc.resize(ST);
-            if (!ratiod_spatiotemporal::st_gp_nc_forward(
-                    z_or_delta, T(1.0) / tau_st, phi_st_space, phi_st_time,
-                    st_data, st_delta_nc.data())) {
-                return T(-std::numeric_limits<double>::infinity());
-            }
-            st_delta = st_delta_nc.data();
-
-            T z_sq = T(0.0);
-            for (int k = 0; k < ST; k++) z_sq = z_sq + z_or_delta[k] * z_or_delta[k];
-            log_post = log_post - T(0.5) * z_sq - T(0.5 * ST * std::log(2.0 * M_PI));
-
-            log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                st_delta, S, T_st, true, true
-            );
+        if (layout.st_collapsed) {
+            // Integrated out with the observations below; the normalizer of
+            // the subspace the margin penalty leaves stays here, as in the
+            // centred coordinate.
             log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
                 st_data)) * safe_log(tau_st);
-        } else if (st_use_nc) {
-            // Forward transform: delta = z / sqrt(tau_st)
-            T inv_scale = T(1.0) / safe_sqrt(tau_st);
-            st_delta_nc.resize(ST);
-            for (int k = 0; k < ST; k++) {
-                st_delta_nc[k] = z_or_delta[k] * inv_scale;
-            }
-            st_delta = st_delta_nc.data();
-
-            // NC prior: -0.5 * z^T (Q_s (x) Q_t) z  (tau-free GMRF)
-            log_post = log_post + ratiod_spatiotemporal::spatiotemporal_log_prior(
-                z_or_delta, T(1.0), T(1.0), rho_st, phi_st_space, phi_st_time,
-                st_data
-            );
-
-            // The GMRF normalizer and the NC Jacobian, less the null
-            // directions the sum-to-zero penalty on z pins
-            const int tau_power = ratiod_spatiotemporal::st_noncentered_tau_power(st_data);
-            log_post = log_post + T(0.5 * tau_power) * safe_log(tau_st);
-
-            // Sum-to-zero on z. In the hard limit this is the constraint on
-            // delta = z / sqrt(tau); held on z, its strength does not fade as
-            // tau grows, which would leave z free to drift along the
-            // directions Q does not constrain.
-            log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                z_or_delta, S, T_st, true, true
-            );
-        } else if (data.st_is_hsgp) {
-            // HSGP-ST: spectral basis interaction (centered). Each basis
-            // function j gets an independent temporal GMRF with precision
-            // tau_st / S(lambda_j).
-            st_delta = z_or_delta;
-            const int M = data.st_hsgp_data.m_total;
-
-            T log_sigma2_st = params[layout.log_sigma2_st_hsgp_idx];
-            T log_ls_st = params[layout.log_lengthscale_st_hsgp_idx];
-            T sigma2_st_hsgp = safe_exp(log_sigma2_st);
-            T lengthscale_st_hsgp = safe_exp(log_ls_st);
-
-            // PC prior on sigma_st_hsgp: rate = 4.6
-            T sigma_st_hsgp = safe_sqrt(sigma2_st_hsgp);
-            log_post = log_post - T(4.6) * sigma_st_hsgp + T(0.5) * log_sigma2_st;
-
-            // LogNormal(0,1) on lengthscale
-            log_post = log_post - T(0.5) * log_ls_st * log_ls_st;
-
-            int rank_t = ratiod_spatiotemporal::st_time_rank(
-                st_data.temporal_type, T_st, st_data.temporal_cyclic);
-            const bool st_hsgp_ar1 =
-                (st_data.temporal_type == TemporalType::AR1 && T_st >= 2);
-            if (st_hsgp_ar1) {
-                // One log|R(rho)| per basis function.
-                log_post = log_post + T(0.5 * M) *
-                           safe_log(ratiod_ar1::one_minus_rho2(rho_st));
-            }
-
-            for (int j = 0; j < M; j++) {
-                T S_j = ratiod_hsgp::spectral_density_se(
-                    data.st_hsgp_data.eigenvalues[j], sigma2_st_hsgp,
-                    lengthscale_st_hsgp);
-                T S_j_floor = (get_value(S_j) < 1e-10) ? T(1e-10) : S_j;
-                T prec_j = tau_st / S_j_floor;
-
-                // GMRF quadratic form: -0.5 * prec_j * delta_j' Q_t delta_j
-                const T* dj = &st_delta[j * T_st];
-                T qf = T(0.0);
-                if (st_data.temporal_type == TemporalType::RW1) {
-                    for (int t = 1; t < T_st; t++) {
-                        T d1 = dj[t] - dj[t - 1];
-                        qf = qf + d1 * d1;
-                    }
-                } else if (st_data.temporal_type == TemporalType::RW2) {
-                    for (int t = 2; t < T_st; t++) {
-                        T d2 = dj[t] - T(2.0) * dj[t - 1] + dj[t - 2];
-                        qf = qf + d2 * d2;
-                    }
-                } else if (st_hsgp_ar1) {
-                    qf = ratiod_ar1::ar1_quadratic_form(dj, T_st, rho_st);
-                }
-                log_post = log_post + T(0.5 * rank_t) * safe_log(prec_j)
-                                    - T(0.5) * prec_j * qf;
-
-                // Soft sum-to-zero per basis function
-                T sum_j = T(0.0);
-                for (int t = 0; t < T_st; t++) sum_j = sum_j + dj[t];
-                log_post = log_post - T(0.5 * tulpa::s2z_precision(T_st)) * sum_j * sum_j;
-            }
         } else {
-            // Centered parameterization (ICAR/BYM2 spatial)
-            st_delta = z_or_delta;
+            const T* z_or_delta = &params[layout.st_delta_start];
 
-            log_post = log_post + ratiod_spatiotemporal::spatiotemporal_log_prior(
-                st_delta, tau_st, tau_st2, rho_st, phi_st_space, phi_st_time,
-                st_data
-            );
+            // NC reparameterization: store z, reconstruct delta
+            const bool st_use_nc = ratiod_spatiotemporal::st_noncentered_gmrf(
+                data.st_parameterization, data.st_is_hsgp, st_data);
+            const bool st_use_nc_gp = ratiod_spatiotemporal::st_noncentered_gp(
+                data.st_parameterization, data.st_is_hsgp, st_data);
 
-            // Soft sum-to-zero constraint for identifiability, and the
-            // normalizer of the subspace it leaves
-            log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                st_delta, S, T_st, true, true
-            );
-            log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
-                st_data)) * safe_log(tau_st);
+            if (st_use_nc_gp) {
+                // The GP interaction from z ~ N(0, I) through the NNGP
+                // autoregression: the field's density is N(0, I) on z, and the
+                // soft sum-to-zero with the normalizer of the subspace it leaves
+                // stays on delta, as in the centred coordinate.
+                st_delta_nc.resize(ST);
+                if (!ratiod_spatiotemporal::st_gp_nc_forward(
+                        z_or_delta, T(1.0) / tau_st, phi_st_space, phi_st_time,
+                        st_data, st_delta_nc.data())) {
+                    return T(-std::numeric_limits<double>::infinity());
+                }
+                st_delta = st_delta_nc.data();
+
+                T z_sq = T(0.0);
+                for (int k = 0; k < ST; k++) z_sq = z_sq + z_or_delta[k] * z_or_delta[k];
+                log_post = log_post - T(0.5) * z_sq - T(0.5 * ST * std::log(2.0 * M_PI));
+
+                log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
+                    st_delta, S, T_st, true, true
+                );
+                log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
+                    st_data)) * safe_log(tau_st);
+            } else if (st_use_nc) {
+                // Forward transform: delta = z / sqrt(tau_st)
+                T inv_scale = T(1.0) / safe_sqrt(tau_st);
+                st_delta_nc.resize(ST);
+                for (int k = 0; k < ST; k++) {
+                    st_delta_nc[k] = z_or_delta[k] * inv_scale;
+                }
+                st_delta = st_delta_nc.data();
+
+                // NC prior: -0.5 * z^T (Q_s (x) Q_t) z  (tau-free GMRF)
+                log_post = log_post + ratiod_spatiotemporal::spatiotemporal_log_prior(
+                    z_or_delta, T(1.0), T(1.0), rho_st, phi_st_space, phi_st_time,
+                    st_data
+                );
+
+                // The GMRF normalizer and the NC Jacobian, less the null
+                // directions the sum-to-zero penalty on z pins
+                const int tau_power = ratiod_spatiotemporal::st_noncentered_tau_power(st_data);
+                log_post = log_post + T(0.5 * tau_power) * safe_log(tau_st);
+
+                // Sum-to-zero on z. In the hard limit this is the constraint on
+                // delta = z / sqrt(tau); held on z, its strength does not fade as
+                // tau grows, which would leave z free to drift along the
+                // directions Q does not constrain.
+                log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
+                    z_or_delta, S, T_st, true, true
+                );
+            } else if (data.st_is_hsgp) {
+                // HSGP-ST: spectral basis interaction (centered). Each basis
+                // function j gets an independent temporal GMRF with precision
+                // tau_st / S(lambda_j).
+                st_delta = z_or_delta;
+                const int M = data.st_hsgp_data.m_total;
+
+                T log_sigma2_st = params[layout.log_sigma2_st_hsgp_idx];
+                T log_ls_st = params[layout.log_lengthscale_st_hsgp_idx];
+                T sigma2_st_hsgp = safe_exp(log_sigma2_st);
+                T lengthscale_st_hsgp = safe_exp(log_ls_st);
+
+                // PC prior on sigma_st_hsgp: rate = 4.6
+                log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
+                    log_sigma2_st, 4.6);
+
+                // LogNormal(0,1) on lengthscale
+                log_post = log_post - T(0.5) * log_ls_st * log_ls_st;
+
+                int rank_t = ratiod_spatiotemporal::st_time_rank(
+                    st_data.temporal_type, T_st, st_data.temporal_cyclic);
+                const bool st_hsgp_ar1 =
+                    (st_data.temporal_type == TemporalType::AR1 && T_st >= 2);
+                if (st_hsgp_ar1) {
+                    // One log|R(rho)| per basis function.
+                    log_post = log_post + T(0.5 * M) *
+                               safe_log(ratiod_ar1::one_minus_rho2(rho_st));
+                }
+
+                for (int j = 0; j < M; j++) {
+                    T S_j = ratiod_hsgp::spectral_density_se(
+                        data.st_hsgp_data.eigenvalues[j], sigma2_st_hsgp,
+                        lengthscale_st_hsgp);
+                    T S_j_floor = (get_value(S_j) < 1e-10) ? T(1e-10) : S_j;
+                    T prec_j = tau_st / S_j_floor;
+
+                    // GMRF quadratic form: -0.5 * prec_j * delta_j' Q_t delta_j
+                    const T* dj = &st_delta[j * T_st];
+                    T qf = T(0.0);
+                    if (st_data.temporal_type == TemporalType::RW1) {
+                        for (int t = 1; t < T_st; t++) {
+                            T d1 = dj[t] - dj[t - 1];
+                            qf = qf + d1 * d1;
+                        }
+                    } else if (st_data.temporal_type == TemporalType::RW2) {
+                        for (int t = 2; t < T_st; t++) {
+                            T d2 = dj[t] - T(2.0) * dj[t - 1] + dj[t - 2];
+                            qf = qf + d2 * d2;
+                        }
+                    } else if (st_hsgp_ar1) {
+                        qf = ratiod_ar1::ar1_quadratic_form(dj, T_st, rho_st);
+                    }
+                    log_post = log_post + T(0.5 * rank_t) * safe_log(prec_j)
+                                        - T(0.5) * prec_j * qf;
+
+                    // Soft sum-to-zero per basis function
+                    T sum_j = T(0.0);
+                    for (int t = 0; t < T_st; t++) sum_j = sum_j + dj[t];
+                    log_post = log_post - T(0.5 * tulpa::s2z_precision(T_st)) * sum_j * sum_j;
+                }
+            } else {
+                // Centered parameterization (ICAR/BYM2 spatial)
+                st_delta = z_or_delta;
+
+                log_post = log_post + ratiod_spatiotemporal::spatiotemporal_log_prior(
+                    st_delta, tau_st, tau_st2, rho_st, phi_st_space, phi_st_time,
+                    st_data
+                );
+
+                // Soft sum-to-zero constraint for identifiability, and the
+                // normalizer of the subspace it leaves
+                log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
+                    st_delta, S, T_st, true, true
+                );
+                log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
+                    st_data)) * safe_log(tau_st);
+            }
         }
     }
 
@@ -1556,9 +1443,10 @@ T compute_log_post_impl(
         ratiod_rsr::project_out(rsr_num_only, data.rsr_basis, data.rsr_rank);
     }
 
-    // One observation's contribution, written once for every scalar type. How
-    // the sum over observations is taken is what differs, below.
-    auto obs_log_lik_i = [&](int i) -> T {
+    // One observation's two linear predictors and inflation logits, written
+    // once for every scalar type.
+    struct ObsPredictors { T eta_num, eta_denom, logit_zi, logit_oi; };
+    auto obs_predictors = [&](int i) -> ObsPredictors {
         // Compute linear predictors
         T eta_num = T(0.0);
         T eta_denom = T(0.0);
@@ -1597,7 +1485,7 @@ T compute_log_post_impl(
             // Intrinsic walks are centred on the way in; their augmented
             // constant carries tau, so leaving it in eta would free the level.
             T temporal_effect = center_temporal
-                ? phi_temporal[g * data.n_times + t] - phi_temporal_mean
+                ? phi_temporal[g * data.n_times + t] - phi_temporal_mean[g]
                 : phi_temporal[g * data.n_times + t];
 
             if (data.temporal_shared) {
@@ -1641,15 +1529,10 @@ T compute_log_post_impl(
             }
         }
 
-        // Add latent factor effect
-        if (layout.has_latent && !latent_eta.empty()) {
-            T latent_effect = latent_eta[i];
-            if (data.latent_shared) {
-                eta_num = eta_num + latent_effect;
-                eta_denom = eta_denom + latent_effect;
-            } else {
-                eta_num = eta_num + latent_effect;
-            }
+        // Add each process's latent factor effect
+        if (!latent_eta_num.empty()) {
+            eta_num = eta_num + latent_eta_num[i];
+            if (!latent_eta_denom.empty()) eta_denom = eta_denom + latent_eta_denom[i];
         }
 
         // Add spatiotemporal interaction effect
@@ -1696,131 +1579,36 @@ T compute_log_post_impl(
         logit_zi = prob_logit(logit_zi, data.link_zi);
         logit_oi = prob_logit(logit_oi, data.link_oi);
 
-        // An identity or inverse link can map eta outside the positive
-        // half-line, where a mean has no density
-        const T neg_inf = T(-std::numeric_limits<double>::infinity());
+        return ObsPredictors{eta_num, eta_denom, logit_zi, logit_oi};
+    };
 
-        // Compute likelihood based on model type
-        T ll_i = T(0.0);
-
-        if (data.model_type == ModelType::BINOMIAL) {
-            T p = inv_logit(prob_logit(eta_num, data.link_num));
-            int y = data.y_num[i];
-            int n = data.y_denom[i];
-
-            // Handle different ZI types for binomial
-            if (data.zi_type == ZIType::ZI_BINOMIAL) {
-                ll_i = log_lik_zi_binomial(y, n, p, logit_zi);
-            } else if (data.zi_type == ZIType::OI_BINOMIAL) {
-                ll_i = log_lik_oi_binomial(y, n, p, logit_oi);
-            } else if (data.zi_type == ZIType::ZOIB) {
-                ll_i = log_lik_zoib(y, n, p, logit_zi, logit_oi);
-            } else if (data.zi_type == ZIType::HURDLE_BINOMIAL) {
-                ll_i = log_lik_hurdle_binomial(y, n, p, logit_zi);
-            } else {
-                ll_i = log_lik_binomial(y, n, p);
-            }
-
-        } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
-            // Zero-inflation and hurdle structures attach to the numerator only;
-            // the denominator count is always the plain family. Both densities
-            // route through ratiod_zi::zi_log_likelihood so a count-response
-            // ZI/hurdle term cannot be carried by one and dropped by the
-            // other.
-            T mu_num = link_mean(eta_num, data.link_num);
-            T mu_denom = link_mean(eta_denom, data.link_denom);
-            if (layout.has_zi) {
-                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
-                                                    logit_zi, data.zi_type);
-            } else {
-                ll_i = log_lik_negbin(data.y_num[i], mu_num, phi_num);
-            }
-            ll_i = ll_i + log_lik_negbin(data.y_denom[i], mu_denom, phi_denom);
-
-        } else if (data.model_type == ModelType::POISSON_GAMMA) {
-            T mu_num = link_mean(eta_num, data.link_num);
-            T mu_denom = link_mean(eta_denom, data.link_denom);
-            if (get_value(mu_denom) <= 0.0) return neg_inf;
-            if (layout.has_zi) {
-                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
-                                                    logit_zi, data.zi_type);
-            } else {
-                ll_i = log_lik_poisson(data.y_num[i], mu_num);
-            }
-            ll_i = ll_i + log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom);
-
-        } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
-            T mu_num = link_mean(eta_num, data.link_num);
-            T mu_denom = link_mean(eta_denom, data.link_denom);
-            if (get_value(mu_denom) <= 0.0) return neg_inf;
-            if (layout.has_zi) {
-                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
-                                                    logit_zi, data.zi_type);
-            } else {
-                ll_i = log_lik_negbin(data.y_num[i], mu_num, phi_num);
-            }
-            ll_i = ll_i + log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom);
-
-        } else if (data.model_type == ModelType::GAMMA_GAMMA) {
-            // Gamma-Gamma: both responses are continuous Gamma
-            // phi_num = shape_num, phi_denom = shape_denom
-            T mu_num = link_mean(eta_num, data.link_num);
-            T mu_denom = link_mean(eta_denom, data.link_denom);
-            if (get_value(mu_num) <= 0.0 || get_value(mu_denom) <= 0.0) return neg_inf;
-            ll_i = log_lik_gamma_gamma(data.y_num_cont[i], data.y_denom_cont[i],
-                                       mu_num, mu_denom, phi_num, phi_denom);
-
-        } else if (data.model_type == ModelType::LOGNORMAL) {
-            // Lognormal-Lognormal: both responses are continuous Lognormal
-            // eta = mean on log scale, phi = sigma (std dev on log scale)
-            ll_i = log_lik_lognormal_lognormal(data.y_num_cont[i], data.y_denom_cont[i],
-                                               eta_num, eta_denom, phi_num, phi_denom);
-
-        } else if (data.model_type == ModelType::BETA_BINOMIAL) {
-            // Beta-Binomial: overdispersed binomial
-            // phi_num = precision parameter (alpha + beta)
-            T p = inv_logit(prob_logit(eta_num, data.link_num));
-            int y = data.y_num[i];
-            int n = data.y_denom[i];
-            ll_i = log_lik_beta_binomial(y, n, p, phi_num);
-
-        } else if (data.model_type == ModelType::POISSON_FIXED ||
-                   data.model_type == ModelType::NEGBIN_FIXED) {
-            // A known exposure E scales the mean: mu = E * linkinv(eta), the
-            // rate being linkinv(eta)
-            T mu_num = link_mean(eta_num, data.link_num) * data.y_denom_cont[i];
-            if (layout.has_zi) {
-                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
-                                                    logit_zi, data.zi_type);
-            } else if (data.model_type == ModelType::POISSON_FIXED) {
-                ll_i = log_lik_poisson(data.y_num[i], mu_num);
-            } else {
-                ll_i = log_lik_negbin(data.y_num[i], mu_num, phi_num);
-            }
-
-        } else if (data.model_type == ModelType::LOGNORMAL_FIXED) {
-            // log y ~ N(log E + eta, sigma): the median is E exp(eta)
-            ll_i = log_lik_lognormal(data.y_num_cont[i],
-                                     eta_num + std::log(data.y_denom_cont[i]), phi_num);
-
-        } else if (data.model_type == ModelType::POISSON_NEGBIN) {
-            T mu_num = link_mean(eta_num, data.link_num);
-            T mu_denom = link_mean(eta_denom, data.link_denom);
-            if (layout.has_zi) {
-                ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
-                                                    logit_zi, data.zi_type);
-            } else {
-                ll_i = log_lik_poisson(data.y_num[i], mu_num);
-            }
-            ll_i = ll_i + log_lik_negbin(data.y_denom[i], mu_denom, phi_denom);
-        }
-
-        return ll_i;
+    // One observation's contribution. How the sum over observations is taken
+    // is what differs, below.
+    auto obs_log_lik_i = [&](int i) -> T {
+        const ObsPredictors pr = obs_predictors(i);
+        return ratio_obs_log_lik(data, layout, i, pr.eta_num, pr.eta_denom,
+                                 phi_num, phi_denom, pr.logit_zi, pr.logit_oi);
     };
 
     // A caller that accumulated the observation likelihood during a fused
     // gradient pass asks for the prior and structural terms alone.
-    if (!opts.skip_obs_loop) {
+    if (!opts.skip_obs_loop && layout.st_collapsed) {
+        // The interaction integrated out: the observations enter through the
+        // Laplace marginal, with every other block as an offset.
+        if constexpr (kDouble) {
+            std::vector<double> off_num(data.N), off_denom(data.N);
+            for (int i = 0; i < data.N; i++) {
+                const ObsPredictors pr = obs_predictors(i);
+                off_num[i] = pr.eta_num;
+                off_denom[i] = pr.eta_denom;
+            }
+            log_post = log_post + ratiod_st_laplace::evaluate(
+                data, layout, params, off_num.data(), off_denom.data(),
+                phi_num, phi_denom);
+        } else {
+            Rcpp::stop("The collapsed GP interaction has no autodiff density.");
+        }
+    } else if (!opts.skip_obs_loop) {
         if constexpr (kDouble) {
             // Only the double instantiation takes this in parallel: an autodiff
             // tape is not thread-safe. The NNGP paths read shared neighbour

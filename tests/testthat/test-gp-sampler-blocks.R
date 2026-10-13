@@ -120,7 +120,7 @@ test_that("a GP main effect carries a latent factor", {
                    verbose = FALSE)
   )
   dr <- expect_draws_in_support(fit)
-  expect_true(any(grepl("^sigma_latent|^latent", colnames(dr))))
+  expect_true(any(grepl("^lambda_latent", colnames(dr))))
 })
 
 

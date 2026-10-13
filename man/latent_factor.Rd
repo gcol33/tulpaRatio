@@ -10,8 +10,7 @@ latent_factor(
   n_factors = 1L,
   prior = NULL,
   shared = TRUE,
-  constraint = c("sum_to_zero", "first_zero"),
-  scale = TRUE
+  constraint = c("sum_to_zero", "first_zero")
 )
 
 \method{print}{ratiod_latent}(x, ...)
@@ -19,25 +18,23 @@ latent_factor(
 \method{latent_factors}{ratiod_fit}(fit, summary = TRUE, probs = c(0.025, 0.5, 0.975), ...)
 }
 \arguments{
-\item{n_factors}{Integer; number of latent factors. Default is 1.
-More factors capture more complex unmeasured structure but increase
-computational cost and risk overfitting.}
+\item{n_factors}{Integer; number of latent factors. Default is 1. With
+\code{shared = TRUE} at most 2 factors are identified, with \code{shared = FALSE}
+at most 1 (see Details).}
 
-\item{prior}{Prior for factor standard deviations. Default is a PC prior
-with P(sigma > 1) = 0.01, which shrinks toward simpler models.}
+\item{prior}{Prior for the diagonal loadings. Default is a PC prior with
+P(loading > 1) = 0.01, which shrinks toward simpler models.}
 
-\item{shared}{Logical; if TRUE (default), latent factors enter both
-numerator and denominator linear predictors identically. If FALSE,
-factors only affect the numerator.}
+\item{shared}{Logical; if TRUE (default), the factors load on both the
+numerator and the denominator linear predictor. If FALSE, they load on
+the numerator only.}
 
-\item{constraint}{Identifiability constraint for factors:
+\item{constraint}{Identifiability constraint for the factor scores:
 \itemize{
-\item \code{"sum_to_zero"} (default): Factors sum to zero across observations
-\item \code{"first_zero"}: First observation's factor is fixed to zero
+\item \code{"sum_to_zero"} (default): each factor's scores sum to zero across
+observations
+\item \code{"first_zero"}: the first observation's scores are fixed at zero
 }}
-
-\item{scale}{Logical; if TRUE (default), factor loadings are standardized
-to have unit variance before applying sigma.}
 
 \item{x}{A ratiod_latent object}
 
@@ -55,15 +52,16 @@ and factor with the posterior mean, sd and \code{probs} quantiles of its score,
 A \code{ratiod_latent} object for use in \code{\link[=tratio]{tratio()}}.
 }
 \description{
-Define latent factors for capturing unmeasured shared structure between
-numerator and denominator. Factors are observation-level random effects
-that enter both linear predictors when \code{shared = TRUE} (default).
+Define latent factors for capturing unmeasured structure shared between
+numerator and denominator. Each observation carries factor scores, and
+each process loads on them with its own loading, so the factors model the
+residual covariance of an observation's two linear predictors.
 }
 \details{
 \subsection{Why Use Latent Factors?}{
 
 When modeling ratios, the numerator and denominator often share unmeasured
-confounders. For example, in relative abundance data, both the focal species
+drivers. For example, in relative abundance data, both the focal species
 count and total count might be affected by:
 \itemize{
 \item Observer skill (unmeasured)
@@ -71,40 +69,53 @@ count and total count might be affected by:
 \item Weather on sampling day (unmeasured)
 }
 
-Without accounting for these shared drivers, ratio estimates can be biased.
 Latent factors capture this shared structure without requiring the
-confounders to be measured.
+drivers to be measured.
 }
 
 \subsection{Mathematical Model}{
 
 For observation i with K latent factors:
 
-\deqn{\eta^{num}_i = X^{num}_i \beta^{num} + \sum_{k=1}^{K} f_{ik} \sigma_k + \ldots}
-\deqn{\eta^{denom}_i = X^{denom}_i \beta^{denom} + \sum_{k=1}^{K} f_{ik} \sigma_k + \ldots}
+\deqn{\eta^{num}_i = X^{num}_i \beta^{num} + \sum_{k=1}^{K} \lambda_{1k} f_{ik} + \ldots}
+\deqn{\eta^{denom}_i = X^{denom}_i \beta^{denom} + \sum_{k=1}^{K} \lambda_{2k} f_{ik} + \ldots}
 
 where:
 \itemize{
-\item \eqn{f_{ik} \sim N(0, 1)} are standardized factor scores
-\item \eqn{\sigma_k} are factor standard deviations with PC prior
-\item Identifiability: \eqn{\sum_i f_{ik} = 0} for each k
+\item \eqn{f_{ik} \sim N(0, 1)} are factor scores, with
+\eqn{\sum_i f_{ik} = 0} for each k
+\item \eqn{\Lambda = (\lambda_{pk})} is the loading matrix, lower triangular
+with a positive diagonal
 }
 
-Because factors enter both linear predictors identically (when shared),
-they cancel in the ratio:
+The factors add the covariance \eqn{\Lambda \Lambda^\top} between the two
+linear predictors of an observation. A 2 x 2 covariance has three free
+entries: one factor (two loadings) fills it up to rank one and two factors
+(three loadings) fill it completely, so a third factor would not be
+identified. Fixing \eqn{\Lambda} lower triangular with a positive diagonal
+makes it the Cholesky factor of that covariance, which is unique; without
+it the loadings and scores rotate freely.
 
-\deqn{ratio_i = \exp(\eta^{num}_i - \eta^{denom}_i)}
+The ratio's linear predictor gains
+\eqn{\sum_k (\lambda_{1k} - \lambda_{2k}) f_{ik}}: a factor that loads
+equally on both processes cancels in the ratio, one that loads unequally
+moves it.
+}
 
-This means factors capture shared multiplicative effects that would
-otherwise bias the ratio.
+\subsection{Priors}{
+
+Each diagonal loading carries \code{prior} (a PC prior by default). Each
+off-diagonal loading carries a normal prior centred at zero, with the
+standard deviation that gives \eqn{|\lambda|} the same 99\% quantile as the
+diagonal prior.
 }
 
 \subsection{Choosing n_factors}{
 \itemize{
-\item Start with \code{n_factors = 1} for simple unmeasured confounding
-\item Use \code{n_factors = 2-3} if you suspect multiple independent confounders
-\item More than 3 factors is rarely needed and risks overfitting
-\item The PC prior provides regularization, shrinking unneeded factors toward zero
+\item \code{n_factors = 1}: one unmeasured driver acting on both processes, with
+process-specific strength
+\item \code{n_factors = 2}: an unrestricted residual covariance between the two
+processes
 }
 }
 
@@ -118,14 +129,14 @@ Latent factors differ from random effects in several ways:
 }
 
 You can use both together: random effects for known grouping, factors for
-residual unmeasured confounding.
+residual unmeasured structure.
 }
 }
 \examples{
-# Basic latent factor (single shared factor)
+# Basic latent factor (single factor on both processes)
 latent_factor()
 
-# Two latent factors
+# Two latent factors: an unrestricted residual covariance
 latent_factor(n_factors = 2)
 
 # Custom prior (more regularization)

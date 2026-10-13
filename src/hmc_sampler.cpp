@@ -415,9 +415,8 @@ ParamLayout compute_param_layout(const ModelData& data) {
 
   // Multi-scale GP parameters
   if (layout.is_multiscale_gp && data.has_multiscale_gp) {
-    // Number of spatial effects per scale: m^2 for HSGP, n_obs for NNGP
-    int n_per_scale = data.msgp_is_hsgp ? data.msgp_hsgp_data.m_total
-                                        : data.multiscale_gp_data.n_obs;
+    // Basis coefficients per scale
+    const int n_per_scale = data.msgp_hsgp_data.m_total;
     // Local scale
     layout.log_sigma2_gp_local_idx = idx++;
     layout.log_phi_gp_local_idx = idx++;  // log_lengthscale for HSGP
@@ -524,17 +523,18 @@ ParamLayout compute_param_layout(const ModelData& data) {
   // Latent factors for unmeasured confounders
   layout.has_latent = data.has_latent;
   if (layout.has_latent && data.latent_n_factors > 0) {
-    // Log sigma for each factor
-    layout.log_sigma_latent_start = idx;
-    idx += data.latent_n_factors;
-    layout.log_sigma_latent_end = idx;
+    // Lower-triangular loadings (hmc_latent.h)
+    layout.latent_loading_start = idx;
+    idx += ratiod_latent::n_loadings(
+        ratiod_latent::n_processes(data.latent_shared), data.latent_n_factors);
+    layout.latent_loading_end = idx;
 
     // Factor scores (N x K)
     layout.latent_factor_start = idx;
     idx += data.N * data.latent_n_factors;
     layout.latent_factor_end = idx;
   } else {
-    layout.log_sigma_latent_start = layout.log_sigma_latent_end = -1;
+    layout.latent_loading_start = layout.latent_loading_end = -1;
     layout.latent_factor_start = layout.latent_factor_end = -1;
   }
 
@@ -585,11 +585,18 @@ ParamLayout compute_param_layout(const ModelData& data) {
       layout.log_lengthscale_st_hsgp_idx = -1;
     }
 
-    // Spatiotemporal interaction effects
-    layout.st_delta_start = idx;
-    idx += data.spatiotemporal_data.n_params;
-    layout.st_delta_end = idx;
+    // Spatiotemporal interaction effects. A collapsed GP interaction is
+    // integrated out (st_gp_laplace.h) and has no slots.
+    layout.st_collapsed = layout.is_st_gp && data.st_parameterization == 2;
+    if (layout.st_collapsed) {
+      layout.st_delta_start = layout.st_delta_end = -1;
+    } else {
+      layout.st_delta_start = idx;
+      idx += data.spatiotemporal_data.n_params;
+      layout.st_delta_end = idx;
+    }
   } else {
+    layout.st_collapsed = false;
     layout.log_tau_st_idx = -1;
     layout.log_tau_st2_idx = -1;
     layout.logit_rho_st_idx = -1;
@@ -842,64 +849,6 @@ inline double log_lik_gamma(double y, double shape, double mu) {
 RATIOD_TLS_WORKSPACE_FN(vectorized::VecGradWorkspace, vec_grad_ws)
 
 // =====================================================================
-// Observation log-likelihood helper (fused with gradient computation)
-// Matches compute_log_post observation loop exactly. Used by specialized
-// H gradient functions to avoid a separate O(N) pass.
-// =====================================================================
-
-inline double compute_obs_ll(
-    const ModelData& data, int i,
-    double eta_num, double eta_denom,
-    double phi_num, double phi_denom
-) {
-  if (data.model_type == ModelType::BINOMIAL) {
-    // The eta-form likelihood drops the binomial coefficient, which is
-    // constant in eta but not in the data. compute_log_post's own
-    // observation loop adds it back, so a fused value without it reports a
-    // different density than the one the gradient beside it describes.
-    return log_lik_binomial(data.y_num[i], data.y_denom[i], eta_num)
-         + ratiod::math::portable_lchoose(data.y_denom[i], data.y_num[i]);
-  } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
-    double mu_num = std::exp(eta_num);
-    double mu_denom = std::exp(eta_denom);
-    return log_lik_negbin(data.y_num[i], mu_num, phi_num)
-         + log_lik_negbin(data.y_denom[i], mu_denom, phi_denom);
-  } else if (data.model_type == ModelType::POISSON_GAMMA) {
-    double mu_num = std::exp(eta_num);
-    double mu_denom = std::exp(eta_denom);
-    return log_lik_poisson(data.y_num[i], mu_num)
-         + log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom);
-  } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
-    double mu_num = std::exp(eta_num);
-    double mu_denom = std::exp(eta_denom);
-    return log_lik_negbin(data.y_num[i], mu_num, phi_num)
-         + log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom);
-  } else if (data.model_type == ModelType::GAMMA_GAMMA) {
-    double mu_num = std::exp(eta_num);
-    double mu_denom = std::exp(eta_denom);
-    return log_lik_gamma(data.y_num_cont[i], phi_num, mu_num)
-         + log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom);
-  } else if (data.model_type == ModelType::LOGNORMAL) {
-    double log_y_num = std::log(data.y_num_cont[i]);
-    double log_y_denom = std::log(data.y_denom_cont[i]);
-    double z_num = (log_y_num - eta_num) / phi_num;
-    double z_denom = (log_y_denom - eta_denom) / phi_denom;
-    return -log_y_num - std::log(phi_num) - 0.5 * z_num * z_num
-           -log_y_denom - std::log(phi_denom) - 0.5 * z_denom * z_denom;
-  } else if (data.model_type == ModelType::BETA_BINOMIAL) {
-    double p = 1.0 / (1.0 + std::exp(-eta_num));
-    int y = data.y_num[i];
-    int n = data.y_denom[i];
-    double alpha = p * phi_num;
-    double beta_param = (1.0 - p) * phi_num;
-    return std::lgamma(y + alpha) + std::lgamma(n - y + beta_param) - std::lgamma(n + phi_num)
-         - std::lgamma(alpha) - std::lgamma(beta_param) + std::lgamma(phi_num)
-         + ratiod::math::portable_lchoose(n, y);
-  }
-  return 0.0;
-}
-
-// =====================================================================
 // ICAR quadratic form: phi' Q phi
 // =====================================================================
 
@@ -1004,21 +953,12 @@ static inline void beta_gradient_prior(
 static inline void phi_gradient_prior(
     const ModelData& data, const ParamLayout& layout,
     double phi_num, double phi_denom, double* grad);
-static inline void compute_obs_residuals(
-    const ModelData& data, int i,
-    double eta_num, double eta_denom,
-    double phi_num, double phi_denom,
-    double& dLL_deta_num, double& dLL_deta_denom);
 static inline void scatter_beta_gradients(
     const ModelData& data, const ParamLayout& layout,
     int i, double dLL_deta_num, double dLL_deta_denom, double* grad);
 static inline void scatter_re_gradient(
     const ModelData& data, const ParamLayout& layout,
     int i, double dLL_deta_num, double dLL_deta_denom, double* grad);
-static inline void accumulate_phi_likelihood_grad(
-    const ModelData& data, const ParamLayout& layout,
-    int i, double eta_num, double eta_denom,
-    double phi_num, double phi_denom, double* grad);
 static inline void tau_temporal_prior_grad(
     const ModelData& data, const ParamLayout& layout,
     double tau_temporal, double* grad);
@@ -2817,49 +2757,80 @@ static inline void phi_gradient_prior(
     }
 }
 
-// Per-observation residual computation (dLL/deta for each family)
-// Handles all model types: BINOMIAL, NEGBIN_NEGBIN, POISSON_GAMMA,
-// NEGBIN_GAMMA, and catch-all (GAMMA_GAMMA, LOGNORMAL, BETA_BINOMIAL)
-static inline void compute_obs_residuals(
-    const ModelData& data, int i,
-    double eta_num, double eta_denom,
-    double phi_num, double phi_denom,
-    double& dLL_deta_num, double& dLL_deta_denom
-) {
-    dLL_deta_num = 0.0;
-    dLL_deta_denom = 0.0;
+// The inflation logits of observation i as the likelihood reads them (the
+// inflation link applied to the linear predictor), with their slopes in that
+// predictor.
+struct InflationLogits {
+    double zi = 0.0, zi_slope = 1.0, oi = 0.0, oi_slope = 1.0;
+};
 
-    if (data.model_type == ModelType::BINOMIAL) {
-        double p = 1.0 / (1.0 + std::exp(-eta_num));
-        dLL_deta_num = data.y_num[i] - data.y_denom[i] * p;
-    } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        dLL_deta_num = data.y_num[i] - mu_num * (data.y_num[i] + phi_num) / (mu_num + phi_num);
-        dLL_deta_denom = data.y_denom[i] - mu_denom * (data.y_denom[i] + phi_denom) / (mu_denom + phi_denom);
-    } else if (data.model_type == ModelType::POISSON_GAMMA) {
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        dLL_deta_num = data.y_num[i] - mu_num;
-        // Gamma requires y > 0; skip if y_denom_cont <= 0 (matches log_lik_gamma)
-        dLL_deta_denom = (data.y_denom_cont[i] > 0.0)
-            ? phi_denom * (data.y_denom_cont[i] / mu_denom - 1.0) : 0.0;
-    } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        double denom_nb = mu_num + phi_num;
-        dLL_deta_num = data.y_num[i] - mu_num * (data.y_num[i] + phi_num) / denom_nb;
-        dLL_deta_denom = (data.y_denom_cont[i] > 0.0)
-            ? phi_denom * (data.y_denom_cont[i] / mu_denom - 1.0) : 0.0;
-    } else {
-        // GAMMA_GAMMA, LOGNORMAL, BETA_BINOMIAL catch-all
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        dLL_deta_num = (data.y_num_cont[i] > 0.0)
-            ? phi_num * (data.y_num_cont[i] / mu_num - 1.0) : 0.0;
-        dLL_deta_denom = (data.y_denom_cont[i] > 0.0)
-            ? phi_denom * (data.y_denom_cont[i] / mu_denom - 1.0) : 0.0;
+static inline InflationLogits inflation_logits(const ModelData& data,
+                                               const ParamLayout& layout,
+                                               const double* params, int i) {
+    InflationLogits out;
+    if (layout.has_zi && data.p_zi > 0) {
+        double lin = 0.0;
+        for (int j = 0; j < data.p_zi; j++)
+            lin += data.X_zi_flat[i * data.p_zi + j] * params[layout.beta_zi_start + j];
+        const ratiod_link::ValueDeriv vd = ratiod_link::prob_logit_vd(lin, data.link_zi);
+        out.zi = vd.value;
+        out.zi_slope = vd.deriv;
     }
+    if (layout.has_oi && data.p_oi > 0) {
+        double lin = 0.0;
+        for (int j = 0; j < data.p_oi; j++)
+            lin += data.X_oi_flat[i * data.p_oi + j] * params[layout.beta_oi_start + j];
+        const ratiod_link::ValueDeriv vd = ratiod_link::prob_logit_vd(lin, data.link_oi);
+        out.oi = vd.value;
+        out.oi_slope = vd.deriv;
+    }
+    return out;
+}
+
+// N(0, sd^2) priors on the inflation coefficients, assigned into grad.
+static inline void inflation_prior_grad(const ModelData& data,
+                                        const ParamLayout& layout,
+                                        const double* params, double* grad) {
+    if (layout.has_zi && data.p_zi > 0) {
+        const double tau = 1.0 / (data.zi_prior_sd * data.zi_prior_sd + 1e-10);
+        for (int j = 0; j < data.p_zi; j++)
+            grad[layout.beta_zi_start + j] = -tau * params[layout.beta_zi_start + j];
+    }
+    if (layout.has_oi && data.p_oi > 0) {
+        const double tau = 1.0 / (data.oi_prior_sd * data.oi_prior_sd + 1e-10);
+        for (int j = 0; j < data.p_oi; j++)
+            grad[layout.beta_oi_start + j] = -tau * params[layout.beta_oi_start + j];
+    }
+}
+
+// The likelihood at observation i and its derivatives, from the log
+// posterior's own per-observation density (ratiod::ratio_obs_derivs): the
+// residuals in the two predictors and d/d(phi) of the two dispersions are
+// returned, and the inflation coefficients' gradient is added to grad.
+static inline ratiod::ObsDerivs obs_likelihood_derivs(
+    const ModelData& data, const ParamLayout& layout, const double* params,
+    int i, double eta_num, double eta_denom, double phi_num, double phi_denom,
+    double* grad) {
+    const InflationLogits inf = inflation_logits(data, layout, params, i);
+    unsigned want = 0u;
+    if (layout.has_phi_num) want |= ratiod::OBS_D_PHI_NUM;
+    if (layout.has_phi_denom) want |= ratiod::OBS_D_PHI_DENOM;
+    if (layout.has_zi && data.p_zi > 0) want |= ratiod::OBS_D_ZI;
+    if (layout.has_oi && data.p_oi > 0) want |= ratiod::OBS_D_OI;
+    const ratiod::ObsDerivs od = ratiod::ratio_obs_derivs(
+        data, layout, i, eta_num, eta_denom, phi_num, phi_denom, inf.zi, inf.oi,
+        want);
+    if (want & ratiod::OBS_D_ZI) {
+        const double g = od.logit_zi * inf.zi_slope;
+        for (int j = 0; j < data.p_zi; j++)
+            grad[layout.beta_zi_start + j] += g * data.X_zi_flat[i * data.p_zi + j];
+    }
+    if (want & ratiod::OBS_D_OI) {
+        const double g = od.logit_oi * inf.oi_slope;
+        for (int j = 0; j < data.p_oi; j++)
+            grad[layout.beta_oi_start + j] += g * data.X_oi_flat[i * data.p_oi + j];
+    }
+    return od;
 }
 
 // Scatter residuals to beta gradient slots
@@ -2885,50 +2856,6 @@ static inline void scatter_re_gradient(
     if (layout.has_re && data.re_group[i] > 0) {
         int g = data.re_group[i] - 1;
         grad[layout.re_start + g] += dLL_deta_num + dLL_deta_denom;
-    }
-}
-
-// Per-observation phi likelihood gradient accumulation
-// Handles NB phi_num, NB phi_denom, and Gamma phi_denom
-static inline void accumulate_phi_likelihood_grad(
-    const ModelData& data, const ParamLayout& layout,
-    int i, double eta_num, double eta_denom,
-    double phi_num, double phi_denom,
-    double* grad
-) {
-    // phi_num gradient (NB families only)
-    if (layout.has_phi_num) {
-        if (data.model_type == ModelType::NEGBIN_NEGBIN ||
-            data.model_type == ModelType::NEGBIN_GAMMA) {
-            double mu_num = std::exp(eta_num);
-            double y = data.y_num[i];
-            double dLL_dphi = ratiod::math::portable_digamma(y + phi_num) - ratiod::math::portable_digamma(phi_num)
-                             + std::log(phi_num / (mu_num + phi_num)) + 1.0
-                             - (y + phi_num) / (mu_num + phi_num);
-            grad[layout.log_phi_num_idx] += dLL_dphi * phi_num;
-        }
-    }
-
-    // phi_denom gradient (NB or Gamma families)
-    if (layout.has_phi_denom) {
-        if (data.model_type == ModelType::NEGBIN_NEGBIN) {
-            double mu_denom = std::exp(eta_denom);
-            double y = data.y_denom[i];
-            double dLL_dphi = ratiod::math::portable_digamma(y + phi_denom) - ratiod::math::portable_digamma(phi_denom)
-                             + std::log(phi_denom / (mu_denom + phi_denom)) + 1.0
-                             - (y + phi_denom) / (mu_denom + phi_denom);
-            grad[layout.log_phi_denom_idx] += dLL_dphi * phi_denom;
-        } else if (data.model_type == ModelType::POISSON_GAMMA ||
-                   data.model_type == ModelType::NEGBIN_GAMMA) {
-            double y = data.y_denom_cont[i];
-            if (y > 0.0) {  // Gamma requires y > 0
-                double mu_denom = std::exp(eta_denom);
-                double rate = phi_denom / mu_denom;
-                double dLL_dphi = std::log(rate) + 1.0 + std::log(y)
-                                 - ratiod::math::portable_digamma(phi_denom) - y / mu_denom;
-                grad[layout.log_phi_denom_idx] += dLL_dphi * phi_denom;
-            }
-        }
     }
 }
 
@@ -3025,7 +2952,7 @@ static inline void temporal_gmrf_prior_grad(
         const double sigma = 1.0 / std::sqrt(tau_temporal);
         std::vector<double> g_proj(grad_temporal_lik,
                                    grad_temporal_lik + T_len);
-        (void)tulpa::s2z_centre_component(g_proj.data(), 0, T_len);
+        tulpa::s2z_centre_blocks(g_proj.data(), n_groups, T);
 
         std::vector<double> gz(T_len, 0.0);
         double g_log_sigma2 = 0.0;
@@ -3045,26 +2972,29 @@ static inline void temporal_gmrf_prior_grad(
     }
 
     // Initialize temporal gradients with likelihood contribution. An intrinsic
-    // walk enters eta centred, so eta depends on the sampled block only through
-    // phi - mean(phi) and the gradient with respect to that block is the
-    // projection (I - 11'/T_len) of the likelihood gradient: subtract its mean
-    // over the whole field, matching the single global constant the prior
-    // augments below.
+    // walk enters eta centred group by group, so eta depends on each group's
+    // block only through phi_g - mean(phi_g) and the gradient with respect to
+    // that block is the likelihood gradient with the group's mean removed.
     for (int t = 0; t < T_len; t++) {
         grad[layout.temporal_start + t] = grad_temporal_lik[t];
     }
     if (tview.centred) {
-        (void)tulpa::s2z_centre_component(grad, layout.temporal_start, T_len);
+        tulpa::s2z_centre_blocks(grad + layout.temporal_start, n_groups, T);
     }
 
-    // Gradient and quadratic contribution of the freed constant direction. One
-    // global direction, so both are formed from the whole field's raw sum.
-    const double aug_grad = tview.centred
-        ? ratiod_constraints::free_direction_grad(tview.raw_sum, T_len, tau_temporal)
-        : 0.0;
-    const double aug_quad = tview.centred
-        ? ratiod_constraints::free_direction_quad(tview.raw_sum, T_len)
-        : 0.0;
+    // Each group's freed constant direction: its gradient, the same for every
+    // entry of the group, and the quadratic form summed over the groups.
+    double aug_quad = 0.0;
+    if (tview.centred) {
+        for (int gg = 0; gg < n_groups; gg++) {
+            const double s = tview.raw_sums[gg];
+            const double g_aug =
+                ratiod_constraints::free_direction_grad(s, T, tau_temporal);
+            for (int t = 0; t < T; t++) grad[layout.temporal_start + gg * T + t] += g_aug;
+            aug_quad += ratiod_constraints::free_direction_quad(s, T);
+        }
+    }
+    const int n_aug_pins = tview.centred ? n_groups : 0;
 
     if (data.temporal_type == TemporalType::RW1) {
         double total_qf = 0.0;
@@ -3091,8 +3021,7 @@ static inline void temporal_gmrf_prior_grad(
             total_qf += qf;
             total_rank += tulpa::rw1_rank(T, data.temporal_cyclic);
         }
-        total_rank = tulpa::s2z_aug_rank(total_rank, tview.centred ? 1 : 0);
-        for (int t = 0; t < T_len; t++) grad[layout.temporal_start + t] += aug_grad;
+        total_rank = tulpa::s2z_aug_rank(total_rank, n_aug_pins);
         grad[layout.log_tau_temporal_idx] +=
             0.5 * total_rank - 0.5 * tau_temporal * (total_qf + aug_quad);
 
@@ -3129,9 +3058,8 @@ static inline void temporal_gmrf_prior_grad(
             total_rank += tulpa::rw2_rank(T, data.temporal_cyclic);
         }
         // A non-cyclic RW2 keeps its per-group LINEAR null direction, which the
-        // augmentation does not touch; s2z_aug_rank adds only the one constant.
-        total_rank = tulpa::s2z_aug_rank(total_rank, tview.centred ? 1 : 0);
-        for (int t = 0; t < T_len; t++) grad[layout.temporal_start + t] += aug_grad;
+        // augmentation does not touch; s2z_aug_rank adds only the constants.
+        total_rank = tulpa::s2z_aug_rank(total_rank, n_aug_pins);
         grad[layout.log_tau_temporal_idx] +=
             0.5 * total_rank - 0.5 * tau_temporal * (total_qf + aug_quad);
 
@@ -3645,8 +3573,11 @@ void compute_gradient_gp_collapsed(
                 eta_num_i += re_val;
                 if (!is_binomial) eta_denom_i += re_val;
             }
-            accumulate_phi_likelihood_grad(data, layout, i, eta_num_i, eta_denom_i,
-                                            phi_num, phi_denom, grad.data());
+            const ratiod::ObsDerivs od = obs_likelihood_derivs(
+                data, layout, params.data(), i, eta_num_i, eta_denom_i, phi_num,
+                phi_denom, grad.data());
+            if (layout.has_phi_num) grad[layout.log_phi_num_idx] += od.phi_num * phi_num;
+            if (layout.has_phi_denom) grad[layout.log_phi_denom_idx] += od.phi_denom * phi_denom;
         }
     }
 
@@ -4804,168 +4735,6 @@ void compute_gradient_temporal_gp_handcoded(
 }
 
 // =====================================================================
-// Multi-scale GP + Temporal hand-coded gradients
-// Combines MSGP spatial gradients with temporal GMRF gradients
-// =====================================================================
-
-void compute_gradient_msgp_temporal_handcoded(
-    const std::vector<double>& params,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out = nullptr
-) {
-    // Fused log-posterior: accumulate obs log-lik during gradient loop,
-    // then add prior/structural terms via skip_obs_loop=true (avoids 2nd O(N) pass)
-    const bool fuse_lp = (log_post_out != nullptr) && !layout.has_zi;
-    if (log_post_out && layout.has_zi) *log_post_out = compute_log_post(params, data, layout);
-    double obs_log_lik = 0.0;
-    int n_params = params.size();
-    grad.assign(n_params, 0.0);
-
-    // Extract common parameters
-    auto cp = extract_common_params(params, layout);
-    const double* beta_num = cp.beta_num;
-    const double* beta_denom = cp.beta_denom;
-    double sigma_re = cp.sigma_re;
-    const double* re = cp.re;
-    double phi_num = cp.phi_num;
-    double phi_denom = cp.phi_denom;
-
-    // Multi-scale GP parameters
-    int N_gp = data.multiscale_gp_data.n_obs;
-    double sigma2_local = std::exp(params[layout.log_sigma2_gp_local_idx]);
-    double phi_local = std::exp(params[layout.log_phi_gp_local_idx]);
-    double sigma2_regional = std::exp(params[layout.log_sigma2_gp_regional_idx]);
-    double phi_regional = std::exp(params[layout.log_phi_gp_regional_idx]);
-
-    // Temporal parameters
-    double tau_temporal = std::exp(params[layout.log_tau_temporal_idx]);
-    int T_len = layout.temporal_end - layout.temporal_start;
-    TemporalView tview;
-    tview.read(params, data, layout);
-    const double* phi_temporal = tview.phi;
-    double rho_ar1 = read_temporal_rho_ar1(params, data, layout);
-
-    // Bounds check for phi
-    if (phi_local < data.multiscale_gp_data.range_local_lower ||
-        phi_local > data.multiscale_gp_data.range_local_upper ||
-        phi_regional < data.multiscale_gp_data.range_regional_lower ||
-        phi_regional > data.multiscale_gp_data.range_regional_upper) {
-        if (log_post_out) *log_post_out = -INFINITY;
-        return;
-    }
-
-    // The field, in whichever coordinate it is sampled in
-    MultiscaleGPView msgp;
-    msgp.read(params, data, layout);
-    const double* w_local = msgp.local();
-    const double* w_regional = msgp.regional();
-    std::vector<double> dL_dw_ms(N_gp, 0.0);
-
-    // =========================================================================
-    // Prior gradients
-    // =========================================================================
-    beta_gradient_prior(data, layout, beta_num, beta_denom, grad.data());
-    re_gradient_prior(data, layout, re, grad.data(), sigma_re);
-    phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
-
-    // PC priors on MSGP variances
-    grad[layout.log_sigma2_gp_local_idx] = gp_pc_prior_grad_log_sigma2(
-        sigma2_local, data.ms_sigma2_local_prior_U, data.ms_sigma2_local_prior_alpha);
-    grad[layout.log_sigma2_gp_regional_idx] = gp_pc_prior_grad_log_sigma2(
-        sigma2_regional, data.ms_sigma2_regional_prior_U, data.ms_sigma2_regional_prior_alpha);
-    grad[layout.log_phi_gp_local_idx] = 1.0;
-    grad[layout.log_phi_gp_regional_idx] = 1.0;
-
-    // Temporal prior
-    tau_temporal_prior_grad(data, layout, tau_temporal, grad.data());
-    temporal_rho_prior_grad(data, layout, rho_ar1, grad.data());
-
-    // =========================================================================
-    // Likelihood loop (vectorized eta + per-obs scatter)
-    // =========================================================================
-    const int N = data.N;
-    const bool is_binomial = (data.model_type == ModelType::BINOMIAL ||
-                              data.model_type == ModelType::BETA_BINOMIAL);
-    std::vector<double> grad_temporal_lik(T_len, 0.0);
-    std::vector<int> obs_t_idx(N, -1);
-
-    using RowMajorMatrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-    using VectorXd = Eigen::VectorXd;
-    vec_grad_ws().init(N);
-    Eigen::Map<const RowMajorMatrix> X_num(data.X_num_flat.data(), N, data.p_num);
-    Eigen::Map<const VectorXd> b_num(beta_num, data.p_num);
-    Eigen::Map<VectorXd> eta_n(vec_grad_ws().eta_num.data(), N);
-    eta_n.noalias() = X_num * b_num;
-    if (!is_binomial) {
-        Eigen::Map<const RowMajorMatrix> X_denom(data.X_denom_flat.data(), N, data.p_denom);
-        Eigen::Map<const VectorXd> b_denom(beta_denom, data.p_denom);
-        Eigen::Map<VectorXd> eta_d(vec_grad_ws().eta_denom.data(), N);
-        eta_d.noalias() = X_denom * b_denom;
-    } else {
-        std::memset(vec_grad_ws().eta_denom.data(), 0, N * sizeof(double));
-    }
-
-    for (int i = 0; i < N; i++) {
-        if (layout.has_re && data.re_group[i] > 0) {
-            double re_eff = re_value_for_eta(re, data.re_group[i] - 1, sigma_re, data.re_parameterization);
-            vec_grad_ws().eta_num[i] += re_eff;
-            if (!is_binomial) vec_grad_ws().eta_denom[i] += re_eff;
-        }
-        int loc_i = data.multiscale_gp_data.obs_to_loc[i];
-        double ms_spatial = w_local[loc_i] + w_regional[loc_i];
-        vec_grad_ws().eta_num[i] += ms_spatial;
-        if (!is_binomial && data.multiscale_gp_data.shared) vec_grad_ws().eta_denom[i] += ms_spatial;
-
-        if (!data.temporal_time_idx.empty() && i < (int)data.temporal_time_idx.size() && data.temporal_time_idx[i] > 0) {
-            int t = data.temporal_time_idx[i] - 1;
-            int g = data.temporal_group_idx[i] - 1;
-            int t_idx = g * data.n_times + t;
-            if (t_idx >= 0 && t_idx < T_len) {
-                obs_t_idx[i] = t_idx;
-                vec_grad_ws().eta_num[i] += phi_temporal[t_idx];
-                if (!is_binomial && data.temporal_shared) vec_grad_ws().eta_denom[i] += phi_temporal[t_idx];
-            }
-        }
-    }
-
-    {
-        double grad_phi_num_lik = 0.0, grad_phi_denom_lik = 0.0;
-        vectorized::dispatch_residuals_and_beta_grads(
-            data, layout,
-            vec_grad_ws().eta_num.data(), vec_grad_ws().eta_denom.data(),
-            vec_grad_ws().resid_num.data(), vec_grad_ws().resid_denom.data(),
-            grad.data(), grad_phi_num_lik, grad_phi_denom_lik,
-            obs_log_lik, fuse_lp, phi_num, phi_denom, vec_grad_ws());
-    }
-
-    for (int i = 0; i < N; i++) {
-        double dLL_num = vec_grad_ws().resid_num[i];
-        double dLL_denom = vec_grad_ws().resid_denom[i];
-        if (layout.has_re && data.re_group[i] > 0) {
-            grad[layout.re_start + data.re_group[i] - 1] += dLL_num + dLL_denom;
-        }
-        int loc_i = data.multiscale_gp_data.obs_to_loc[i];
-        double dLL_dspatial = data.multiscale_gp_data.shared ? (dLL_num + dLL_denom) : dLL_num;
-        dL_dw_ms[loc_i] += dLL_dspatial;
-        if (obs_t_idx[i] >= 0) grad_temporal_lik[obs_t_idx[i]] += data.temporal_shared ? (dLL_num + dLL_denom) : dLL_num;
-    }
-
-    // The field's prior and the likelihood scatter, onto the sampled coordinate
-    msgp.accumulate(dL_dw_ms.data(), data, layout, grad.data());
-
-    // Temporal GMRF gradients
-    temporal_gmrf_prior_grad(data, layout, tau_temporal, rho_ar1,
-                             tview, T_len, grad_temporal_lik.data(), grad.data());
-
-    // Non-centered RE chain rule transformation
-    re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
-
-    if (fuse_lp) *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true) + obs_log_lik;
-}
-
-// =====================================================================
 // SVC gradient (hand-coded, ~3x faster than autodiff)
 // Uses the spatial GP's analytical NNGP gradients for the field prior
 // =====================================================================
@@ -5227,11 +4996,9 @@ void compute_gradient_svc_hsgp_handcoded(
         double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
         double log_ls_j = params[layout.range_svc_start + j];
 
-        // PC prior on sigma: log_post += -rate*sigma + 0.5*log_sigma2
-        // d/d(log_sigma2) = -0.5*rate*sigma + 0.5
-        double sigma_j = std::sqrt(sigma2_j);
-        double rate_sigma = 4.6;  // -log(0.01) / 1.0
-        grad[layout.log_sigma2_svc_start + j] = -0.5 * rate_sigma * sigma_j + 0.5;
+        // PC prior on sigma
+        grad[layout.log_sigma2_svc_start + j] =
+            ratiod_gp::log_prior_sd_pc_logvar_grad(std::log(sigma2_j), 4.6);
 
         // LogNormal(0,1) on lengthscale: d/d(log_ell) = -log_ell
         grad[layout.range_svc_start + j] = -log_ls_j;
@@ -5563,94 +5330,19 @@ void compute_gradient_latent_handcoded(
     double phi_num = cp.phi_num;
     double phi_denom = cp.phi_denom;
 
-    // Latent factor parameters
-    int K = data.latent_n_factors;
-    int N = data.N;
-
-    // Extract log_sigma for latent factors
-    std::vector<double> log_sigma_latent(K);
-    std::vector<double> sigma_latent(K);
-    for (int k = 0; k < K; k++) {
-        log_sigma_latent[k] = params[layout.log_sigma_latent_start + k];
-        sigma_latent[k] = std::exp(log_sigma_latent[k]);
-    }
-
-    // Extract factors (unconstrained)
-    int n_factor_params = N * K;
-    std::vector<double> factors_raw(n_factor_params);
-    for (int j = 0; j < n_factor_params; j++) {
-        factors_raw[j] = params[layout.latent_factor_start + j];
-    }
-
-    // Apply constraint to get constrained factors
-    std::vector<double> factors_constrained = factors_raw;
-    if (data.latent_constraint == 0) {  // SUM_TO_ZERO
-        for (int k = 0; k < K; k++) {
-            double sum = 0.0;
-            for (int i = 0; i < N; i++) {
-                sum += factors_constrained[i * K + k];
-            }
-            double mean = sum / N;
-            for (int i = 0; i < N; i++) {
-                factors_constrained[i * K + k] -= mean;
-            }
-        }
-    } else {  // FIRST_ZERO
-        for (int k = 0; k < K; k++) {
-            double first_val = factors_constrained[k];  // factors[0, k]
-            for (int i = 0; i < N; i++) {
-                factors_constrained[i * K + k] -= first_val;
-            }
-        }
-    }
-
-    // Precompute latent contribution to eta
-    std::vector<double> latent_eta(N, 0.0);
-    for (int i = 0; i < N; i++) {
-        for (int k = 0; k < K; k++) {
-            latent_eta[i] += factors_constrained[i * K + k] * sigma_latent[k];
-        }
-    }
-
-    // =========================================================================
-    // Prior gradients
-    // =========================================================================
+    const int N = data.N;
+    ratiod_latent::LatentView lv;
+    lv.read(params.data(), layout.latent_loading_start, layout.latent_factor_start,
+            N, data.latent_n_factors, data.latent_shared,
+            static_cast<ratiod_latent::LatentConstraint>(data.latent_constraint));
 
     beta_gradient_prior(data, layout, beta_num, beta_denom, grad.data());
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
+    inflation_prior_grad(data, layout, params.data(), grad.data());
 
-    // Latent sigma prior: Exponential(rate) on sigma, with Jacobian for log transform
-    // log p(log_sigma) = log(rate) + log_sigma - rate * sigma
-    // d/d(log_sigma) = 1 - rate * sigma
-    double latent_rate = data.latent_sigma_prior_rate;
-    for (int k = 0; k < K; k++) {
-        grad[layout.log_sigma_latent_start + k] = 1.0 - latent_rate * sigma_latent[k];
-    }
-
-    // Latent factor prior: N(0, 1) on constrained factors
-    // The autodiff applies the prior to constrained factors, then chain-rules to raw factors.
-    // Direct computation: d(-0.5*f_constrained^2)/d(f_raw) = -f_constrained * d(f_constrained)/d(f_raw)
-    // For SUM_TO_ZERO: d(fc[i])/d(fr[j]) = delta_ij - 1/N, so gradient = -fc[i] + mean(fc) = -fc[i]
-    // For FIRST_ZERO: d(fc[i])/d(fr[j]) = delta_ij - delta_j0, similar result
-    // In both cases, the prior gradient w.r.t. raw factors equals -constrained_factor
-    // But we need to apply the chain rule properly below, so here we just store the
-    // gradient w.r.t. constrained factors.
-
-    // Note: The prior is conceptually on the constrained factors (which sum to zero),
-    // and the gradient flows back through the constraint transformation.
-    // We handle this by computing prior gradient on constrained factors,
-    // then adding it to grad_factors_constrained, which gets chain-ruled below.
-
-    // =========================================================================
-    // Likelihood loop - compute dLL/deta and chain-rule to all parameters
-    // =========================================================================
-
-    // Gradients to accumulate for latent factors (on constrained factors first)
-    std::vector<double> grad_factors_constrained(n_factor_params, 0.0);
-
+    std::vector<double> d_num(N, 0.0), d_denom(N, 0.0);
     for (int i = 0; i < N; i++) {
-        // Linear predictors
         double eta_num = 0.0, eta_denom = 0.0;
         for (int j = 0; j < data.p_num; j++) {
             eta_num += data.X_num_flat[i * data.p_num + j] * beta_num[j];
@@ -5667,88 +5359,24 @@ void compute_gradient_latent_handcoded(
             eta_denom += re_eff;
         }
 
-        // Latent effect
-        double latent_effect = latent_eta[i];
-        if (data.latent_shared) {
-            eta_num += latent_effect;
-            eta_denom += latent_effect;
-        } else {
-            eta_num += latent_effect;
-        }
+        eta_num += lv.eta_num[i];
+        eta_denom += lv.denom(i);
 
-        if (fuse_lp) obs_log_lik += compute_obs_ll(data, i, eta_num, eta_denom, phi_num, phi_denom);
+        const ratiod::ObsDerivs od = obs_likelihood_derivs(
+            data, layout, params.data(), i, eta_num, eta_denom, phi_num, phi_denom,
+            grad.data());
+        if (fuse_lp) obs_log_lik += od.ll;
+        d_num[i] = od.eta_num;
+        d_denom[i] = od.eta_denom;
 
-        double dLL_deta_num = 0.0, dLL_deta_denom = 0.0;
-        compute_obs_residuals(data, i, eta_num, eta_denom, phi_num, phi_denom, dLL_deta_num, dLL_deta_denom);
-
-        // Total gradient through latent effect
-        double dLL_dlatent = data.latent_shared ?
-                             (dLL_deta_num + dLL_deta_denom) : dLL_deta_num;
-
-        scatter_beta_gradients(data, layout, i, dLL_deta_num, dLL_deta_denom, grad.data());
-        scatter_re_gradient(data, layout, i, dLL_deta_num, dLL_deta_denom, grad.data());
-
-        // Gradients for latent factors (on constrained space)
-        // eta_latent[i] = sum_k factor[i,k] * sigma[k]
-        // d(LL)/d(factor[i,k]) = dLL_dlatent * sigma[k]
-        // d(LL)/d(log_sigma[k]) += dLL_dlatent * factor[i,k] * sigma[k]
-        for (int k = 0; k < K; k++) {
-            grad_factors_constrained[i * K + k] = dLL_dlatent * sigma_latent[k];
-            grad[layout.log_sigma_latent_start + k] += dLL_dlatent * factors_constrained[i * K + k] * sigma_latent[k];
-        }
-
-        accumulate_phi_likelihood_grad(data, layout, i, eta_num, eta_denom, phi_num, phi_denom, grad.data());
+        scatter_beta_gradients(data, layout, i, od.eta_num, od.eta_denom, grad.data());
+        scatter_re_gradient(data, layout, i, od.eta_num, od.eta_denom, grad.data());
+        if (layout.has_phi_num) grad[layout.log_phi_num_idx] += od.phi_num * phi_num;
+        if (layout.has_phi_denom) grad[layout.log_phi_denom_idx] += od.phi_denom * phi_denom;
     }
 
-    // =========================================================================
-    // Add prior gradient to grad_factors_constrained
-    // =========================================================================
-    // Prior: N(0, 1) on constrained factors, log p = -0.5 * f_constrained^2
-    // Gradient: d(-0.5 * f^2)/d(f) = -f
-    // For FIRST_ZERO: constrained factor 0 is always 0, so skip it
-    int prior_start = (data.latent_constraint == 0) ? 0 : 1;
-    for (int k = 0; k < K; k++) {
-        for (int i = prior_start; i < N; i++) {
-            grad_factors_constrained[i * K + k] += -factors_constrained[i * K + k];
-        }
-    }
-
-    // =========================================================================
-    // Apply constraint chain-rule to get gradients on raw (unconstrained) factors
-    // =========================================================================
-
-    // For sum-to-zero: d(LL)/d(factor_raw[j,k]) = d(LL)/d(factor_constrained[j,k])
-    //                                           - (1/N) * sum_i d(LL)/d(factor_constrained[i,k])
-    // For first-zero: d(LL)/d(factor_raw[0,k]) = -sum_{i>0} d(LL)/d(factor_constrained[i,k])
-    //                 d(LL)/d(factor_raw[j,k]) = d(LL)/d(factor_constrained[j,k]) for j > 0
-
-    if (data.latent_constraint == 0) {  // SUM_TO_ZERO
-        for (int k = 0; k < K; k++) {
-            // Compute mean gradient for this factor
-            double sum_grad = 0.0;
-            for (int i = 0; i < N; i++) {
-                sum_grad += grad_factors_constrained[i * K + k];
-            }
-            double mean_grad = sum_grad / N;
-
-            // Adjust each gradient
-            for (int i = 0; i < N; i++) {
-                grad[layout.latent_factor_start + i * K + k] +=
-                    grad_factors_constrained[i * K + k] - mean_grad;
-            }
-        }
-    } else {  // FIRST_ZERO
-        for (int k = 0; k < K; k++) {
-            // Gradient for factor_raw[0,k] = -sum of gradients for i > 0
-            double sum_grad = 0.0;
-            for (int i = 1; i < N; i++) {
-                sum_grad += grad_factors_constrained[i * K + k];
-                // Gradient for factor_raw[i,k] = gradient of constrained[i,k] for i > 0
-                grad[layout.latent_factor_start + i * K + k] += grad_factors_constrained[i * K + k];
-            }
-            grad[layout.latent_factor_start + k] += -sum_grad;  // factor_raw[0,k]
-        }
-    }
+    lv.add_gradient(params.data(), d_num, d_denom, data.latent_sigma_prior_rate,
+                    data.latent_offdiag_sd, grad.data());
 
     // Non-centered RE chain rule transformation
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
@@ -5840,138 +5468,6 @@ static inline AutodiffCommonResult add_common_priors_ad(
 }
 
 // =====================================================================
-// Multi-scale GP gradient (hand-coded, ~2-3x faster than autodiff)
-// Uses analytical gradients for w and numerical for sigma2/phi
-// =====================================================================
-
-void compute_gradient_msgp_handcoded(
-    const std::vector<double>& params,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out = nullptr
-) {
-    // Fused log-posterior: accumulate obs log-lik during gradient loop,
-    // then add prior/structural terms via skip_obs_loop=true (avoids 2nd O(N) pass)
-    const bool fuse_lp = (log_post_out != nullptr) && !layout.has_zi;
-    if (log_post_out && layout.has_zi) *log_post_out = compute_log_post(params, data, layout);
-    double obs_log_lik = 0.0;
-    int n_params = params.size();
-    grad.assign(n_params, 0.0);
-
-    // Extract common parameters
-    auto cp = extract_common_params(params, layout);
-    const double* beta_num = cp.beta_num;
-    const double* beta_denom = cp.beta_denom;
-    double sigma_re = cp.sigma_re;
-    const double* re = cp.re;
-    double phi_num = cp.phi_num;
-    double phi_denom = cp.phi_denom;
-
-    // Multi-scale GP parameters
-    int N_gp = data.multiscale_gp_data.n_obs;
-
-    double log_sigma2_local = params[layout.log_sigma2_gp_local_idx];
-    double log_phi_local = params[layout.log_phi_gp_local_idx];
-    double sigma2_local = std::exp(log_sigma2_local);
-    double phi_local = std::exp(log_phi_local);
-
-    double log_sigma2_regional = params[layout.log_sigma2_gp_regional_idx];
-    double log_phi_regional = params[layout.log_phi_gp_regional_idx];
-    double sigma2_regional = std::exp(log_sigma2_regional);
-    double phi_regional = std::exp(log_phi_regional);
-
-    // Bounds check for phi
-    if (phi_local < data.multiscale_gp_data.range_local_lower ||
-        phi_local > data.multiscale_gp_data.range_local_upper ||
-        phi_regional < data.multiscale_gp_data.range_regional_lower ||
-        phi_regional > data.multiscale_gp_data.range_regional_upper) {
-        if (log_post_out) *log_post_out = -INFINITY;
-        return;
-    }
-
-    // The field, in whichever coordinate it is sampled in
-    MultiscaleGPView msgp;
-    msgp.read(params, data, layout);
-    const double* w_local = msgp.local();
-    const double* w_regional = msgp.regional();
-    std::vector<double> dL_dw_ms(N_gp, 0.0);
-
-    // =========================================================================
-    // Prior gradients
-    // =========================================================================
-
-    beta_gradient_prior(data, layout, beta_num, beta_denom, grad.data());
-    re_gradient_prior(data, layout, re, grad.data(), sigma_re);
-    phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
-
-    // PC priors on GP variances
-    grad[layout.log_sigma2_gp_local_idx] = gp_pc_prior_grad_log_sigma2(
-        sigma2_local, data.ms_sigma2_local_prior_U, data.ms_sigma2_local_prior_alpha);
-    grad[layout.log_sigma2_gp_regional_idx] = gp_pc_prior_grad_log_sigma2(
-        sigma2_regional, data.ms_sigma2_regional_prior_U, data.ms_sigma2_regional_prior_alpha);
-
-    // Jacobians for log-transforms
-    grad[layout.log_phi_gp_local_idx] = 1.0;    // Uniform prior, just Jacobian
-    grad[layout.log_phi_gp_regional_idx] = 1.0;
-
-    // =========================================================================
-    // Data likelihood loop
-    // =========================================================================
-    for (int i = 0; i < data.N; i++) {
-        // Linear predictors
-        double eta_num = 0.0, eta_denom = 0.0;
-        for (int j = 0; j < data.p_num; j++) {
-            eta_num += data.X_num_flat[i * data.p_num + j] * beta_num[j];
-        }
-        for (int j = 0; j < data.p_denom; j++) {
-            eta_denom += data.X_denom_flat[i * data.p_denom + j] * beta_denom[j];
-        }
-
-        // Random effects (handles NC parameterization)
-        if (layout.has_re && data.re_group[i] > 0) {
-            int g = data.re_group[i] - 1;
-            double re_eff = re_value_for_eta(re, g, sigma_re, data.re_parameterization);
-            eta_num += re_eff;
-            eta_denom += re_eff;
-        }
-
-        // Multi-scale GP spatial effect (map observation to unique location)
-        int loc_i = data.multiscale_gp_data.obs_to_loc[i];
-        double ms_spatial = w_local[loc_i] + w_regional[loc_i];
-        if (data.multiscale_gp_data.shared) {
-            eta_num += ms_spatial;
-            eta_denom += ms_spatial;
-        } else {
-            eta_num += ms_spatial;
-        }
-
-        if (fuse_lp) obs_log_lik += compute_obs_ll(data, i, eta_num, eta_denom, phi_num, phi_denom);
-
-        double dLL_deta_num = 0.0, dLL_deta_denom = 0.0;
-        compute_obs_residuals(data, i, eta_num, eta_denom, phi_num, phi_denom, dLL_deta_num, dLL_deta_denom);
-
-        scatter_beta_gradients(data, layout, i, dLL_deta_num, dLL_deta_denom, grad.data());
-        scatter_re_gradient(data, layout, i, dLL_deta_num, dLL_deta_denom, grad.data());
-
-        // Gradients for GP spatial effects (from likelihood, mapped to unique location)
-        double dLL_dspatial = data.multiscale_gp_data.shared ?
-                              (dLL_deta_num + dLL_deta_denom) : dLL_deta_num;
-        dL_dw_ms[loc_i] += dLL_dspatial;
-
-        accumulate_phi_likelihood_grad(data, layout, i, eta_num, eta_denom, phi_num, phi_denom, grad.data());
-    }
-
-    // The field's prior and the likelihood scatter, onto the sampled coordinate
-    msgp.accumulate(dL_dw_ms.data(), data, layout, grad.data());
-
-    // Non-centered RE chain rule transformation
-    re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
-
-    if (fuse_lp) *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true) + obs_log_lik;
-}
-
-// =====================================================================
 // HSGP gradient (O(N*M^2) - analytical, ~50x faster than numerical)
 // =====================================================================
 
@@ -6041,9 +5537,8 @@ void compute_gradient_hsgp(
   phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
   // HSGP prior gradients (will be added to by hsgp_compute_gradients_ws)
-  double sigma = std::sqrt(sigma2_hsgp);
-  double rate_sigma = 4.6;
-  grad[layout.log_sigma2_hsgp_idx] = -0.5 * rate_sigma * sigma + 0.5 - 0.5;
+  grad[layout.log_sigma2_hsgp_idx] =
+      ratiod_gp::log_prior_sd_pc_logvar_grad(std::log(sigma2_hsgp), 4.6);
 
   // LogNormal(0,1) on lengthscale
   grad[layout.log_lengthscale_hsgp_idx] = -log_lengthscale;
@@ -6203,8 +5698,6 @@ void compute_gradient_msgp_hsgp(
     // Two thread-local HSGP workspaces (one per scale)
     RATIOD_TLS_WORKSPACE(ratiod_hsgp::HSGPWorkspace, ws_local);
     RATIOD_TLS_WORKSPACE(ratiod_hsgp::HSGPWorkspace, ws_regional);
-    ws_local.init(data.N, data.msgp_hsgp_data.m_total);
-    ws_regional.init(data.N, data.msgp_hsgp_data.m_total);
 
     const bool fuse_lp = (log_post_out != nullptr) && !layout.has_zi;
     if (log_post_out && layout.has_zi) *log_post_out = compute_log_post(params, data, layout);
@@ -6221,26 +5714,8 @@ void compute_gradient_msgp_hsgp(
     double phi_num = cp.phi_num;
     double phi_denom = cp.phi_denom;
 
-    // HSGP-MSGP parameters
-    double log_sigma2_local = params[layout.log_sigma2_gp_local_idx];
-    double log_ls_local = params[layout.log_phi_gp_local_idx];
-    double sigma2_local = std::exp(log_sigma2_local);
-    double ls_local = std::exp(log_ls_local);
-
-    double log_sigma2_regional = params[layout.log_sigma2_gp_regional_idx];
-    double log_ls_regional = params[layout.log_phi_gp_regional_idx];
-    double sigma2_regional = std::exp(log_sigma2_regional);
-    double ls_regional = std::exp(log_ls_regional);
-
-    int m_total = data.msgp_hsgp_data.m_total;
-    const double* beta_local = &params[layout.gp_local_start];
-    const double* beta_regional = &params[layout.gp_regional_start];
-
-    // Evaluate HSGP spatial effects for both scales
-    ratiod_hsgp::hsgp_evaluate_ws(beta_local, sigma2_local, ls_local,
-                                   data.msgp_hsgp_data, ws_local);
-    ratiod_hsgp::hsgp_evaluate_ws(beta_regional, sigma2_regional, ls_regional,
-                                   data.msgp_hsgp_data, ws_regional);
+    MultiscaleHSGPView msgp;
+    msgp.read(params, data, layout, ws_local, ws_regional);
 
     // Temporal parameters (for HSGP-MSGP + temporal combinations)
     double tau_temporal = 0.0;
@@ -6256,9 +5731,6 @@ void compute_gradient_msgp_hsgp(
         rho_ar1 = read_temporal_rho_ar1(params, data, layout);
     }
 
-    // Zero grad_f buffers
-    std::memset(ws_local.grad_f.data(), 0, data.N * sizeof(double));
-    // ws_regional.grad_f will get the same values (shared residuals)
     std::vector<double> grad_temporal_lik(T_len, 0.0);
 
     // --- Prior gradients ---
@@ -6266,27 +5738,7 @@ void compute_gradient_msgp_hsgp(
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
-    // PC priors on sigma for both scales
-    double sigma_local = std::sqrt(sigma2_local);
-    double rate_local = -std::log(data.ms_sigma2_local_prior_alpha) / data.ms_sigma2_local_prior_U;
-    grad[layout.log_sigma2_gp_local_idx] = -0.5 * rate_local * sigma_local + 0.5 - 0.5;
-
-    double sigma_regional = std::sqrt(sigma2_regional);
-    double rate_regional = -std::log(data.ms_sigma2_regional_prior_alpha) / data.ms_sigma2_regional_prior_U;
-    grad[layout.log_sigma2_gp_regional_idx] = -0.5 * rate_regional * sigma_regional + 0.5 - 0.5;
-
-    // LogNormal priors on lengthscales
-    double z_local = (log_ls_local - data.ms_log_ls_local_mean) / data.ms_log_ls_local_sd;
-    grad[layout.log_phi_gp_local_idx] = -z_local / data.ms_log_ls_local_sd;
-
-    double z_regional = (log_ls_regional - data.ms_log_ls_regional_mean) / data.ms_log_ls_regional_sd;
-    grad[layout.log_phi_gp_regional_idx] = -z_regional / data.ms_log_ls_regional_sd;
-
-    // N(0, I) prior on beta: d/d(beta_j) = -beta_j
-    for (int j = 0; j < m_total; j++) {
-        grad[layout.gp_local_start + j] = -beta_local[j];
-        grad[layout.gp_regional_start + j] = -beta_regional[j];
-    }
+    msgp.add_prior_gradient(data, layout, grad.data());
 
     // Temporal prior on tau/rho
     if (layout.has_temporal) {
@@ -6298,7 +5750,7 @@ void compute_gradient_msgp_hsgp(
     const int N = data.N;
     const bool is_binomial = (data.model_type == ModelType::BINOMIAL ||
                               data.model_type == ModelType::BETA_BINOMIAL);
-    const bool shared = data.multiscale_gp_data.shared;
+    const bool shared = msgp.shared;
 
     vec_grad_ws().init(N);
 
@@ -6345,12 +5797,11 @@ void compute_gradient_msgp_hsgp(
         }
     }
 
-    // Add combined HSGP-MSGP spatial effect: f_local + f_regional (vectorized)
-    Eigen::Map<const VectorXd> f_local_v(ws_local.hsgp_f.data(), N);
-    Eigen::Map<const VectorXd> f_regional_v(ws_regional.hsgp_f.data(), N);
-    eta_n += f_local_v + f_regional_v;
-    if (shared && !is_binomial) {
-        Eigen::Map<VectorXd>(vec_grad_ws().eta_denom.data(), N) += f_local_v + f_regional_v;
+    // The multi-scale field: f_local + f_regional
+    for (int i = 0; i < N; i++) {
+        const double f_i = msgp.effect(i);
+        vec_grad_ws().eta_num[i] += f_i;
+        if (shared && !is_binomial) vec_grad_ws().eta_denom[i] += f_i;
     }
 
     // Pass 2+3: vectorized residuals + beta grads
@@ -6364,15 +5815,12 @@ void compute_gradient_msgp_hsgp(
             obs_log_lik, fuse_lp, phi_num, phi_denom, vec_grad_ws());
     }
 
-    // Accumulate grad_f for both HSGP scales from residuals
-    // Both scales share the same grad_f (additive model)
+    // dL/df, shared by both scales
+    std::vector<double> dL_df(N);
     for (int i = 0; i < N; i++) {
-        double gf = shared ? (vec_grad_ws().resid_num[i] + vec_grad_ws().resid_denom[i])
-                           : vec_grad_ws().resid_num[i];
-        ws_local.grad_f[i] = gf;
+        dL_df[i] = shared ? (vec_grad_ws().resid_num[i] + vec_grad_ws().resid_denom[i])
+                          : vec_grad_ws().resid_num[i];
     }
-    // Copy to regional workspace (same values)
-    std::memcpy(ws_regional.grad_f.data(), ws_local.grad_f.data(), N * sizeof(double));
 
     // RE gradients
     if (layout.has_re) {
@@ -6399,26 +5847,7 @@ void compute_gradient_msgp_hsgp(
         }
     }
 
-    // Compute HSGP parameter gradients for both scales
-    double grad_log_sigma2_local, grad_log_ls_local;
-    ratiod_hsgp::hsgp_compute_gradients_ws(beta_local, sigma2_local, ls_local,
-                                            data.msgp_hsgp_data, ws_local,
-                                            grad_log_sigma2_local, grad_log_ls_local);
-
-    double grad_log_sigma2_regional, grad_log_ls_regional;
-    ratiod_hsgp::hsgp_compute_gradients_ws(beta_regional, sigma2_regional, ls_regional,
-                                            data.msgp_hsgp_data, ws_regional,
-                                            grad_log_sigma2_regional, grad_log_ls_regional);
-
-    // Add likelihood contribution to HSGP gradients
-    for (int j = 0; j < m_total; j++) {
-        grad[layout.gp_local_start + j] += ws_local.grad_beta_out[j];
-        grad[layout.gp_regional_start + j] += ws_regional.grad_beta_out[j];
-    }
-    grad[layout.log_sigma2_gp_local_idx] += grad_log_sigma2_local;
-    grad[layout.log_phi_gp_local_idx] += grad_log_ls_local;
-    grad[layout.log_sigma2_gp_regional_idx] += grad_log_sigma2_regional;
-    grad[layout.log_phi_gp_regional_idx] += grad_log_ls_regional;
+    msgp.add_lik_gradient(dL_df.data(), data, layout, grad.data());
 
     // Temporal GMRF gradients
     if (layout.has_temporal && T_len > 0) {
@@ -6857,8 +6286,8 @@ void compute_gradient_spatiotemporal_handcoded(
     // HSGP-ST hyperparameter priors: PC on sigma, LogNormal(0, 1) on the
     // lengthscale. The field's own contribution to both arrives below.
     if (data.st_is_hsgp) {
-        grad[layout.log_sigma2_st_hsgp_idx] =
-            -0.5 * 4.6 * std::sqrt(sigma2_st_hsgp) + 0.5;
+        grad[layout.log_sigma2_st_hsgp_idx] = ratiod_gp::log_prior_sd_pc_logvar_grad(
+            params[layout.log_sigma2_st_hsgp_idx], 4.6);
         grad[layout.log_lengthscale_st_hsgp_idx] =
             -params[layout.log_lengthscale_st_hsgp_idx];
     }
@@ -7161,29 +6590,15 @@ void compute_gradient_composite(
         }
     }
 
-    // --- Multi-scale GP spatial (two NNGP scales) ---
-    const bool has_msgp_nngp = layout.is_multiscale_gp && data.has_multiscale_gp &&
-                               !data.msgp_is_hsgp;
-    const int N_msgp = has_msgp_nngp ? data.multiscale_gp_data.n_obs : 0;
-    double ms_sigma2_local = 0.0, ms_phi_local = 0.0;
-    double ms_sigma2_regional = 0.0, ms_phi_regional = 0.0;
-    MultiscaleGPView msgp;
-    std::vector<double> grad_ms_w_lik;
-    if (has_msgp_nngp) {
-        ms_sigma2_local = std::exp(params[layout.log_sigma2_gp_local_idx]);
-        ms_phi_local = std::exp(params[layout.log_phi_gp_local_idx]);
-        ms_sigma2_regional = std::exp(params[layout.log_sigma2_gp_regional_idx]);
-        ms_phi_regional = std::exp(params[layout.log_phi_gp_regional_idx]);
-        const auto& msd = data.multiscale_gp_data;
-        if (ms_phi_local < msd.range_local_lower || ms_phi_local > msd.range_local_upper ||
-            ms_phi_regional < msd.range_regional_lower ||
-            ms_phi_regional > msd.range_regional_upper) {
-            if (log_post_out && !layout.has_zi)
-                *log_post_out = compute_log_post(params_in, data, layout);
-            return;
-        }
-        msgp.read(params, data, layout);
-        grad_ms_w_lik.assign(N_msgp, 0.0);
+    // --- Multi-scale GP spatial (two scales on one HSGP basis) ---
+    const bool has_msgp = layout.is_multiscale_gp && data.has_multiscale_gp;
+    RATIOD_TLS_WORKSPACE(ratiod_hsgp::HSGPWorkspace, msgp_ws_local);
+    RATIOD_TLS_WORKSPACE(ratiod_hsgp::HSGPWorkspace, msgp_ws_regional);
+    MultiscaleHSGPView msgp;
+    std::vector<double> grad_ms_f_lik;
+    if (has_msgp) {
+        msgp.read(params, data, layout, msgp_ws_local, msgp_ws_regional);
+        grad_ms_f_lik.assign(N, 0.0);
     }
 
     // --- HSGP spatial ---
@@ -7357,35 +6772,16 @@ void compute_gradient_composite(
     }
 
     // --- Latent factors ---
-    int K_latent = 0;
-    RATIOD_TLS_WORKSPACE(std::vector<double>, latent_eta_precomp);
-    RATIOD_TLS_WORKSPACE(std::vector<double>, factors_constrained);
-    RATIOD_TLS_WORKSPACE(std::vector<double>, sigma_latent_vec);
+    ratiod_latent::LatentView latent_view;
+    RATIOD_TLS_WORKSPACE(std::vector<double>, latent_d_num);
+    RATIOD_TLS_WORKSPACE(std::vector<double>, latent_d_denom);
     if (layout.has_latent && data.latent_n_factors > 0) {
-        K_latent = data.latent_n_factors;
-        sigma_latent_vec.resize(K_latent);
-        for (int k = 0; k < K_latent; k++)
-            sigma_latent_vec[k] = std::exp(params[layout.log_sigma_latent_start + k]);
-
-        int n_factor_params = N * K_latent;
-        factors_constrained.resize(n_factor_params);
-        for (int j = 0; j < n_factor_params; j++)
-            factors_constrained[j] = params[layout.latent_factor_start + j];
-
-        // Apply sum-to-zero constraint
-        if (data.latent_constraint == 0) {
-            for (int k = 0; k < K_latent; k++) {
-                double sum = 0.0;
-                for (int i = 0; i < N; i++) sum += factors_constrained[i * K_latent + k];
-                double mean = sum / N;
-                for (int i = 0; i < N; i++) factors_constrained[i * K_latent + k] -= mean;
-            }
-        }
-
-        latent_eta_precomp.assign(N, 0.0);
-        for (int i = 0; i < N; i++)
-            for (int k = 0; k < K_latent; k++)
-                latent_eta_precomp[i] += factors_constrained[i * K_latent + k] * sigma_latent_vec[k];
+        latent_view.read(params.data(), layout.latent_loading_start,
+                         layout.latent_factor_start, N, data.latent_n_factors,
+                         data.latent_shared,
+                         static_cast<ratiod_latent::LatentConstraint>(data.latent_constraint));
+        latent_d_num.assign(N, 0.0);
+        latent_d_denom.assign(N, 0.0);
     }
 
     // --- Spatiotemporal ---
@@ -7431,6 +6827,21 @@ void compute_gradient_composite(
             st_delta = st_delta_buf.data();
         } else {
             st_delta = z_or_delta_st;
+        }
+    }
+
+    // A collapsed GP interaction keeps its three hyperparameters and no field
+    const bool st_lap = layout.st_collapsed;
+    if (st_lap) {
+        tau_st = std::exp(params[layout.log_tau_st_idx]);
+        phi_st_space = std::exp(params[layout.log_phi_st_space_idx]);
+        phi_st_time = std::exp(params[layout.log_phi_st_time_idx]);
+        if (phi_st_space < data.st_phi_space_prior_lower ||
+            phi_st_space > data.st_phi_space_prior_upper ||
+            phi_st_time < data.st_phi_time_prior_lower ||
+            phi_st_time > data.st_phi_time_prior_upper) {
+            if (log_post_out) *log_post_out = -INFINITY;
+            return;
         }
     }
 
@@ -7489,6 +6900,7 @@ void compute_gradient_composite(
     beta_gradient_prior(data, layout, beta_num, beta_denom, grad.data());
     if (!re_blocks_prior_grad(params, data, layout, grad, re_ws)) return;
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
+    inflation_prior_grad(data, layout, params.data(), grad.data());
 
     // ICAR/BYM2/pCAR spatial priors
     if (has_icar_bym2 && !layout.is_bym2) {
@@ -7525,18 +6937,8 @@ void compute_gradient_composite(
         }
     }
 
-    // Multi-scale GP priors: PC on each scale's variance, uniform on each
-    // range (log-transform Jacobian only). Each field's own prior reaches the
-    // sampled coordinate through the view's adjoint, below.
-    if (has_msgp_nngp) {
-        grad[layout.log_sigma2_gp_local_idx] += gp_pc_prior_grad_log_sigma2(
-            ms_sigma2_local, data.ms_sigma2_local_prior_U, data.ms_sigma2_local_prior_alpha);
-        grad[layout.log_sigma2_gp_regional_idx] += gp_pc_prior_grad_log_sigma2(
-            ms_sigma2_regional, data.ms_sigma2_regional_prior_U,
-            data.ms_sigma2_regional_prior_alpha);
-        grad[layout.log_phi_gp_local_idx] += 1.0;
-        grad[layout.log_phi_gp_regional_idx] += 1.0;
-    }
+    // Multi-scale GP priors
+    if (has_msgp) msgp.add_prior_gradient(data, layout, grad.data());
 
     // SVC (NNGP) priors: half-Cauchy on each sigma, and the NNGP field prior.
     // Centred, that prior is placed on the UNCENTRED w and so is not
@@ -7560,11 +6962,10 @@ void compute_gradient_composite(
         }
     }
 
-    // HSGP priors (must match hardcoded rate=4.6 in compute_log_post)
+    // HSGP priors
     if (layout.is_hsgp && data.has_hsgp) {
-        double sigma = std::sqrt(hsgp_sigma2);
-        double rate = 4.6;  // Matches compute_log_post line 1457
-        grad[layout.log_sigma2_hsgp_idx] = -0.5 * rate * sigma + 0.5 - 0.5;
+        grad[layout.log_sigma2_hsgp_idx] = ratiod_gp::log_prior_sd_pc_logvar_grad(
+            params[layout.log_sigma2_hsgp_idx], 4.6);
         double log_ls = params[layout.log_lengthscale_hsgp_idx];
         grad[layout.log_lengthscale_hsgp_idx] = -log_ls;  // LogNormal(0,1) prior
         // N(0,I) prior on beta
@@ -7621,14 +7022,10 @@ void compute_gradient_composite(
     }
 
     // SVC-HSGP priors: PC prior on sigma, LogNormal(0,1) on lengthscale, N(0,I) on beta
-    // Must match compute_log_post: -rate*sigma + 0.5*log_sigma2 (Jacobian)
     if (layout.has_svc && data.has_svc && data.svc_is_hsgp) {
-        double rate_svc = 4.6;  // Matches compute_log_post line 1781
         for (int j = 0; j < n_svc; j++) {
-            double sigma2_j = std::exp(params[layout.log_sigma2_svc_start + j]);
-            double sigma_j = std::sqrt(sigma2_j);
-            // d/d(log_sigma2) [-rate*sigma + 0.5*log_sigma2] = -0.5*rate*sigma + 0.5
-            grad[layout.log_sigma2_svc_start + j] = -0.5 * rate_svc * sigma_j + 0.5;
+            grad[layout.log_sigma2_svc_start + j] = ratiod_gp::log_prior_sd_pc_logvar_grad(
+                params[layout.log_sigma2_svc_start + j], 4.6);
             // LogNormal(0,1) on lengthscale: d/d(log_ls) [-0.5*log_ls^2] = -log_ls
             double log_ls_j = params[layout.range_svc_start + j];
             grad[layout.range_svc_start + j] = -log_ls_j;
@@ -7636,13 +7033,6 @@ void compute_gradient_composite(
             for (int m = 0; m < svc_m_total; m++)
                 grad[layout.svc_w_start + j * svc_m_total + m] = -params[layout.svc_w_start + j * svc_m_total + m];
         }
-    }
-
-    // Latent priors
-    if (K_latent > 0) {
-        double latent_rate = data.latent_sigma_prior_rate;
-        for (int k = 0; k < K_latent; k++)
-            grad[layout.log_sigma_latent_start + k] = 1.0 - latent_rate * sigma_latent_vec[k];
     }
 
     // Multiscale temporal priors (PC priors on variances + AR1 rho prior)
@@ -7667,6 +7057,16 @@ void compute_gradient_composite(
     // ST interaction hyperparameter priors: PC on sigma_st, Beta on the time
     // margin's correlation, and for HSGP-ST a PC on sigma and a LogNormal(0, 1)
     // on the lengthscale. The field's own contribution to each arrives below.
+    if (st_lap) {
+        // The same priors on the collapsed interaction's hyperparameters, and
+        // the margin penalty's normalizer the density keeps
+        grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(
+            std::log(tau_st), data.st_sigma2_prior_U, data.st_sigma2_prior_alpha)
+            + 0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
+                  data.spatiotemporal_data);
+        grad[layout.log_phi_st_space_idx] = 1.0;
+        grad[layout.log_phi_st_time_idx] = 1.0;
+    }
     if (has_st) {
         grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(
             std::log(tau_st), data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
@@ -7682,8 +7082,8 @@ void compute_gradient_composite(
                 data.spatiotemporal_data.rho_prior_b);
         }
         if (data.st_is_hsgp) {
-            grad[layout.log_sigma2_st_hsgp_idx] =
-                -0.5 * 4.6 * std::sqrt(sigma2_st_hsgp) + 0.5;
+            grad[layout.log_sigma2_st_hsgp_idx] = ratiod_gp::log_prior_sd_pc_logvar_grad(
+                params[layout.log_sigma2_st_hsgp_idx], 4.6);
             grad[layout.log_lengthscale_st_hsgp_idx] =
                 -params[layout.log_lengthscale_st_hsgp_idx];
         }
@@ -7698,7 +7098,6 @@ void compute_gradient_composite(
     RATIOD_TLS_WORKSPACE(std::vector<double>, grad_hsgp_f);
     RATIOD_TLS_WORKSPACE(std::vector<double>, grad_delta_lik);
     RATIOD_TLS_WORKSPACE(std::vector<double>, grad_tvc_w);
-    RATIOD_TLS_WORKSPACE(std::vector<double>, grad_factors_c);
     RATIOD_TLS_WORKSPACE(std::vector<double>, grad_svc_f);
     RATIOD_TLS_WORKSPACE(std::vector<double>, grad_svc_w_lik);
     RATIOD_TLS_WORKSPACE(std::vector<double>, grad_gp_w_lik);
@@ -7711,7 +7110,6 @@ void compute_gradient_composite(
     if (has_nngp_gp) grad_gp_w_lik.assign(N_gp_comp, 0.0);
     if (has_st) grad_delta_lik.assign(ST_n, 0.0);
     if (layout.has_tvc && data.has_tvc) grad_tvc_w.assign(n_w, 0.0);
-    if (K_latent > 0) grad_factors_c.assign(N * K_latent, 0.0);
     if (layout.has_svc && data.has_svc && data.svc_is_hsgp) grad_svc_f.assign(n_svc * N, 0.0);
     if (has_svc_nngp) grad_svc_w_lik.assign(static_cast<size_t>(n_svc) * N_svc, 0.0);
 
@@ -7719,10 +7117,10 @@ void compute_gradient_composite(
     double grad_phi_num_lik_comp = 0.0;
     double grad_phi_denom_lik_comp = 0.0;
 
-    // Scalar observation loop (handles all features uniformly)
-    for (int i = 0; i < N; i++) {
-        // Compute eta_num and eta_denom
-        double eta_num_i = 0.0, eta_denom_i = 0.0;
+    // One observation's two linear predictors, every block included
+    auto eta_at = [&](int i, double& eta_num_i, double& eta_denom_i) {
+        eta_num_i = 0.0;
+        eta_denom_i = 0.0;
         for (int j = 0; j < data.p_num; j++) eta_num_i += data.X_num_flat[i * data.p_num + j] * beta_num[j];
         if (!is_binomial)
             for (int j = 0; j < data.p_denom; j++) eta_denom_i += data.X_denom_flat[i * data.p_denom + j] * beta_denom[j];
@@ -7754,11 +7152,10 @@ void compute_gradient_composite(
         }
 
         // Multi-scale GP spatial
-        if (has_msgp_nngp) {
-            const int loc_i = data.multiscale_gp_data.obs_to_loc[i];
-            const double ms_eff = msgp.local()[loc_i] + msgp.regional()[loc_i];
+        if (has_msgp) {
+            const double ms_eff = msgp.effect(i);
             eta_num_i += ms_eff;
-            if (!is_binomial && data.multiscale_gp_data.shared) eta_denom_i += ms_eff;
+            if (!is_binomial && msgp.shared) eta_denom_i += ms_eff;
         }
 
         // GP spatial (NNGP)
@@ -7805,13 +7202,9 @@ void compute_gradient_composite(
         }
 
         // Latent factors
-        if (K_latent > 0) {
-            if (data.latent_shared) {
-                eta_num_i += latent_eta_precomp[i];
-                eta_denom_i += latent_eta_precomp[i];
-            } else {
-                eta_num_i += latent_eta_precomp[i];
-            }
+        if (latent_view.active()) {
+            eta_num_i += latent_view.eta_num[i];
+            eta_denom_i += latent_view.denom(i);
         }
 
         // Multiscale temporal
@@ -7841,98 +7234,47 @@ void compute_gradient_composite(
             eta_num_i += st_eff;
             if (!is_binomial && data.spatiotemporal_data.shared) eta_denom_i += st_eff;
         }
+    };
+
+    // The collapsed GP interaction: every other block reaches the Laplace
+    // marginal as offsets, and its gradient comes back as per-observation
+    // residuals in place of the family's (st_gp_laplace.h)
+    ratiod_st_laplace::Gradient st_lap_grad;
+    if (st_lap) {
+        std::vector<double> off_num(N), off_denom(N);
+        for (int i = 0; i < N; i++) eta_at(i, off_num[i], off_denom[i]);
+        if (!ratiod_st_laplace::gradient(data, layout, params, off_num.data(),
+                                         off_denom.data(), phi_num, phi_denom,
+                                         layout.has_phi_num, layout.has_phi_denom,
+                                         st_lap_grad)) {
+            if (log_post_out) *log_post_out = -INFINITY;
+            return;
+        }
+        grad_phi_num_lik_comp = st_lap_grad.phi_num;
+        grad_phi_denom_lik_comp = st_lap_grad.phi_denom;
+        grad[layout.log_tau_st_idx] -= st_lap_grad.log_sigma2;
+        grad[layout.log_phi_st_space_idx] += st_lap_grad.log_phi_space;
+        grad[layout.log_phi_st_time_idx] += st_lap_grad.log_phi_time;
+    }
+
+    // Scalar observation loop (handles all features uniformly)
+    for (int i = 0; i < N; i++) {
+        double eta_num_i = 0.0, eta_denom_i = 0.0;
+        eta_at(i, eta_num_i, eta_denom_i);
 
         // Compute residuals
         double dLL_num = 0.0, dLL_denom = 0.0;
-        double mu_num = std::exp(eta_num_i);
-        double mu_denom = is_binomial ? 0.0 : std::exp(eta_denom_i);
-
-        switch (data.model_type) {
-            case ModelType::BINOMIAL: {
-                double p = 1.0 / (1.0 + std::exp(-eta_num_i));
-                dLL_num = data.y_num[i] - data.y_denom[i] * p;
-                break;
-            }
-            case ModelType::BETA_BINOMIAL: {
-                double p = 1.0 / (1.0 + std::exp(-eta_num_i));
-                double phi_bb = phi_num;
-                double a = p * phi_bb;
-                double b = (1.0 - p) * phi_bb;
-                double psi_ab = R::digamma(a + b);
-                dLL_num = phi_bb * (R::digamma(data.y_num[i] + a) - R::digamma(data.y_denom[i] - data.y_num[i] + b)
-                          + R::digamma(b) - R::digamma(a)) * p * (1.0 - p);
-                break;
-            }
-            case ModelType::NEGBIN_NEGBIN: {
-                double y_n = data.y_num[i], y_d = data.y_denom[i];
-                double dn_n = mu_num + phi_num, dn_d = mu_denom + phi_denom;
-                dLL_num = y_n - mu_num * (y_n + phi_num) / dn_n;
-                dLL_denom = y_d - mu_denom * (y_d + phi_denom) / dn_d;
-                // phi likelihood gradient (d/d(log_phi))
-                grad_phi_num_lik_comp += R::digamma(y_n + phi_num) - R::digamma(phi_num)
-                    + std::log(phi_num / dn_n) + (mu_num - y_n) / dn_n;
-                grad_phi_denom_lik_comp += R::digamma(y_d + phi_denom) - R::digamma(phi_denom)
-                    + std::log(phi_denom / dn_d) + (mu_denom - y_d) / dn_d;
-                break;
-            }
-            case ModelType::POISSON_GAMMA: {
-                double y_d_cont = data.y_denom_cont[i];
-                dLL_num = data.y_num[i] - mu_num;
-                if (y_d_cont > 0) {
-                    dLL_denom = phi_denom * (y_d_cont / mu_denom - 1.0);
-                    double log_rate = std::log(phi_denom / mu_denom);
-                    grad_phi_denom_lik_comp += log_rate + 1.0 + std::log(std::max(y_d_cont, 1e-10))
-                        - R::digamma(phi_denom) - y_d_cont / mu_denom;
-                }
-                break;
-            }
-            case ModelType::NEGBIN_GAMMA: {
-                double y_n = data.y_num[i];
-                double y_d_cont = data.y_denom_cont[i];
-                double dn_n = mu_num + phi_num;
-                dLL_num = y_n - mu_num * (y_n + phi_num) / dn_n;
-                grad_phi_num_lik_comp += R::digamma(y_n + phi_num) - R::digamma(phi_num)
-                    + std::log(phi_num / dn_n) + (mu_num - y_n) / dn_n;
-                if (y_d_cont > 0) {
-                    dLL_denom = phi_denom * (y_d_cont / mu_denom - 1.0);
-                    double log_rate = std::log(phi_denom / mu_denom);
-                    grad_phi_denom_lik_comp += log_rate + 1.0 + std::log(std::max(y_d_cont, 1e-10))
-                        - R::digamma(phi_denom) - y_d_cont / mu_denom;
-                }
-                break;
-            }
-            case ModelType::GAMMA_GAMMA: {
-                double y_n_cont = data.y_denom_cont.empty() ? (double)data.y_num[i] : data.y_denom_cont[i];
-                // For GG, both y_num and y_denom are continuous — use y_denom_cont for denom, y_num cast for num
-                double y_num_d = (double)data.y_num[i];  // y_num is stored as int but represents continuous
-                dLL_num = phi_num * (y_num_d / mu_num - 1.0);
-                dLL_denom = phi_denom * (y_n_cont / mu_denom - 1.0);
-                grad_phi_num_lik_comp += phi_num * (std::log(phi_num / mu_num) + 1.0
-                    + std::log(std::max(y_num_d, 1e-10)) - R::digamma(phi_num) - y_num_d / mu_num);
-                grad_phi_denom_lik_comp += phi_denom * (std::log(phi_denom / mu_denom) + 1.0
-                    + std::log(std::max(y_n_cont, 1e-10)) - R::digamma(phi_denom) - y_n_cont / mu_denom);
-                break;
-            }
-            case ModelType::LOGNORMAL: {
-                double log_y_num = std::log(std::max((double)data.y_num[i], 1e-10));
-                double log_y_denom = std::log(std::max(data.y_denom_cont[i], 1e-10));
-                double sigma2_num = 1.0 / phi_num;
-                double sigma2_denom = 1.0 / phi_denom;
-                dLL_num = (log_y_num - eta_num_i) / sigma2_num;
-                dLL_denom = (log_y_denom - eta_denom_i) / sigma2_denom;
-                // phi = 1/sigma2, log_phi gradient
-                double resid_n = log_y_num - eta_num_i;
-                double resid_d = log_y_denom - eta_denom_i;
-                grad_phi_num_lik_comp += 0.5 * (resid_n * resid_n * phi_num - 1.0);
-                grad_phi_denom_lik_comp += 0.5 * (resid_d * resid_d * phi_denom - 1.0);
-                break;
-            }
-            default: break;
-        }
-
-        if (fuse_lp) {
-            // Accumulate log-likelihood (simplified — full version in compute_log_post)
-            // This is approximate; for exact fused LP, use compute_log_post with skip_obs_loop
+        if (st_lap) {
+            dLL_num = st_lap_grad.e_num[i];
+            dLL_denom = st_lap_grad.e_denom[i];
+        } else {
+            const ratiod::ObsDerivs od = obs_likelihood_derivs(
+                data, layout, params.data(), i, eta_num_i, eta_denom_i, phi_num,
+                phi_denom, grad.data());
+            dLL_num = od.eta_num;
+            dLL_denom = od.eta_denom;
+            grad_phi_num_lik_comp += od.phi_num;
+            grad_phi_denom_lik_comp += od.phi_denom;
         }
 
         double dLL_shared = dLL_num + dLL_denom;
@@ -7957,12 +7299,8 @@ void compute_gradient_composite(
             grad_hsgp_f[i] = dLL_num + (data.hsgp_data.shared ? dLL_denom : 0.0);
         }
 
-        // Scatter to the multi-scale GP field, by location rather than by row
-        if (has_msgp_nngp) {
-            const int loc_i = data.multiscale_gp_data.obs_to_loc[i];
-            grad_ms_w_lik[loc_i] +=
-                data.multiscale_gp_data.shared ? dLL_shared : dLL_num;
-        }
+        // Scatter to the multi-scale GP field
+        if (has_msgp) grad_ms_f_lik[i] = msgp.shared ? dLL_shared : dLL_num;
 
         // Scatter to the GP field, by location rather than by row
         if (has_nngp_gp) {
@@ -8014,13 +7352,9 @@ void compute_gradient_composite(
                     dLL_svc * data.svc_data.X_svc[i * n_svc + j];
         }
 
-        // Scatter to latent factors
-        if (K_latent > 0) {
-            double dLL_latent = data.latent_shared ? dLL_shared : dLL_num;
-            for (int k = 0; k < K_latent; k++) {
-                grad_factors_c[i * K_latent + k] += dLL_latent * sigma_latent_vec[k];
-                grad[layout.log_sigma_latent_start + k] += dLL_latent * factors_constrained[i * K_latent + k] * sigma_latent_vec[k];
-            }
+        if (latent_view.active()) {
+            latent_d_num[i] = dLL_num;
+            latent_d_denom[i] = dLL_denom;
         }
 
         // Scatter to multiscale temporal
@@ -8076,11 +7410,8 @@ void compute_gradient_composite(
                                 grad_spatial_lik.data(), grad.data());
     }
 
-    // Multi-scale GP field: its own prior and the likelihood scatter, onto
-    // whichever coordinate the two scales are sampled in.
-    if (has_msgp_nngp) {
-        msgp.accumulate(grad_ms_w_lik.data(), data, layout, grad.data());
-    }
+    // Multi-scale GP field: the likelihood through both expansions
+    if (has_msgp) msgp.add_lik_gradient(grad_ms_f_lik.data(), data, layout, grad.data());
 
     // GP (NNGP) field: the likelihood scatter reaches the sampled parameters
     // through the non-centred backward pass, or lands on them directly.
@@ -8247,27 +7578,10 @@ void compute_gradient_composite(
         }
     }
 
-    // Latent factor constraint chain rule
-    if (K_latent > 0) {
-        // N(0,1) prior on constrained factors
-        for (int k = 0; k < K_latent; k++)
-            for (int i = 0; i < N; i++)
-                grad_factors_c[i * K_latent + k] -= factors_constrained[i * K_latent + k];
-
-        // Chain rule: constrained -> raw
-        if (data.latent_constraint == 0) {
-            // Sum-to-zero: d/d(raw[i,k]) = d/d(constrained[i,k]) - mean(d/d(constrained[:,k]))
-            for (int k = 0; k < K_latent; k++) {
-                double sum_gc = 0.0;
-                for (int i = 0; i < N; i++) sum_gc += grad_factors_c[i * K_latent + k];
-                double mean_gc = sum_gc / N;
-                for (int i = 0; i < N; i++)
-                    grad[layout.latent_factor_start + i * K_latent + k] += grad_factors_c[i * K_latent + k] - mean_gc;
-            }
-        } else {
-            for (int j = 0; j < N * K_latent; j++)
-                grad[layout.latent_factor_start + j] += grad_factors_c[j];
-        }
+    if (latent_view.active()) {
+        latent_view.add_gradient(params.data(), latent_d_num, latent_d_denom,
+                                 data.latent_sigma_prior_rate,
+                                 data.latent_offdiag_sd, grad.data());
     }
 
     // ST interaction prior gradients: the same implementation
@@ -8465,15 +7779,9 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
         return &compute_gradient_numerical;
     if (layout.is_gp && data.has_gp && covers(GF_GP))
         return &compute_gradient_gp_handcoded;
-    if (layout.is_multiscale_gp && data.has_multiscale_gp && data.msgp_is_hsgp &&
+    if (layout.is_multiscale_gp && data.has_multiscale_gp &&
         covers(GF_MULTISCALE_GP | GF_TEMPORAL))
         return &compute_gradient_msgp_hsgp;
-    if (layout.is_multiscale_gp && data.has_multiscale_gp && layout.has_temporal &&
-        covers(GF_MULTISCALE_GP | GF_TEMPORAL))
-        return &compute_gradient_msgp_temporal_handcoded;
-    if (layout.is_multiscale_gp && data.has_multiscale_gp &&
-        covers(GF_MULTISCALE_GP))
-        return &compute_gradient_msgp_handcoded;
     if (layout.is_gp && covers(GF_GP | GF_TEMPORAL))
         return &compute_gradient_gp_temporal_handcoded;
     if (layout.has_svc && data.has_svc && data.svc_is_hsgp && covers(GF_SVC))
@@ -8521,8 +7829,6 @@ const char* gradient_fn_name(GradientFn fn) {
   if (fn == &compute_gradient_icar_collapsed) return "icar_collapsed";
   if (fn == &compute_gradient_gp_handcoded) return "gp";
   if (fn == &compute_gradient_msgp_hsgp) return "msgp_hsgp";
-  if (fn == &compute_gradient_msgp_temporal_handcoded) return "msgp_temporal";
-  if (fn == &compute_gradient_msgp_handcoded) return "msgp";
   if (fn == &compute_gradient_gp_temporal_handcoded) return "gp_temporal";
   if (fn == &compute_gradient_svc_hsgp_handcoded) return "svc_hsgp";
   if (fn == &compute_gradient_svc_handcoded) return "svc";
@@ -8535,12 +7841,52 @@ const char* gradient_fn_name(GradientFn fn) {
   return "unknown";
 }
 
-// Refuse an autodiff gradient mode on a model the templated log posterior
-// cannot express. Called on the R thread before sampling starts, because
-// resolve_gradient_fn runs on OpenMP workers where a throw cannot cross the
-// region boundary. The H and N modes carry the analytic density and are
-// unaffected.
-void require_autodiff_supported(const ModelData& data, const ParamLayout& layout) {
+// Refuse a model its gradient cannot be computed for: an autodiff gradient
+// mode on a model the templated log posterior cannot express, and a
+// collapsed GP interaction outside the analytic path that carries it. Called
+// on the R thread before sampling starts, because resolve_gradient_fn runs on
+// OpenMP workers where a throw cannot cross the region boundary.
+void require_gradient_supported(const ModelData& data, const ParamLayout& layout) {
+  // A collapsed spatial field locates its mode with per-location curvature
+  // written for the families below; with any other likelihood, or with
+  // inflation, its gradient is not the gradient of its density.
+  if (data.gp_collapsed || layout.is_icar_collapsed || layout.is_bym2_collapsed) {
+    const ModelType mt = data.model_type;
+    const bool family_ok =
+        mt == ModelType::BINOMIAL || mt == ModelType::POISSON_GAMMA ||
+        mt == ModelType::NEGBIN_NEGBIN ||
+        (mt == ModelType::NEGBIN_GAMMA && !data.gp_collapsed);
+    if (!family_ok || layout.has_zi || layout.has_oi) {
+      Rcpp::stop(std::string("The collapsed ") +
+                 (data.gp_collapsed ? "GP" : "areal") +
+                 " field is written for the binomial, Poisson-gamma and "
+                 "negative binomial families" +
+                 (data.gp_collapsed ? "" : " (and negative binomial-gamma)") +
+                 " without inflation. Use parameterization = \"centered\" or "
+                 "\"noncentered\" for this model.");
+    }
+  }
+
+  if (layout.st_collapsed) {
+    // The Laplace step reads W = -d^2 l / d delta^2 as a precision, which a
+    // log-concave likelihood keeps positive; the composite gradient is where
+    // its adjoint residuals enter, and it carries the hand-coded families.
+    if (!handcoded_likelihood(data) ||
+        data.model_type == ModelType::BETA_BINOMIAL) {
+      Rcpp::stop("The collapsed GP interaction needs a log-concave family with "
+                 "its canonical links: binomial, Poisson-gamma, negative "
+                 "binomial, gamma-gamma or lognormal.");
+    }
+    if (layout.has_zi || layout.has_oi) {
+      Rcpp::stop("The collapsed GP interaction does not take zero or one "
+                 "inflation, whose likelihood is not log-concave.");
+    }
+    if (data.has_rsr) {
+      Rcpp::stop("The collapsed GP interaction does not take a restricted "
+                 "spatial field.");
+    }
+  }
+
   if (g_gradient_mode != GradientMode::AUTODIFF_ARENA &&
       g_gradient_mode != GradientMode::AUTODIFF_FORWARD &&
       g_gradient_mode != GradientMode::AUTODIFF_TAPE) return;
@@ -9645,6 +8991,13 @@ HMCResultCpp run_hmc_chain_cpp(
       result.gp_w_star_flat.resize(static_cast<size_t>(n_sample) * data.gp_data.n_obs, 0.0);
   }
 
+  // Collapsed GP interaction: one draw of the field per saved iteration
+  if (layout.st_collapsed) {
+      result.n_st_collapsed = data.spatiotemporal_data.n_params;
+      result.st_delta_flat.resize(
+          static_cast<size_t>(n_sample) * result.n_st_collapsed, 0.0);
+  }
+
   // Collapsed ICAR/BYM2: allocate phi*/theta* storage
   if (data.icar_collapsed || data.bym2_collapsed) {
       int S = data.n_spatial_units;
@@ -9656,6 +9009,7 @@ HMCResultCpp run_hmc_chain_cpp(
   }
 
   std::mt19937 rng(seed + chain_id * 12345);
+  std::mt19937 st_draw_rng(seed + chain_id * 12345 + 7919);
   std::normal_distribution<double> normal(0.0, 1.0);
   std::uniform_real_distribution<double> unif(0.0, 1.0);
 
@@ -11090,15 +10444,6 @@ HMCResultCpp run_hmc_chain_cpp(
                   phi_time_store, data.spatiotemporal_data,
                   &row[layout.st_delta_start]);
           }
-          if (msgp_nc(data, layout)) {
-              MultiscaleGPView msgp_store;
-              msgp_store.read(q, data, layout);
-              const int N_msgp_store = data.multiscale_gp_data.n_obs;
-              for (int i = 0; i < N_msgp_store; i++) {
-                  row[layout.gp_local_start + i] = msgp_store.local()[i];
-                  row[layout.gp_regional_start + i] = msgp_store.regional()[i];
-              }
-          }
           if (temporal_effects_transformed(data, layout)) {
               std::vector<double> phi_store_buf;
               const double* phi_store = temporal_effects(q, data, layout, phi_store_buf);
@@ -11164,6 +10509,16 @@ HMCResultCpp run_hmc_chain_cpp(
       if (data.gp_collapsed && data.has_gp && result.n_gp_collapsed > 0) {
           collapsed_gp_store_sample(sample_idx, collapsed_gp_ws(),
               result.gp_w_star_flat, result.n_gp_collapsed);
+      }
+      // The collapsed interaction at the saved state: the Laplace
+      // approximation N(dh, H^-1) re-evaluated there, and one draw from it.
+      // Its own stream, so storing a draw does not move the chain.
+      if (result.n_st_collapsed > 0) {
+          (void)compute_log_post(q, data, layout);
+          ratiod_st_laplace::draw(
+              data, ratiod_st_laplace::workspace(), st_draw_rng,
+              &result.st_delta_flat[static_cast<size_t>(sample_idx) *
+                                    result.n_st_collapsed]);
       }
       if ((data.icar_collapsed || data.bym2_collapsed) && result.n_icar_collapsed > 0) {
           collapsed_icar_store_sample(sample_idx, data, collapsed_icar_ws(),
@@ -11270,7 +10625,7 @@ std::vector<HMCResult> run_hmc_parallel_chains(
   // All gradient modes (N, A, A_t, H) are now thread-safe and can run in parallel.
   // The old global tape limitation has been removed.
 
-  require_autodiff_supported(data, layout);
+  require_gradient_supported(data, layout);
 
   if (n_chains > 1) {
     // The team stays at ratiod_omp::chain_team_size() for the whole session;
@@ -11364,6 +10719,9 @@ Rcpp::List hmc_results_list(const std::vector<ratiod_hmc::HMCResult>& results, i
   );
   if (results[0].n_gp_collapsed > 0) {
     ret["gp_w_star"] = field([](const HMCResult& r) { return r.gp_w_star; });
+  }
+  if (results[0].n_st_collapsed > 0) {
+    ret["st_delta_draws"] = field([](const HMCResult& r) { return r.st_delta; });
   }
   if (results[0].n_icar_collapsed > 0) {
     ret["icar_phi_star"] = field([](const HMCResult& r) { return r.icar_phi_star; });
@@ -11629,7 +10987,7 @@ Rcpp::List cpp_hmc_fit(
   // This prevents R GC from invalidating memory during sampling
   std::atomic_thread_fence(std::memory_order_seq_cst);
 
-  require_autodiff_supported(data, compute_param_layout(data));
+  require_gradient_supported(data, compute_param_layout(data));
 
   // Run sampler
   std::vector<HMCResult> results;
@@ -11742,19 +11100,7 @@ Rcpp::List cpp_hmc_fit_gp(
   // Memory barrier to ensure all extractions complete before proceeding
   std::atomic_thread_fence(std::memory_order_seq_cst);
 
-  // Extract multiscale GP parameters - eager copy to std::vectors
-  std::vector<int> nn_idx_local_vec = Rcpp::as<std::vector<int>>(ms_gp_params["nn_idx_local"]);
-  std::vector<double> nn_dist_local_vec = Rcpp::as<std::vector<double>>(ms_gp_params["nn_dist_local"]);
-  std::vector<int> nn_order_local_vec = Rcpp::as<std::vector<int>>(ms_gp_params["nn_order_local"]);
-  std::vector<int> nn_order_inv_local_vec = Rcpp::as<std::vector<int>>(ms_gp_params["nn_order_inv_local"]);
-  int nn_local = Rcpp::as<int>(ms_gp_params["nn_local"]);
-  std::vector<int> nn_idx_regional_vec = Rcpp::as<std::vector<int>>(ms_gp_params["nn_idx_regional"]);
-  std::vector<double> nn_dist_regional_vec = Rcpp::as<std::vector<double>>(ms_gp_params["nn_dist_regional"]);
-  std::vector<int> nn_order_regional_vec = Rcpp::as<std::vector<int>>(ms_gp_params["nn_order_regional"]);
-  std::vector<int> nn_order_inv_regional_vec = Rcpp::as<std::vector<int>>(ms_gp_params["nn_order_inv_regional"]);
-  int nn_regional = Rcpp::as<int>(ms_gp_params["nn_regional"]);
-  std::vector<double> nn_neighbor_dist_local_vec = Rcpp::as<std::vector<double>>(ms_gp_params["nn_neighbor_dist_local"]);  // Phase 1.3
-  std::vector<double> nn_neighbor_dist_regional_vec = Rcpp::as<std::vector<double>>(ms_gp_params["nn_neighbor_dist_regional"]);  // Phase 1.3
+  // Extract multiscale GP parameters
   double range_local_lower = Rcpp::as<double>(ms_gp_params["range_local_lower"]);
   double range_local_upper = Rcpp::as<double>(ms_gp_params["range_local_upper"]);
   double range_regional_lower = Rcpp::as<double>(ms_gp_params["range_regional_lower"]);
@@ -11879,99 +11225,28 @@ Rcpp::List cpp_hmc_fit_gp(
     data.has_multiscale_gp = true;
     data.has_hsgp = false;
 
-    // Check if using HSGP approximation
-    std::string msgp_approx = "nngp";
-    if (gp_params.containsElementNamed("msgp_approx")) {
-      msgp_approx = Rcpp::as<std::string>(gp_params["msgp_approx"]);
-    }
-    data.msgp_is_hsgp = (msgp_approx == "hsgp");
-
-    if (data.msgp_is_hsgp) {
-      // HSGP-MSGP: set up shared basis functions, no NNGP neighbor computation
-      int hsgp_m = Rcpp::as<int>(gp_params["hsgp_m"]);
-      double hsgp_c = Rcpp::as<double>(gp_params["hsgp_c"]);
-      ratiod_hsgp::setup_hsgp_2d(coords_vec, data.N, hsgp_m, hsgp_c,
-                                  gp_shared, data.msgp_hsgp_data);
-      data.multiscale_gp_data.shared = gp_shared;
-      // Set n_obs for consistency (used by param layout check)
-      data.multiscale_gp_data.n_obs = data.N;
-
-      // Lengthscale prior means from range bounds (geometric mean on log scale)
-      data.ms_log_ls_local_mean = 0.5 * (std::log(range_local_lower) + std::log(range_local_upper));
-      data.ms_log_ls_local_sd = 0.5;
-      data.ms_log_ls_regional_mean = 0.5 * (std::log(range_regional_lower) + std::log(range_regional_upper));
-      data.ms_log_ls_regional_sd = 0.5;
-
-      if (verbose) {
-        Rcpp::Rcout << "  HSGP-MSGP: m=" << hsgp_m << ", c=" << hsgp_c
-                    << ", m_total=" << data.msgp_hsgp_data.m_total
-                    << " (local+regional: " << 2 * data.msgp_hsgp_data.m_total << " basis coefficients)\n";
-        Rcpp::Rcout << "  Lengthscale priors: local LogN(" << data.ms_log_ls_local_mean
-                    << ", " << data.ms_log_ls_local_sd << "), regional LogN("
-                    << data.ms_log_ls_regional_mean << ", " << data.ms_log_ls_regional_sd << ")\n";
-      }
-    } else {
-      // NNGP-MSGP: standard neighbor-based computation
-      data.multiscale_gp_data.n_obs = gp_n_unique;  // Unique locations, not total observations
-      data.multiscale_gp_data.coords = coords_vec;  // Already std::vector from eager copy
-      // Convert obs_to_loc from R's 1-based to C++'s 0-based indexing
-      data.multiscale_gp_data.obs_to_loc.resize(gp_obs_to_loc_r.size());
-      for (size_t i = 0; i < gp_obs_to_loc_r.size(); i++) {
-        data.multiscale_gp_data.obs_to_loc[i] = gp_obs_to_loc_r[i] - 1;
-      }
-
-      // Local scale - use pre-copied std::vectors
-      data.multiscale_gp_data.nn_local = nn_local;
-      data.multiscale_gp_data.nn_idx_local = nn_idx_local_vec;
-      data.multiscale_gp_data.nn_dist_local = nn_dist_local_vec;
-      // Convert from R's 1-based to C++'s 0-based indexing
-      data.multiscale_gp_data.nn_order_local.resize(nn_order_local_vec.size());
-      for (size_t i = 0; i < nn_order_local_vec.size(); i++) {
-        data.multiscale_gp_data.nn_order_local[i] = nn_order_local_vec[i] - 1;
-      }
-      data.multiscale_gp_data.nn_order_inv_local.resize(nn_order_inv_local_vec.size());
-      for (size_t i = 0; i < nn_order_inv_local_vec.size(); i++) {
-        data.multiscale_gp_data.nn_order_inv_local[i] = nn_order_inv_local_vec[i] - 1;
-      }
-      data.multiscale_gp_data.nn_neighbor_dist_local = nn_neighbor_dist_local_vec;  // Phase 1.3
-
-      // Regional scale - use pre-copied std::vectors
-      data.multiscale_gp_data.nn_regional = nn_regional;
-      data.multiscale_gp_data.nn_idx_regional = nn_idx_regional_vec;
-      data.multiscale_gp_data.nn_dist_regional = nn_dist_regional_vec;
-      // Convert from R's 1-based to C++'s 0-based indexing
-      data.multiscale_gp_data.nn_order_regional.resize(nn_order_regional_vec.size());
-      for (size_t i = 0; i < nn_order_regional_vec.size(); i++) {
-        data.multiscale_gp_data.nn_order_regional[i] = nn_order_regional_vec[i] - 1;
-      }
-      data.multiscale_gp_data.nn_order_inv_regional.resize(nn_order_inv_regional_vec.size());
-      for (size_t i = 0; i < nn_order_inv_regional_vec.size(); i++) {
-        data.multiscale_gp_data.nn_order_inv_regional[i] = nn_order_inv_regional_vec[i] - 1;
-      }
-      data.multiscale_gp_data.nn_neighbor_dist_regional = nn_neighbor_dist_regional_vec;  // Phase 1.3
-
-      // Range constraints
-      data.multiscale_gp_data.range_local_lower = range_local_lower;
-      data.multiscale_gp_data.range_local_upper = range_local_upper;
-      data.multiscale_gp_data.range_regional_lower = range_regional_lower;
-      data.multiscale_gp_data.range_regional_upper = range_regional_upper;
-
-      data.multiscale_gp_data.cov_type = cov_type;
-      data.multiscale_gp_data.nu = nu;
-      data.multiscale_gp_data.sampler = ratiod_gp::parse_msgp_sampler(msgp_sampler_str);
-    }
-
+    // Both scales on one Hilbert-space basis
+    int hsgp_m = Rcpp::as<int>(gp_params["hsgp_m"]);
+    double hsgp_c = Rcpp::as<double>(gp_params["hsgp_c"]);
+    ratiod_hsgp::setup_hsgp_2d(coords_vec, data.N, hsgp_m, hsgp_c,
+                                gp_shared, data.msgp_hsgp_data);
     data.multiscale_gp_data.shared = gp_shared;
+    data.multiscale_gp_data.n_obs = data.N;
+    data.multiscale_gp_data.sampler = ratiod_gp::parse_msgp_sampler(msgp_sampler_str);
 
-    // Multi-scale GP parameterization: centered (default) or noncentered. The
-    // HSGP arm samples basis coefficients, which are already the non-centred
-    // coordinate, so msgp_nc() reads this for the two-neighbour-set arm alone.
-    {
-        std::string msgp_param_str = "centered";
-        if (gp_params.containsElementNamed("parameterization")) {
-            msgp_param_str = Rcpp::as<std::string>(gp_params["parameterization"]);
-        }
-        data.msgp_parameterization = (msgp_param_str == "noncentered") ? 1 : 0;
+    // Lengthscale prior means from range bounds (geometric mean on log scale)
+    data.ms_log_ls_local_mean = 0.5 * (std::log(range_local_lower) + std::log(range_local_upper));
+    data.ms_log_ls_local_sd = 0.5;
+    data.ms_log_ls_regional_mean = 0.5 * (std::log(range_regional_lower) + std::log(range_regional_upper));
+    data.ms_log_ls_regional_sd = 0.5;
+
+    if (verbose) {
+      Rcpp::Rcout << "  HSGP-MSGP: m=" << hsgp_m << ", c=" << hsgp_c
+                  << ", m_total=" << data.msgp_hsgp_data.m_total
+                  << " (local+regional: " << 2 * data.msgp_hsgp_data.m_total << " basis coefficients)\n";
+      Rcpp::Rcout << "  Lengthscale priors: local LogN(" << data.ms_log_ls_local_mean
+                  << ", " << data.ms_log_ls_local_sd << "), regional LogN("
+                  << data.ms_log_ls_regional_mean << ", " << data.ms_log_ls_regional_sd << ")\n";
     }
 
     data.ms_sigma2_local_prior_U = ms_sigma2_local_prior_U;
@@ -12086,7 +11361,7 @@ Rcpp::List cpp_hmc_fit_gp(
   // Initialize parameters - use explicit std::vector copy from Rcpp
   std::vector<double> q0(q_init.begin(), q_init.end());
 
-  require_autodiff_supported(data, compute_param_layout(data));
+  require_gradient_supported(data, compute_param_layout(data));
 
   // Run sampler
   std::vector<HMCResult> results;

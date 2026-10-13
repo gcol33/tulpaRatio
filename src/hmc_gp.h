@@ -213,86 +213,24 @@ struct GPData {
   bool shared;                        // Whether GP is shared between num/denom
 };
 
-// Multi-scale GP data structure
+// Multi-scale GP data: the field's two scales share one Hilbert-space basis
+// (ModelData::msgp_hsgp_data); this carries what the rest of the sampler reads.
 struct MultiscaleGPData {
-  int n_obs;                          // Number of unique locations
-
-  std::vector<double> coords;         // Coordinates (n_obs x 2, flattened) — unique locations only
-
-  // Observation-to-location mapping (0-based, length = total N)
-  std::vector<int> obs_to_loc;
-
-  // Local scale neighbor structure (computed on unique locations)
-  int nn_local;
-  std::vector<int> nn_idx_local;
-  std::vector<double> nn_dist_local;
-  std::vector<double> nn_neighbor_dist_local;  // Phase 1.3: pairwise distances among neighbors
-  std::vector<int> nn_order_local;
-  std::vector<int> nn_order_inv_local;
-
-  // Regional scale neighbor structure (computed on unique locations)
-  int nn_regional;
-  std::vector<int> nn_idx_regional;
-  std::vector<double> nn_dist_regional;
-  std::vector<double> nn_neighbor_dist_regional;  // Phase 1.3: pairwise distances among neighbors
-  std::vector<int> nn_order_regional;
-  std::vector<int> nn_order_inv_regional;
-
-  // Range prior bounds (for identifiability)
-  double range_local_lower, range_local_upper;
-  double range_regional_lower, range_regional_upper;
-
-  CovType cov_type;
-  double nu;
-  bool shared;
-
-  // Advanced sampler strategy
+  int n_obs = 0;                      // Observations the basis is evaluated at
+  bool shared = true;                 // Whether the field enters both processes
   MSGPSampler sampler = MSGPSampler::AUTO;
 };
 
 // -----------------------------------------------------------------------------
-// Multi-scale GP
-// -----------------------------------------------------------------------------
-
-// The two scales of a multi-scale GP as single-scale GPData, so that every
-// routine written against one NNGP field serves both. Every field GPData
-// declares is filled: a routine reading nn_neighbor_dist off a view that left
-// it empty indexes past the end of an empty vector rather than failing.
-inline std::pair<GPData, GPData> make_msgp_gp_views(const MultiscaleGPData& ms) {
-  GPData gp_local;
-  gp_local.n_obs = ms.n_obs;
-  gp_local.nn = ms.nn_local;
-  gp_local.coords = ms.coords;
-  gp_local.nn_idx = ms.nn_idx_local;
-  gp_local.nn_dist = ms.nn_dist_local;
-  gp_local.nn_neighbor_dist = ms.nn_neighbor_dist_local;
-  gp_local.nn_order = ms.nn_order_local;
-  gp_local.nn_order_inv = ms.nn_order_inv_local;
-  gp_local.obs_to_loc = ms.obs_to_loc;
-  gp_local.cov_type = ms.cov_type;
-  gp_local.nu = ms.nu;
-  gp_local.shared = ms.shared;
-
-  GPData gp_regional;
-  gp_regional.n_obs = ms.n_obs;
-  gp_regional.nn = ms.nn_regional;
-  gp_regional.coords = ms.coords;
-  gp_regional.nn_idx = ms.nn_idx_regional;
-  gp_regional.nn_dist = ms.nn_dist_regional;
-  gp_regional.nn_neighbor_dist = ms.nn_neighbor_dist_regional;
-  gp_regional.nn_order = ms.nn_order_regional;
-  gp_regional.nn_order_inv = ms.nn_order_inv_regional;
-  gp_regional.obs_to_loc = ms.obs_to_loc;
-  gp_regional.cov_type = ms.cov_type;
-  gp_regional.nu = ms.nu;
-  gp_regional.shared = ms.shared;
-
-  return {gp_local, gp_regional};
-}
-
-// -----------------------------------------------------------------------------
 // Priors for GP hyperparameters
 // -----------------------------------------------------------------------------
+
+// d/d(theta) of the PC prior on a marginal sd, sigma ~ Exponential(rate),
+// written on theta = log(sigma^2): log p(theta) = const - rate * sigma +
+// theta / 2 (ratiod_gp::log_prior_sd_pc_logvar_t is the density).
+inline double log_prior_sd_pc_logvar_grad(double theta, double rate) {
+  return 0.5 - 0.5 * rate * std::exp(0.5 * theta);
+}
 
 // Log prior for range with PC-style (favor larger ranges = simpler models)
 inline double log_prior_phi_pc(double phi, double U, double alpha) {
@@ -640,48 +578,6 @@ inline NNGPNCWorkspaceT<T>& nngp_nc_ws() {
     RATIOD_TLS_WORKSPACE(NNGPNCWorkspaceT<T>, ws);
     return ws;
 }
-
-// The multi-scale field's two scales at the sampled coordinate.
-//
-// Centred, each scale's parameter block holds the effects and `local` /
-// `regional` point straight at it. Non-centred, each block holds z ~ N(0, I)
-// and the effects are w = L(sigma2, phi) z through the same NNGP
-// autoregression the single-scale field uses -- one workspace per scale, since
-// the local field's adjoint reads its cached factors after the regional
-// field's forward pass has run. Every density and every gradient reads the
-// effects, so the transform lives here and nowhere else.
-//
-// `Slot` is the first of the two workspace slots the transform claims.
-template <typename T, int Slot>
-struct MultiscaleGPFieldT {
-    GPData gp_local, gp_regional;
-    const T* local = nullptr;
-    const T* regional = nullptr;
-    bool noncentered = false;
-
-    void read(const T* block_local, const T* block_regional,
-              const T& sigma2_local, const T& phi_local,
-              const T& sigma2_regional, const T& phi_regional,
-              const MultiscaleGPData& ms_data, bool nc) {
-        std::tie(gp_local, gp_regional) = make_msgp_gp_views(ms_data);
-        noncentered = nc;
-        if (!nc) {
-            local = block_local;
-            regional = block_regional;
-            return;
-        }
-        NNGPNCWorkspaceT<T>& ws_l = nngp_nc_ws<T, Slot>();
-        NNGPNCWorkspaceT<T>& ws_r = nngp_nc_ws<T, Slot + 1>();
-        nngp_nc_forward(block_local, sigma2_local, phi_local, gp_local, ws_l);
-        nngp_nc_forward(block_regional, sigma2_regional, phi_regional,
-                        gp_regional, ws_r);
-        local = ws_l.w.data();
-        regional = ws_r.w.data();
-    }
-
-    NNGPNCWorkspaceT<T>& ws_local() const { return nngp_nc_ws<T, Slot>(); }
-    NNGPNCWorkspaceT<T>& ws_regional() const { return nngp_nc_ws<T, Slot + 1>(); }
-};
 
 // Backward pass: given dL/dw from likelihood, compute gradients for z, log_sigma2, log_phi.
 // z and grad_z are indexed by LOCATION (matching parameter layout).

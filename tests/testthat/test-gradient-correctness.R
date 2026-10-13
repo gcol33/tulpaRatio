@@ -26,12 +26,8 @@ FIELDS <- c("icar", "bym2", "rw1", "rw2", "temporal_ar1", "temporal_iid",
             # transform leaves alone, and the cyclic pair inverts
             # B = C + 11'/n rather than a triangular stack.
             "rw1_nc", "rw2_nc", "rw1_cyclic", "rw1_cyclic_nc",
-            # Panel data: several disconnected walks under ONE augmented
-            # global constant, so the G - 1 group contrasts are improper and
-            # the likelihood identifies each group's level. In the non-centred
-            # coordinate the transform reaches that by re-mixing its per-group
-            # sum coordinates, which is a different map from running the
-            # single-group one per group (gcol33/tulpaRatio#81).
+            # Panel data: several disconnected walks, each centred on its own
+            # with its own augmented constant (gcol33/tulpaRatio#135).
             "rw1_panel", "rw1_nc_panel", "rw2_nc_panel",
             "rw1_cyclic_nc_panel")
 # The spatial field carried alongside a second structure, which routes to the
@@ -118,6 +114,7 @@ ST_IV_AR1_FIELDS <- c("st4_ar1", "st4_ar1_nc")
 # what caught compute_gradient_latent_handcoded being selected for a model
 # carrying an interaction it never writes (gcol33/tulpaRatio#71).
 ST_GP_FIELDS <- c("stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
+                  "stgp_latent2",
                   # The non-centred GP interaction, separable and Gneiting
                   "stgp_nc", "stgp_gneiting_nc")
 # The kernels resolve_gradient_fn can select that make_model() could not build a
@@ -130,14 +127,9 @@ ST_GP_FIELDS <- c("stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
 #                parameters are z ~ N(0, I) and the field is
 #                w = L(sigma2, phi) z, so both hyperparameters reach eta
 #                through the transform as well as through the prior.
-#   msgp_hsgp -- spatial_multiscale(approx = "hsgp"): both scales read one
-#                Hilbert-space basis rather than two neighbour sets, and each
-#                carries a PC prior on sigma with a LogNormal on its
-#                lengthscale rather than an NNGP density.
-#   msgp_nc   -- spatial_multiscale(parameterization = "noncentered"): each
-#                scale's block holds z ~ N(0, I) and its field is
-#                w = L(sigma2, phi) z, so all four hyperparameters reach eta
-#                through the transforms as well as through the priors.
+#   msgp_hsgp -- spatial_multiscale(): both scales read one Hilbert-space
+#                basis, and each carries a PC prior on sigma with a
+#                LogNormal on its lengthscale.
 #   svc_nc    -- spatial_svc(parameterization = "noncentered") with two
 #                terms: each term's block holds z ~ N(0, I) and its field is
 #                w_j = L(sigma2_j, phi_j) z_j, read through a workspace of its
@@ -146,9 +138,13 @@ ST_GP_FIELDS <- c("stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
 # the autodiff modes now differentiate a density that expresses them, so they
 # belong here rather than with the collapsed fields.
 KERNEL_FIELDS <- c("gp", "gp_matern", "gp_gaussian", "gp_spherical",
-                   "gp_temporal", "gp_nc", "msgp", "msgp_temporal",
-                   "msgp_hsgp", "msgp_nc", "svc", "svc_hsgp", "svc_nc",
+                   "gp_temporal", "gp_nc", "msgp_temporal",
+                   "msgp_hsgp", "svc", "svc_hsgp", "svc_nc",
                    "temporal_gp", "ms_temporal", "latent",
+                   # Process-specific loadings: two factors filling the
+                   # lower-triangular matrix, a numerator-only factor, and the
+                   # first-zero shift (gcol33/tulpaRatio#134)
+                   "latent2", "latent_num", "latent2_first_zero",
                    # The intrinsic multi-scale arms in either coordinate. The
                    # non-centred one holds z ~ N(0, I) and reaches eta through
                    # sigma * A^{-1} z, so sigma2 enters through the transform
@@ -159,7 +155,10 @@ KERNEL_FIELDS <- c("gp", "gp_matern", "gp_gaussian", "gp_spherical",
 # The kernel field the templated density declares a gap for: gp_collapsed
 # marginalizes its field out, as the collapsed areal fields do, so it has no
 # autodiff case and is checked against compute_log_post alone.
-KERNEL_COLLAPSED_FIELDS <- c("gp_collapsed")
+KERNEL_COLLAPSED_FIELDS <- c("gp_collapsed",
+                             # The GP space-time interaction integrated out by
+                             # an inner Laplace (gcol33/tulpaRatio#143)
+                             "stgp_collapsed", "stgp_gneiting_collapsed")
 # Cases the harness can build whose gradient does not match the density it
 # reports. Each names the defect it is blocked on; the case is written out so
 # the fix has a test to turn green, and the deviation each measures today is
@@ -284,15 +283,16 @@ for (field in DISPATCH_MASK_COLLAPSED_FIELDS) {
 test_that("resolve_gradient_fn sends each model to the function written for it", {
   expected <- c(
     # One structure: the specialized function keeps it.
-    gp = "gp", gp_temporal = "gp_temporal", msgp = "msgp",
-    msgp_temporal = "msgp_temporal", hsgp = "hsgp",
+    gp = "gp", gp_temporal = "gp_temporal", msgp_hsgp = "msgp_hsgp",
+    msgp_temporal = "msgp_hsgp", hsgp = "hsgp",
     svc = "svc", svc_hsgp = "svc_hsgp", svc_nc = "svc", tvc = "tvc",
     temporal_gp = "temporal_gp", ms_temporal = "ms_temporal",
     ms_temporal_nc = "ms_temporal", ms_temporal_rw2 = "ms_temporal",
     ms_temporal_rw2_nc = "ms_temporal",
     ms_temporal_seasonal = "ms_temporal",
     ms_temporal_seasonal_nc = "ms_temporal",
-    latent = "latent", st4 = "spatiotemporal", icar_st = "spatiotemporal",
+    latent = "latent", latent2 = "latent", latent_num = "latent",
+    latent2_first_zero = "latent", st4 = "spatiotemporal", icar_st = "spatiotemporal",
     icar_collapsed = "icar_collapsed", bym2_collapsed = "icar_collapsed",
     gp_collapsed = "gp_collapsed",
     icar_collapsed_rw1 = "icar_collapsed", bym2_collapsed_rw1 = "icar_collapsed",
@@ -304,7 +304,7 @@ test_that("resolve_gradient_fn sends each model to the function written for it",
     gp_tgp = "composite", svc_ms = "composite", svc_ms_nc = "composite",
     gp_slopes = "composite",
     gp_slopes_corr = "composite", gp_crossed = "composite",
-    stgp_latent = "composite",
+    stgp_latent = "composite", stgp_latent2 = "composite",
     # A collapsed marginal alongside a second block.
     gp_collapsed_st4 = "numerical", icar_collapsed_st4 = "numerical",
     bym2_collapsed_st4 = "numerical",
@@ -450,6 +450,54 @@ for (case in ZI_COUNT_CASES) {
   }
 }
 
+# The gradients that walk the observations one at a time -- the composite, the
+# latent factors and the collapsed GP interaction -- each carried their own
+# residual algebra, written for some families and not others: on gamma-gamma
+# and lognormal the composite and latent paths were off by order one, and
+# neither handled zero inflation (gcol33/tulpaRatio#148). They read the log
+# posterior's own per-observation density now, so every hand-coded family and
+# inflation structure is checked on each.
+PER_OBS_FIELDS <- c("gp_st4", "tvc_st4", "latent", "latent2")
+HANDCODED_FAMILIES <- c("binomial", "beta_binomial", "poisson_gamma",
+                        "negbin_gamma", "negbin_negbin", "gamma_gamma",
+                        "lognormal")
+PER_OBS_ZI_CASES <- c(ZI_COUNT_CASES, list(
+  list(family = "binomial", zi = "zi_binomial"),
+  list(family = "binomial", zi = "zoib")
+))
+
+check_per_obs <- function(field, family, zi = "none") {
+  r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded",
+                                       family = family, zi = zi)
+  dev <- rel_dev(r$analytic, r$finite_diff)
+  worst <- which.max(dev)
+  expect_lt(
+    max(dev), 1e-4,
+    label = sprintf(
+      "%s/%s/%s: worst parameter %d (block %s), analytic %.6f vs finite-diff %.6f",
+      field, family, zi, worst, r$block[worst], r$analytic[worst],
+      r$finite_diff[worst]
+    )
+  )
+}
+
+for (field in PER_OBS_FIELDS) {
+  test_that(sprintf("the %s gradient carries every hand-coded family", field), {
+    for (family in HANDCODED_FAMILIES) check_per_obs(field, family)
+  })
+  test_that(sprintf("the %s gradient carries zero and one inflation", field), {
+    for (case in PER_OBS_ZI_CASES) check_per_obs(field, case$family, case$zi)
+  })
+}
+
+test_that("the collapsed GP interaction carries the log-concave families", {
+  for (field in c("stgp_collapsed", "stgp_gneiting_collapsed")) {
+    for (family in setdiff(HANDCODED_FAMILIES, "beta_binomial")) {
+      check_per_obs(field, family)
+    }
+  }
+})
+
 test_that("a count-response ZI or hurdle term reaches both instantiations", {
   # Before #34 the templated density returned the same number for zi_poisson,
   # hurdle_poisson and no zero-inflation at all, and differed from the analytic
@@ -552,21 +600,6 @@ for (field in KERNEL_FIELDS) {
   }
 }
 
-# What a finite difference cannot reach on msgp_nc. The non-centred field is
-# w = L(sigma2, phi) z, and a transform that built some OTHER field would leave
-# the non-centred density self-consistent: its gradient would still match its
-# own difference quotient, and the sweep above would stay green while the
-# posterior being sampled was not the multi-scale GP.
-#
-# What ties the two coordinates together is
-# log N(z; 0, I) = log NNGP(w; sigma2, phi) + log|det L|, whose last term is a
-# function of the hyperparameters alone. So at fixed hyperparameters the
-# difference between the two densities is one number for every z, and a
-# transform that disagrees with the NNGP density makes it move.
-test_that("both coordinates of the multi-scale field carry one posterior", {
-  expect_lt(tulpaRatio:::cpp_msgp_nc_coordinate_spread(), 1e-8)
-})
-
 for (field in KERNEL_COLLAPSED_FIELDS) {
   test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded")
@@ -640,10 +673,17 @@ test_that("the collapsed parameterizations are declared, not silently mis-differ
   # The templated density cannot express them, so it must say so and the
   # autodiff modes must refuse. Left undeclared, the gradient of every parameter
   # is taken against a posterior with no spatial marginal in it.
-  for (field in c(COLLAPSED_FIELDS, COLLAPSED_TEMPORAL_FIELDS,
-                  KERNEL_COLLAPSED_FIELDS)) {
+  st_collapsed <- c("stgp_collapsed", "stgp_gneiting_collapsed")
+  for (field in setdiff(c(COLLAPSED_FIELDS, COLLAPSED_TEMPORAL_FIELDS,
+                          KERNEL_COLLAPSED_FIELDS), st_collapsed)) {
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "arena")
     expect_false(is.na(r$impl_gap), label = sprintf("field = %s", field))
+  }
+  # The collapsed GP interaction has no templated density at all: an autodiff
+  # instantiation stops rather than differentiate one without the interaction
+  for (field in st_collapsed) {
+    expect_error(tulpaRatio:::cpp_gradient_check(field, mode = "arena"),
+                 "no autodiff density")
   }
 })
 
@@ -820,11 +860,7 @@ test_that("the multi-scale arms' non-centred coordinate carries its density", {
 })
 
 # The same invariant with several temporal groups, where the centred density
-# is the per-group quadratic forms plus ONE augmented global direction and the
-# transform has to re-mix its per-group sum coordinates to match it. Running
-# the single-group transform per group augments each group's own constant
-# instead: a different model, whose density is self-consistent and whose
-# gradient still matches its own difference quotient.
+# is each group's quadratic form plus its own augmented constant.
 test_that("the non-centred coordinate carries its density over groups", {
   for (field in c("ms_temporal_nc", "ms_temporal_rw2_nc",
                   "ms_temporal_seasonal_nc")) {
@@ -839,27 +875,6 @@ test_that("the non-centred coordinate carries its density over groups", {
     }
   }
 })
-
-# Whether the G - 1 group contrasts are still improper. Augmenting per group
-# would shrink the group levels toward each other, and both coordinates would
-# stay consistent with THAT model, so the spread above cannot see it. Moving
-# the contrast directions alone must leave the prior where it is and shift
-# group g's field by exactly the unscaled offset -- a transform that dropped
-# the contrasts would leave the field alone and pass flatness by itself.
-test_that("the grouped transform leaves the group contrasts improper", {
-  for (field in c("ms_temporal_nc", "ms_temporal_rw2_nc",
-                  "ms_temporal_seasonal_nc")) {
-    for (n_groups in c(2L, 4L)) {
-      for (sigma2 in c(0.05, 1)) {
-        violation <- tulpaRatio:::cpp_ms_temporal_nc_group_contrast_flat(
-          field, n = 12L, n_groups = n_groups, sigma2 = sigma2,
-          n_draws = 8L)
-        expect_lt(violation, 1e-9)
-      }
-    }
-  }
-})
-
 
 # make_model() builds a structure per field name, by a chain of flags each
 # naming the fields it covers. A name added to KNOWN_FIELDS but to no flag falls

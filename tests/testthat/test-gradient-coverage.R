@@ -378,9 +378,7 @@ test_that("negbin_negbin with MSGP runs correctly (row 44)", {
 
   ms <- spatial_multiscale(
     ~ x + y,
-    nn_local = 5,
-    nn_regional = 10,
-    parameterization = "noncentered"
+    m = 6
   )
 
   fit <- suppressWarnings(
@@ -408,9 +406,7 @@ test_that("binomial with MSGP runs correctly (row 45)", {
 
   ms <- spatial_multiscale(
     ~ x + y,
-    nn_local = 5,
-    nn_regional = 10,
-    parameterization = "noncentered"
+    m = 6
   )
 
   fit <- suppressWarnings(

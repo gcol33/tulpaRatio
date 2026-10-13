@@ -148,21 +148,12 @@ hmc_draws_list <- function(unpacked) {
   # Multi-scale GP
   ms <- unpacked$msgp
   if (!is.null(ms)) {
-    if (ms$is_hsgp) {
-      put("sigma2_hsgp_local", ms$sigma2_local)
-      put("lengthscale_hsgp_local", ms$phi_local)
-      put_cols("hsgp_beta_local", ms$w_local)
-      put("sigma2_hsgp_regional", ms$sigma2_regional)
-      put("lengthscale_hsgp_regional", ms$phi_regional)
-      put_cols("hsgp_beta_regional", ms$w_regional)
-    } else {
-      put("sigma2_gp_local", ms$sigma2_local)
-      put("phi_gp_local", ms$phi_local)
-      put_cols("gp_local_w", ms$w_local)
-      put("sigma2_gp_regional", ms$sigma2_regional)
-      put("phi_gp_regional", ms$phi_regional)
-      put_cols("gp_regional_w", ms$w_regional)
-    }
+    put("sigma2_hsgp_local", ms$sigma2_local)
+    put("lengthscale_hsgp_local", ms$phi_local)
+    put_cols("hsgp_beta_local", ms$w_local)
+    put("sigma2_hsgp_regional", ms$sigma2_regional)
+    put("lengthscale_hsgp_regional", ms$phi_regional)
+    put_cols("hsgp_beta_regional", ms$w_regional)
   }
 
   # Multi-scale temporal
@@ -207,8 +198,8 @@ hmc_draws_list <- function(unpacked) {
   # Latent factors
   lf <- unpacked$latent
   if (!is.null(lf)) {
-    for (k in seq_len(ncol(lf$sigma))) {
-      put(paste0("sigma_latent[", k, "]"), lf$sigma[, k])
+    for (l in lf$lambda) {
+      put(paste0("lambda_latent[", l$process, ",", l$factor, "]"), l$draws)
     }
   }
 

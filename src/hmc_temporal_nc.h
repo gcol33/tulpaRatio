@@ -231,266 +231,6 @@ inline void rw_nc_backward(const double* g, const double* phi, const double* z,
   }
 }
 
-// =====================================================================
-// Several walks under one augmented constant
-// =====================================================================
-//
-// With G temporal groups the prior is blockdiag(Q_g) + (1/N) 11', N = G*T: one
-// global constant is augmented, not one per group, so G - 1 group contrasts
-// stay improper and the transform has to carry them beside the scaled
-// directions. Running the single-group primitive per group would augment each
-// group's constant instead, which is a different model.
-//
-// The primitive already isolates the direction that has to be re-mixed. Its
-// coordinate splits into the walk's increments and ONE sum coordinate c, with
-//
-//     sum_t phi_t = sigma * sqrt(T) * c,
-//
-// and the walk's quadratic form is blind to c, so a group's increments carry
-// |z_inc|^2 whatever c is. Collect the G sum coordinates into a vector c, give
-// every group the same primitive sum coordinate cbar = mean(c), and add the
-// deviation (c_g - cbar) / sqrt(T) to group g as an unscaled constant. That is
-// the orthogonal split of c into the global direction m = sqrt(G) * cbar and
-// the G - 1 contrasts, written without materializing a Helmert basis: the
-// deviations ARE the contrast coordinates read in the group basis.
-//
-// The contrasts are orthogonal to 1 and so drop out of the global sum, which
-// is sigma * sqrt(T*G) * m. With N = G*T,
-//
-//     tau * global_aug_quad = tau * (1/N) (global sum)^2 = m^2,
-//     tau * sum_g |D_g phi_g|^2 = sum_g |z_g,inc|^2,
-//
-// and the scaled coordinates number G * rank(Q_g) + 1, the normalizer's rank,
-// so the Jacobian cancels as it does for one group. The contrasts are left
-// unscaled: they are flat directions, and scaling them would couple the group
-// levels to tau where the centred coordinate does not. G = 1 leaves the
-// primitive's coordinate untouched.
-
-// The index within a block that carries its sum coordinate, or -1 when the
-// coordinate is not a single entry: a cyclic walk inverts B = C + 11'/n, whose
-// constant coordinate is the block's mean.
-inline int nc_sum_slot(int n, int order, bool cyclic) {
-  if (!nc_applies(n, order, cyclic) || cyclic) return -1;
-  return (order == 2) ? n - 2 : n - 1;
-}
-
-// The block's sum coordinate c, the one direction of z the transform turns
-// into the block's total: sum_t phi_t = sigma * sqrt(n) * c.
-template <typename T>
-inline T nc_sum_coord(const T* z, int n, int order, bool cyclic) {
-  const int slot = nc_sum_slot(n, order, cyclic);
-  if (slot >= 0) return z[slot];
-  T s = T(0.0);
-  for (int t = 0; t < n; t++) s = s + z[t];
-  return s / T(std::sqrt(static_cast<double>(n)));
-}
-
-// `z` with its sum coordinate set to `c` and every other direction untouched.
-template <typename T>
-inline void nc_with_sum_coord(const T* z, int n, int order, bool cyclic,
-                              const T& c, T* out) {
-  for (int t = 0; t < n; t++) out[t] = z[t];
-  const int slot = nc_sum_slot(n, order, cyclic);
-  if (slot >= 0) {
-    out[slot] = c;
-    return;
-  }
-  const T shift = (c - nc_sum_coord(z, n, order, cyclic)) /
-                  T(std::sqrt(static_cast<double>(n)));
-  for (int t = 0; t < n; t++) out[t] = out[t] + shift;
-}
-
-// |z|^2 over the block's scaled coordinates other than the sum one: the
-// increments the walk's own quadratic form reads.
-template <typename T>
-inline T nc_increment_quad(const T* z, int n, int order, bool cyclic) {
-  const int d = nc_normal_dim(n, order, cyclic);
-  if (d == 0) return T(0.0);
-  const int slot = nc_sum_slot(n, order, cyclic);
-  T quad = T(0.0);
-  if (slot >= 0) {
-    for (int k = 0; k < d; k++) {
-      if (k != slot) quad = quad + z[k] * z[k];
-    }
-    return quad;
-  }
-  T mean = T(0.0);
-  for (int t = 0; t < n; t++) mean = mean + z[t];
-  mean = mean / T(static_cast<double>(n));
-  for (int t = 0; t < n; t++) {
-    const T dev = z[t] - mean;
-    quad = quad + dev * dev;
-  }
-  return quad;
-}
-
-// How many of the G*n coordinates carry the N(0, I) density: every group's
-// increments plus the one global direction the augmentation fills.
-inline int nc_grouped_normal_dim(int n, int n_groups, int order, bool cyclic) {
-  const int d = nc_normal_dim(n, order, cyclic);
-  if (d == 0) return 0;
-  return n_groups * (d - 1) + 1;
-}
-
-// phi = sigma * A^{-1} z over G blocks of length n sharing one augmented
-// constant.
-template <typename T>
-inline void rw_nc_grouped_forward(const T* z, int n, int n_groups, int order,
-                                  bool cyclic, const T& sigma, T* phi) {
-  if (!nc_applies(n, order, cyclic) || n_groups <= 1) {
-    for (int g = 0; g < n_groups; g++) {
-      rw_nc_forward(z + g * n, n, order, cyclic, sigma, phi + g * n);
-    }
-    return;
-  }
-  std::vector<T> c(n_groups, T(0.0));
-  T cbar = T(0.0);
-  for (int g = 0; g < n_groups; g++) {
-    c[g] = nc_sum_coord(z + g * n, n, order, cyclic);
-    cbar = cbar + c[g];
-  }
-  cbar = cbar / T(static_cast<double>(n_groups));
-
-  const double inv_sqrt_n = 1.0 / std::sqrt(static_cast<double>(n));
-  std::vector<T> zg(n, T(0.0));
-  for (int g = 0; g < n_groups; g++) {
-    nc_with_sum_coord(z + g * n, n, order, cyclic, cbar, zg.data());
-    rw_nc_forward(zg.data(), n, order, cyclic, sigma, phi + g * n);
-    const T off = (c[g] - cbar) * T(inv_sqrt_n);
-    for (int t = 0; t < n; t++) phi[g * n + t] = phi[g * n + t] + off;
-  }
-}
-
-// log N(z; 0, I) over the coordinates that carry it, for G blocks: every
-// group's increments and the global direction m = sqrt(G) * cbar. The G - 1
-// contrasts and a non-cyclic RW2's per-group linear direction keep the flat
-// prior the centred coordinate gives them.
-template <typename T>
-inline T rw_nc_grouped_log_prior(const T* z, int n, int n_groups, int order,
-                                 bool cyclic) {
-  const int d = nc_grouped_normal_dim(n, n_groups, order, cyclic);
-  if (d == 0) return T(0.0);
-  T quad = T(0.0), cbar = T(0.0);
-  for (int g = 0; g < n_groups; g++) {
-    quad = quad + nc_increment_quad(z + g * n, n, order, cyclic);
-    cbar = cbar + nc_sum_coord(z + g * n, n, order, cyclic);
-  }
-  cbar = cbar / T(static_cast<double>(n_groups));
-  quad = quad + T(static_cast<double>(n_groups)) * cbar * cbar;
-  return T(-0.5) * quad - T(0.5 * d) * T(std::log(2.0 * M_PI));
-}
-
-// d(rw_nc_grouped_log_prior)/dz, added to `gz`.
-inline void rw_nc_grouped_log_prior_grad(const double* z, int n, int n_groups,
-                                         int order, bool cyclic, double* gz) {
-  if (nc_grouped_normal_dim(n, n_groups, order, cyclic) == 0) return;
-  const int d = nc_normal_dim(n, order, cyclic);
-  const int slot = nc_sum_slot(n, order, cyclic);
-  const double dn = static_cast<double>(n);
-
-  double cbar = 0.0;
-  for (int g = 0; g < n_groups; g++) {
-    cbar += nc_sum_coord(z + g * n, n, order, cyclic);
-  }
-  cbar /= static_cast<double>(n_groups);
-
-  for (int g = 0; g < n_groups; g++) {
-    const double* zg = z + g * n;
-    double* out = gz + g * n;
-    if (slot >= 0) {
-      for (int k = 0; k < d; k++) out[k] += (k == slot) ? -cbar : -zg[k];
-      continue;
-    }
-    // Cyclic: the sum coordinate is the block's mean, so the increments are
-    // what is left once it is removed and the global direction reads it.
-    double mean = 0.0;
-    for (int t = 0; t < n; t++) mean += zg[t];
-    mean /= dn;
-    for (int t = 0; t < n; t++) out[t] += -(zg[t] - mean) - cbar / std::sqrt(dn);
-  }
-}
-
-// dL/dz and dL/d(log sigma2) from dL/dphi, for G blocks sharing one augmented
-// constant. The re-mixing is linear, so its adjoint is the primitive's adjoint
-// per block followed by the transpose of the split: a sum coordinate collects
-// the average of what the blocks send it, and the unscaled offset sends back
-// the deviation of its own block's likelihood sum.
-//
-// The block's own field is rebuilt here rather than read from the caller. The
-// sigma derivative is a dot product against the scaled part of phi, and the
-// unscaled offset the re-mixing adds is a per-group constant, which a
-// per-group likelihood sum does not annihilate the way the global one does.
-inline void rw_nc_grouped_backward(const double* g, const double* z, int n,
-                                   int n_groups, int order, bool cyclic,
-                                   double sigma, double* gz,
-                                   double* g_log_sigma2) {
-  const double dn = static_cast<double>(n);
-  const double dG = static_cast<double>(n_groups);
-  const double sqrt_n = std::sqrt(dn);
-  const int slot = nc_sum_slot(n, order, cyclic);
-  const bool grouped = nc_applies(n, order, cyclic) && n_groups > 1;
-
-  double cbar = 0.0;
-  if (grouped) {
-    for (int gg = 0; gg < n_groups; gg++) {
-      cbar += nc_sum_coord(z + gg * n, n, order, cyclic);
-    }
-    cbar /= dG;
-  }
-
-  std::vector<double> ghat(static_cast<size_t>(n) * n_groups, 0.0);
-  std::vector<double> zg(n, 0.0), phig(n, 0.0), lik_sum(n_groups, 0.0);
-  double lik_sum_bar = 0.0;
-  for (int gg = 0; gg < n_groups; gg++) {
-    if (grouped) {
-      nc_with_sum_coord(z + gg * n, n, order, cyclic, cbar, zg.data());
-    } else {
-      for (int t = 0; t < n; t++) zg[t] = z[gg * n + t];
-    }
-    rw_nc_forward(zg.data(), n, order, cyclic, sigma, phig.data());
-    double s = 0.0;
-    for (int t = 0; t < n; t++) s += g[gg * n + t];
-    lik_sum[gg] = s;
-    lik_sum_bar += s;
-    rw_nc_backward(g + gg * n, phig.data(), zg.data(), n, order, cyclic, sigma,
-                   ghat.data() + gg * n, g_log_sigma2);
-  }
-  if (!grouped) {
-    for (int k = 0; k < n * n_groups; k++) gz[k] += ghat[k];
-    return;
-  }
-  lik_sum_bar /= dG;
-
-  if (slot >= 0) {
-    double slot_total = 0.0;
-    for (int gg = 0; gg < n_groups; gg++) slot_total += ghat[gg * n + slot];
-    for (int gg = 0; gg < n_groups; gg++) {
-      for (int k = 0; k < n; k++) {
-        if (k != slot) gz[gg * n + k] += ghat[gg * n + k];
-      }
-      gz[gg * n + slot] +=
-          slot_total / dG + (lik_sum[gg] - lik_sum_bar) / sqrt_n;
-    }
-    return;
-  }
-
-  std::vector<double> mean_g(n_groups, 0.0);
-  double mean_bar = 0.0;
-  for (int gg = 0; gg < n_groups; gg++) {
-    double s = 0.0;
-    for (int t = 0; t < n; t++) s += ghat[gg * n + t];
-    mean_g[gg] = s / dn;
-    mean_bar += mean_g[gg];
-  }
-  mean_bar /= dG;
-  for (int gg = 0; gg < n_groups; gg++) {
-    const double off_share = (lik_sum[gg] - lik_sum_bar) / dn;
-    for (int t = 0; t < n; t++) {
-      gz[gg * n + t] += ghat[gg * n + t] - mean_g[gg] + mean_bar + off_share;
-    }
-  }
-}
-
 // log N(z; 0, I) over the coordinates that carry it. The free linear direction
 // of a non-cyclic RW2 keeps the flat prior the centred coordinate gave it, so
 // it contributes nothing here.
@@ -500,6 +240,60 @@ inline T rw_nc_log_prior(const T* z, int n, int order, bool cyclic) {
   T quad = T(0.0);
   for (int k = 0; k < d; k++) quad = quad + z[k] * z[k];
   return T(-0.5) * quad - T(0.5 * d) * T(std::log(2.0 * M_PI));
+}
+
+// =====================================================================
+// One walk per group
+// =====================================================================
+//
+// With G temporal groups each group's walk is its own intrinsic field: it is
+// centred on its own way into eta and its own constant is augmented, so the
+// prior is blockdiag(Q_g + 11'/n). A group's level then belongs to a group
+// intercept, which the walk cannot trade against, and the grouped transform is
+// the single-walk primitive applied block by block.
+
+// phi = sigma * A^{-1} z for each of G blocks of length n.
+template <typename T>
+inline void rw_nc_grouped_forward(const T* z, int n, int n_groups, int order,
+                                  bool cyclic, const T& sigma, T* phi) {
+  for (int g = 0; g < n_groups; g++) {
+    rw_nc_forward(z + g * n, n, order, cyclic, sigma, phi + g * n);
+  }
+}
+
+// log N(z; 0, I) over every block's coordinates that carry it.
+template <typename T>
+inline T rw_nc_grouped_log_prior(const T* z, int n, int n_groups, int order,
+                                 bool cyclic) {
+  T lp = T(0.0);
+  for (int g = 0; g < n_groups; g++) {
+    lp = lp + rw_nc_log_prior(z + g * n, n, order, cyclic);
+  }
+  return lp;
+}
+
+// d(rw_nc_grouped_log_prior)/dz, added to `gz`.
+inline void rw_nc_grouped_log_prior_grad(const double* z, int n, int n_groups,
+                                         int order, bool cyclic, double* gz) {
+  const int d = nc_normal_dim(n, order, cyclic);
+  for (int g = 0; g < n_groups; g++) {
+    for (int k = 0; k < d; k++) gz[g * n + k] -= z[g * n + k];
+  }
+}
+
+// dL/dz and dL/d(log sigma2) from dL/dphi, block by block. Each block's field
+// is rebuilt for the sigma derivative rather than read from the caller, whose
+// copy has been centred.
+inline void rw_nc_grouped_backward(const double* g, const double* z, int n,
+                                   int n_groups, int order, bool cyclic,
+                                   double sigma, double* gz,
+                                   double* g_log_sigma2) {
+  std::vector<double> phig(n, 0.0);
+  for (int gg = 0; gg < n_groups; gg++) {
+    rw_nc_forward(z + gg * n, n, order, cyclic, sigma, phig.data());
+    rw_nc_backward(g + gg * n, phig.data(), z + gg * n, n, order, cyclic,
+                   sigma, gz + gg * n, g_log_sigma2);
+  }
 }
 
 }  // namespace ratiod_temporal_nc

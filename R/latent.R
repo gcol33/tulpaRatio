@@ -14,24 +14,23 @@ NULL
 #' Latent Factor Specification
 #'
 #' @description
-#' Define latent factors for capturing unmeasured shared structure between
-#' numerator and denominator. Factors are observation-level random effects
-#' that enter both linear predictors when `shared = TRUE` (default).
+#' Define latent factors for capturing unmeasured structure shared between
+#' numerator and denominator. Each observation carries factor scores, and
+#' each process loads on them with its own loading, so the factors model the
+#' residual covariance of an observation's two linear predictors.
 #'
-#' @param n_factors Integer; number of latent factors. Default is 1.
-#'   More factors capture more complex unmeasured structure but increase
-#'   computational cost and risk overfitting.
-#' @param prior Prior for factor standard deviations. Default is a PC prior
-#'   with P(sigma > 1) = 0.01, which shrinks toward simpler models.
-#' @param shared Logical; if TRUE (default), latent factors enter both
-
-#'   numerator and denominator linear predictors identically. If FALSE,
-#'   factors only affect the numerator.
-#' @param constraint Identifiability constraint for factors:
-#'   - `"sum_to_zero"` (default): Factors sum to zero across observations
-#'   - `"first_zero"`: First observation's factor is fixed to zero
-#' @param scale Logical; if TRUE (default), factor loadings are standardized
-#'   to have unit variance before applying sigma.
+#' @param n_factors Integer; number of latent factors. Default is 1. With
+#'   `shared = TRUE` at most 2 factors are identified, with `shared = FALSE`
+#'   at most 1 (see Details).
+#' @param prior Prior for the diagonal loadings. Default is a PC prior with
+#'   P(loading > 1) = 0.01, which shrinks toward simpler models.
+#' @param shared Logical; if TRUE (default), the factors load on both the
+#'   numerator and the denominator linear predictor. If FALSE, they load on
+#'   the numerator only.
+#' @param constraint Identifiability constraint for the factor scores:
+#'   - `"sum_to_zero"` (default): each factor's scores sum to zero across
+#'     observations
+#'   - `"first_zero"`: the first observation's scores are fixed at zero
 #'
 #' @return A `ratiod_latent` object for use in [tratio()].
 #'
@@ -40,42 +39,54 @@ NULL
 #' ## Why Use Latent Factors?
 #'
 #' When modeling ratios, the numerator and denominator often share unmeasured
-#' confounders. For example, in relative abundance data, both the focal species
+#' drivers. For example, in relative abundance data, both the focal species
 #' count and total count might be affected by:
 #' - Observer skill (unmeasured)
 #' - Local microhabitat conditions (unmeasured)
 #' - Weather on sampling day (unmeasured)
 #'
-#' Without accounting for these shared drivers, ratio estimates can be biased.
 #' Latent factors capture this shared structure without requiring the
-#' confounders to be measured.
+#' drivers to be measured.
 #'
 #' ## Mathematical Model
 #'
 #' For observation i with K latent factors:
 #'
-#' \deqn{\eta^{num}_i = X^{num}_i \beta^{num} + \sum_{k=1}^{K} f_{ik} \sigma_k + \ldots}
-#' \deqn{\eta^{denom}_i = X^{denom}_i \beta^{denom} + \sum_{k=1}^{K} f_{ik} \sigma_k + \ldots}
+#' \deqn{\eta^{num}_i = X^{num}_i \beta^{num} + \sum_{k=1}^{K} \lambda_{1k} f_{ik} + \ldots}
+#' \deqn{\eta^{denom}_i = X^{denom}_i \beta^{denom} + \sum_{k=1}^{K} \lambda_{2k} f_{ik} + \ldots}
 #'
 #' where:
-#' - \eqn{f_{ik} \sim N(0, 1)} are standardized factor scores
-#' - \eqn{\sigma_k} are factor standard deviations with PC prior
-#' - Identifiability: \eqn{\sum_i f_{ik} = 0} for each k
+#' - \eqn{f_{ik} \sim N(0, 1)} are factor scores, with
+#'   \eqn{\sum_i f_{ik} = 0} for each k
+#' - \eqn{\Lambda = (\lambda_{pk})} is the loading matrix, lower triangular
+#'   with a positive diagonal
 #'
-#' Because factors enter both linear predictors identically (when shared),
-#' they cancel in the ratio:
+#' The factors add the covariance \eqn{\Lambda \Lambda^\top} between the two
+#' linear predictors of an observation. A 2 x 2 covariance has three free
+#' entries: one factor (two loadings) fills it up to rank one and two factors
+#' (three loadings) fill it completely, so a third factor would not be
+#' identified. Fixing \eqn{\Lambda} lower triangular with a positive diagonal
+#' makes it the Cholesky factor of that covariance, which is unique; without
+#' it the loadings and scores rotate freely.
 #'
-#' \deqn{ratio_i = \exp(\eta^{num}_i - \eta^{denom}_i)}
+#' The ratio's linear predictor gains
+#' \eqn{\sum_k (\lambda_{1k} - \lambda_{2k}) f_{ik}}: a factor that loads
+#' equally on both processes cancels in the ratio, one that loads unequally
+#' moves it.
 #'
-#' This means factors capture shared multiplicative effects that would
-#' otherwise bias the ratio.
+#' ## Priors
+#'
+#' Each diagonal loading carries `prior` (a PC prior by default). Each
+#' off-diagonal loading carries a normal prior centred at zero, with the
+#' standard deviation that gives \eqn{|\lambda|} the same 99% quantile as the
+#' diagonal prior.
 #'
 #' ## Choosing n_factors
 #'
-#' - Start with `n_factors = 1` for simple unmeasured confounding
-#' - Use `n_factors = 2-3` if you suspect multiple independent confounders
-#' - More than 3 factors is rarely needed and risks overfitting
-#' - The PC prior provides regularization, shrinking unneeded factors toward zero
+#' - `n_factors = 1`: one unmeasured driver acting on both processes, with
+#'   process-specific strength
+#' - `n_factors = 2`: an unrestricted residual covariance between the two
+#'   processes
 #'
 #' ## Relationship to Random Effects
 #'
@@ -85,13 +96,13 @@ NULL
 #' - Factors capture residual correlation not explained by observed predictors
 #'
 #' You can use both together: random effects for known grouping, factors for
-#' residual unmeasured confounding.
+#' residual unmeasured structure.
 #'
 #' @examples
-#' # Basic latent factor (single shared factor)
+#' # Basic latent factor (single factor on both processes)
 #' latent_factor()
 #'
-#' # Two latent factors
+#' # Two latent factors: an unrestricted residual covariance
 #' latent_factor(n_factors = 2)
 #'
 #' # Custom prior (more regularization)
@@ -127,8 +138,7 @@ latent_factor <- function(
     n_factors = 1L,
     prior = NULL,
     shared = TRUE,
-    constraint = c("sum_to_zero", "first_zero"),
-    scale = TRUE
+    constraint = c("sum_to_zero", "first_zero")
 ) {
 
   # Validate n_factors
@@ -143,7 +153,6 @@ latent_factor <- function(
     prior <- prior_pc(U = 1.0, alpha = 0.01)
   }
 
-
   # Validate prior
   if (!inherits(prior, "ratiod_prior")) {
     stop("`prior` must be a prior object (use prior_*() functions)", call. = FALSE)
@@ -154,21 +163,21 @@ latent_factor <- function(
     stop("`shared` must be TRUE or FALSE", call. = FALSE)
   }
 
+  n_proc <- if (shared) 2L else 1L
+  if (n_factors > n_proc) {
+    stop(n_factors, " latent factors on ", n_proc, " process(es): at most ",
+         n_proc, " are identified.", call. = FALSE)
+  }
+
   # Validate constraint
   constraint <- match.arg(constraint)
-
-  # Validate scale
-  if (!is.logical(scale) || length(scale) != 1) {
-    stop("`scale` must be TRUE or FALSE", call. = FALSE)
-  }
 
   structure(
     list(
       n_factors = n_factors,
       prior = prior,
       shared = shared,
-      constraint = constraint,
-      scale = scale
+      constraint = constraint
     ),
     class = c("ratiod_latent", "list")
   )
@@ -185,11 +194,10 @@ print.ratiod_latent <- function(x, ...) {
   cat("===========================\n\n")
 
   cat("Number of factors:", x$n_factors, "\n")
-  cat("Shared:", ifelse(x$shared, "Yes (enters both num and denom)", "No (numerator only)"), "\n")
-  cat("Constraint:", x$constraint, "\n")
-  cat("Scale:", ifelse(x$scale, "Yes", "No"), "\n\n")
+  cat("Shared:", ifelse(x$shared, "Yes (loads on both num and denom)", "No (numerator only)"), "\n")
+  cat("Constraint:", x$constraint, "\n\n")
 
-  cat("Factor SD prior:\n")
+  cat("Diagonal loading prior:\n")
   print_prior(x$prior, indent = "  ")
 
   invisible(x)
@@ -214,23 +222,13 @@ validate_latent <- function(latent, N) {
          call. = FALSE)
   }
 
-  # Check n_factors is reasonable for data size
   if (latent$n_factors >= N) {
     stop("Number of latent factors (", latent$n_factors,
          ") must be less than number of observations (", N, ")",
          call. = FALSE)
   }
 
-  # Warn if many factors relative to data
-  if (latent$n_factors > sqrt(N)) {
-    warning("Number of latent factors (", latent$n_factors,
-            ") is large relative to data size. Consider using fewer factors.",
-            call. = FALSE)
-  }
-
-  # Add computed fields
   latent$n_obs <- N
-  latent$n_params <- N * latent$n_factors + latent$n_factors  # factors + sigmas
 
   latent
 }
@@ -252,8 +250,8 @@ prepare_latent_for_hmc <- function(latent, N) {
       n_obs = as.integer(N),
       shared = FALSE,
       constraint = "sum_to_zero",
-      scale = TRUE,
-      sigma_prior_rate = 0.0  # Not used when type = "none"
+      sigma_prior_rate = 0.0,
+      offdiag_sd = 1.0
     ))
   }
 
@@ -277,57 +275,19 @@ prepare_latent_for_hmc <- function(latent, N) {
     -log(0.01) / 1.0  # PC prior default
   }
 
+  # An off-diagonal loading is signed: N(0, sd^2) with the sd that gives
+  # |lambda| the diagonal prior's 99% quantile
+  offdiag_sd <- (-log(0.01) / sigma_prior_rate) / stats::qnorm(0.995)
+
   list(
     type = "latent",
     n_factors = as.integer(latent$n_factors),
     n_obs = as.integer(N),
     shared = latent$shared,
     constraint = latent$constraint,
-    scale = latent$scale,
-    sigma_prior_rate = sigma_prior_rate
+    sigma_prior_rate = sigma_prior_rate,
+    offdiag_sd = offdiag_sd
   )
-}
-
-
-#' Initialize latent factor parameters
-#'
-#' @param latent_info Latent factor info from prepare_latent_for_hmc
-#' @param seed Optional random seed
-#'
-#' @return Numeric vector of initial parameter values
-#' @keywords internal
-initialize_latent_params <- function(latent_info, seed = NULL) {
-
-  if (latent_info$type == "none" || latent_info$n_factors == 0) {
-    return(numeric(0))
-  }
-
-  if (!is.null(seed)) set.seed(seed)
-
-  n_factors <- latent_info$n_factors
-  n_obs <- latent_info$n_obs
-
-  # Initialize log_sigma_factor (log scale, small positive values)
-  log_sigma_init <- rep(-1.0, n_factors)  # sigma ~ 0.37
-
-  # Initialize factor scores (standardized, sum-to-zero enforced)
-  factor_init <- matrix(rnorm(n_obs * n_factors, 0, 0.1), nrow = n_obs)
-
-  # Apply constraint
-  if (latent_info$constraint == "sum_to_zero") {
-    for (k in seq_len(n_factors)) {
-      factor_init[, k] <- factor_init[, k] - mean(factor_init[, k])
-    }
-  } else if (latent_info$constraint == "first_zero") {
-    for (k in seq_len(n_factors)) {
-      factor_init[, k] <- factor_init[, k] - factor_init[1, k]
-    }
-  }
-
-  # Flatten: [log_sigma_1, ..., log_sigma_K, f_1, ..., f_N*K]
-  # But exclude one observation per factor for identifiability
-  # Simpler: just return all and let C++ handle constraint
-  c(log_sigma_init, as.vector(t(factor_init)))
 }
 
 

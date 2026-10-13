@@ -17,7 +17,9 @@ temporal_rw2(
 (e.g., \code{~ year}) or a character string (e.g., \code{"year"}).}
 
 \item{group_var}{Optional name of grouping variable for panel data.
-If provided, separate random walks are estimated for each group.}
+If provided, separate random walks are estimated for each group. Each
+group's walk sums to zero over time, so it carries the group's trend and
+not its level; add a group intercept such as \code{(1 | site)} for the levels.}
 
 \item{cyclic}{Logical; if TRUE, the random walk wraps around (first and
 last time points are neighbors). Useful for seasonal data.}

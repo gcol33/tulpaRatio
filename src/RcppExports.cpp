@@ -446,53 +446,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_pg_binomial_gibbs_multiscale_gp
-Rcpp::List cpp_pg_binomial_gibbs_multiscale_gp(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::NumericMatrix coords, Rcpp::IntegerMatrix nn_idx_local, Rcpp::NumericMatrix nn_dist_local, Rcpp::IntegerVector nn_order_local, int nn_local, Rcpp::IntegerMatrix nn_idx_regional, Rcpp::NumericMatrix nn_dist_regional, Rcpp::IntegerVector nn_order_regional, int nn_regional, Rcpp::IntegerVector obs_to_loc, int n_spatial, double sigma2_local_init, double phi_local_init, double sigma2_regional_init, double phi_regional_init, int cov_type, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_local_U, double prior_sigma_local_alpha, double prior_phi_local_lower, double prior_phi_local_upper, double prior_sigma_regional_U, double prior_sigma_regional_alpha, double prior_phi_regional_lower, double prior_phi_regional_upper, bool store_eta, bool verbose, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_multiscale_gp(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP coordsSEXP, SEXP nn_idx_localSEXP, SEXP nn_dist_localSEXP, SEXP nn_order_localSEXP, SEXP nn_localSEXP, SEXP nn_idx_regionalSEXP, SEXP nn_dist_regionalSEXP, SEXP nn_order_regionalSEXP, SEXP nn_regionalSEXP, SEXP obs_to_locSEXP, SEXP n_spatialSEXP, SEXP sigma2_local_initSEXP, SEXP phi_local_initSEXP, SEXP sigma2_regional_initSEXP, SEXP phi_regional_initSEXP, SEXP cov_typeSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_local_USEXP, SEXP prior_sigma_local_alphaSEXP, SEXP prior_phi_local_lowerSEXP, SEXP prior_phi_local_upperSEXP, SEXP prior_sigma_regional_USEXP, SEXP prior_sigma_regional_alphaSEXP, SEXP prior_phi_regional_lowerSEXP, SEXP prior_phi_regional_upperSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type n(nSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type re_group(re_groupSEXP);
-    Rcpp::traits::input_parameter< int >::type n_re_groups(n_re_groupsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type coords(coordsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type nn_idx_local(nn_idx_localSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type nn_dist_local(nn_dist_localSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type nn_order_local(nn_order_localSEXP);
-    Rcpp::traits::input_parameter< int >::type nn_local(nn_localSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type nn_idx_regional(nn_idx_regionalSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type nn_dist_regional(nn_dist_regionalSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type nn_order_regional(nn_order_regionalSEXP);
-    Rcpp::traits::input_parameter< int >::type nn_regional(nn_regionalSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type obs_to_loc(obs_to_locSEXP);
-    Rcpp::traits::input_parameter< int >::type n_spatial(n_spatialSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma2_local_init(sigma2_local_initSEXP);
-    Rcpp::traits::input_parameter< double >::type phi_local_init(phi_local_initSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma2_regional_init(sigma2_regional_initSEXP);
-    Rcpp::traits::input_parameter< double >::type phi_regional_init(phi_regional_initSEXP);
-    Rcpp::traits::input_parameter< int >::type cov_type(cov_typeSEXP);
-    Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
-    Rcpp::traits::input_parameter< int >::type n_warmup(n_warmupSEXP);
-    Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_beta_sd(prior_beta_sdSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_sigma_re_scale(prior_sigma_re_scaleSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_sigma_local_U(prior_sigma_local_USEXP);
-    Rcpp::traits::input_parameter< double >::type prior_sigma_local_alpha(prior_sigma_local_alphaSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_phi_local_lower(prior_phi_local_lowerSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_phi_local_upper(prior_phi_local_upperSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_sigma_regional_U(prior_sigma_regional_USEXP);
-    Rcpp::traits::input_parameter< double >::type prior_sigma_regional_alpha(prior_sigma_regional_alphaSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_phi_regional_lower(prior_phi_regional_lowerSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_phi_regional_upper(prior_phi_regional_upperSEXP);
-    Rcpp::traits::input_parameter< bool >::type store_eta(store_etaSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_multiscale_gp(y, n, X, re_group, n_re_groups, coords, nn_idx_local, nn_dist_local, nn_order_local, nn_local, nn_idx_regional, nn_dist_regional, nn_order_regional, nn_regional, obs_to_loc, n_spatial, sigma2_local_init, phi_local_init, sigma2_regional_init, phi_regional_init, cov_type, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_local_U, prior_sigma_local_alpha, prior_phi_local_lower, prior_phi_local_upper, prior_sigma_regional_U, prior_sigma_regional_alpha, prior_phi_regional_lower, prior_phi_regional_upper, store_eta, verbose, n_threads));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_pg_binomial_gibbs_rsr
 Rcpp::List cpp_pg_binomial_gibbs_rsr(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, Rcpp::NumericMatrix rsr_design, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, bool store_eta, bool verbose, int n_threads);
 RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_rsr(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP rsr_designSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
@@ -828,6 +781,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_time_gradient
+double cpp_time_gradient(std::string field, int n_rep, int n_obs, int n_units, int n_times, unsigned int seed, std::string family);
+RcppExport SEXP _tulpaRatio_cpp_time_gradient(SEXP fieldSEXP, SEXP n_repSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP, SEXP seedSEXP, SEXP familySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rep(n_repSEXP);
+    Rcpp::traits::input_parameter< int >::type n_obs(n_obsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_units(n_unitsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_time_gradient(field, n_rep, n_obs, n_units, n_times, seed, family));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_logpost_at
 double cpp_logpost_at(std::string field, int n_obs, int n_units, int n_times, unsigned int seed, std::string family, bool temporal_shared, std::string zi);
 RcppExport SEXP _tulpaRatio_cpp_logpost_at(SEXP fieldSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP, SEXP seedSEXP, SEXP familySEXP, SEXP temporal_sharedSEXP, SEXP ziSEXP) {
@@ -846,20 +816,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_msgp_nc_coordinate_spread
-double cpp_msgp_nc_coordinate_spread(int n_obs, int n_units, int n_draws, unsigned int seed);
-RcppExport SEXP _tulpaRatio_cpp_msgp_nc_coordinate_spread(SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_drawsSEXP, SEXP seedSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type n_obs(n_obsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_units(n_unitsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_msgp_nc_coordinate_spread(n_obs, n_units, n_draws, seed));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_st_gp_nc_coordinate_spread
 double cpp_st_gp_nc_coordinate_spread(std::string field, int n_draws, unsigned int seed);
 RcppExport SEXP _tulpaRatio_cpp_st_gp_nc_coordinate_spread(SEXP fieldSEXP, SEXP n_drawsSEXP, SEXP seedSEXP) {
@@ -870,6 +826,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_st_gp_nc_coordinate_spread(field, n_draws, seed));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_st_collapsed_exactness
+double cpp_st_collapsed_exactness(std::string field, int n_draws, unsigned int seed, int n_obs, int n_units, int n_times);
+RcppExport SEXP _tulpaRatio_cpp_st_collapsed_exactness(SEXP fieldSEXP, SEXP n_drawsSEXP, SEXP seedSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
+    Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< int >::type n_obs(n_obsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_units(n_unitsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_st_collapsed_exactness(field, n_draws, seed, n_obs, n_units, n_times));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -889,19 +861,15 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_ms_temporal_nc_group_contrast_flat
-double cpp_ms_temporal_nc_group_contrast_flat(std::string field, int n, int n_groups, double sigma2, int n_draws, unsigned int seed);
-RcppExport SEXP _tulpaRatio_cpp_ms_temporal_nc_group_contrast_flat(SEXP fieldSEXP, SEXP nSEXP, SEXP n_groupsSEXP, SEXP sigma2SEXP, SEXP n_drawsSEXP, SEXP seedSEXP) {
+// cpp_polygamma
+Rcpp::NumericVector cpp_polygamma(int n, Rcpp::NumericVector x);
+RcppExport SEXP _tulpaRatio_cpp_polygamma(SEXP nSEXP, SEXP xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type n_groups(n_groupsSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma2(sigma2SEXP);
-    Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_ms_temporal_nc_group_contrast_flat(field, n, n_groups, sigma2, n_draws, seed));
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_polygamma(n, x));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1898,7 +1866,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_pg_nngp_log_density_probe", (DL_FUNC) &_tulpaRatio_cpp_pg_nngp_log_density_probe, 9},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_gp", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_gp, 27},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_temporal", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_temporal, 22},
-    {"_tulpaRatio_cpp_pg_binomial_gibbs_multiscale_gp", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_multiscale_gp, 37},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_rsr", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_rsr, 20},
     {"_tulpaRatio_cpp_pg_negbin_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_gibbs, 15},
     {"_tulpaRatio_cpp_pg_negbin_negbin_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_negbin_gibbs, 19},
@@ -1916,11 +1883,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_gradient_dispatch", (DL_FUNC) &_tulpaRatio_cpp_gradient_dispatch, 6},
     {"_tulpaRatio_cpp_gradient_check", (DL_FUNC) &_tulpaRatio_cpp_gradient_check, 16},
     {"_tulpaRatio_cpp_gradient_race", (DL_FUNC) &_tulpaRatio_cpp_gradient_race, 10},
+    {"_tulpaRatio_cpp_time_gradient", (DL_FUNC) &_tulpaRatio_cpp_time_gradient, 7},
     {"_tulpaRatio_cpp_logpost_at", (DL_FUNC) &_tulpaRatio_cpp_logpost_at, 8},
-    {"_tulpaRatio_cpp_msgp_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_msgp_nc_coordinate_spread, 4},
     {"_tulpaRatio_cpp_st_gp_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_st_gp_nc_coordinate_spread, 3},
+    {"_tulpaRatio_cpp_st_collapsed_exactness", (DL_FUNC) &_tulpaRatio_cpp_st_collapsed_exactness, 6},
     {"_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread, 6},
-    {"_tulpaRatio_cpp_ms_temporal_nc_group_contrast_flat", (DL_FUNC) &_tulpaRatio_cpp_ms_temporal_nc_group_contrast_flat, 6},
+    {"_tulpaRatio_cpp_polygamma", (DL_FUNC) &_tulpaRatio_cpp_polygamma, 2},
     {"_tulpaRatio_cpp_test_leapfrog", (DL_FUNC) &_tulpaRatio_cpp_test_leapfrog, 4},
     {"_tulpaRatio_cpp_test_hamiltonian", (DL_FUNC) &_tulpaRatio_cpp_test_hamiltonian, 2},
     {"_tulpaRatio_cpp_test_log_sum_exp", (DL_FUNC) &_tulpaRatio_cpp_test_log_sum_exp, 1},
