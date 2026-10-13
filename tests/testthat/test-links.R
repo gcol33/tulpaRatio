@@ -2,26 +2,21 @@
 # of the log posterior, a model simulated under a link is recovered under it,
 # and the samplers written for the canonical links refuse the others.
 
-link_rel_dev <- function(r, atol = 1e-6) {
-  max(pmax(0, abs(r$analytic - r$finite_diff) - atol) /
-        pmax(1e-6, pmax(abs(r$analytic), abs(r$finite_diff))))
-}
-
 test_that("probability links have the gradient of their log posterior", {
   for (link in c("probit", "cloglog")) {
     for (field in c("none", "re", "icar")) {
       r <- tulpaRatio:::cpp_gradient_check(field, family = "binomial",
                                            link_num = link)
-      expect_lt(link_rel_dev(r), 1e-4, label = paste(field, link))
+      expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste(field, link))
     }
     for (zi in c("zi_binomial", "hurdle_binomial", "zoib")) {
       r <- tulpaRatio:::cpp_gradient_check("none", family = "binomial", zi = zi,
                                            link_num = link, link_inflation = link)
-      expect_lt(link_rel_dev(r), 1e-4, label = paste(zi, link))
+      expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste(zi, link))
     }
     r <- tulpaRatio:::cpp_gradient_check("none", family = "poisson_gamma",
                                          zi = "zi_poisson", link_inflation = link)
-    expect_lt(link_rel_dev(r), 1e-4, label = paste("zi_poisson", link))
+    expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste("zi_poisson", link))
   }
 })
 
@@ -31,7 +26,7 @@ test_that("gamma mean links have the gradient of their log posterior", {
       for (field in c("none", "re")) {
         r <- tulpaRatio:::cpp_gradient_check(field, family = family,
                                              link_denom = link)
-        expect_lt(link_rel_dev(r), 1e-4, label = paste(family, field, link))
+        expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste(family, field, link))
       }
     }
   }

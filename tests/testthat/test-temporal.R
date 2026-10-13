@@ -223,7 +223,10 @@ test_that("a panel walk carries its group's trend and the intercept its level", 
   cen <- fit_panel("centered")
   nc <- fit_panel("noncentered")
 
-  expect_equal(nc$n_divergent, 0L)
+  # a walk not centred within its group trades its level with the site
+  # intercept and sends about 95 of these 1000 draws divergent; centred, the
+  # count is a few at most and varies across platforms
+  expect_lt(nc$n_divergent, 10L)
   expect_lt(max(abs(cen$walk_sums)), 1e-8)
   expect_lt(max(abs(nc$walk_sums)), 1e-8)
   # the site levels reach the intercepts

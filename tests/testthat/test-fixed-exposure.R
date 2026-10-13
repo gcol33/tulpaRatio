@@ -3,17 +3,12 @@
 # posterior, recovers the model it was simulated from, and reports the rate as
 # its ratio.
 
-exposure_rel_dev <- function(r, atol = 1e-6) {
-  max(pmax(0, abs(r$analytic - r$finite_diff) - atol) /
-        pmax(1e-6, pmax(abs(r$analytic), abs(r$finite_diff))))
-}
-
 test_that("the new pairs have the gradient of their log posterior", {
   for (family in c("poisson_fixed", "negbin_fixed", "lognormal_fixed",
                    "poisson_negbin")) {
     for (field in c("none", "re", "icar")) {
       r <- tulpaRatio:::cpp_gradient_check(field, family = family)
-      expect_lt(exposure_rel_dev(r), 1e-4, label = paste(family, field))
+      expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste(family, field))
     }
   }
   inflated <- list(poisson_fixed = c("zi_poisson", "hurdle_poisson"),
@@ -22,7 +17,7 @@ test_that("the new pairs have the gradient of their log posterior", {
   for (family in names(inflated)) {
     for (zi in inflated[[family]]) {
       r <- tulpaRatio:::cpp_gradient_check("none", family = family, zi = zi)
-      expect_lt(exposure_rel_dev(r), 1e-4, label = paste(family, zi))
+      expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste(family, zi))
     }
   }
 })

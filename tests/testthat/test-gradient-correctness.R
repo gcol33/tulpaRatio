@@ -203,28 +203,12 @@ AUTODIFF_MODES <- c("arena", "forward", "tape")
 # The same three under the names the front door takes.
 AUTODIFF_MODES_STR <- c("A_r", "A", "A_t")
 
-# Relative deviation per parameter, with an absolute allowance first.
-#
-# A central difference of a log posterior of magnitude L with step h carries a
-# roundoff error of about eps*L/h, which for L ~ 1e3-1e4 and h = 1e-5 is around
-# 1e-7. A purely relative criterion demands more than that from any entry whose
-# true value is small: the HSGP basis coefficients run to 6e-4, where 1e-4
-# relative is 6e-8, below what the difference can resolve. Sweeping h on that
-# field traces the expected V (1.2e-4 at h = 1e-3, 1.5e-7 at h = 1e-5, 6.3e-6 at
-# h = 1e-7) rather than the flat line a missing term would give. A term actually
-# absent from one side is wrong by order 1, so the allowance cannot hide one.
-GRAD_ATOL <- 1e-6
-
-rel_dev <- function(a, f, atol = GRAD_ATOL) {
-  pmax(0, abs(a - f) - atol) / pmax(1e-6, pmax(abs(a), abs(f)))
-}
-
 for (field in FIELDS) {
   for (mode in MODES) {
     test_that(sprintf("analytic gradient matches finite differences (%s, %s)", field, mode), {
       r <- tulpaRatio:::cpp_gradient_check(field, mode = mode)
       expect_gt(r$n_params, 0)
-      dev <- rel_dev(r$analytic, r$finite_diff)
+      dev <- grad_rel_dev(r)
       worst <- which.max(dev)
       expect_lt(
         max(dev),
@@ -245,7 +229,7 @@ for (field in COLLAPSED_TEMPORAL_FIELDS) {
   test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded")
     expect_gt(r$n_params, 0)
-    dev <- rel_dev(r$analytic, r$finite_diff)
+    dev <- grad_rel_dev(r)
     worst <- which.max(dev)
     expect_lt(
       max(dev),
@@ -262,7 +246,7 @@ for (field in DISPATCH_MASK_COLLAPSED_FIELDS) {
   test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded")
     expect_gt(r$n_params, 0)
-    dev <- rel_dev(r$analytic, r$finite_diff)
+    dev <- grad_rel_dev(r)
     worst <- which.max(dev)
     expect_lt(
       max(dev),
@@ -320,7 +304,7 @@ for (field in CAR_PROPER_FIELDS) {
   test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded")
     expect_gt(r$n_params, 0)
-    dev <- rel_dev(r$analytic, r$finite_diff)
+    dev <- grad_rel_dev(r)
     worst <- which.max(dev)
     expect_lt(
       max(dev),
@@ -340,7 +324,7 @@ for (field in c(MULTI_FIELDS, STRUCTURE_FIELDS, ST_IV_FIELDS,
     test_that(sprintf("analytic gradient matches finite differences (%s, %s)", field, mode), {
       r <- tulpaRatio:::cpp_gradient_check(field, mode = mode)
       expect_gt(r$n_params, 0)
-      dev <- rel_dev(r$analytic, r$finite_diff)
+      dev <- grad_rel_dev(r)
       worst <- which.max(dev)
       expect_lt(
         max(dev),
@@ -372,7 +356,7 @@ for (field in ALL_FIELDS) {
         label = sprintf("%s/%s: zero-gradient blocks %s", field, mode,
                         paste(unique(r$block[zero]), collapse = ", "))
       )
-      expect_lt(max(rel_dev(r$analytic, r$finite_diff)), 1e-4)
+      expect_lt(max(grad_rel_dev(r)), 1e-4)
     })
   }
 }
@@ -391,7 +375,7 @@ for (field in c("rw1", "rw2", "icar_rw1")) {
         r <- tulpaRatio:::cpp_gradient_check(field, mode = mode,
                                              family = "poisson_gamma",
                                              temporal_shared = shared)
-        dev <- rel_dev(r$analytic, r$finite_diff)
+        dev <- grad_rel_dev(r)
         worst <- which.max(dev)
         expect_lt(
           max(dev),
@@ -435,7 +419,7 @@ for (case in ZI_COUNT_CASES) {
       # true of a model with no zero-inflation in it.
       expect_true("beta_zi" %in% r$block)
       expect_true(all(r$analytic[r$block == "beta_zi"] != 0))
-      dev <- rel_dev(r$analytic, r$finite_diff)
+      dev <- grad_rel_dev(r)
       worst <- which.max(dev)
       expect_lt(
         max(dev),
@@ -469,7 +453,7 @@ PER_OBS_ZI_CASES <- c(ZI_COUNT_CASES, list(
 check_per_obs <- function(field, family, zi = "none") {
   r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded",
                                        family = family, zi = zi)
-  dev <- rel_dev(r$analytic, r$finite_diff)
+  dev <- grad_rel_dev(r)
   worst <- which.max(dev)
   expect_lt(
     max(dev), 1e-4,
@@ -586,7 +570,7 @@ for (field in KERNEL_FIELDS) {
     test_that(sprintf("analytic gradient matches finite differences (%s, %s)", field, mode), {
       r <- tulpaRatio:::cpp_gradient_check(field, mode = mode)
       expect_gt(r$n_params, 0)
-      dev <- rel_dev(r$analytic, r$finite_diff)
+      dev <- grad_rel_dev(r)
       worst <- which.max(dev)
       expect_lt(
         max(dev),
@@ -604,7 +588,7 @@ for (field in KERNEL_COLLAPSED_FIELDS) {
   test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded")
     expect_gt(r$n_params, 0)
-    dev <- rel_dev(r$analytic, r$finite_diff)
+    dev <- grad_rel_dev(r)
     worst <- which.max(dev)
     expect_lt(
       max(dev),
@@ -647,7 +631,7 @@ for (field in names(BLOCKED_FIELDS)) {
   test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
     skip(paste("blocked on", BLOCKED_FIELDS[[field]]))
     r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded")
-    dev <- rel_dev(r$analytic, r$finite_diff)
+    dev <- grad_rel_dev(r)
     worst <- which.max(dev)
     expect_lt(
       max(dev),
