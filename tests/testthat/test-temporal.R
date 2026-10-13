@@ -195,6 +195,14 @@ test_that("a panel walk carries its group's trend and the intercept its level", 
                    count = rpois(n_t * n_s, exp(2.5 + 0.3 * x + eff)),
                    effort = rgamma(n_t * n_s, shape = 3, rate = exp(-eff)))
 
+  # Monte Carlo standard error of each column mean from 20 batch means
+  batch_mcse <- function(d, n_batch = 20L) {
+    n <- nrow(d) %/% n_batch * n_batch
+    b <- rowsum(d[seq_len(n), , drop = FALSE],
+                rep(seq_len(n_batch), each = n / n_batch)) / (n / n_batch)
+    apply(b, 2, stats::sd) / sqrt(n_batch)
+  }
+
   fit_panel <- function(par) {
     fit <- suppressWarnings(
       tratio(count | effort ~ x + (1 | site), data = df,
@@ -211,6 +219,7 @@ test_that("a panel walk carries its group's trend and the intercept its level", 
       n_divergent = sum(unlist(fit$diagnostics$divergent)),
       walk_sums = apply(draws, 1, function(d) tapply(d, group, sum)),
       field = colMeans(draws),
+      field_mcse = batch_mcse(draws),
       # contrasts between sites: their common mean trades with the intercept
       re = {
         re <- colMeans(dr[, paste0("re[", seq_len(n_s), "]")])
@@ -231,7 +240,10 @@ test_that("a panel walk carries its group's trend and the intercept its level", 
   expect_lt(max(abs(nc$walk_sums)), 1e-8)
   # the site levels reach the intercepts
   expect_gt(stats::cor(cen$re, level), 0.9)
-  expect_lt(max(abs(nc$field - cen$field)), 0.05)
+  # each walk mean carries a Monte Carlo error of about 0.01; across the 96
+  # entries the largest gap between the coordinates is a few of those
+  expect_lt(max(abs(nc$field - cen$field) /
+                sqrt(nc$field_mcse^2 + cen$field_mcse^2)), 5)
   expect_lt(max(abs(nc$re - cen$re)), 0.1)
   expect_lt(abs(nc$slope - cen$slope), 0.02)
 })
