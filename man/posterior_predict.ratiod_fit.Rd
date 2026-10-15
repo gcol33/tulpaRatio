@@ -15,10 +15,12 @@ uses every draw; a smaller number takes a random subsample.}
 \item{...}{Unused.}
 }
 \value{
-A list with \code{y_num_rep} and \code{y_denom_rep}, each a draws-by-observation
-matrix, plus \code{y_num} and \code{y_denom}, the observed responses. A family with a
-fixed denominator (the binomial arms, whose denominator is the trial count)
-reports the trials as \code{y_denom_rep}.
+An object of class \code{ratiod_ppred} holding the replicated numerator
+and denominator, each a draws-by-observation matrix that
+\link[=as.matrix.ratiod_priorpred]{as.matrix()} returns, and the observed
+responses. A family with a fixed denominator (the binomial arms, whose
+denominator is the trial count) reports the trials as the replicated
+denominator.
 }
 \description{
 Draw replicated numerator and denominator responses from the posterior
@@ -40,7 +42,8 @@ fit <- tratio(count | total ~ x, data = df,
               family = ratiod_poisson_gamma(),
               control = list(iter = 400, chains = 1, seed = 1))
 rep <- posterior_predict(fit, ndraws = 50)
-dim(rep$y_num_rep)
+rep
+dim(as.matrix(rep, component = "numerator"))
 }
 
 }

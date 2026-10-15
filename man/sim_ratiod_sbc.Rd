@@ -41,24 +41,30 @@ Generate multiple simulated datasets for simulation-based calibration (SBC).
 Each dataset is generated with parameters drawn from the prior.
 }
 \examples{
-# Generate datasets for SBC (returns immediately)
+# Parameters are drawn from the priors the fits below use
+priors <- ratiod_priors(beta = prior_normal(0, 1),
+                        sigma = prior_half_cauchy(0.5))
 sims <- sim_ratiod_sbc(
   n_sims = 3,
   n = 30,
   family = ratiod_negbin_negbin(),
+  priors = priors,
   seed = 42
 )
 print(sims)
 
 \donttest{
-# Fit model to each simulation
-# ranks <- lapply(sims, function(sim) {
-#   fit <- tratio(y_num | y_denom ~ x1 + (1 | group),
-#                data = sim$data,
-#                family = ratiod_negbin_negbin(),
-#                control = list(iter = 400, chains = 1, seed = 1))
-#   sum(as.matrix(fit$draws)[, "beta_num[1]"] < sim$true_params$beta_num[1])
-# })
+# Rank of each true coefficient among its posterior draws
+ranks <- t(sapply(sims, function(sim) {
+  fit <- tratio(y_num | y_denom ~ x1 + (1 | group),
+                data = as.data.frame(sim),
+                family = ratiod_negbin_negbin(), priors = priors,
+                control = list(iter = 400, chains = 1, seed = 1))
+  beta <- c("beta_num[1]", "beta_num[2]", "beta_denom[1]", "beta_denom[2]")
+  draws <- as.matrix(draws_wide(fit, "beta_num", "beta_denom")[, beta])
+  colSums(sweep(draws, 2, coef(sim), "<"))
+}))
+ranks
 }
 
 }

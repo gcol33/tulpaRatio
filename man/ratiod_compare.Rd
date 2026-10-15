@@ -20,10 +20,10 @@ Compare multiple ratio models using LOO-CV or WAIC.
 \examples{
 \donttest{
 sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
               family = ratiod_poisson_gamma(),
               control = list(iter = 1000, chains = 2, seed = 1))
-fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = as.data.frame(sim),
                family = ratiod_poisson_gamma(),
                control = list(iter = 1000, chains = 2, seed = 1))
 ratiod_compare(fit0, fit)

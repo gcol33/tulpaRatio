@@ -26,6 +26,12 @@ validate_response <- function(y, dist, name) {
     if (any(y != floor(y), na.rm = TRUE)) {
       stop(sprintf("%s response must be integer counts", name), call. = FALSE)
     }
+    # the samplers hold counts as 32-bit integers
+    n_big <- sum(y > .Machine$integer.max, na.rm = TRUE)
+    if (n_big > 0) {
+      stop(sprintf("%s response has %d count(s) above %d, the largest the samplers hold.",
+                   name, n_big, .Machine$integer.max), call. = FALSE)
+    }
   } else if (dist %in% c("gamma", "lognormal")) {
     # Must be positive
     if (!is.numeric(y)) {

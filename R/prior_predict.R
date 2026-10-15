@@ -189,11 +189,11 @@ pp_has_dispersion <- function(distribution) {
 #' @param priors A `ratiod_priors` object. Defaults to `ratiod_priors()`.
 #' @param n Number of prior predictive draws.
 #'
-#' @return An object of class `ratiod_priorpred`: a list with the `n` x `N`
-#'   matrices `y_num`, `y_denom`, `ratio`, `mu_num` and `mu_denom`, the drawn
-#'   coefficients `beta_num` and `beta_denom`, the drawn random-effect scales
-#'   `sigma`, the drawn dispersions `phi_num` and `phi_denom`, and the `family`
-#'   and `data` the draws were taken on.
+#' @return An object of class `ratiod_priorpred` holding `n` draws of the
+#'   ratio, the numerator and the denominator at each of the `N` rows of
+#'   `data`, which [as.matrix()][as.matrix.ratiod_priorpred] returns as
+#'   `n` x `N` matrices, together with the parameter values each draw was
+#'   generated from.
 #'
 #' @examples
 #' set.seed(1)
@@ -210,8 +210,8 @@ pp_has_dispersion <- function(distribution) {
 #'   data = df,
 #'   n = 50
 #' )
-#' dim(pp$ratio)
-#' summary(as.vector(pp$ratio))
+#' pp
+#' dim(as.matrix(pp))
 #'
 #' # A tighter coefficient prior narrows the predicted ratios
 #' pp_tight <- prior_predict(
@@ -221,6 +221,7 @@ pp_has_dispersion <- function(distribution) {
 #'   priors = ratiod_priors(beta = prior_normal(0, 0.5)),
 #'   n = 50
 #' )
+#' pp_tight
 #'
 #' @seealso [sim_ratiod()] for simulating from a known parameterisation,
 #'   [ratiod_priors()] for the prior specification

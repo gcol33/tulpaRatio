@@ -69,7 +69,9 @@ available samples for HMC/PG.}
 }
 \value{
 If \code{summary = TRUE}, a data frame with posterior summaries.
-If \code{summary = FALSE}, a matrix of posterior draws (rows = draws, cols = obs).
+If \code{summary = FALSE}, a \code{ratiod_prediction_draws} object with one
+draws-by-row matrix per component, which
+\link[=as.matrix.ratiod_priorpred]{as.matrix()} returns.
 If \code{return_spatial = TRUE}, returns a list with \code{predictions} and \code{w.0.samples}.
 }
 \description{
@@ -105,7 +107,7 @@ new_df <- data.frame(depth = c(-1, 0, 1), season = "summer")
 predict(fit, newdata = new_df)
 
 # Full posterior draws of the predicted ratio (draws x rows)
-dim(predict(fit, newdata = new_df, summary = FALSE)$ratio)
+dim(as.matrix(predict(fit, newdata = new_df, summary = FALSE)))
 
 # Spatial prediction at new locations (kriging) from a GP fit
 fit_gp <- tratio(

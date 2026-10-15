@@ -1272,7 +1272,7 @@ print_diagnostics_summary <- function(object) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' draws <- as.data.frame(fit)
@@ -1557,7 +1557,7 @@ plot_with_base <- function(draws_array, type, n_chains, n_col = NULL) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' diagnostics(fit)
@@ -1638,7 +1638,7 @@ print.ratiod_diagnostics <- function(x, ...) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' check_diagnostics(fit)
@@ -1750,7 +1750,7 @@ check_diagnostics <- function(fit, quiet = FALSE) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' n_divergent(fit)

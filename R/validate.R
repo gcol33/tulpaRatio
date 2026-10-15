@@ -7,7 +7,7 @@
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' if (requireNamespace("ggplot2", quietly = TRUE)) {
@@ -488,7 +488,7 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' loo(fit)
@@ -522,7 +522,7 @@ loo.ratiod_fit <- function(x, ...) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
 #' # waic() warns when an observation's p_waic exceeds 0.4; loo() is then
@@ -553,10 +553,10 @@ waic.ratiod_fit <- function(x, ...) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
-#' fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+#' fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = as.data.frame(sim),
 #'                family = ratiod_poisson_gamma(),
 #'                control = list(iter = 1000, chains = 2, seed = 1))
 #' ratiod_compare(fit0, fit)
@@ -635,10 +635,10 @@ ratiod_compare <- function(..., criterion = c("loo", "waic")) {
 #' @examples
 #' \donttest{
 #' sim <- sim_ratiod(n = 100, family = ratiod_poisson_gamma(), seed = 1)
-#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = sim$data,
+#' fit <- tratio(y_num | y_denom ~ x1 + (1 | group), data = as.data.frame(sim),
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 1000, chains = 2, seed = 1))
-#' fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = sim$data,
+#' fit0 <- tratio(y_num | y_denom ~ 1 + (1 | group), data = as.data.frame(sim),
 #'                family = ratiod_poisson_gamma(),
 #'                control = list(iter = 1000, chains = 2, seed = 1))
 #' avg <- ratiod_average(fit0, fit)

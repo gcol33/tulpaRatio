@@ -30,11 +30,11 @@ the prior predictive distribution depends on the observed response.}
 \item{...}{Ignored}
 }
 \value{
-An object of class \code{ratiod_priorpred}: a list with the \code{n} x \code{N}
-matrices \code{y_num}, \code{y_denom}, \code{ratio}, \code{mu_num} and \code{mu_denom}, the drawn
-coefficients \code{beta_num} and \code{beta_denom}, the drawn random-effect scales
-\code{sigma}, the drawn dispersions \code{phi_num} and \code{phi_denom}, and the \code{family}
-and \code{data} the draws were taken on.
+An object of class \code{ratiod_priorpred} holding \code{n} draws of the
+ratio, the numerator and the denominator at each of the \code{N} rows of
+\code{data}, which \link[=as.matrix.ratiod_priorpred]{as.matrix()} returns as
+\code{n} x \code{N} matrices, together with the parameter values each draw was
+generated from.
 
 \code{x}, invisibly
 }
@@ -66,8 +66,8 @@ pp <- prior_predict(
   data = df,
   n = 50
 )
-dim(pp$ratio)
-summary(as.vector(pp$ratio))
+pp
+dim(as.matrix(pp))
 
 # A tighter coefficient prior narrows the predicted ratios
 pp_tight <- prior_predict(
@@ -77,6 +77,7 @@ pp_tight <- prior_predict(
   priors = ratiod_priors(beta = prior_normal(0, 0.5)),
   n = 50
 )
+pp_tight
 
 }
 \seealso{

@@ -473,9 +473,12 @@ and deep trees. `parameterization = "collapsed"` integrates the interaction
 out with a Laplace approximation inside HMC, so the sampler moves only its
 three hyperparameters beside the other blocks, and the interaction is drawn
 from its Gaussian approximation at each saved iteration. On this model the
-two chains above take about five minutes on one core each and reach
-`rhat` of 1.00 for every hyperparameter, where the centred interaction takes
-about 390 leapfrog steps per draw.
+two chains above take about five minutes on one core each, at about 20
+leapfrog steps per draw where the centred interaction takes about 390. The
+spatial range of the interaction can settle beyond the extent of the grid,
+where the field is nearly constant in space and the data say little about its
+precision; `rhat` and the divergent transitions of `tau_st` and
+`phi_st_space` show whether the chains did.
 
 Non-separability types:
 

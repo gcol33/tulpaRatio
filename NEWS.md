@@ -1,5 +1,20 @@
 # tulpaRatio 1.7.3
 
+* Predictive and simulated objects have accessors. `as.matrix()` returns the
+  draws-by-observation matrix of one component (`"ratio"`, `"numerator"`,
+  `"denominator"`) from `prior_predict()`, `posterior_predict()` and
+  `predict(summary = FALSE)`; `posterior_predict()` now returns a
+  `ratiod_ppred` object, and it and `ratiod_prediction_draws` print a short
+  summary. `as.data.frame()` and `coef()` return the data and the true fixed
+  effects of `sim_ratiod()`, named as `coef()` names those of a fit. The
+  examples read results through these instead of `$`, and the
+  `sim_ratiod_sbc()` example now runs its rank computation, with the priors
+  the simulations were drawn from.
+
+* A count response above 2147483647 is refused with a message (#150). The
+  samplers hold counts as 32-bit integers, and such a count became `NA` with
+  only a coercion warning.
+
 * `latent_factor()` gives each process its own loading on each factor (#134).
   The loading matrix is lower triangular with a positive diagonal, so one
   factor adds a rank-one and two factors a full residual covariance between
@@ -52,7 +67,8 @@
   centred ones took 10. For a likelihood Gaussian in the interaction the
   approximation is exact, and a test checks the density against the centred
   one there to 1e-8. It needs a log-concave family with canonical links and
-  no inflation.
+  no inflation. On the vignette's model the chains can settle at a spatial
+  range beyond the grid, with several hundred divergent transitions (#151).
 
 * The composite and latent-factor gradients read an observation's residuals
   and dispersion derivatives from the log posterior's own per-observation

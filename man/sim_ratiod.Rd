@@ -3,6 +3,8 @@
 \name{sim_ratiod}
 \alias{sim_ratiod}
 \alias{print.ratiod_simdata}
+\alias{as.data.frame.ratiod_simdata}
+\alias{coef.ratiod_simdata}
 \title{Simulate Data from Ratio Models}
 \usage{
 sim_ratiod(
@@ -21,6 +23,10 @@ sim_ratiod(
 )
 
 \method{print}{ratiod_simdata}(x, ...)
+
+\method{as.data.frame}{ratiod_simdata}(x, row.names = NULL, optional = FALSE, ...)
+
+\method{coef}{ratiod_simdata}(object, ...)
 }
 \arguments{
 \item{n}{Number of observations to simulate.}
@@ -53,15 +59,16 @@ If NULL, drawn from prior.}
 \item{x}{A ratiod_simdata object}
 
 \item{...}{Ignored}
+
+\item{row.names, optional}{Ignored.}
+
+\item{object}{A \code{ratiod_simdata} object.}
 }
 \value{
-A list with class \code{ratiod_simdata} containing:
-\describe{
-\item{data}{Data frame with simulated observations}
-\item{true_params}{List of true parameter values used}
-\item{family}{Family specification}
-\item{n}{Number of observations}
-}
+An object of class \code{ratiod_simdata}. \code{as.data.frame()} returns the
+simulated observations (columns \code{y_num}, \code{y_denom}, \code{x1}, \code{x2}, \code{group})
+and \code{coef()} the true fixed effects, named as \code{coef()} names the
+coefficients of a fit of \code{y_num | y_denom ~ x1}.
 }
 \description{
 Generate simulated datasets from prior or posterior predictive distributions.
@@ -103,12 +110,10 @@ sim <- sim_ratiod(
   seed = 123
 )
 
-# View simulated data
-head(sim$data)
-
-# Check true ratio distribution
-true_ratio <- sim$data$y_num / sim$data$y_denom
-hist(true_ratio, main = "Simulated ratios")
+sim
+df <- as.data.frame(sim)
+head(df)
+hist(df$y_num / df$y_denom, main = "Simulated ratios")
 
 # Simulate binomial proportion data
 sim_binom <- sim_ratiod(
@@ -123,13 +128,11 @@ sim_binom <- sim_ratiod(
 # Fit model to simulated data
 fit <- tratio(
   y_num | y_denom ~ x1 + (1 | group),
-  data = sim$data,
+  data = as.data.frame(sim),
   family = ratiod_poisson_gamma(),
   control = list(iter = 400, chains = 1, seed = 1)
 )
-# Compare estimated vs. true parameters
-# summary(fit)
-# sim$true_params
+cbind(true = coef(sim), estimate = coef(fit))
 }
 
 }

@@ -623,7 +623,9 @@ compute_fitted_laplace <- function(object) {
 #' @param ... Ignored
 #'
 #' @return If `summary = TRUE`, a data frame with posterior summaries.
-#'   If `summary = FALSE`, a matrix of posterior draws (rows = draws, cols = obs).
+#'   If `summary = FALSE`, a `ratiod_prediction_draws` object with one
+#'   draws-by-row matrix per component, which
+#'   [as.matrix()][as.matrix.ratiod_priorpred] returns.
 #'   If `return_spatial = TRUE`, returns a list with `predictions` and `w.0.samples`.
 #'
 #' @examples
@@ -656,7 +658,7 @@ compute_fitted_laplace <- function(object) {
 #' predict(fit, newdata = new_df)
 #'
 #' # Full posterior draws of the predicted ratio (draws x rows)
-#' dim(predict(fit, newdata = new_df, summary = FALSE)$ratio)
+#' dim(as.matrix(predict(fit, newdata = new_df, summary = FALSE)))
 #'
 #' # Spatial prediction at new locations (kriging) from a GP fit
 #' fit_gp <- tratio(

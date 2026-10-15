@@ -12,10 +12,12 @@
 #'   uses every draw; a smaller number takes a random subsample.
 #' @param ... Unused.
 #'
-#' @return A list with `y_num_rep` and `y_denom_rep`, each a draws-by-observation
-#'   matrix, plus `y_num` and `y_denom`, the observed responses. A family with a
-#'   fixed denominator (the binomial arms, whose denominator is the trial count)
-#'   reports the trials as `y_denom_rep`.
+#' @return An object of class `ratiod_ppred` holding the replicated numerator
+#'   and denominator, each a draws-by-observation matrix that
+#'   [as.matrix()][as.matrix.ratiod_priorpred] returns, and the observed
+#'   responses. A family with a fixed denominator (the binomial arms, whose
+#'   denominator is the trial count) reports the trials as the replicated
+#'   denominator.
 #'
 #' @examples
 #' \donttest{
@@ -30,7 +32,8 @@
 #'               family = ratiod_poisson_gamma(),
 #'               control = list(iter = 400, chains = 1, seed = 1))
 #' rep <- posterior_predict(fit, ndraws = 50)
-#' dim(rep$y_num_rep)
+#' rep
+#' dim(as.matrix(rep, component = "numerator"))
 #' }
 #'
 #' @seealso [pp_check()]
@@ -97,12 +100,15 @@ posterior_predict.ratiod_fit <- function(object, ndraws = NULL, ...) {
     }
   }
 
-  list(
-    y_num_rep = y_num_rep,
-    y_denom_rep = y_denom_rep,
-    y_num = observed$y_num,
-    y_denom = observed$y_denom,
-    draw_ids = idx
+  structure(
+    list(
+      y_num_rep = y_num_rep,
+      y_denom_rep = y_denom_rep,
+      y_num = observed$y_num,
+      y_denom = observed$y_denom,
+      draw_ids = idx
+    ),
+    class = "ratiod_ppred"
   )
 }
 

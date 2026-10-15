@@ -24,13 +24,10 @@ NULL
 #' @param spatial Optional spatial structure specification.
 #' @param seed Random seed for reproducibility.
 #'
-#' @return A list with class `ratiod_simdata` containing:
-#' \describe{
-#'   \item{data}{Data frame with simulated observations}
-#'   \item{true_params}{List of true parameter values used}
-#'   \item{family}{Family specification}
-#'   \item{n}{Number of observations}
-#' }
+#' @return An object of class `ratiod_simdata`. `as.data.frame()` returns the
+#'   simulated observations (columns `y_num`, `y_denom`, `x1`, `x2`, `group`)
+#'   and `coef()` the true fixed effects, named as `coef()` names the
+#'   coefficients of a fit of `y_num | y_denom ~ x1`.
 #'
 #' @details
 #' The simulation generates data according to the ratio model structure:
@@ -61,12 +58,10 @@ NULL
 #'   seed = 123
 #' )
 #'
-#' # View simulated data
-#' head(sim$data)
-#'
-#' # Check true ratio distribution
-#' true_ratio <- sim$data$y_num / sim$data$y_denom
-#' hist(true_ratio, main = "Simulated ratios")
+#' sim
+#' df <- as.data.frame(sim)
+#' head(df)
+#' hist(df$y_num / df$y_denom, main = "Simulated ratios")
 #'
 #' # Simulate binomial proportion data
 #' sim_binom <- sim_ratiod(
@@ -81,13 +76,11 @@ NULL
 #' # Fit model to simulated data
 #' fit <- tratio(
 #'   y_num | y_denom ~ x1 + (1 | group),
-#'   data = sim$data,
+#'   data = as.data.frame(sim),
 #'   family = ratiod_poisson_gamma(),
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
-#' # Compare estimated vs. true parameters
-#' # summary(fit)
-#' # sim$true_params
+#' cbind(true = coef(sim), estimate = coef(fit))
 #' }
 #'
 #' @seealso [tratio()] for model fitting, [prior_predict()] for prior checks
@@ -292,10 +285,30 @@ print.ratiod_simdata <- function(x, ...) {
   }
 
   cat("\nData columns:", paste(names(x$data), collapse = ", "), "\n")
-  cat("\nUse x$data to access the simulated data frame\n")
-  cat("Use x$true_params to access true parameter values\n")
 
   invisible(x)
+}
+
+
+#' @rdname sim_ratiod
+#' @param row.names,optional Ignored.
+#' @export
+as.data.frame.ratiod_simdata <- function(x, row.names = NULL, optional = FALSE, ...) {
+  x$data
+}
+
+
+#' @rdname sim_ratiod
+#' @param object A `ratiod_simdata` object.
+#' @export
+coef.ratiod_simdata <- function(object, ...) {
+  terms <- c("(Intercept)", "x1")
+  tp <- object$true_params
+  out <- stats::setNames(tp$beta_num, paste0("num:", terms))
+  if (!is.null(tp$beta_denom)) {
+    out <- c(out, stats::setNames(tp$beta_denom, paste0("denom:", terms)))
+  }
+  out
 }
 
 
@@ -315,24 +328,30 @@ print.ratiod_simdata <- function(x, ...) {
 #' @return A list of `ratiod_simdata` objects.
 #'
 #' @examples
-#' # Generate datasets for SBC (returns immediately)
+#' # Parameters are drawn from the priors the fits below use
+#' priors <- ratiod_priors(beta = prior_normal(0, 1),
+#'                         sigma = prior_half_cauchy(0.5))
 #' sims <- sim_ratiod_sbc(
 #'   n_sims = 3,
 #'   n = 30,
 #'   family = ratiod_negbin_negbin(),
+#'   priors = priors,
 #'   seed = 42
 #' )
 #' print(sims)
 #'
 #' \donttest{
-#' # Fit model to each simulation
-#' # ranks <- lapply(sims, function(sim) {
-#' #   fit <- tratio(y_num | y_denom ~ x1 + (1 | group),
-#' #                data = sim$data,
-#' #                family = ratiod_negbin_negbin(),
-#' #                control = list(iter = 400, chains = 1, seed = 1))
-#' #   sum(as.matrix(fit$draws)[, "beta_num[1]"] < sim$true_params$beta_num[1])
-#' # })
+#' # Rank of each true coefficient among its posterior draws
+#' ranks <- t(sapply(sims, function(sim) {
+#'   fit <- tratio(y_num | y_denom ~ x1 + (1 | group),
+#'                 data = as.data.frame(sim),
+#'                 family = ratiod_negbin_negbin(), priors = priors,
+#'                 control = list(iter = 400, chains = 1, seed = 1))
+#'   beta <- c("beta_num[1]", "beta_num[2]", "beta_denom[1]", "beta_denom[2]")
+#'   draws <- as.matrix(draws_wide(fit, "beta_num", "beta_denom")[, beta])
+#'   colSums(sweep(draws, 2, coef(sim), "<"))
+#' }))
+#' ranks
 #' }
 #'
 #' @seealso [sim_ratiod()] for single dataset simulation
@@ -404,7 +423,6 @@ print.ratiod_sbc_sims <- function(x, ...) {
   cat("Observations per sim:", x[[1]]$n, "\n")
   cat("Groups per sim:", x[[1]]$n_groups, "\n")
 
-  cat("\nUse lapply() to fit models to each simulation\n")
 
   invisible(x)
 }
