@@ -160,6 +160,7 @@ reference:
     contents:
       - pp_check.ratiod_fit
       - posterior_predict.ratiod_fit
+      - as.matrix.ratiod_priorpred
       - loo.ratiod_fit
       - waic.ratiod_fit
       - check_diagnostics
