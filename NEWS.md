@@ -1,5 +1,13 @@
 # tulpaRatio 1.7.3
 
+* `ratio_contrast(type = "ratio")` reports in `prob_positive` the posterior
+  probability that the level's ratio exceeds the reference's, as
+  `type = "difference"` does (#162); it was 1 whatever the data. The help
+  page states what the contrast averages over.
+
+* `priors_default()` prints no dispersion prior for a family that has none,
+  such as a Poisson count over a known exposure (#163).
+
 * The default core budget (`control$cores`) is at most two under
   `R CMD check`, which sets `_R_CHECK_LIMIT_CORES_` (#161). An explicit
   `cores` is unchanged.

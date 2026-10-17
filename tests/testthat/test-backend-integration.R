@@ -375,6 +375,10 @@ test_that("ratio_contrast computes ratio of ratios", {
   )
 
   contrast <- ratio_contrast(fit, ~ season, type = "ratio")
+  difference <- ratio_contrast(fit, ~ season, type = "difference")
+  # The probability that winter's ratio exceeds summer's, on either scale
+  expect_equal(contrast$prob_positive, difference$prob_positive)
+  expect_lt(contrast$prob_positive, 1)
 
   expect_equal(attr(contrast, "type"), "ratio")
   # Ratio of ratios is positive

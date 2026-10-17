@@ -170,3 +170,11 @@ test_that("prior print methods work", {
   expect_output(print(prior_beta(2, 2)), "Beta")
   expect_output(print(ratiod_priors()), "tulpaRatio prior specification")
 })
+
+
+test_that("priors_default() prints no dispersion prior for a family without one", {
+  out <- capture.output(priors_default(ratiod_poisson()))
+  expect_true(any(grepl("none (poisson_fixed)", out, fixed = TRUE)))
+  out <- capture.output(priors_default(ratiod_negbin()))
+  expect_false(any(grepl("none (", out, fixed = TRUE)))
+})

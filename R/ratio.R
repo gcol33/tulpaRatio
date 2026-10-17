@@ -244,6 +244,15 @@ print.ratiod_ratio_summary <- function(x, n = 10, ...) {
 #' Compute posterior distributions of contrasts (differences or ratios)
 #' between conditions for the derived ratio quantity.
 #'
+#' @details
+#' Each level is summarised, draw by draw, by the geometric mean of the ratios
+#' of its observations, the mean on the log scale, so the comparison averages
+#' over the covariates those observations carry rather than holding them
+#' fixed. `type = "difference"` reports the difference of the two log means,
+#' a log ratio; `type = "ratio"` its exponential, the ratio of the geometric
+#' means. `prob_positive` is the posterior probability that the level's ratio
+#' exceeds the reference's, the same under either type.
+#'
 #' @param object A `ratiod_fit` object
 #' @param contrast A formula specifying the contrast, e.g., `~ treatment`
 #' @param type Type of contrast: "difference" (default) or "ratio"
@@ -333,13 +342,14 @@ ratio_contrast <- function(object, contrast, type = c("difference", "ratio"),
 
     lvl_idx <- which(object$data[[contrast_var]] == lvl)
     lvl_mean <- rowMeans(draws[, lvl_idx, drop = FALSE])
+    log_contrast <- lvl_mean - ref_mean
 
     if (type == "difference") {
       # Difference on log scale = log ratio
-      contrast_draws <- lvl_mean - ref_mean
+      contrast_draws <- log_contrast
     } else {
       # Ratio = exp(difference on log scale)
-      contrast_draws <- exp(lvl_mean - ref_mean)
+      contrast_draws <- exp(log_contrast)
     }
 
     results[[as.character(lvl)]] <- data.frame(
@@ -349,7 +359,8 @@ ratio_contrast <- function(object, contrast, type = c("difference", "ratio"),
       q2.5 = quantile(contrast_draws, 0.025),
       q50 = quantile(contrast_draws, 0.5),
       q97.5 = quantile(contrast_draws, 0.975),
-      prob_positive = mean(contrast_draws > 0)
+      # The level's ratio above the reference's, on either scale
+      prob_positive = mean(log_contrast > 0)
     )
   }
 

@@ -595,8 +595,8 @@ priors_default <- function(family = NULL, spatial = FALSE, temporal = FALSE) {
       cat(sprintf("  %s: ", nm))
       print_prior(default_prior("phi", groups[[nm]]))
     }
-  } else if (identical(family$name, "binomial")) {
-    cat("  none (binomial)\n")
+  } else if (is.null(MODEL_DISPERSION_NAMES[[model_type]])) {
+    cat(sprintf("  none (%s)\n", family$name))
   } else {
     print_prior(defaults$phi, indent = "  ")
   }

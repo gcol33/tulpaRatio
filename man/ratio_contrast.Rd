@@ -35,6 +35,15 @@ A data frame with posterior summaries of contrasts
 Compute posterior distributions of contrasts (differences or ratios)
 between conditions for the derived ratio quantity.
 }
+\details{
+Each level is summarised, draw by draw, by the geometric mean of the ratios
+of its observations, the mean on the log scale, so the comparison averages
+over the covariates those observations carry rather than holding them
+fixed. \code{type = "difference"} reports the difference of the two log means,
+a log ratio; \code{type = "ratio"} its exponential, the ratio of the geometric
+means. \code{prob_positive} is the posterior probability that the level's ratio
+exceeds the reference's, the same under either type.
+}
 \examples{
 \donttest{
 # Generate synthetic data with grouping variable
