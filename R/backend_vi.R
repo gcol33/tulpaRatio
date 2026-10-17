@@ -291,7 +291,7 @@ fit_vi <- function(formula,
   if (fit_raw$psis_k > 0.7) {
     warning("PSIS k-hat = ", round(fit_raw$psis_k, 2),
             " > 0.7: VI approximation may be unreliable. ",
-            "Consider using backend = 'hmc' for exact inference.")
+            "mode = \"hmc\" samples the posterior itself.")
   } else if (fit_raw$psis_k > 0.5) {
     message("PSIS k-hat = ", round(fit_raw$psis_k, 2),
             " (marginal): approximation quality is acceptable but not ideal.")

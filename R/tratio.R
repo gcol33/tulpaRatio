@@ -358,8 +358,8 @@ tratio <- function(formula,
   if (selected_backend == "pg") {
     if (!can_use_pg_backend(family)) {
       stop(
-        "PG backend only supports ratiod_binomial() family.\n",
-        "For other families, use backend = 'hmc' or mode = 'exact'.",
+        "The PG backend fits ratiod_binomial() only; use mode = \"hmc\" ",
+        "for other families.",
         call. = FALSE
       )
     }
@@ -862,14 +862,18 @@ print.ratiod_fit <- function(x, ...) {
                  "inference conditional on structural assumptions",
                  "uncertainty may be underestimated")
 
-  cat("ratio model fit:", paste(deparse(formula(x)), collapse = " "), "\n")
-  cat(sprintf("Family: %s (%s)\n", x$family$name, x$family$description))
+  # Each line wraps at the console width, continuation lines indented
+  say <- function(...) {
+    cat(strwrap(paste0(...), width = getOption("width"), exdent = 2), sep = "\n")
+  }
+  say("ratio model fit: ", paste(deparse(formula(x)), collapse = " "))
+  say("Family: ", x$family$name, " (", x$family$description, ")")
   if (!is.na(tier)) {
-    cat(sprintf("Inference: %s (Tier %d) via %s; %s\n",
+    say(sprintf("Inference: %s (Tier %d) via %s; %s",
                 x$inference_tier_name %||% "Unknown", tier, backend,
                 tier_note[tier]))
   } else {
-    cat("Inference:", backend, "\n")
+    say("Inference: ", backend)
   }
 
   structure_line <- sprintf("Observations: %d", nrow(x$data))
@@ -885,7 +889,7 @@ print.ratiod_fit <- function(x, ...) {
   if (!is.null(spatial_type)) {
     structure_line <- paste0(structure_line, "; spatial: ", spatial_type)
   }
-  cat(structure_line, "\n")
+  say(structure_line)
   cat("Use summary() for estimates and ratio() for ratio posteriors.\n")
 
   invisible(x)

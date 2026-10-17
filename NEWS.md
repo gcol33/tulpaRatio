@@ -1,5 +1,9 @@
 # tulpaRatio 1.7.3
 
+* Messages that told the user to set `backend = 'hmc'` name `mode = "hmc"`,
+  the argument `tratio()` has (#159). `print()` of a fit wraps its lines at
+  the console width.
+
 * `confint()` gives central posterior intervals of the fixed effects, named
   as `coef()` names them (#158). The draws are named by position
   (`beta_num[7]`), so an interval for one coefficient needed its index.
