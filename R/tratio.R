@@ -877,7 +877,7 @@ print.ratiod_fit <- function(x, ...) {
   }
 
   structure_line <- sprintf("Observations: %d", nrow(x$data))
-  re_terms <- x$.internal$hmc_data$re_terms
+  re_terms <- x$formula$numerator$random_effects
   if (length(re_terms) > 0) {
     groups <- vapply(re_terms, function(t) {
       sprintf("%s (%d)", paste(t$group_var, collapse = ":"), as.integer(t$n_groups))

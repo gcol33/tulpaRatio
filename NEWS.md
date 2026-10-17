@@ -2,7 +2,8 @@
 
 * Messages that told the user to set `backend = 'hmc'` name `mode = "hmc"`,
   the argument `tratio()` has (#159). `print()` of a fit wraps its lines at
-  the console width.
+  the console width, and names the random effects of a fit from any backend,
+  not only HMC (#160).
 
 * `confint()` gives central posterior intervals of the fixed effects, named
   as `coef()` names them (#158). The draws are named by position

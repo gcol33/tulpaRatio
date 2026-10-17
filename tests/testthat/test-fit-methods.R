@@ -107,3 +107,18 @@ test_that("draws_wide(), draws_long() and draws_interval() keep parameter names"
   expect_true("beta_num[2]" %in% draws_long(fit, beta_num)$.variable)
   expect_true("beta_num[2]" %in% draws_interval(fit, beta_num)$.variable)
 })
+
+test_that("print() names the random effects whichever backend fitted them", {
+  skip_on_cran()
+  set.seed(4)
+  d <- data.frame(site = factor(rep(1:8, each = 10)), x = rnorm(80))
+  d$effort <- rgamma(80, shape = 6, rate = 1)
+  d$catch <- rpois(80, d$effort * exp(0.2 + 0.3 * d$x))
+  for (mode in c("hmc", "laplace")) {
+    fit <- tratio(catch | effort ~ x + (1 | site), data = d,
+                  family = ratiod_poisson_gamma(), mode = mode,
+                  control = list(iter = 200, chains = 1, seed = 1))
+    expect_true(any(grepl("random effects: site (8)", capture.output(print(fit)),
+                          fixed = TRUE)), label = mode)
+  }
+})
