@@ -1498,6 +1498,8 @@ plot_with_bayesplot <- function(draws_array, type, n_chains) {
 #' Plot using base R graphics
 #' @keywords internal
 plot_with_base <- function(draws_array, type, n_chains, n_col = NULL) {
+  old_par <- graphics::par(no.readonly = TRUE)
+  on.exit(graphics::par(old_par), add = TRUE)
   n_pars <- dim(draws_array)[3]
   par_names <- dimnames(draws_array)[[3]]
 

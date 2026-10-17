@@ -75,7 +75,7 @@ fit_pg_binomial <- function(formula,
 
   # Set cores for within-chain parallelism
   if (is.null(cores)) {
-    cores <- cpp_pg_get_max_threads()
+    cores <- pg_default_cores()
   }
 
   # Set base seed for reproducibility
@@ -642,7 +642,7 @@ fit_pg_binomial_gp <- function(formula,
 
   # Set cores for within-chain parallelism
   if (is.null(cores)) {
-    cores <- cpp_pg_get_max_threads()
+    cores <- pg_default_cores()
   }
 
   # Set base seed for reproducibility
@@ -888,7 +888,7 @@ fit_pg_binomial_temporal <- function(formula,
 
   # Set cores for within-chain parallelism
   if (is.null(cores)) {
-    cores <- cpp_pg_get_max_threads()
+    cores <- pg_default_cores()
   }
 
   # Set base seed for reproducibility
@@ -1158,7 +1158,7 @@ fit_pg_binomial_rsr <- function(formula,
 
   # Set cores
   if (is.null(cores)) {
-    cores <- cpp_pg_get_max_threads()
+    cores <- pg_default_cores()
   }
 
   # Extract response and design matrix
@@ -1409,7 +1409,7 @@ fit_pg_negbin <- function(formula,
 
   # Set cores
   if (is.null(cores)) {
-    cores <- cpp_pg_get_max_threads()
+    cores <- pg_default_cores()
   }
 
   if (!is.null(seed)) {
@@ -1557,7 +1557,7 @@ fit_pg_negbin_negbin <- function(formula,
                                   verbose = TRUE) {
 
   if (is.null(cores)) {
-    cores <- cpp_pg_get_max_threads()
+    cores <- pg_default_cores()
   }
 
   if (!is.null(seed)) {
@@ -1863,4 +1863,18 @@ convert_pg_negbin_negbin_to_ratiod_fit <- function(fit_raw, formula, data, famil
 
   class(fit) <- "ratiod_fit"
   return(fit)
+}
+
+
+#' The Polya-Gamma samplers' default thread count
+#'
+#' Every thread OpenMP offers, at most two under `R CMD check`
+#' (`_R_CHECK_LIMIT_CORES_`), as [default_cores()] does for the chains.
+#'
+#' @return An integer.
+#' @keywords internal
+pg_default_cores <- function() {
+  cores <- cpp_pg_get_max_threads()
+  if (nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_"))) cores <- min(cores, 2L)
+  as.integer(cores)
 }
