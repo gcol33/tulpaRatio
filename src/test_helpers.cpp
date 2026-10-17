@@ -1063,25 +1063,12 @@ NumericVector cpp_test_parallel_independent(int n, int n_threads) {
 
 #include "hmc_spatiotemporal.h"
 
-// [[Rcpp::export]]
-double cpp_test_st_gp_log_lik(
-    NumericVector w,
-    double sigma2,
-    double phi_space,
-    double phi_time,
-    NumericMatrix coords,        // n x 2, by field index
-    NumericVector time_values,   // n, by field index
-    int nn,
-    IntegerVector nn_idx,        // n x nn, row-major, 1-based within ordering
-    NumericVector nn_dist_space,
-    NumericVector nn_dist_time,
-    IntegerVector nn_order,      // 1-based from R, stored 0-based
-    std::string nonsep_type = "product",
-    std::string cov_space = "exponential",
-    std::string cov_time = "exponential"
-) {
+static ratiod_spatiotemporal::SpatiotemporalData test_st_gp_structure(
+    int n, NumericMatrix coords, NumericVector time_values, int nn,
+    IntegerVector nn_idx, NumericVector nn_dist_space, NumericVector nn_dist_time,
+    IntegerVector nn_order, const std::string& nonsep_type,
+    const std::string& cov_space, const std::string& cov_time) {
   ratiod_spatiotemporal::SpatiotemporalData st;
-  const int n = w.size();
   st.type = ratiod_spatiotemporal::STType::NONSEP_GP;
   st.n_params = n;
   st.nn = nn;
@@ -1106,20 +1093,94 @@ double cpp_test_st_gp_log_lik(
   } else if (nonsep_type == "gneiting") {
     st.nonsep_type = ratiod_spatiotemporal::NonsepType::GNEITING;
   } else {
-    Rcpp::stop("cpp_test_st_gp_log_lik: unknown nonsep_type '%s'",
-               nonsep_type.c_str());
+    Rcpp::stop("unknown nonsep_type '%s'", nonsep_type.c_str());
   }
   auto parse_cov = [](const std::string& s) {
     if (s == "exponential") return ratiod_cov::CovType::EXPONENTIAL;
     if (s == "matern")      return ratiod_cov::CovType::MATERN;
     if (s == "gaussian")    return ratiod_cov::CovType::GAUSSIAN;
     if (s == "spherical")   return ratiod_cov::CovType::SPHERICAL;
-    Rcpp::stop("cpp_test_st_gp_log_lik: unknown covariance '%s'", s.c_str());
+    Rcpp::stop("unknown covariance '%s'", s.c_str());
     return ratiod_cov::CovType::EXPONENTIAL;
   };
   st.cov_space = parse_cov(cov_space);
   st.cov_time = parse_cov(cov_time);
+  return st;
+}
 
+// [[Rcpp::export]]
+double cpp_test_st_gp_log_lik(
+    NumericVector w,
+    double sigma2,
+    double phi_space,
+    double phi_time,
+    NumericMatrix coords,        // n x 2, by field index
+    NumericVector time_values,   // n, by field index
+    int nn,
+    IntegerVector nn_idx,        // n x nn, row-major, 1-based within ordering
+    NumericVector nn_dist_space,
+    NumericVector nn_dist_time,
+    IntegerVector nn_order,      // 1-based from R, stored 0-based
+    std::string nonsep_type = "product",
+    std::string cov_space = "exponential",
+    std::string cov_time = "exponential"
+) {
+  const ratiod_spatiotemporal::SpatiotemporalData st = test_st_gp_structure(
+      w.size(), coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time,
+      nn_order, nonsep_type, cov_space, cov_time);
   return ratiod_spatiotemporal::st_gp_nngp_log_lik(
       w.begin(), sigma2, phi_space, phi_time, st);
+}
+
+// The margin penalty's normalizer on an S x T grid (field index s * T + t),
+// with its derivatives in log tau and the two log ranges.
+// [[Rcpp::export]]
+Rcpp::List cpp_test_st_gp_margin_normalizer(
+    double tau,
+    double phi_space,
+    double phi_time,
+    int n_spatial,
+    int n_times,
+    NumericMatrix coords,
+    NumericVector time_values,
+    int nn,
+    IntegerVector nn_idx,
+    NumericVector nn_dist_space,
+    NumericVector nn_dist_time,
+    IntegerVector nn_order,
+    std::string nonsep_type = "gneiting"
+) {
+  ratiod_spatiotemporal::SpatiotemporalData st = test_st_gp_structure(
+      n_spatial * n_times, coords, time_values, nn, nn_idx, nn_dist_space,
+      nn_dist_time, nn_order, nonsep_type, "exponential", "exponential");
+  st.n_spatial = n_spatial;
+  st.n_times = n_times;
+  const ratiod_spatiotemporal::StGpMarginNormalizer nz =
+      ratiod_spatiotemporal::st_gp_margin_normalizer_grad(tau, phi_space, phi_time, st);
+  if (!nz.ok) Rcpp::stop("the normalizer could not be formed");
+  return Rcpp::List::create(
+      Rcpp::Named("value") = nz.value,
+      Rcpp::Named("grad") = Rcpp::NumericVector::create(
+          nz.log_tau, nz.log_phi_space, nz.log_phi_time));
+}
+
+// The rho term of a Knorr-Held interaction's margin-penalty normalizer on an
+// S x T grid with an AR1 time margin, with its rho derivative.
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_st_ar1_margin_normalizer(
+    double rho, int n_spatial, int n_times, std::string type = "II") {
+  ratiod_spatiotemporal::SpatiotemporalData st;
+  if (type == "II") {
+    st.type = ratiod_spatiotemporal::STType::TYPE_II;
+  } else if (type == "IV") {
+    st.type = ratiod_spatiotemporal::STType::TYPE_IV;
+  } else {
+    Rcpp::stop("unknown type '%s'", type.c_str());
+  }
+  st.temporal_type = ratiod_temporal::TemporalType::AR1;
+  st.n_spatial = n_spatial;
+  st.n_times = n_times;
+  return Rcpp::NumericVector::create(
+      ratiod_spatiotemporal::st_ar1_margin_log_normalizer(rho, st),
+      ratiod_spatiotemporal::st_ar1_margin_log_normalizer_drho(rho, st));
 }

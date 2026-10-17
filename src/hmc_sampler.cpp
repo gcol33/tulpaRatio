@@ -7060,12 +7060,14 @@ void compute_gradient_composite(
     if (st_lap) {
         // The same priors on the collapsed interaction's hyperparameters, and
         // the margin penalty's normalizer the density keeps
+        const ratiod_spatiotemporal::StGpMarginNormalizer nz =
+            ratiod_spatiotemporal::st_gp_margin_normalizer_grad(
+                tau_st, phi_st_space, phi_st_time, data.spatiotemporal_data);
         grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(
             std::log(tau_st), data.st_sigma2_prior_U, data.st_sigma2_prior_alpha)
-            + 0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
-                  data.spatiotemporal_data);
-        grad[layout.log_phi_st_space_idx] = 1.0;
-        grad[layout.log_phi_st_time_idx] = 1.0;
+            + nz.log_tau;
+        grad[layout.log_phi_st_space_idx] = 1.0 + nz.log_phi_space;
+        grad[layout.log_phi_st_time_idx] = 1.0 + nz.log_phi_time;
     }
     if (has_st) {
         grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(

@@ -67,8 +67,31 @@
   centred ones took 10. For a likelihood Gaussian in the interaction the
   approximation is exact, and a test checks the density against the centred
   one there to 1e-8. It needs a log-concave family with canonical links and
-  no inflation. On the vignette's model the chains can settle at a spatial
-  range beyond the grid, with several hundred divergent transitions (#151).
+  no inflation.
+
+* The space-time interaction's density carries the full normalizer of its
+  soft margin penalty, 1/2 log|I + B'SB| for the GP covariance S and the
+  margin matrix B, instead of a count of the pinned directions times
+  1/2 log(tau) (#151). The omitted part moves with the ranges: on the
+  spatial-temporal vignette's model it rose by about 18 nats from a short to
+  a long spatial range, so chains settled at a range beyond the grid with
+  several hundred divergent transitions and an R-hat of 1.8. It is formed
+  from the NNGP factorization with one (S + T) x (S + T) Cholesky, its
+  gradient analytically in the same pass, and a test checks it against the
+  dense determinant to 1e-8. On that model both chains now agree (spatial
+  range medians 0.16 and 0.13, largest R-hat 1.03), with 56 divergent
+  transitions in 1000 post-warmup draws. Knorr-Held interactions keep the count, except
+  for the AR1 term below.
+
+* A Type II or Type IV interaction with an AR1 time margin carries the part of
+  its margin-penalty normalizer that moves with rho (#152). Its precision is
+  proper in directions the penalty pins (each region's sum over time, and
+  under Type II each time's sum over regions), and the variance of those sums
+  depends on rho, so the count of pinned directions left out
+  0.5 (S - 1) log(1' R(rho)^-1 1), plus 0.5 log|R(rho)^-1| under Type II. On
+  a 5 x 4 grid the prior's mass fell by 6.7 nats from rho = 0 to rho = 0.9,
+  which held rho away from strong positive correlation. A test checks that
+  the penalised prior's integral no longer moves with rho.
 
 * The composite and latent-factor gradients read an observation's residuals
   and dispersion derivatives from the log posterior's own per-observation

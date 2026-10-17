@@ -1719,6 +1719,43 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_st_gp_margin_normalizer
+Rcpp::List cpp_test_st_gp_margin_normalizer(double tau, double phi_space, double phi_time, int n_spatial, int n_times, NumericMatrix coords, NumericVector time_values, int nn, IntegerVector nn_idx, NumericVector nn_dist_space, NumericVector nn_dist_time, IntegerVector nn_order, std::string nonsep_type);
+RcppExport SEXP _tulpaRatio_cpp_test_st_gp_margin_normalizer(SEXP tauSEXP, SEXP phi_spaceSEXP, SEXP phi_timeSEXP, SEXP n_spatialSEXP, SEXP n_timesSEXP, SEXP coordsSEXP, SEXP time_valuesSEXP, SEXP nnSEXP, SEXP nn_idxSEXP, SEXP nn_dist_spaceSEXP, SEXP nn_dist_timeSEXP, SEXP nn_orderSEXP, SEXP nonsep_typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type phi_space(phi_spaceSEXP);
+    Rcpp::traits::input_parameter< double >::type phi_time(phi_timeSEXP);
+    Rcpp::traits::input_parameter< int >::type n_spatial(n_spatialSEXP);
+    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type coords(coordsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type time_values(time_valuesSEXP);
+    Rcpp::traits::input_parameter< int >::type nn(nnSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type nn_idx(nn_idxSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type nn_dist_space(nn_dist_spaceSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type nn_dist_time(nn_dist_timeSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type nn_order(nn_orderSEXP);
+    Rcpp::traits::input_parameter< std::string >::type nonsep_type(nonsep_typeSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_st_gp_margin_normalizer(tau, phi_space, phi_time, n_spatial, n_times, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_st_ar1_margin_normalizer
+Rcpp::NumericVector cpp_test_st_ar1_margin_normalizer(double rho, int n_spatial, int n_times, std::string type);
+RcppExport SEXP _tulpaRatio_cpp_test_st_ar1_margin_normalizer(SEXP rhoSEXP, SEXP n_spatialSEXP, SEXP n_timesSEXP, SEXP typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
+    Rcpp::traits::input_parameter< int >::type n_spatial(n_spatialSEXP);
+    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_st_ar1_margin_normalizer(rho, n_spatial, n_times, type));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_tls_workspace_shrink
 double cpp_tls_workspace_shrink(int cycles, int work, int n);
 RcppExport SEXP _tulpaRatio_cpp_tls_workspace_shrink(SEXP cyclesSEXP, SEXP workSEXP, SEXP nSEXP) {
@@ -1957,6 +1994,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_parallel_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_likelihood, 3},
     {"_tulpaRatio_cpp_test_parallel_independent", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_independent, 2},
     {"_tulpaRatio_cpp_test_st_gp_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_log_lik, 14},
+    {"_tulpaRatio_cpp_test_st_gp_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_margin_normalizer, 13},
+    {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},

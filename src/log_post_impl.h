@@ -1219,11 +1219,14 @@ T compute_log_post_impl(
         }
 
         if (layout.st_collapsed) {
-            // Integrated out with the observations below; the normalizer of
-            // the subspace the margin penalty leaves stays here, as in the
-            // centred coordinate.
-            log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
-                st_data)) * safe_log(tau_st);
+            // Integrated out with the observations below; the margin
+            // penalty's normalizer stays here, as in the centred coordinate.
+            T st_norm;
+            if (!ratiod_spatiotemporal::st_margin_normalizer(
+                    tau_st, rho_st, phi_st_space, phi_st_time, st_data, &st_norm)) {
+                return T(-std::numeric_limits<double>::infinity());
+            }
+            log_post = log_post + st_norm;
         } else {
             const T* z_or_delta = &params[layout.st_delta_start];
 
@@ -1253,8 +1256,12 @@ T compute_log_post_impl(
                 log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
                     st_delta, S, T_st, true, true
                 );
-                log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
-                    st_data)) * safe_log(tau_st);
+                T st_norm;
+                if (!ratiod_spatiotemporal::st_margin_normalizer(
+                        tau_st, rho_st, phi_st_space, phi_st_time, st_data, &st_norm)) {
+                    return T(-std::numeric_limits<double>::infinity());
+                }
+                log_post = log_post + st_norm;
             } else if (st_use_nc) {
                 // Forward transform: delta = z / sqrt(tau_st)
                 T inv_scale = T(1.0) / safe_sqrt(tau_st);
@@ -1356,8 +1363,12 @@ T compute_log_post_impl(
                 log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
                     st_delta, S, T_st, true, true
                 );
-                log_post = log_post + T(0.5 * ratiod_spatiotemporal::st_centered_tau_correction(
-                    st_data)) * safe_log(tau_st);
+                T st_norm;
+                if (!ratiod_spatiotemporal::st_margin_normalizer(
+                        tau_st, rho_st, phi_st_space, phi_st_time, st_data, &st_norm)) {
+                    return T(-std::numeric_limits<double>::infinity());
+                }
+                log_post = log_post + st_norm;
             }
         }
     }

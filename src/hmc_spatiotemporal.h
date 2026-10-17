@@ -662,6 +662,304 @@ inline Scalar st_gp_nngp_log_lik(
   return log_lik;
 }
 
+// The margin penalty's factor B (P = B B'), n x (T + S): column t has
+// sqrt(lambda_s) on every cell of time slice t, column T + s sqrt(lambda_t)
+// on every cell of region s. Emitted as (cell, column, value).
+template <typename Emit>
+inline void emit_margin_factor(const SpatiotemporalData& st, Emit&& emit) {
+  const int S = st.n_spatial, T = st.n_times;
+  const double rs = std::sqrt(tulpa::s2z_precision(S));
+  const double rt = std::sqrt(tulpa::s2z_precision(T));
+  for (int s = 0; s < S; s++) {
+    for (int t = 0; t < T; t++) {
+      emit(s * T + t, t, rs);
+      emit(s * T + t, T + s, rt);
+    }
+  }
+}
+
+// The normalizer of a GP interaction's prior under its soft margin penalty.
+//
+// The prior is p(delta) proportional to N(delta; 0, Sigma) exp(-delta' P delta / 2),
+// with Sigma = sigma2 R(phi_space, phi_time) the NNGP covariance and P = B B' the
+// sum-to-zero penalty on each spatial and each temporal margin. Its normalizer is
+//
+//   log Z = -0.5 log|I + B' Sigma B|,
+//
+// so the density carries +0.5 log|I + B' Sigma B| beside the NNGP log density
+// and the penalty. The term moves with tau and with both ranges: at a range
+// beyond the domain the margins of Sigma become nearly collinear and log Z
+// rises, and a density without it rewards such ranges by that amount. As the
+// penalty hardens it tends to 0.5 log|A Sigma A'| over the S + T - 1
+// independent margins, plus a constant.
+//
+// With Sigma = L D L', L = (I - A)^-1 the NNGP autoregression and D its
+// conditional variances, B' Sigma B = X' D X for X = (I - A)^-T B: one backward
+// pass over the ordering, each location passing its row of X to its
+// neighbours with the weights alpha the scan computed. The (T + S) x (T + S)
+// matrix M = I + X' D X is then factorized once.
+
+// The NNGP autoregression as the scan reports it, by position in the ordering:
+// the field index, the conditional variance and the neighbours with their
+// weights (neighbours of position i at nb[start[i] .. start[i + 1])).
+template <typename Scalar>
+struct StGpAutoregression {
+  std::vector<int> order, start, nb;
+  std::vector<Scalar> alpha, cond_var;
+  std::vector<char> floored;
+};
+
+// Solves (I - A)' Y = Y0 in place, Y n x m by field index: a row is final once
+// every later location naming it as a neighbour has passed its share.
+template <typename Scalar>
+inline void st_gp_autoregression_back(const StGpAutoregression<Scalar>& ar,
+                                      int m, std::vector<Scalar>& Y) {
+  const int N = static_cast<int>(ar.order.size());
+  for (int i = N - 1; i >= 0; i--) {
+    const Scalar* yi = &Y[static_cast<size_t>(ar.order[i]) * m];
+    for (int q = ar.start[i]; q < ar.start[i + 1]; q++) {
+      Scalar* yn = &Y[static_cast<size_t>(ar.nb[q]) * m];
+      for (int c = 0; c < m; c++) yn[c] = yn[c] + ar.alpha[q] * yi[c];
+    }
+  }
+}
+
+// X = (I - A)^-T B and the Cholesky factor of M = I + X' D X.
+template <typename Scalar>
+inline bool st_gp_margin_factor(const StGpAutoregression<Scalar>& ar,
+                                const SpatiotemporalData& st,
+                                std::vector<Scalar>& X, std::vector<Scalar>& LM) {
+  const int N = st.n_params;
+  const int m = st.n_spatial + st.n_times;
+  X.assign(static_cast<size_t>(N) * m, Scalar(0.0));
+  emit_margin_factor(st, [&](int cell, int col, double v) {
+    X[static_cast<size_t>(cell) * m + col] = Scalar(v);
+  });
+  st_gp_autoregression_back(ar, m, X);
+
+  std::vector<Scalar> M(static_cast<size_t>(m) * m, Scalar(0.0));
+  for (int c = 0; c < m; c++) M[static_cast<size_t>(c) * m + c] = Scalar(1.0);
+  for (int i = 0; i < N; i++) {
+    const Scalar* xi = &X[static_cast<size_t>(ar.order[i]) * m];
+    const Scalar d = ar.cond_var[i];
+    for (int c1 = 0; c1 < m; c1++) {
+      const Scalar dx = d * xi[c1];
+      for (int c2 = c1; c2 < m; c2++) {
+        M[static_cast<size_t>(c1) * m + c2] = M[static_cast<size_t>(c1) * m + c2] + dx * xi[c2];
+      }
+    }
+  }
+  for (int c1 = 0; c1 < m; c1++) {
+    for (int c2 = 0; c2 < c1; c2++) {
+      M[static_cast<size_t>(c1) * m + c2] = M[static_cast<size_t>(c2) * m + c1];
+    }
+  }
+  return ratiod_cov::nngp_chol(M, m, LM);
+}
+
+template <typename Scalar>
+inline Scalar st_gp_margin_half_logdet(const std::vector<Scalar>& LM, int m) {
+  Scalar h(0.0);
+  for (int c = 0; c < m; c++) h = h + safe_log(LM[static_cast<size_t>(c) * m + c]);
+  return h;
+}
+
+// The normalizer's value. Returns false where the scan or the factorization
+// fails, as the density does.
+template <typename Scalar>
+inline bool st_gp_margin_log_normalizer(const Scalar& sigma2,
+                                        const Scalar& phi_space,
+                                        const Scalar& phi_time,
+                                        const SpatiotemporalData& st,
+                                        Scalar* out) {
+  const int N = st.n_params;
+  if (N != st.n_spatial * st.n_times) return false;
+
+  StGpAutoregression<Scalar> ar;
+  ar.order.resize(N);
+  ar.cond_var.resize(N);
+  ar.floored.resize(N);
+  ar.start.assign(N + 1, 0);
+  std::vector<Scalar> zeros(N, Scalar(0.0));
+  const bool ok = st_gp_nngp_scan<Scalar>(
+      zeros.data(), sigma2, phi_space, phi_time, st,
+      [&](int i, int obs_idx, const int* nb, int n_nb, const Scalar* /*L*/,
+          const Scalar* /*c_vec*/, const Scalar* alpha,
+          const Scalar& /*cond_mean*/, const Scalar& cv, bool fl) {
+        ar.order[i] = obs_idx;
+        ar.cond_var[i] = cv;
+        ar.floored[i] = fl;
+        for (int j = 0; j < n_nb; j++) {
+          ar.nb.push_back(nb[j]);
+          ar.alpha.push_back(alpha[j]);
+        }
+        ar.start[i + 1] = static_cast<int>(ar.nb.size());
+      });
+  if (!ok) return false;
+
+  std::vector<Scalar> X, LM;
+  if (!st_gp_margin_factor(ar, st, X, LM)) return false;
+  *out = st_gp_margin_half_logdet(LM, st.n_spatial + st.n_times);
+  return true;
+}
+
+// The same term with its derivatives in log tau and the two log ranges, for
+// the hand-coded gradients, from one pass of the scan.
+//
+// With q_i = x_i' M^-1 x_i and x_i the row of X at location i,
+//
+//   d(0.5 log|M|) = 0.5 sum_i [ dd_i q_i + 2 d_i dx_i' M^-1 x_i ].
+//
+// alpha and X do not move with sigma2 and d_i is proportional to it, so the
+// log-tau slope is -0.5 sum_i d_i q_i. For a range, dalpha = C^-1 (dc - dC alpha)
+// and dd = -2 dc' alpha + alpha' dC alpha at each location, as in the prior's
+// own gradient, and dX = (I - A)^-T (dA' X), one more backward pass. A
+// location whose conditional variance sits on its floor contributes no dd.
+struct StGpMarginNormalizer {
+  double value = 0.0;
+  double log_tau = 0.0;
+  double log_phi_space = 0.0;
+  double log_phi_time = 0.0;
+  bool ok = true;
+};
+
+inline StGpMarginNormalizer st_gp_margin_normalizer_grad(
+    double tau, double phi_space, double phi_time, const SpatiotemporalData& st) {
+  StGpMarginNormalizer out;
+  const int N = st.n_params;
+  const int m = st.n_spatial + st.n_times;
+  const int nn = st.nn;
+  if (N != st.n_spatial * st.n_times) {
+    out.ok = false;
+    return out;
+  }
+  const double sigma2 = 1.0 / tau;
+
+  StGpAutoregression<double> ar;
+  ar.order.resize(N);
+  ar.cond_var.resize(N);
+  ar.floored.resize(N);
+  ar.start.assign(N + 1, 0);
+  std::vector<double> dalpha_s, dalpha_t, dd_s(N, 0.0), dd_t(N, 0.0);
+  std::vector<double> dc_s, dc_t, dC_s, dC_t, v, tmp, da;
+  std::vector<double> zeros(N, 0.0);
+
+  out.ok = st_gp_nngp_scan<double>(
+      zeros.data(), sigma2, phi_space, phi_time, st,
+      [&](int i, int obs_idx, const int* nb, int n_nb, const double* L,
+          const double* /*c_vec*/, const double* alpha,
+          const double& /*cond_mean*/, const double& cv, bool fl) {
+        ar.order[i] = obs_idx;
+        ar.cond_var[i] = cv;
+        ar.floored[i] = fl;
+        for (int j = 0; j < n_nb; j++) {
+          ar.nb.push_back(nb[j]);
+          ar.alpha.push_back(alpha[j]);
+        }
+        ar.start[i + 1] = static_cast<int>(ar.nb.size());
+        if (n_nb == 0) return;
+
+        dc_s.resize(n_nb);
+        dc_t.resize(n_nb);
+        dC_s.assign(static_cast<size_t>(n_nb) * n_nb, 0.0);
+        dC_t.assign(static_cast<size_t>(n_nb) * n_nb, 0.0);
+        for (int j = 0; j < n_nb; j++) {
+          const size_t f = static_cast<size_t>(i) * nn + j;
+          double ds, dt;
+          st_corr_dphi(st.nn_dist_space[f], st.nn_dist_time[f], phi_space,
+                       phi_time, st, &ds, &dt);
+          dc_s[j] = sigma2 * ds;
+          dc_t[j] = sigma2 * dt;
+        }
+        for (int j1 = 0; j1 < n_nb; j1++) {
+          for (int j2 = j1; j2 < n_nb; j2++) {
+            double h12, u12, ds, dt;
+            st_pair_separation(st, nb[j1], nb[j2], &h12, &u12);
+            st_corr_dphi(h12, u12, phi_space, phi_time, st, &ds, &dt);
+            dC_s[static_cast<size_t>(j1) * n_nb + j2] = sigma2 * ds;
+            dC_s[static_cast<size_t>(j2) * n_nb + j1] = sigma2 * ds;
+            dC_t[static_cast<size_t>(j1) * n_nb + j2] = sigma2 * dt;
+            dC_t[static_cast<size_t>(j2) * n_nb + j1] = sigma2 * dt;
+          }
+        }
+
+        v.resize(n_nb);
+        tmp.resize(n_nb);
+        da.resize(n_nb);
+        auto direction = [&](const std::vector<double>& dc,
+                             const std::vector<double>& dC,
+                             std::vector<double>& dalpha_all, double& dd) {
+          double dc_a = 0.0, a_dC_a = 0.0;
+          for (int j1 = 0; j1 < n_nb; j1++) {
+            double row = 0.0;
+            for (int j2 = 0; j2 < n_nb; j2++) {
+              row += dC[static_cast<size_t>(j1) * n_nb + j2] * alpha[j2];
+            }
+            v[j1] = dc[j1] - row;
+            dc_a += dc[j1] * alpha[j1];
+            a_dC_a += alpha[j1] * row;
+          }
+          ratiod_cov::nngp_forward_solve(L, n_nb, v.data(), tmp.data());
+          ratiod_cov::nngp_back_solve(L, n_nb, tmp.data(), da.data());
+          for (int j = 0; j < n_nb; j++) dalpha_all.push_back(da[j]);
+          dd = fl ? 0.0 : (-2.0 * dc_a + a_dC_a);
+        };
+        direction(dc_s, dC_s, dalpha_s, dd_s[i]);
+        direction(dc_t, dC_t, dalpha_t, dd_t[i]);
+      });
+  if (!out.ok) return out;
+
+  std::vector<double> X, LM;
+  if (!st_gp_margin_factor(ar, st, X, LM)) {
+    out.ok = false;
+    return out;
+  }
+  out.value = st_gp_margin_half_logdet(LM, m);
+
+  // Y = X M^-1, row by row against the factor of M
+  std::vector<double> Y(static_cast<size_t>(N) * m), y_tmp(m);
+  for (int k = 0; k < N; k++) {
+    ratiod_cov::nngp_forward_solve(LM.data(), m, &X[static_cast<size_t>(k) * m], y_tmp.data());
+    ratiod_cov::nngp_back_solve(LM.data(), m, y_tmp.data(), &Y[static_cast<size_t>(k) * m]);
+  }
+  std::vector<double> q(N, 0.0);
+  for (int i = 0; i < N; i++) {
+    const size_t r = static_cast<size_t>(ar.order[i]) * m;
+    for (int c = 0; c < m; c++) q[i] += X[r + c] * Y[r + c];
+  }
+
+  double dlog_sigma2 = 0.0;
+  for (int i = 0; i < N; i++) {
+    if (!ar.floored[i]) dlog_sigma2 += 0.5 * ar.cond_var[i] * q[i];
+  }
+  out.log_tau = -dlog_sigma2;
+
+  // dX for one range, then its slope
+  auto range_slope = [&](const std::vector<double>& dalpha,
+                         const std::vector<double>& dd) {
+    std::vector<double> dX(static_cast<size_t>(N) * m, 0.0);
+    for (int i = 0; i < N; i++) {
+      const double* xi = &X[static_cast<size_t>(ar.order[i]) * m];
+      for (int qn = ar.start[i]; qn < ar.start[i + 1]; qn++) {
+        double* rn = &dX[static_cast<size_t>(ar.nb[qn]) * m];
+        for (int c = 0; c < m; c++) rn[c] += dalpha[qn] * xi[c];
+      }
+    }
+    st_gp_autoregression_back(ar, m, dX);
+    double g = 0.0;
+    for (int i = 0; i < N; i++) {
+      const size_t r = static_cast<size_t>(ar.order[i]) * m;
+      double cross = 0.0;
+      for (int c = 0; c < m; c++) cross += dX[r + c] * Y[r + c];
+      g += 0.5 * dd[i] * q[i] + ar.cond_var[i] * cross;
+    }
+    return g;
+  };
+  out.log_phi_space = range_slope(dalpha_s, dd_s) * phi_space;
+  out.log_phi_time = range_slope(dalpha_t, dd_t) * phi_time;
+  return out;
+}
+
 // =====================================================================
 // Knorr-Held precision stencils
 // =====================================================================
@@ -726,6 +1024,67 @@ inline int st_noncentered_tau_power(const SpatiotemporalData& st) {
 inline int st_centered_tau_correction(const SpatiotemporalData& st) {
   const int n_constraints = st.n_spatial + st.n_times - 1;
   return st_constrained_null_dim(st) - n_constraints;
+}
+
+// Whether the interaction's time margin is an AR1 the margin penalty pins
+// proper directions of.
+inline bool st_ar1_margin_pinned(const SpatiotemporalData& st) {
+  return (st.type == STType::TYPE_II || st.type == STType::TYPE_IV) &&
+         st.temporal_type == TemporalType::AR1 && st.n_times >= 2;
+}
+
+// The part of a Knorr-Held interaction's margin-penalty normalizer that moves
+// with an AR1 time margin's rho. In the penalty's hard limit the normalizer
+// gains 0.5 log|A Q^-1 A'| over the pinned directions Q makes proper, A
+// orthonormal. Split the pinned space as (1_S (x) R^T) + (1_S-perp (x) 1_T):
+// under Type II, Q = tau (I_S (x) R(rho)) is proper on both, contributing
+// log|R^-1| = -log(1 - rho^2) from the first and (S - 1) log(1' R^-1 1) from
+// the second; under Type IV the first is the ICAR null space, so only the
+// second remains. With 1' R^-1 1 = correlation_sum(rho) / (1 - rho^2), and
+// the tau part left to st_centered_tau_correction:
+//   Type II  0.5 [(S - 1) log c(rho) - S log(1 - rho^2)]
+//   Type IV  0.5 (S - 1) [log c(rho) - log(1 - rho^2)]
+template <typename Scalar>
+inline Scalar st_ar1_margin_log_normalizer(const Scalar& rho,
+                                           const SpatiotemporalData& st) {
+  if (!st_ar1_margin_pinned(st)) return Scalar(0.0);
+  const int S = st.n_spatial;
+  const double n_log_det = (st.type == STType::TYPE_II) ? S : S - 1;
+  return Scalar(0.5 * (S - 1)) *
+             safe_log(ratiod_ar1::correlation_sum(rho, st.n_times)) -
+         Scalar(0.5 * n_log_det) * safe_log(ratiod_ar1::one_minus_rho2(rho));
+}
+
+inline double st_ar1_margin_log_normalizer_drho(double rho,
+                                                const SpatiotemporalData& st) {
+  if (!st_ar1_margin_pinned(st)) return 0.0;
+  const int S = st.n_spatial;
+  const double n_log_det = (st.type == STType::TYPE_II) ? S : S - 1;
+  return 0.5 * (S - 1) * ratiod_ar1::dcorrelation_sum_drho(rho, st.n_times) /
+             ratiod_ar1::correlation_sum(rho, st.n_times) -
+         0.5 * n_log_det * ratiod_ar1::dlog_one_minus_rho2_drho(rho);
+}
+
+// The normalizer the interaction's density carries for its margin penalty, on
+// delta (the centred and the collapsed coordinates, and the non-centred GP,
+// whose penalty stays on delta). A GP type's covariance is proper in every
+// direction the penalty pins, so its normalizer is the full
+// st_gp_margin_log_normalizer, which moves with the ranges; a Knorr-Held type
+// keeps the count of pinned directions st_centered_tau_correction gives, plus
+// the rho term of an AR1 time margin (st_ar1_margin_log_normalizer).
+// Returns false where the GP term cannot be formed.
+template <typename Scalar>
+inline bool st_margin_normalizer(const Scalar& tau, const Scalar& rho,
+                                 const Scalar& phi_space,
+                                 const Scalar& phi_time,
+                                 const SpatiotemporalData& st, Scalar* out) {
+  if (st.type == STType::SEPARABLE || st.type == STType::NONSEP_GP) {
+    return st_gp_margin_log_normalizer<Scalar>(Scalar(1.0) / tau, phi_space,
+                                               phi_time, st, out);
+  }
+  *out = Scalar(0.5 * st_centered_tau_correction(st)) * safe_log(tau) +
+         st_ar1_margin_log_normalizer(rho, st);
+  return true;
 }
 
 // Whether the interaction is sampled non-centered: z with delta = z / sqrt(tau),

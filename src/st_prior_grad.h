@@ -457,10 +457,25 @@ inline StPriorGrad st_interaction_prior_grad(
     for (int s = 0; s < S; s++) out.log_prior -= 0.5 * lambda_t * col_sums_buf[s] * col_sums_buf[s];
 
     if (!use_nc) {
-      // The normalizer of the subspace the constraints leave
-      const int correction = st_centered_tau_correction(st);
-      out.log_tau += 0.5 * correction;
-      out.log_prior += 0.5 * correction * std::log(tau);
+      // The margin penalty's normalizer (st_margin_normalizer)
+      if (st.type == STType::SEPARABLE || st.type == STType::NONSEP_GP) {
+        const StGpMarginNormalizer nz =
+            st_gp_margin_normalizer_grad(tau, phi_space, phi_time, st);
+        if (!nz.ok) {
+          out.log_prior = -std::numeric_limits<double>::infinity();
+          return out;
+        }
+        out.log_tau += nz.log_tau;
+        out.log_phi_space += nz.log_phi_space;
+        out.log_phi_time += nz.log_phi_time;
+        out.log_prior += nz.value;
+      } else {
+        const int correction = st_centered_tau_correction(st);
+        out.log_tau += 0.5 * correction;
+        out.log_prior += 0.5 * correction * std::log(tau) +
+                         st_ar1_margin_log_normalizer(rho, st);
+        grad_rho += st_ar1_margin_log_normalizer_drho(rho, st);
+      }
     }
   }
 

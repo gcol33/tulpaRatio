@@ -40,6 +40,23 @@ inline double dlog_one_minus_rho2_drho(double rho) {
   return (raw > ONE_MINUS_RHO2_FLOOR) ? (-2.0 * rho / raw) : 0.0;
 }
 
+// The sum of every entry of an n-step AR1 correlation matrix,
+// sum_{t,t'} rho^|t - t'| = n + 2 sum_{k=1}^{n-1} (n - k) rho^k, by Horner.
+// Positive for every rho in (-1, 1), as 1' C 1 of a correlation matrix C.
+template <typename T>
+inline T correlation_sum(const T& rho, int n) {
+  T acc = T(0.0);
+  for (int k = n - 1; k >= 1; k--) acc = acc * rho + T(static_cast<double>(n - k));
+  return T(static_cast<double>(n)) + T(2.0) * rho * acc;
+}
+
+// d/d(rho) of correlation_sum, 2 sum_{k=1}^{n-1} k (n - k) rho^(k-1).
+inline double dcorrelation_sum_drho(double rho, int n) {
+  double acc = 0.0;
+  for (int k = n - 1; k >= 1; k--) acc = acc * rho + static_cast<double>(k * (n - k));
+  return 2.0 * acc;
+}
+
 // ---------------------------------------------------------------------------
 // The sampled coordinate
 // ---------------------------------------------------------------------------

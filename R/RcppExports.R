@@ -449,6 +449,14 @@ cpp_test_st_gp_log_lik <- function(w, sigma2, phi_space, phi_time, coords, time_
     .Call(`_tulpaRatio_cpp_test_st_gp_log_lik`, w, sigma2, phi_space, phi_time, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type, cov_space, cov_time)
 }
 
+cpp_test_st_gp_margin_normalizer <- function(tau, phi_space, phi_time, n_spatial, n_times, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type = "gneiting") {
+    .Call(`_tulpaRatio_cpp_test_st_gp_margin_normalizer`, tau, phi_space, phi_time, n_spatial, n_times, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type)
+}
+
+cpp_test_st_ar1_margin_normalizer <- function(rho, n_spatial, n_times, type = "II") {
+    .Call(`_tulpaRatio_cpp_test_st_ar1_margin_normalizer`, rho, n_spatial, n_times, type)
+}
+
 cpp_tls_workspace_shrink <- function(cycles, work, n) {
     .Call(`_tulpaRatio_cpp_tls_workspace_shrink`, cycles, work, n)
 }

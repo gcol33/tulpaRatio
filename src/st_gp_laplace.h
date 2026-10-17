@@ -217,21 +217,7 @@ inline void margin_penalty_apply(const SpatiotemporalData& st, const double* x,
   }
 }
 
-// The margin penalty's factor B (P = B B'), n x (T + S): column t has
-// sqrt(lambda_s) on every cell of time slice t, column T + s sqrt(lambda_t)
-// on every cell of region s. Emitted as (cell, column, value).
-template <typename Emit>
-inline void emit_margin_factor(const SpatiotemporalData& st, Emit&& emit) {
-  const int S = st.n_spatial, T = st.n_times;
-  const double rs = std::sqrt(tulpa::s2z_precision(S));
-  const double rt = std::sqrt(tulpa::s2z_precision(T));
-  for (int s = 0; s < S; s++) {
-    for (int t = 0; t < T; t++) {
-      emit(s * T + t, t, rs);
-      emit(s * T + t, T + s, rt);
-    }
-  }
-}
+using ratiod_spatiotemporal::emit_margin_factor;
 
 // =====================================================================
 // Workspace
