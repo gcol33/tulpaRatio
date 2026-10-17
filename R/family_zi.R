@@ -231,9 +231,9 @@ ratiod_hurdle_pois <- function(link_num = "log", link_denom = "log",
 }
 
 
-# Denominators each inflated count numerator is fitted with; every pair is
-# one likelihood of the samplers (get_hmc_model_type()).
-zi_count_denominators <- list(
+# Denominators each count numerator is fitted with, inflated or not; every
+# pair is one likelihood of the samplers (get_hmc_model_type()).
+count_denominators <- list(
   poisson = c(gamma = "gamma", negbin = "neg_binomial_2", fixed = "fixed"),
   neg_binomial_2 = c(negbin = "neg_binomial_2", gamma = "gamma", fixed = "fixed")
 )
@@ -251,17 +251,7 @@ zi_count_family <- function(base, type, denom_family, link_num, link_denom,
                             link_inflation) {
   validate_link(link_num, "log")
   validate_link(link_inflation, LINKS_PROBABILITY)
-  allowed <- zi_count_denominators[[base]]
-  if (!(length(denom_family) == 1L && denom_family %in% names(allowed))) {
-    stop(sprintf("`denom_family` must be one of %s.",
-                 paste0('"', names(allowed), '"', collapse = ", ")),
-         call. = FALSE)
-  }
-  fixed <- identical(denom_family, "fixed")
-  if (!fixed) {
-    validate_link(link_denom,
-                  if (identical(allowed[[denom_family]], "gamma")) LINKS_GAMMA else "log")
-  }
+  denominator <- count_denominator(base, denom_family, link_denom)
   hurdle <- identical(type, "hurdle")
   short <- c(poisson = "pois", neg_binomial_2 = "negbin")[[base]]
   label <- c(poisson = "Poisson", neg_binomial_2 = "negative binomial")[[base]]
@@ -280,8 +270,7 @@ zi_count_family <- function(base, type, denom_family, link_num, link_denom,
     list(
       name = paste0(if (hurdle) "hurdle_" else "zi", short, "_", denom_family),
       numerator = numerator,
-      denominator = list(distribution = allowed[[denom_family]],
-                         link = if (fixed) NULL else link_denom),
+      denominator = denominator,
       zero_inflated = TRUE,
       zi_type = type,
       description = sprintf("%s %s numerator, %s denominator",
@@ -290,6 +279,30 @@ zi_count_family <- function(base, type, denom_family, link_num, link_denom,
     ),
     class = c("ratiod_family_zi", "ratiod_family", "list")
   )
+}
+
+
+#' The denominator of a count family
+#'
+#' @param base Count distribution of the numerator: "poisson" or
+#'   "neg_binomial_2".
+#' @param denom_family One of the names of `count_denominators[[base]]`.
+#' @param link_denom Link of the denominator mean; unread for a known exposure.
+#' @return The `denominator` element of a `ratiod_family`.
+#' @keywords internal
+count_denominator <- function(base, denom_family, link_denom) {
+  allowed <- count_denominators[[base]]
+  if (!(length(denom_family) == 1L && denom_family %in% names(allowed))) {
+    stop(sprintf("`denom_family` must be one of %s.",
+                 paste0('"', names(allowed), '"', collapse = ", ")),
+         call. = FALSE)
+  }
+  fixed <- identical(denom_family, "fixed")
+  if (!fixed) {
+    validate_link(link_denom,
+                  if (identical(allowed[[denom_family]], "gamma")) LINKS_GAMMA else "log")
+  }
+  list(distribution = allowed[[denom_family]], link = if (fixed) NULL else link_denom)
 }
 
 

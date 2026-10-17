@@ -1,5 +1,14 @@
 # tulpaRatio 1.7.3
 
+* `ratiod_poisson()` and `ratiod_negbin()` fit a Poisson or negative binomial
+  count over a known exposure (`denom_family = "fixed"`, the default), a count
+  or a continuous effort, without inflation (#154). The samplers fitted these
+  pairs, but only the zero-inflated and hurdle constructors reached them, so
+  observed cases over a population could not be fitted as plain counts. The
+  Gibbs sampler reads the same model type as the HMC samplers and refuses a
+  pair it has no likelihood for; before, it fitted any Poisson numerator as
+  Poisson-gamma.
+
 * Predictive and simulated objects have accessors. `as.matrix()` returns the
   draws-by-observation matrix of one component (`"ratio"`, `"numerator"`,
   `"denominator"`) from `prior_predict()`, `posterior_predict()` and

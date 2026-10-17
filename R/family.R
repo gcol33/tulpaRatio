@@ -274,6 +274,90 @@ ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
   )
 }
 
+#' Count Families by Denominator
+#'
+#' @description
+#' A Poisson or negative binomial count over any denominator the samplers fit:
+#' a known exposure (`"fixed"`), a count (`"negbin"`) or a continuous effort
+#' (`"gamma"`). A known exposure is data: it scales the count mean, which is
+#' then the rate times the exposure, and the ratio is the rate. This is the
+#' disease-mapping model of observed cases over a population or an expected
+#' count. The zero-inflated and hurdle counterparts are [ratiod_zipois()],
+#' [ratiod_zinegbin()], [ratiod_hurdle_pois()] and [ratiod_hurdle_negbin()].
+#'
+#' `ratiod_poisson(denom_family = "gamma")` is [ratiod_poisson_gamma()],
+#' `ratiod_negbin(denom_family = "negbin")` is [ratiod_negbin_negbin()] and
+#' `ratiod_negbin(denom_family = "gamma")` is [ratiod_negbin_gamma()].
+#'
+#' @param link_num Link function for the count mean: "log".
+#' @param link_denom Link function for the denominator mean: "log" (default);
+#'   a gamma denominator also takes "identity" or "inverse". Unread for a
+#'   known exposure.
+#' @param denom_family Denominator distribution: "fixed" (default) for a known
+#'   exposure, "negbin" for a count denominator, or "gamma" for continuous
+#'   effort.
+#'
+#' @return A `ratiod_family` object
+#'
+#' @examples
+#' fam <- ratiod_poisson()
+#' print(fam)
+#'
+#' # Cases over a known population at risk
+#' set.seed(1)
+#' n <- 60
+#' df <- data.frame(population = round(runif(n, 500, 5000)), x = rnorm(n))
+#' df$cases <- rpois(n, df$population * exp(-6 + 0.3 * df$x))
+#'
+#' \donttest{
+#' fit <- tratio(cases | population ~ x, data = df,
+#'               family = ratiod_poisson(),
+#'               control = list(iter = 400, chains = 1, seed = 1))
+#' coef(fit)
+#' }
+#' @export
+ratiod_poisson <- function(link_num = "log", link_denom = "log",
+                           denom_family = "fixed") {
+  validate_link(link_num, "log")
+  if (identical(denom_family, "gamma")) {
+    return(ratiod_poisson_gamma(link_num, link_denom))
+  }
+  count_family("poisson", denom_family, link_num, link_denom)
+}
+
+#' @rdname ratiod_poisson
+#' @export
+ratiod_negbin <- function(link_num = "log", link_denom = "log",
+                          denom_family = "fixed") {
+  validate_link(link_num, "log")
+  if (identical(denom_family, "negbin")) {
+    return(ratiod_negbin_negbin(link_num, link_denom))
+  }
+  if (identical(denom_family, "gamma")) {
+    return(ratiod_negbin_gamma(link_num, link_denom))
+  }
+  count_family("neg_binomial_2", denom_family, link_num, link_denom)
+}
+
+#' A count family over a denominator of `count_denominators`
+#' @keywords internal
+count_family <- function(base, denom_family, link_num, link_denom) {
+  denominator <- count_denominator(base, denom_family, link_denom)
+  short <- c(poisson = "poisson", neg_binomial_2 = "negbin")[[base]]
+  label <- c(poisson = "Poisson", neg_binomial_2 = "Negative binomial")[[base]]
+  denom_label <- c(gamma = "Gamma", negbin = "negative binomial",
+                   fixed = "known exposure")[[denom_family]]
+  structure(
+    list(
+      name = paste0(short, "_", denom_family),
+      numerator = list(distribution = base, link = link_num),
+      denominator = denominator,
+      description = sprintf("%s numerator, %s denominator", label, denom_label)
+    ),
+    class = c("ratiod_family", "list")
+  )
+}
+
 #' Links of probabilities and of gamma means
 #'
 #' A success, zero-inflation, one-inflation or hurdle probability takes any

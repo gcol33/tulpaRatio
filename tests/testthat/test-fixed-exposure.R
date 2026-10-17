@@ -99,3 +99,39 @@ test_that("samplers with likelihoods of their own refuse the new pairs", {
            family = ratiod_zipois(denom_family = "fixed"), mode = "laplace"),
     "likelihood")
 })
+
+test_that("a count over a known exposure has a constructor of its own", {
+  expect_identical(get_hmc_model_type(ratiod_poisson()), "poisson_fixed")
+  expect_identical(get_hmc_model_type(ratiod_negbin()), "negbin_fixed")
+  expect_identical(get_hmc_model_type(ratiod_poisson(denom_family = "negbin")),
+                   "poisson_negbin")
+  expect_identical(ratiod_poisson(denom_family = "gamma"), ratiod_poisson_gamma())
+  expect_identical(ratiod_negbin(denom_family = "negbin"), ratiod_negbin_negbin())
+  expect_identical(ratiod_negbin(denom_family = "gamma"), ratiod_negbin_gamma())
+  expect_false(is_zi_family(ratiod_poisson()))
+  expect_error(ratiod_poisson(denom_family = "binomial"), "denom_family")
+})
+
+test_that("the Gibbs sampler refuses a count it has no likelihood for", {
+  expect_true(is.na(gibbs_model_type(ratiod_poisson())))
+  expect_true(is.na(gibbs_model_type(ratiod_negbin())))
+  expect_true(is.na(gibbs_model_type(ratiod_zipois())))
+  expect_identical(gibbs_model_type(ratiod_poisson_gamma()), "poisson_gamma")
+  expect_identical(gibbs_model_type(ratiod_negbin_negbin()), "negbin_negbin")
+  expect_error(get_gibbs_family_string(ratiod_poisson()), "Gibbs backend")
+  expect_identical(
+    auto_select_mode(ratiod_poisson(), 100, list(spatial = list(type = "icar")))$backend,
+    "hmc")
+})
+
+test_that("a Poisson count over a known exposure is recovered", {
+  skip_on_cran()
+  d <- exposure_data()
+  fit <- tratio(count | exposure ~ x, data = d,
+                family = ratiod_poisson(),
+                control = list(iter = 1000, chains = 2, seed = 1))
+  ref <- stats::glm(count ~ x + offset(log(exposure)), family = stats::poisson(),
+                    data = d)
+  expect_equal(unname(coef(fit)[c("num:(Intercept)", "num:x")]),
+               unname(stats::coef(ref)), tolerance = 0.05)
+})

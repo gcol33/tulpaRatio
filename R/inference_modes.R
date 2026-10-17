@@ -588,23 +588,15 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
   # test models with the same posterior
   is_gibbs_spatial <- has_spatial && !is.null(spatial_type) &&
                       spatial_type %in% c("icar", "car", "bym2")
-  if (is_gibbs_spatial && handcoded && backend_fits_structures("gibbs", structures)) {
-    # Check family is supported by Gibbs
-    gibbs_families <- c("poisson_gamma", "negbin_negbin", "binomial",
-                        "negbin_gamma", "poisson", "neg_binomial_2",
-                        "negative_binomial", "negbin")
-    fam_name <- family$name %||% ""
-    fam_dist <- family$numerator$distribution %||% ""
-    if (fam_name %in% gibbs_families || fam_dist %in% gibbs_families ||
-        fam_dist == "binomial") {
-      return(list(
-        mode = "exact",
-        backend = "gibbs",
-        tier = 1L,
-        tier_name = "Exact",
-        reason = sprintf("ICAR spatial model (Gibbs %s)", spatial_type)
-      ))
-    }
+  if (is_gibbs_spatial && handcoded && backend_fits_structures("gibbs", structures) &&
+      !is.na(gibbs_model_type(family))) {
+    return(list(
+      mode = "exact",
+      backend = "gibbs",
+      tier = 1L,
+      tier_name = "Exact",
+      reason = sprintf("ICAR spatial model (Gibbs %s)", spatial_type)
+    ))
   }
 
   # Default: Tier 1 (Exact) with HMC

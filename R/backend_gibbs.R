@@ -337,16 +337,28 @@ gibbs_natural_draws <- function(draws, model_type) {
 }
 
 
+# The numerator and denominator pairs the Gibbs sampler has a likelihood for.
+GIBBS_MODEL_TYPES <- c("poisson_gamma", "negbin_negbin", "negbin_gamma", "binomial")
+
+#' The model type the Gibbs sampler fits for a family
+#'
+#' The same pair the HMC samplers read (`get_hmc_model_type()`), or `NA` when
+#' the Gibbs sampler has no likelihood for it, as for an inflated count or a
+#' known exposure.
+#' @keywords internal
+gibbs_model_type <- function(family) {
+  if (is_zi_family(family)) return(NA_character_)
+  type <- tryCatch(get_hmc_model_type(family), error = function(e) NA_character_)
+  if (type %in% GIBBS_MODEL_TYPES) type else NA_character_
+}
+
 #' Map family to Gibbs family string
 #' @keywords internal
 get_gibbs_family_string <- function(family) {
-  if (identical(family$name, "negbin_gamma")) return("negbin_gamma")
-
-  dist <- family$numerator$distribution
-  if (dist == "binomial") return("binomial")
-  if (dist %in% c("negbin", "negative_binomial", "neg_binomial_2")) return("negbin_negbin")
-  if (dist == "poisson") return("poisson_gamma")
-
-  stop(sprintf("Gibbs backend does not support family '%s'. Use mode='hmc'.",
-               dist), call. = FALSE)
+  type <- gibbs_model_type(family)
+  if (is.na(type)) {
+    stop(sprintf("Gibbs backend does not support family '%s'. Use mode='hmc'.",
+                 family$name), call. = FALSE)
+  }
+  type
 }
