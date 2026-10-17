@@ -114,7 +114,8 @@ Sampling budget (all backends):
 \item \code{iter}: total iterations per chain (default 2000).
 \item \code{warmup}: warmup iterations per chain (default \code{floor(iter / 2)}).
 \item \code{thin}: thinning interval (default 1).
-\item \code{cores}: cores for parallel chains (default \code{getOption("mc.cores", chains)}).
+\item \code{cores}: cores for parallel chains (default \code{getOption("mc.cores", chains)},
+at most two under \verb{R CMD check}).
 \item \code{seed}: random seed for reproducibility.
 \item \code{verbose}: print progress messages and sampler adaptation traces
 during fitting (default \code{FALSE}).

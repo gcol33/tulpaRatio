@@ -106,7 +106,7 @@
 
   if (is.null(ctrl$warmup)) ctrl$warmup <- as.integer(floor(ctrl$iter / 2))
   if (is.null(ctrl$cores))  ctrl$cores  <- .tratio_count(
-    getOption("mc.cores", ctrl$chains), "cores")
+    default_cores(ctrl$chains), "cores")
 
   if (ctrl$warmup >= ctrl$iter) {
     stop(sprintf(
@@ -130,4 +130,19 @@
   knobs <- .TRATIO_SG_KNOBS[[backend]]
   args <- ctrl[knobs]
   args[!vapply(args, is.null, logical(1))]
+}
+
+
+#' The default core budget of a fit
+#'
+#' `getOption("mc.cores", chains)`, at most two under `R CMD check`, which
+#' sets `_R_CHECK_LIMIT_CORES_` and allows two cores.
+#'
+#' @param chains Number of chains.
+#' @return An integer.
+#' @keywords internal
+default_cores <- function(chains) {
+  cores <- getOption("mc.cores", chains)
+  if (nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_"))) cores <- min(cores, 2L)
+  as.integer(cores)
 }

@@ -82,3 +82,18 @@ test_that("tratio() rejects tuning knobs passed as bare arguments", {
   df <- data.frame(a = c(2, 3), b = c(5, 7))
   expect_error(tratio(a | b ~ 1, data = df, iter = 10), "unused argument")
 })
+
+test_that("the default core budget keeps to two under R CMD check", {
+  old_opt <- options(mc.cores = NULL)
+  old_env <- Sys.getenv("_R_CHECK_LIMIT_CORES_", unset = NA)
+  on.exit({
+    options(old_opt)
+    if (is.na(old_env)) Sys.unsetenv("_R_CHECK_LIMIT_CORES_")
+    else Sys.setenv(`_R_CHECK_LIMIT_CORES_` = old_env)
+  })
+  Sys.setenv(`_R_CHECK_LIMIT_CORES_` = "TRUE")
+  expect_identical(default_cores(4L), 2L)
+  expect_identical(default_cores(1L), 1L)
+  Sys.unsetenv("_R_CHECK_LIMIT_CORES_")
+  expect_identical(default_cores(4L), 4L)
+})

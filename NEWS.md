@@ -1,5 +1,9 @@
 # tulpaRatio 1.7.3
 
+* The default core budget (`control$cores`) is at most two under
+  `R CMD check`, which sets `_R_CHECK_LIMIT_CORES_` (#161). An explicit
+  `cores` is unchanged.
+
 * Messages that told the user to set `backend = 'hmc'` name `mode = "hmc"`,
   the argument `tratio()` has (#159). `print()` of a fit wraps its lines at
   the console width, and names the random effects of a fit from any backend,

@@ -83,7 +83,8 @@
 #'   - `iter`: total iterations per chain (default 2000).
 #'   - `warmup`: warmup iterations per chain (default `floor(iter / 2)`).
 #'   - `thin`: thinning interval (default 1).
-#'   - `cores`: cores for parallel chains (default `getOption("mc.cores", chains)`).
+#'   - `cores`: cores for parallel chains (default `getOption("mc.cores", chains)`,
+#'     at most two under `R CMD check`).
 #'   - `seed`: random seed for reproducibility.
 #'   - `verbose`: print progress messages and sampler adaptation traces
 #'     during fitting (default `FALSE`).
