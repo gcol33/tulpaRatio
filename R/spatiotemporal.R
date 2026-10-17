@@ -599,13 +599,7 @@ build_st_index <- function(st, data) {
       stop(sprintf("Spatial group variable '%s' not found in data", spatial_var),
            call. = FALSE)
     }
-    s_vals <- data[[spatial_var]]
-    if (is.factor(s_vals)) {
-      s_idx <- as.integer(s_vals)
-    } else {
-      s_factor <- as.factor(s_vals)
-      s_idx <- as.integer(s_factor)
-    }
+    s_idx <- areal_unit_index(st$spatial$adjacency, data[[spatial_var]])
   } else if (!is.null(st$spatial$obs_to_loc)) {
     # Spatial GP: n_spatial counts UNIQUE locations, so the interaction's
     # spatial index is the observation's location, not its row. seq_len(N)

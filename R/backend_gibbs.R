@@ -97,10 +97,9 @@ fit_gibbs <- function(formula,
          call. = FALSE)
   }
 
-  group_factor <- as.factor(data[[spatial_var]])
-  spatial_group <- as.integer(group_factor)  # 1-based
+  spatial_group <- areal_unit_index(spatial$adjacency, data[[spatial_var]])  # 1-based
 
-  S <- nlevels(group_factor)
+  S <- nrow(spatial$adjacency)
   N <- nrow(data)
 
   # Build design matrices from formula

@@ -1078,25 +1078,16 @@ predict_spatial_areal <- function(object, newdata, return_spatial) {
     return(list(w_pred = NULL, w_samples = NULL))
   }
 
-  # Map new data spatial groups onto the units the fit numbered by factor level
-  orig_data <- object$data
-  orig_levels <- levels(as.factor(orig_data[[spatial_var]]))
-  new_levels <- newdata[[spatial_var]]
-
+  # Map new data spatial groups onto the units of the fitted adjacency;
+  # unmatched levels stay at 0 (no spatial effect)
   n_new <- nrow(newdata)
-  spatial_group <- integer(n_new)
-  for (i in seq_len(n_new)) {
-    match_idx <- match(new_levels[i], orig_levels)
-    if (!is.na(match_idx)) {
-      spatial_group[i] <- match_idx
-    }
-    # Unmatched levels stay at 0 (no spatial effect)
-  }
+  spatial_group <- fitted_unit_index(spatial, object$data, newdata[[spatial_var]])
+  spatial_group[is.na(spatial_group)] <- 0L
 
   # Find spatial effects in samples
   # For ICAR: phi_spatial[1:n_units]
   # For BYM2: sigma_spatial, rho, phi_scaled[1:n_units], theta[1:n_units]
-  n_units <- length(orig_levels)
+  n_units <- spatial$n_units %||% nrow(spatial$adjacency)
   idx <- hmc_data$p_num + hmc_data$p_denom
   if (hmc_data$n_re_groups > 0) {
     idx <- idx + 1 + hmc_data$n_re_groups
@@ -1325,17 +1316,12 @@ predict_spatial_areal_pg <- function(object, newdata, return_spatial) {
     return(list(w_pred = NULL, w_samples = NULL))
   }
 
-  # Map groups onto the units the fit numbered by factor level
-  orig_data <- object$data
-  orig_levels <- levels(as.factor(orig_data[[spatial_var]]))
+  # Map groups onto the units of the fitted adjacency
   n_new <- nrow(newdata)
   n_samples <- nrow(spatial_draws)
 
-  spatial_group <- integer(n_new)
-  for (i in seq_len(n_new)) {
-    match_idx <- match(newdata[[spatial_var]][i], orig_levels)
-    if (!is.na(match_idx)) spatial_group[i] <- match_idx
-  }
+  spatial_group <- fitted_unit_index(spatial, object$data, newdata[[spatial_var]])
+  spatial_group[is.na(spatial_group)] <- 0L
 
   # Look up
   w_pred <- matrix(0, n_samples, n_new)
@@ -1425,10 +1411,8 @@ predict_gibbs <- function(object, newdata, type, re_formula, allow_new_levels,
          call. = FALSE)
   }
 
-  group_factor_orig <- as.factor(object$data[[spatial_var]])
-  orig_levels <- levels(group_factor_orig)
   new_levels <- as.character(newdata[[spatial_var]])
-  group_idx <- match(new_levels, orig_levels)
+  group_idx <- fitted_unit_index(spatial, object$data, new_levels)
 
   if (any(is.na(group_idx))) {
     if (!isTRUE(allow_new_levels)) {

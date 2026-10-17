@@ -1,5 +1,16 @@
 # tulpaRatio 1.7.3
 
+* An areal adjacency with row names is matched to the grouping variable by
+  name (#155). Before, row i was always the i-th sorted level of the grouping
+  variable and the names were ignored, so an adjacency in another order (a
+  shapefile's, or character ids `"1"` to `"12"`, which sort as `"1"`,
+  `"10"`, `"11"`, `"12"`, `"2"`, ...) attached each region to another
+  region's neighbours without a message. Every backend and prediction read
+  one index (`areal_unit_index()`); a value the names do not cover, or row
+  and column names that disagree, is refused. Without names the sorted-level
+  order still applies. A plain areal structure is now checked against the
+  data before fitting, as a spatiotemporal one was.
+
 * `ratiod_poisson()` and `ratiod_negbin()` fit a Poisson or negative binomial
   count over a known exposure (`denom_family = "fixed"`, the default), a count
   or a continuous effort, without inflation (#154). The samplers fitted these

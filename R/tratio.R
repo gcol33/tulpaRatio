@@ -258,8 +258,12 @@ tratio <- function(formula,
     }
   }
 
-  # Validate spatial specification
-  # (SVC is now handled in fit_hmc() with prepare_svc_for_hmc())
+  # Validate spatial specification: an areal structure's units against the
+  # data (SVC is handled in fit_hmc() with prepare_svc_for_hmc())
+  if (!is.null(spatial) && !is.null(spatial$adjacency) &&
+      !inherits(spatial, "ratiod_svc")) {
+    validate_areal_groups(spatial, data)
+  }
 
   # Validate zero-inflation specification
   if (!is.null(zi)) {

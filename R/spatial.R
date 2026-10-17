@@ -2106,6 +2106,50 @@ plot.ratiod_svc_posterior <- function(x, term = 1, type = "mean", ...) {
 }
 
 
+#' The areal unit each adjacency row stands for
+#'
+#' An adjacency with row (or column) names names its units, and observations
+#' are matched to its rows by the value of the grouping variable. Without
+#' names, row i is the i-th level of `factor(group)`.
+#'
+#' @param adjacency The adjacency matrix of an areal spatial structure.
+#' @param group The grouping variable's values in the fitted data.
+#' @return A character vector, one label per adjacency row.
+#' @keywords internal
+areal_unit_labels <- function(adjacency, group) {
+  labels <- rownames(adjacency) %||% colnames(adjacency)
+  if (is.null(labels)) return(levels(factor(group)))
+  as.character(labels)
+}
+
+#' The adjacency row of each value of a grouping variable
+#'
+#' @inheritParams areal_unit_labels
+#' @param values The grouping values to index, the fitted data's by default.
+#' @return An integer vector, `NA` where a value names no unit.
+#' @keywords internal
+areal_unit_index <- function(adjacency, group, values = group) {
+  match(as.character(values), areal_unit_labels(adjacency, group))
+}
+
+#' The adjacency row of each grouping value, for a fitted structure
+#'
+#' A fit keeps either the specification, with its adjacency, or the
+#' sampler's processed structure, which records the unit labels it fitted
+#' (`unit_labels`). Either way new values are matched to the units the fit
+#' numbered.
+#'
+#' @param spatial The fit's spatial structure.
+#' @param data The fitted data.
+#' @param values The grouping values to index.
+#' @return An integer vector, `NA` where a value names no fitted unit.
+#' @keywords internal
+fitted_unit_index <- function(spatial, data, values) {
+  labels <- spatial$unit_labels %||%
+    areal_unit_labels(spatial$adjacency, data[[spatial$group_var]])
+  match(as.character(values), labels)
+}
+
 #' Validate spatial specification against data
 #'
 #' @param spatial ratiod_spatial object
@@ -2121,30 +2165,7 @@ validate_spatial <- function(spatial, data) {
     return(invisible(NULL))
   }
 
-  # Check group variable exists
-  if (spatial$level == "group") {
-    if (!(spatial$group_var %in% names(data))) {
-      stop(sprintf("Spatial group variable '%s' not found in data",
-                   spatial$group_var), call. = FALSE)
-    }
-
-    # Check number of groups matches adjacency matrix
-    n_groups <- length(unique(data[[spatial$group_var]]))
-    if (n_groups != spatial$n_spatial) {
-      stop(sprintf(
-        "Number of groups in data (%d) does not match adjacency matrix (%d)",
-        n_groups, spatial$n_spatial
-      ), call. = FALSE)
-    }
-  } else {
-    # Observation-level spatial
-    if (nrow(data) != spatial$n_spatial) {
-      stop(sprintf(
-        "Number of observations (%d) does not match adjacency matrix (%d)",
-        nrow(data), spatial$n_spatial
-      ), call. = FALSE)
-    }
-  }
+  validate_areal_groups(spatial, data)
 
   # Check connectivity
   if (!is_connected(spatial$adjacency)) {
@@ -2155,6 +2176,61 @@ validate_spatial <- function(spatial, data) {
       "  - Fitting separate models for each connected component",
       call. = FALSE
     )
+  }
+
+  invisible(NULL)
+}
+
+#' Check an areal structure's units against the data
+#'
+#' The grouping variable exists, each of its values names a row of the
+#' adjacency (`areal_unit_index()`), and the data carry every unit.
+#'
+#' @inheritParams validate_spatial
+#' @return NULL (invisibly); errors if a check fails
+#' @keywords internal
+validate_areal_groups <- function(spatial, data) {
+  # Check group variable exists
+  if (!is.null(spatial$group_var)) {
+    if (!(spatial$group_var %in% names(data))) {
+      stop(sprintf("Spatial group variable '%s' not found in data",
+                   spatial$group_var), call. = FALSE)
+    }
+
+    # Every group names a unit of a named adjacency
+    rn <- rownames(spatial$adjacency)
+    cn <- colnames(spatial$adjacency)
+    if (!is.null(rn) && !is.null(cn) && !identical(as.character(rn), as.character(cn))) {
+      stop("The adjacency's row and column names must name the same units in the same order.",
+           call. = FALSE)
+    }
+    group <- data[[spatial$group_var]]
+    unmatched <- is.na(areal_unit_index(spatial$adjacency, group))
+    if (any(unmatched)) {
+      stop(sprintf(
+        "%s value(s) not among the adjacency's row names: %s",
+        spatial$group_var,
+        paste0("'", utils::head(unique(as.character(group[unmatched])), 5), "'",
+               collapse = ", ")
+      ), call. = FALSE)
+    }
+
+    # Check number of groups matches adjacency matrix
+    n_groups <- length(unique(group))
+    if (n_groups != spatial$n_spatial) {
+      stop(sprintf(
+        "Number of groups in data (%d) does not match adjacency matrix (%d)",
+        n_groups, spatial$n_spatial
+      ), call. = FALSE)
+    }
+  } else if (identical(spatial$level, "obs")) {
+    # Observation-level spatial
+    if (nrow(data) != spatial$n_spatial) {
+      stop(sprintf(
+        "Number of observations (%d) does not match adjacency matrix (%d)",
+        nrow(data), spatial$n_spatial
+      ), call. = FALSE)
+    }
   }
 
   invisible(NULL)

@@ -1338,9 +1338,11 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
   }
 
   # Get group mapping
+  unit_labels <- NULL
   if (!is.null(spatial$group_var)) {
-    spatial_group <- as.integer(factor(data[[spatial$group_var]]))
-    n_units <- max(spatial_group)
+    unit_labels <- areal_unit_labels(spatial$adjacency, data[[spatial$group_var]])
+    spatial_group <- areal_unit_index(spatial$adjacency, data[[spatial$group_var]])
+    n_units <- nrow(spatial$adjacency)
   } else {
     # Observation-level spatial
     spatial_group <- seq_len(N)
@@ -1388,6 +1390,7 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
     type = spatial_type,
     group = spatial_group,
     n_units = n_units,
+    unit_labels = unit_labels,
     adj_row_ptr = adj_row_ptr,
     adj_col_idx = adj_col_idx,
     n_neighbors = n_neighbors,

@@ -235,14 +235,12 @@ prepare_spatial_for_laplace <- function(spatial, data, formula) {
     stop(sprintf("Spatial group variable '%s' not found in data", group_var))
   }
 
-  group_factor <- as.factor(data[[group_var]])
-  group_idx <- as.integer(group_factor)
-  n_units <- nlevels(group_factor)
-
   adj_matrix <- spatial$adj_matrix %||% spatial$adjacency
   if (is.null(adj_matrix)) {
     stop("Spatial structure must include adj_matrix or adjacency")
   }
+  group_idx <- areal_unit_index(adj_matrix, data[[group_var]])
+  n_units <- nrow(adj_matrix)
 
   # CSR with 0-based column indices
   n_neighbors <- integer(n_units)

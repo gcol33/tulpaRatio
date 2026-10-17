@@ -419,9 +419,8 @@ prepare_spatial_for_pg <- function(spatial, data, formula) {
   }
 
   if (!is.null(spatial_var)) {
-    group_factor <- as.factor(data[[spatial_var]])
-    group_idx <- as.integer(group_factor)
-    n_units <- nlevels(group_factor)
+    group_idx <- areal_unit_index(spatial$adjacency, data[[spatial_var]])
+    n_units <- nrow(spatial$adjacency)
   } else {
     # Observation level
     group_idx <- seq_len(nrow(data))
