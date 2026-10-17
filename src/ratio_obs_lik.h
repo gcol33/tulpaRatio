@@ -173,6 +173,18 @@ inline ObsDerivs ratio_obs_derivs(const ModelData& data, const ParamLayout& layo
                                   double phi_num, double phi_denom,
                                   double logit_zi, double logit_oi,
                                   unsigned want) {
+    // A Poisson count over a known exposure in the log link, with no
+    // inflation: mu = E exp(eta) and d ll / d eta = y - mu, the same density
+    // log_lik_poisson gives, without a dual pass per argument.
+    if (data.model_type == ModelType::POISSON_FIXED && !layout.has_zi &&
+        data.link_num == ratiod_link::LinkType::LOG) {
+        ObsDerivs out;
+        const double mu = std::exp(eta_num) * data.y_denom_cont[i];
+        out.ll = log_lik_poisson(data.y_num[i], mu);
+        out.eta_num = static_cast<double>(data.y_num[i]) - mu;
+        return out;
+    }
+
     using D = fwd::Dual;
     // The argument seeded with slope 1 in this pass
     auto pass = [&](int seed) {

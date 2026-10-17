@@ -1,5 +1,13 @@
 # tulpaRatio 1.7.3
 
+* A Poisson count over a known exposure samples about 1.7 times faster
+  (#156). Its observation derivatives are the closed form y - mu in place of
+  a dual pass per argument, and a likelihood the specialised gradients carry
+  no branch for (a known exposure, a Poisson count over a negative binomial
+  one, a non-canonical link) takes the composite hand-coded gradient instead
+  of the arena autodiff one. On `pennlc` with a BYM2 field, 200 iterations of
+  one chain take 37 s where they took 63 s.
+
 * New data: `pennlc`, lung cancer cases and population in Pennsylvania's 67
   counties in 2002 by race, sex and age, with county smoking rates, and
   `pennlc_adj`, the counties' contiguity named by county. They come from the

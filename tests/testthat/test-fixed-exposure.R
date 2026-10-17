@@ -6,7 +6,8 @@
 test_that("the new pairs have the gradient of their log posterior", {
   for (family in c("poisson_fixed", "negbin_fixed", "lognormal_fixed",
                    "poisson_negbin")) {
-    for (field in c("none", "re", "icar")) {
+    for (field in c("none", "re", "icar", "bym2", "rw1", "temporal_ar1", "gp",
+                    "st4", "latent")) {
       r <- tulpaRatio:::cpp_gradient_check(field, family = family)
       expect_lt(max(grad_rel_dev(r)), 1e-4, label = paste(family, field))
     }

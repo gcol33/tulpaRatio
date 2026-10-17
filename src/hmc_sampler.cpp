@@ -7731,12 +7731,6 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
     if (data.has_rsr)
         return &compute_gradient_arena;
 
-    // The hand-coded gradients are written for the canonical links of the
-    // original model types. Any other likelihood is the one the templated
-    // log posterior carries, which the arena gradient differentiates.
-    if (!handcoded_likelihood(data))
-        return &compute_gradient_arena;
-
     // The non-centred GP interaction reaches delta through the NNGP
     // autoregression, which the arena gradient differentiates.
     if (layout.has_spatiotemporal &&
@@ -7744,6 +7738,18 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
                                                  data.st_is_hsgp,
                                                  data.spatiotemporal_data))
         return &compute_gradient_arena;
+
+    // The specialized gradients are written for the canonical links of the
+    // original model types. Any other likelihood (a known exposure, a count
+    // over a count of another family, a non-canonical link) goes to the
+    // composite, which reads each observation's derivatives off the log
+    // posterior's own density (ratio_obs_derivs). A collapsed field's
+    // marginal is carried by the numerical gradient, as below.
+    if (!handcoded_likelihood(data)) {
+        if (model_grad_features(data, layout) & (GF_AREAL_COLLAPSED | GF_GP_COLLAPSED))
+            return &compute_gradient_numerical;
+        return &compute_gradient_composite;
+    }
 
     // AUTO or HANDCODED: use fastest available (H > A_r > A > N)
     if (can_use_analytical_gradient(data, layout)) {
