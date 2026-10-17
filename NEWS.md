@@ -1,5 +1,12 @@
 # tulpaRatio 1.7.3
 
+* The stochastic-gradient samplers (`mode = "sghmc"`, `"sgld"`) are Tier 3
+  beside variational inference, as the README described them, instead of
+  Tier 1 (#157). They run a fixed step size on minibatch gradients with no
+  Metropolis correction, so a run samples a distribution perturbed by the
+  discretization and the gradient noise; `mode = "exact"` no longer accepts
+  them, and their fits report Tier 3.
+
 * A Poisson count over a known exposure samples about 1.7 times faster
   (#156). Its observation derivatives are the closed form y - mu in place of
   a dual pass per argument, and a likelihood the specialised gradients carry

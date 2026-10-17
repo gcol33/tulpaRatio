@@ -57,8 +57,8 @@
 #'   - `"hmc"` (Tier 1): Native HMC/NUTS sampler
 #'   - `"ess"` (Tier 1): Elliptical Slice Sampling
 #'   - `"pg"` (Tier 1): Pólya-Gamma Gibbs (binomial only)
-#'   - `"sghmc"` (Tier 1): Stochastic Gradient HMC (large datasets)
-#'   - `"sgld"` (Tier 1): Stochastic Gradient Langevin Dynamics (large datasets)
+#'   - `"sghmc"` (Tier 3): Stochastic Gradient HMC (large datasets)
+#'   - `"sgld"` (Tier 3): Stochastic Gradient Langevin Dynamics (large datasets)
 #'   - `"laplace"` (Tier 2): Laplace approximation
 #'   - `"vi"` (Tier 3): Variational Inference
 #'
@@ -649,7 +649,7 @@ tratio <- function(formula,
   }
 
   # -------------------------------------------------------------------------
-  # Dispatch to SGHMC backend (Tier 1: Exact, large-scale)
+  # Dispatch to SGHMC backend (Tier 3: Optimized, large-scale)
   # -------------------------------------------------------------------------
   if (selected_backend == "sghmc") {
     # Default batch size: sqrt(n) for good variance/speed tradeoff
@@ -688,7 +688,7 @@ tratio <- function(formula,
   }
 
   # -------------------------------------------------------------------------
-  # Dispatch to SGLD backend (Tier 1: Exact, large-scale)
+  # Dispatch to SGLD backend (Tier 3: Optimized, large-scale)
   # -------------------------------------------------------------------------
   if (selected_backend == "sgld") {
     # Default batch size: sqrt(n) for good variance/speed tradeoff
@@ -756,8 +756,8 @@ suggest_mode <- function(n_obs, structures, current_mode) {
   }
 
   alternatives <- c(
-    sghmc = "  - mode = 'sghmc' for minibatch MCMC (Tier 1, scales better)",
-    sgld = "  - mode = 'sgld' for stochastic gradient Langevin dynamics (Tier 1)",
+    sghmc = "  - mode = 'sghmc' for minibatch MCMC (Tier 3, scales better)",
+    sgld = "  - mode = 'sgld' for stochastic gradient Langevin dynamics (Tier 3)",
     laplace = "  - mode = 'structured' for Tier 2 (Laplace approximation)"
   )
   alternatives <- alternatives[vapply(

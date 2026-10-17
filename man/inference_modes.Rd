@@ -28,7 +28,10 @@ outside that class. Failure modes are predictable and explainable.
 No general correctness guarantee beyond empirical usefulness.
 Point estimates usually good, but uncertainty often underestimated.
 Tails and correlations unreliable. Failure is usually silent.
-This is optimization, not sampling.
+Variational inference optimizes an approximating family; the
+stochastic-gradient samplers (SGHMC, SGLD) run at a fixed step size on
+minibatch gradients with no Metropolis correction, so they sample a
+distribution perturbed by the discretization and the gradient noise.
 }
 
 \section{Auto Mode}{

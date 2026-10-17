@@ -24,7 +24,10 @@
 #' No general correctness guarantee beyond empirical usefulness.
 #' Point estimates usually good, but uncertainty often underestimated.
 #' Tails and correlations unreliable. Failure is usually silent.
-#' This is optimization, not sampling.
+#' Variational inference optimizes an approximating family; the
+#' stochastic-gradient samplers (SGHMC, SGLD) run at a fixed step size on
+#' minibatch gradients with no Metropolis correction, so they sample a
+#' distribution perturbed by the discretization and the gradient noise.
 #'
 #' @section Auto Mode:
 #'
@@ -66,7 +69,7 @@ INFERENCE_TIERS <- list(
     name = "Exact",
     description = "Asymptotically correct posterior inference",
     guarantee = "Credible intervals interpretable as posterior uncertainty",
-    backends = c("hmc", "ess", "pg", "gibbs", "sghmc", "sgld"),
+    backends = c("hmc", "ess", "pg", "gibbs"),
     note = "Reference standard"
   ),
   structured = list(
@@ -80,9 +83,9 @@ INFERENCE_TIERS <- list(
   optimized = list(
     tier = 3L,
     name = "Optimized",
-    description = "Optimization-based approximate inference",
+    description = "Approximate inference: optimization, or stochastic-gradient dynamics at a fixed step size",
     guarantee = "No general correctness guarantee",
-    backends = c("vi"),
+    backends = c("vi", "sghmc", "sgld"),
     note = "Uncertainty often underestimated; requires explicit opt-in"
   )
 )
@@ -630,7 +633,8 @@ select_backend_for_mode <- function(mode) {
   }
 
   if (mode == "optimized") {
-    # VI is currently the only Tier 3 backend
+    # VI is the default Tier 3 backend; the stochastic-gradient samplers are
+    # chosen by name
     return("vi")
   }
 
@@ -746,8 +750,8 @@ inference_mode_info <- function() {
   cat("Usage (by backend):\n")
   cat("  tratio(..., mode = 'hmc')        # HMC/NUTS (Tier 1)\n")
   cat("  tratio(..., mode = 'ess')        # Elliptical Slice Sampling (Tier 1)\n")
-  cat("  tratio(..., mode = 'sghmc')      # Stochastic Gradient HMC (Tier 1, large N)\n")
-  cat("  tratio(..., mode = 'sgld')       # Stochastic Gradient Langevin (Tier 1, large N)\n")
+  cat("  tratio(..., mode = 'sghmc')      # Stochastic Gradient HMC (Tier 3, large N)\n")
+  cat("  tratio(..., mode = 'sgld')       # Stochastic Gradient Langevin (Tier 3, large N)\n")
   cat("  tratio(..., mode = 'laplace')    # Laplace approximation (Tier 2)\n")
   cat("  tratio(..., mode = 'vi')         # Variational Inference (Tier 3)\n")
 

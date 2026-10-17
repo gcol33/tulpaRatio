@@ -4,8 +4,8 @@
 \alias{sghmc_backend}
 \title{Stochastic Gradient MCMC Backends for ratio Models}
 \description{
-Stochastic gradient MCMC methods enable Tier 1 (Exact) inference on
-large datasets by using minibatch gradients.
+Stochastic gradient MCMC methods sample large datasets from minibatch
+gradients. They are Tier 3 (Optimized): see Details.
 }
 \details{
 Two methods are provided:
@@ -18,15 +18,16 @@ Reference: Chen, Fox, Guestrin (2014) "Stochastic Gradient Hamiltonian Monte Car
 Simpler method without momentum, uses decaying step size schedule.
 Reference: Welling & Teh (2011) "Bayesian Learning via Stochastic Gradient Langevin Dynamics"
 
-Both methods are asymptotically exact (Tier 1) - the continuous-time limit
-samples from the true posterior. This distinguishes them from VI (Tier 3).
+Their continuous-time limit samples the posterior, but both run a fixed
+step size on minibatch gradients with no Metropolis correction, so a run
+samples a distribution perturbed by the discretization and the gradient
+noise. They share Tier 3 with VI for that reason.
 }
 \section{When to Use}{
 
 \itemize{
 \item N > 10,000 observations
 \item Full HMC is too slow
-\item You need exact (Tier 1) inference, not approximations
 \item Model structure is relatively simple (RE, basic spatial/temporal)
 }
 }

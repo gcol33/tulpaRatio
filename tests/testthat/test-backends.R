@@ -353,3 +353,12 @@ test_that("convert_pg_to_ratiod_fit creates valid ratiod_fit object", {
   expect_equal(fit$n_save_per_chain, n_save)
   expect_true(is.array(fit$draws))
 })
+
+test_that("the stochastic-gradient samplers are Tier 3, beside VI", {
+  expect_identical(get_backend_tier("sghmc")$tier, 3L)
+  expect_identical(get_backend_tier("sgld")$tier, 3L)
+  expect_identical(get_backend_tier("vi")$tier, 3L)
+  expect_identical(get_backend_tier("hmc")$tier, 1L)
+  expect_false(any(c("sghmc", "sgld") %in% get_mode_backends("auto")))
+  expect_false(any(c("sghmc", "sgld") %in% get_mode_backends("exact")))
+})

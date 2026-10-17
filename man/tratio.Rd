@@ -83,8 +83,8 @@ Point estimates usually good, uncertainty often underestimated.
 \item \code{"hmc"} (Tier 1): Native HMC/NUTS sampler
 \item \code{"ess"} (Tier 1): Elliptical Slice Sampling
 \item \code{"pg"} (Tier 1): Pólya-Gamma Gibbs (binomial only)
-\item \code{"sghmc"} (Tier 1): Stochastic Gradient HMC (large datasets)
-\item \code{"sgld"} (Tier 1): Stochastic Gradient Langevin Dynamics (large datasets)
+\item \code{"sghmc"} (Tier 3): Stochastic Gradient HMC (large datasets)
+\item \code{"sgld"} (Tier 3): Stochastic Gradient Langevin Dynamics (large datasets)
 \item \code{"laplace"} (Tier 2): Laplace approximation
 \item \code{"vi"} (Tier 3): Variational Inference
 }
