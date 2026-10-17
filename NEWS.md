@@ -3,6 +3,8 @@
 * `confint()` gives central posterior intervals of the fixed effects, named
   as `coef()` names them (#158). The draws are named by position
   (`beta_num[7]`), so an interval for one coefficient needed its index.
+  `plot()` takes the same names and labels the fixed effects' panels with
+  them.
 
 * The stochastic-gradient samplers (`mode = "sghmc"`, `"sgld"`) are Tier 3
   beside variational inference, as the README described them, instead of

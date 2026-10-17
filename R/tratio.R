@@ -1306,7 +1306,9 @@ as.data.frame.ratiod_fit <- function(x, ...) {
 
 
 #' @rdname summary.ratiod_fit
-#' @param pars Character vector of parameter names to plot. If NULL (default),
+#' @param pars Character vector of parameters to plot: draw names, regular
+#'   expressions over them, or fixed effects named as [coef()] names them
+#'   (`"num:depth"`). If NULL (default),
 #'   plots the first 12 main parameters (fixed effects, variance components).
 #' @param type Type of plot: "trace" (default), "dens" (density), or "both".
 #' @param n_col Number of columns in the plot grid (default: auto).
@@ -1336,6 +1338,7 @@ as.data.frame.ratiod_fit <- function(x, ...) {
 #' )
 #' plot(fit)
 #' plot(fit, pars = "beta_num", type = "both")
+#' plot(fit, pars = "num:depth")
 #' }
 #'
 #' @export
@@ -1350,11 +1353,14 @@ plot.ratiod_fit <- function(x, pars = NULL, type = c("trace", "dens", "both"),
 
   # Select parameters to plot
   all_pars <- dimnames(draws_array)[[3]]
+  terms <- fixed_effect_terms(x)
   if (is.null(pars)) {
     # Default: the first 12 main parameters (high-dimensional blocks excluded)
     pars <- utils::head(select_main_params(all_pars), 12)
   } else {
-    # Handle regex-like selection
+    # A fixed effect may be named as coef() names it; the rest are draw names
+    # or regular expressions over them
+    pars <- ifelse(pars %in% terms, names(terms)[match(pars, terms)], pars)
     pars <- grep_params(pars, all_pars)
   }
 
@@ -1362,8 +1368,12 @@ plot.ratiod_fit <- function(x, pars = NULL, type = c("trace", "dens", "both"),
     stop("No parameters selected for plotting", call. = FALSE)
   }
 
-  # Subset draws
+  # Subset draws, the fixed effects labelled by their terms
   draws_subset <- draws_array[, , pars, drop = FALSE]
+  labels <- dimnames(draws_subset)[[3]]
+  is_term <- labels %in% names(terms)
+  labels[is_term] <- terms[labels[is_term]]
+  dimnames(draws_subset)[[3]] <- labels
 
   # Use bayesplot if available, otherwise base R
   if (requireNamespace("bayesplot", quietly = TRUE)) {

@@ -37,6 +37,12 @@ test_that("as.data.frame(), coef(), vcov() and formula() read a fit", {
                ignore_attr = TRUE)
   expect_identical(colnames(confint(fit, "num:x1", level = 0.9)), c("5 %", "95 %"))
   expect_identical(rownames(confint(fit, 2)), "num:x1")
+
+  # plot() takes a fixed effect by the name coef() gives it
+  pdf(NULL)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  expect_no_error(plot(fit, pars = c("num:x1", "beta_denom[1]")))
+  expect_error(plot(fit, pars = "num:nothing"), "No parameters selected")
 })
 
 test_that("validate_mode() accepts the backend a fit ran on", {

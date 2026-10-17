@@ -66,7 +66,9 @@ position; all of them by default.}
 
 \item{level}{Probability of the central posterior interval.}
 
-\item{pars}{Character vector of parameter names to plot. If NULL (default),
+\item{pars}{Character vector of parameters to plot: draw names, regular
+expressions over them, or fixed effects named as \code{\link[=coef]{coef()}} names them
+(\code{"num:depth"}). If NULL (default),
 plots the first 12 main parameters (fixed effects, variance components).}
 
 \item{type}{Type of plot: "trace" (default), "dens" (density), or "both".}
@@ -117,6 +119,7 @@ fit <- tratio(
 )
 plot(fit)
 plot(fit, pars = "beta_num", type = "both")
+plot(fit, pars = "num:depth")
 }
 
 }
