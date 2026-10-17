@@ -41,3 +41,4 @@
 ^test_zi\.R$
 ^debug_gp_crash\.md$
 ^\.git-blame-ignore-revs$
+^data-raw$

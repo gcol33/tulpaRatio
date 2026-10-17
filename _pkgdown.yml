@@ -190,6 +190,12 @@ reference:
       - sim_ratiod
       - sim_ratiod_sbc
 
+  - title: "Data"
+    desc: "Data shipped with the package"
+    contents:
+      - pennlc
+      - pennlc_adj
+
   - title: "Benchmarking"
     desc: "Performance comparison"
     contents:

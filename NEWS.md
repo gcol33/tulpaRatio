@@ -1,5 +1,10 @@
 # tulpaRatio 1.7.3
 
+* New data: `pennlc`, lung cancer cases and population in Pennsylvania's 67
+  counties in 2002 by race, sex and age, with county smoking rates, and
+  `pennlc_adj`, the counties' contiguity named by county. They come from the
+  `pennLC` data of the SpatialEpi package.
+
 * An areal adjacency with row names is matched to the grouping variable by
   name (#155). Before, row i was always the i-th sorted level of the grouping
   variable and the names were ignored, so an adjacency in another order (a
