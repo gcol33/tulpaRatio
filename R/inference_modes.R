@@ -159,8 +159,7 @@ MODEL_STRUCTURES <- c("spatial", "temporal", "spatiotemporal", "zi", "latent")
 #' @keywords internal
 tvc_temporal_support <- function(temporal, structures) {
   if (inherits(temporal, "ratiod_tvc")) return(TRUE)
-  paste0("only time-varying coefficients are implemented; ",
-         "build the term with temporal_tvc()")
+  "only temporal_tvc() terms are implemented"
 }
 
 
@@ -176,8 +175,7 @@ tvc_temporal_support <- function(temporal, structures) {
 #' @keywords internal
 multiscale_temporal_support <- function(temporal, structures) {
   if (!inherits(temporal, "ratiod_temporal_multiscale")) {
-    return(paste0("only multi-scale temporal is implemented; ",
-                  "build the term with temporal_multiscale()"))
+    return("only temporal_multiscale() terms are implemented")
   }
   if (!is.null(structures$spatial)) {
     return("a temporal field and a spatial field cannot share one fit")
@@ -198,8 +196,7 @@ multiscale_temporal_support <- function(temporal, structures) {
 #' @keywords internal
 laplace_temporal_support <- function(temporal, structures) {
   if (!inherits(temporal, "ratiod_temporal_multiscale")) {
-    return(paste0("only multi-scale temporal is implemented; ",
-                  "build the term with temporal_multiscale()"))
+    return("only temporal_multiscale() terms are implemented")
   }
   TRUE
 }
