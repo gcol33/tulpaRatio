@@ -1056,6 +1056,21 @@ vcov.ratiod_fit <- function(object, ...) {
 
 
 #' @rdname summary.ratiod_fit
+#' @param parm Fixed effects to report, by the names [coef()] gives or by
+#'   position; all of them by default.
+#' @param level Probability of the central posterior interval.
+#' @export
+confint.ratiod_fit <- function(object, parm, level = 0.95, ...) {
+  draws <- fixed_effect_draws(object)
+  if (!missing(parm)) draws <- draws[, parm, drop = FALSE]
+  a <- (1 - level) / 2
+  ci <- t(apply(draws, 2, stats::quantile, probs = c(a, 1 - a), names = FALSE))
+  colnames(ci) <- paste(format(100 * c(a, 1 - a), trim = TRUE, digits = 3), "%")
+  ci
+}
+
+
+#' @rdname summary.ratiod_fit
 #' @export
 nobs.ratiod_fit <- function(object, ...) {
   nrow(object$data)

@@ -28,6 +28,15 @@ test_that("as.data.frame(), coef(), vcov() and formula() read a fit", {
   expect_equal(unname(b[["num:x1"]]), mean(fit$draws[, "beta_num[2]"]))
   expect_equal(dim(vcov(fit)), c(4L, 4L))
   expect_identical(deparse(formula(fit)), "y_num | y_denom ~ x1 + (1 | group)")
+
+  ci <- confint(fit)
+  expect_identical(rownames(ci), names(b))
+  expect_identical(colnames(ci), c("2.5 %", "97.5 %"))
+  expect_equal(ci["num:x1", ],
+               stats::quantile(fit$draws[, "beta_num[2]"], c(0.025, 0.975), names = FALSE),
+               ignore_attr = TRUE)
+  expect_identical(colnames(confint(fit, "num:x1", level = 0.9)), c("5 %", "95 %"))
+  expect_identical(rownames(confint(fit, 2)), "num:x1")
 })
 
 test_that("validate_mode() accepts the backend a fit ran on", {

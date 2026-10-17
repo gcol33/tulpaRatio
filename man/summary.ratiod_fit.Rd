@@ -12,6 +12,7 @@
 \alias{coef.summary.ratiod_fit}
 \alias{coef.ratiod_fit}
 \alias{vcov.ratiod_fit}
+\alias{confint.ratiod_fit}
 \alias{nobs.ratiod_fit}
 \alias{formula.ratiod_fit}
 \alias{plot.ratiod_fit}
@@ -39,6 +40,8 @@
 
 \method{vcov}{ratiod_fit}(object, ...)
 
+\method{confint}{ratiod_fit}(object, parm, level = 0.95, ...)
+
 \method{nobs}{ratiod_fit}(object, ...)
 
 \method{formula}{ratiod_fit}(x, ...)
@@ -57,6 +60,11 @@ summary of one.}
 \item{object}{A ratiod_fit object}
 
 \item{prob}{Probability mass for credible intervals (default 0.95)}
+
+\item{parm}{Fixed effects to report, by the names \code{\link[=coef]{coef()}} gives or by
+position; all of them by default.}
+
+\item{level}{Probability of the central posterior interval.}
 
 \item{pars}{Character vector of parameter names to plot. If NULL (default),
 plots the first 12 main parameters (fixed effects, variance components).}
