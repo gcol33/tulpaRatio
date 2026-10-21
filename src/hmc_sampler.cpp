@@ -10740,54 +10740,30 @@ Rcpp::List hmc_results_list(const std::vector<ratiod_hmc::HMCResult>& results, i
   return ret;
 }
 
-// [[Rcpp::export]]
-Rcpp::List cpp_hmc_fit(
-    Rcpp::NumericVector q_init,
-    Rcpp::IntegerVector y_num,
-    Rcpp::IntegerVector y_denom,
-    Rcpp::NumericVector y_num_cont,
-    Rcpp::NumericVector y_denom_cont,
-    Rcpp::NumericMatrix X_num,
-    Rcpp::NumericMatrix X_denom,
-    Rcpp::List family,
-    Rcpp::List re_params,
-    Rcpp::List spatial_params,
-    Rcpp::List temporal_params,
-    Rcpp::List prior_params,
-    Rcpp::List zi_params,
-    Rcpp::List latent_params,
-    Rcpp::List st_params,
-    Rcpp::List tvc_params,  // Time-varying coefficients
-    Rcpp::List svc_params,  // Spatially-varying coefficients
-    int n_iter,
-    int n_warmup,
-    int L,
-    int n_chains,
-    unsigned int seed,
-    int n_threads,
-    bool verbose,
-    std::string gradient_mode_str = "auto",
-    int max_treedepth = 10,
-    std::string metric_str = "auto",
-    double adapt_delta = -1.0,
-    bool walnuts = false,
-    int n_cores = 0
+namespace ratiod_hmc {
+
+ModelData build_model_data(
+    const Rcpp::IntegerVector& y_num,
+    const Rcpp::IntegerVector& y_denom,
+    const Rcpp::NumericVector& y_num_cont,
+    const Rcpp::NumericVector& y_denom_cont,
+    const Rcpp::NumericMatrix& X_num,
+    const Rcpp::NumericMatrix& X_denom,
+    const Rcpp::List& family,
+    const Rcpp::List& re_params,
+    const Rcpp::List& spatial_params,
+    const Rcpp::List& temporal_params,
+    const Rcpp::List& prior_params,
+    const Rcpp::List& zi_params,
+    const Rcpp::List& latent_params,
+    const Rcpp::List& st_params,
+    const Rcpp::List& tvc_params,
+    const Rcpp::List& svc_params
 ) {
-  using namespace ratiod_hmc;
-
-  // Set global gradient mode from R parameter
-  GradientMode grad_mode = parse_gradient_mode(gradient_mode_str);
-  set_gradient_mode(grad_mode);
-
-  const tulpa::WalnutsConfig walnuts_cfg;
-  const tulpa::WalnutsConfig* walnuts_ptr = walnuts ? &walnuts_cfg : nullptr;
-
-  // Parse metric type
-  MassMatrixType metric_type = parse_metric_type(metric_str);
-
-  // =========================================================================
-  // Extract bundled parameters from lists with defensive checks
-  // =========================================================================
+  ModelData data;
+  apply_family_params(data, family);
+  apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
+                      X_num, X_denom);
 
   // The random-effect bundle is read by apply_re_params() below, once data.N
   // is known: see hmc_model_data_blocks.h.
@@ -10860,19 +10836,8 @@ Rcpp::List cpp_hmc_fit(
     oi_prior_sd = Rcpp::as<double>(oi_prior_sd_sexp);
   }
 
-
-  // =========================================================================
-  // Set up model data
-  // =========================================================================
-  ModelData data;
-
-  apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
-                      X_num, X_denom);
-
   // Random effects
   apply_re_params(data, re_params);
-
-  apply_family_params(data, family);
 
   // Spatial structure
   if (spatial_type_str == "icar") {
@@ -10964,18 +10929,7 @@ Rcpp::List cpp_hmc_fit(
   data.tau_spatial_shape = tau_spatial_shape;
   data.tau_spatial_rate = tau_spatial_rate;
 
-  // Parallelization. The OpenMP regions inside a gradient read the
-  // nthreads-var, which the chain team's workers inherit, so it is scoped to
-  // this fit's within-chain budget; left at the process default every
-  // gradient evaluation would start a team as wide as the machine.
-  data.n_threads = n_threads;
-  ratiod_omp::ScopedThreadCount omp_scope(n_threads);
-  // Across-chain team bound. n_cores == 0 means "size the team to the chain
-  // count"; a positive value (the R backend passes the core budget) keeps the
-  // multi-chain team the same size across fits.
-  data.n_cores = (n_cores > 0) ? n_cores : n_chains;
-
-  // Feature flags this entry never sets, which belong to cpp_hmc_fit_gp.
+  // Feature flags these bundles never set, which belong to cpp_hmc_fit_gp.
   // has_multiscale_temporal is not among them: the temporal bundle above sets
   // it for temporal_multiscale(), and compute_param_layout() allocates the
   // trend, seasonal and short-term blocks off it.
@@ -10987,6 +10941,73 @@ Rcpp::List cpp_hmc_fit(
   apply_st_params(data, st_params);
   apply_tvc_params(data, tvc_params);
   apply_svc_params(data, svc_params);
+
+  return data;
+}
+
+} // namespace ratiod_hmc
+
+// [[Rcpp::export]]
+Rcpp::List cpp_hmc_fit(
+    Rcpp::NumericVector q_init,
+    Rcpp::IntegerVector y_num,
+    Rcpp::IntegerVector y_denom,
+    Rcpp::NumericVector y_num_cont,
+    Rcpp::NumericVector y_denom_cont,
+    Rcpp::NumericMatrix X_num,
+    Rcpp::NumericMatrix X_denom,
+    Rcpp::List family,
+    Rcpp::List re_params,
+    Rcpp::List spatial_params,
+    Rcpp::List temporal_params,
+    Rcpp::List prior_params,
+    Rcpp::List zi_params,
+    Rcpp::List latent_params,
+    Rcpp::List st_params,
+    Rcpp::List tvc_params,  // Time-varying coefficients
+    Rcpp::List svc_params,  // Spatially-varying coefficients
+    int n_iter,
+    int n_warmup,
+    int L,
+    int n_chains,
+    unsigned int seed,
+    int n_threads,
+    bool verbose,
+    std::string gradient_mode_str = "auto",
+    int max_treedepth = 10,
+    std::string metric_str = "auto",
+    double adapt_delta = -1.0,
+    bool walnuts = false,
+    int n_cores = 0
+) {
+  using namespace ratiod_hmc;
+
+  // Set global gradient mode from R parameter
+  GradientMode grad_mode = parse_gradient_mode(gradient_mode_str);
+  set_gradient_mode(grad_mode);
+
+  const tulpa::WalnutsConfig walnuts_cfg;
+  const tulpa::WalnutsConfig* walnuts_ptr = walnuts ? &walnuts_cfg : nullptr;
+
+  // Parse metric type
+  MassMatrixType metric_type = parse_metric_type(metric_str);
+
+  ModelData data = build_model_data(y_num, y_denom, y_num_cont, y_denom_cont,
+                                    X_num, X_denom, family, re_params,
+                                    spatial_params, temporal_params,
+                                    prior_params, zi_params, latent_params,
+                                    st_params, tvc_params, svc_params);
+
+  // Parallelization. The OpenMP regions inside a gradient read the
+  // nthreads-var, which the chain team's workers inherit, so it is scoped to
+  // this fit's within-chain budget; left at the process default every
+  // gradient evaluation would start a team as wide as the machine.
+  data.n_threads = n_threads;
+  ratiod_omp::ScopedThreadCount omp_scope(n_threads);
+  // Across-chain team bound. n_cores == 0 means "size the team to the chain
+  // count"; a positive value (the R backend passes the core budget) keeps the
+  // multi-chain team the same size across fits.
+  data.n_cores = (n_cores > 0) ? n_cores : n_chains;
 
   // Initialize parameters
   std::vector<double> q0(q_init.begin(), q_init.end());

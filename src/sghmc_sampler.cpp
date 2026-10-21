@@ -30,6 +30,8 @@ Rcpp::List cpp_sghmc_fit(
     Rcpp::List zi_params,
     Rcpp::List latent_params,
     Rcpp::List st_params,
+    Rcpp::List tvc_params,
+    Rcpp::List svc_params,
     int n_iter,
     int n_warmup,
     int batch_size,
@@ -42,151 +44,16 @@ Rcpp::List cpp_sghmc_fit(
     using namespace ratiod_hmc;
 
     // =========================================================================
-    // Set up model data (similar to cpp_hmc_fit)
+    // Set up model data
     // =========================================================================
 
-    ModelData data;
-    apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
-                        X_num, X_denom);
-    apply_family_params(data, family);
-    const int N = data.N;
-
-    // Random effects
-    data.re_group = Rcpp::as<std::vector<int>>(re_params["group"]);
-    data.n_re_groups = Rcpp::as<int>(re_params["n_groups"]);
-    data.n_re_terms = 0;
-    data.total_re_groups = data.n_re_groups;
-    data.has_re_slopes = false;
-    data.has_re_correlated_slopes = false;
-    data.total_re_params = data.n_re_groups;
-    data.total_sigma_params = (data.n_re_groups > 0) ? 1 : 0;
-    data.total_chol_params = 0;
-
-    // Prior parameters
-    data.sigma_beta = Rcpp::as<double>(prior_params["sigma_beta"]);
-    data.sigma_re_scale = Rcpp::as<double>(prior_params["sigma_re_scale"]);
-    data.phi_prior_shape = Rcpp::as<double>(prior_params["phi_shape"]);
-    data.phi_prior_rate = Rcpp::as<double>(prior_params["phi_rate"]);
-
-    // Spatial structure
-    std::string spatial_type_str = Rcpp::as<std::string>(spatial_params["type"]);
-    if (spatial_type_str == "icar") {
-        data.spatial_type = SpatialType::ICAR;
-        data.spatial_group = Rcpp::as<std::vector<int>>(spatial_params["group"]);
-        data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
-        apply_areal_structure(data, spatial_params);
-        data.adj_row_ptr = Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]);
-        data.adj_col_idx = Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]);
-        data.n_neighbors = Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]);
-        data.tau_spatial_shape = Rcpp::as<double>(prior_params["tau_spatial_shape"]);
-        data.tau_spatial_rate = Rcpp::as<double>(prior_params["tau_spatial_rate"]);
-    } else if (spatial_type_str == "bym2") {
-        data.spatial_type = SpatialType::BYM2;
-        data.spatial_group = Rcpp::as<std::vector<int>>(spatial_params["group"]);
-        data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
-        apply_areal_structure(data, spatial_params);
-        data.adj_row_ptr = Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]);
-        data.adj_col_idx = Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]);
-        data.n_neighbors = Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]);
-        data.bym2_scale_factor = Rcpp::as<double>(spatial_params["bym2_scale"]);
-        data.tau_spatial_shape = Rcpp::as<double>(prior_params["tau_spatial_shape"]);
-        data.tau_spatial_rate = Rcpp::as<double>(prior_params["tau_spatial_rate"]);
-    } else {
-        data.spatial_type = SpatialType::NONE;
-        data.n_spatial_units = 0;
-    }
-
-    // Temporal structure
-    std::string temporal_type_str = Rcpp::as<std::string>(temporal_params["type"]);
-    if (temporal_type_str == "rw1") {
-        data.temporal_type = TemporalType::RW1;
-    } else if (temporal_type_str == "rw2") {
-        data.temporal_type = TemporalType::RW2;
-    } else if (temporal_type_str == "ar1") {
-        data.temporal_type = TemporalType::AR1;
-    } else {
-        data.temporal_type = TemporalType::NONE;
-    }
-
-    if (data.temporal_type != TemporalType::NONE) {
-        data.temporal_time_idx = Rcpp::as<std::vector<int>>(temporal_params["time_idx"]);
-        data.temporal_group_idx = Rcpp::as<std::vector<int>>(temporal_params["group_idx"]);
-        data.n_times = Rcpp::as<int>(temporal_params["n_times"]);
-        data.n_temporal_groups = Rcpp::as<int>(temporal_params["n_groups"]);
-        data.n_temporal_params = Rcpp::as<int>(temporal_params["n_params"]);
-        data.temporal_cyclic = Rcpp::as<bool>(temporal_params["cyclic"]);
-        data.temporal_shared = Rcpp::as<bool>(temporal_params["shared"]);
-        data.tau_temporal_shape = Rcpp::as<double>(temporal_params["tau_shape"]);
-        data.tau_temporal_rate = Rcpp::as<double>(temporal_params["tau_rate"]);
-    } else {
-        data.n_times = 0;
-        data.n_temporal_groups = 0;
-        data.n_temporal_params = 0;
-        data.temporal_cyclic = false;
-        data.temporal_shared = true;
-    }
-
-    // Zero-inflation
-    std::string zi_type_str = Rcpp::as<std::string>(zi_params["type"]);
-    data.zi_type = ratiod_zi::parse_zi_type(zi_type_str);
-
-    if (data.zi_type != ZIType::NONE) {
-        NumericMatrix X_zi = Rcpp::as<NumericMatrix>(zi_params["X"]);
-        // Use explicit p_zi from R (not X_zi.ncol()) because OI-only models
-        // pass a 1-column placeholder X_zi but p_zi=0
-        SEXP p_zi_sexp = zi_params["p_zi"];
-        data.p_zi = (!Rf_isNull(p_zi_sexp)) ? Rcpp::as<int>(p_zi_sexp) : X_zi.ncol();
-        data.X_zi_flat.resize(N * data.p_zi);
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < data.p_zi; j++) {
-                data.X_zi_flat[i * data.p_zi + j] = X_zi(i, j);
-            }
-        }
-        data.zi_prior_sd = Rcpp::as<double>(zi_params["prior_sd"]);
-    } else {
-        data.p_zi = 0;
-        data.zi_prior_sd = 10.0;
-    }
-
-    // One-inflation (for OI-binomial and ZOIB)
-    data.p_oi = 0;
-    SEXP p_oi_sexp = zi_params["p_oi"];
-    if (!Rf_isNull(p_oi_sexp)) {
-        data.p_oi = Rcpp::as<int>(p_oi_sexp);
-    }
-    if (data.p_oi > 0) {
-        NumericMatrix X_oi = zi_params["X_oi"];
-        data.X_oi_flat.resize(N * data.p_oi);
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < data.p_oi; j++) {
-                data.X_oi_flat[i * data.p_oi + j] = X_oi(i, j);
-            }
-        }
-    }
-    data.oi_prior_sd = data.zi_prior_sd;
-    SEXP oi_prior_sd_sexp = zi_params["oi_prior_sd"];
-    if (!Rf_isNull(oi_prior_sd_sexp)) {
-        data.oi_prior_sd = Rcpp::as<double>(oi_prior_sd_sexp);
-    }
-
-    // GP/HSGP not supported in SGHMC yet
-    data.has_gp = false;
-    data.has_multiscale_gp = false;
-    data.has_hsgp = false;
-    data.has_svc = false;
-    data.has_rsr = false;
-
-    // Multi-scale temporal not supported
-    data.has_multiscale_temporal = false;
-
-    // Latent factors not supported
-    data.has_latent = false;
-    data.latent_n_factors = 0;
-
-    // Spatiotemporal not supported
-    data.has_spatiotemporal = false;
-
+    ModelData data = build_model_data(y_num, y_denom, y_num_cont, y_denom_cont,
+                                      X_num, X_denom, family, re_params,
+                                      spatial_params, temporal_params,
+                                      prior_params, zi_params, latent_params,
+                                      st_params, tvc_params, svc_params);
     data.n_threads = 1;
+    const int N = data.N;
 
     // =========================================================================
     // Compute parameter layout
@@ -271,6 +138,8 @@ Rcpp::List cpp_sgld_fit(
     Rcpp::List zi_params,
     Rcpp::List latent_params,
     Rcpp::List st_params,
+    Rcpp::List tvc_params,
+    Rcpp::List svc_params,
     int n_iter,
     int n_warmup,
     int batch_size,
@@ -285,138 +154,16 @@ Rcpp::List cpp_sgld_fit(
     using namespace ratiod_hmc;
 
     // =========================================================================
-    // Set up model data (same as SGHMC)
+    // Set up model data
     // =========================================================================
 
-    ModelData data;
-    apply_response_data(data, y_num, y_denom, y_num_cont, y_denom_cont,
-                        X_num, X_denom);
-    apply_family_params(data, family);
-    const int N = data.N;
-
-    // Random effects
-    data.re_group = Rcpp::as<std::vector<int>>(re_params["group"]);
-    data.n_re_groups = Rcpp::as<int>(re_params["n_groups"]);
-    data.n_re_terms = 0;
-    data.total_re_groups = data.n_re_groups;
-    data.has_re_slopes = false;
-    data.has_re_correlated_slopes = false;
-    data.total_re_params = data.n_re_groups;
-    data.total_sigma_params = (data.n_re_groups > 0) ? 1 : 0;
-    data.total_chol_params = 0;
-
-    // Prior parameters
-    data.sigma_beta = Rcpp::as<double>(prior_params["sigma_beta"]);
-    data.sigma_re_scale = Rcpp::as<double>(prior_params["sigma_re_scale"]);
-    data.phi_prior_shape = Rcpp::as<double>(prior_params["phi_shape"]);
-    data.phi_prior_rate = Rcpp::as<double>(prior_params["phi_rate"]);
-
-    // Spatial (simplified - same pattern as SGHMC)
-    std::string spatial_type_str = Rcpp::as<std::string>(spatial_params["type"]);
-    if (spatial_type_str == "icar" || spatial_type_str == "bym2") {
-        if (spatial_type_str == "icar") {
-            data.spatial_type = SpatialType::ICAR;
-        } else {
-            data.spatial_type = SpatialType::BYM2;
-            data.bym2_scale_factor = Rcpp::as<double>(spatial_params["bym2_scale"]);
-        }
-        data.spatial_group = Rcpp::as<std::vector<int>>(spatial_params["group"]);
-        data.n_spatial_units = Rcpp::as<int>(spatial_params["n_units"]);
-        apply_areal_structure(data, spatial_params);
-        data.adj_row_ptr = Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]);
-        data.adj_col_idx = Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]);
-        data.n_neighbors = Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]);
-        data.tau_spatial_shape = Rcpp::as<double>(prior_params["tau_spatial_shape"]);
-        data.tau_spatial_rate = Rcpp::as<double>(prior_params["tau_spatial_rate"]);
-    } else {
-        data.spatial_type = SpatialType::NONE;
-        data.n_spatial_units = 0;
-    }
-
-    // Temporal
-    std::string temporal_type_str = Rcpp::as<std::string>(temporal_params["type"]);
-    if (temporal_type_str == "rw1") {
-        data.temporal_type = TemporalType::RW1;
-    } else if (temporal_type_str == "rw2") {
-        data.temporal_type = TemporalType::RW2;
-    } else if (temporal_type_str == "ar1") {
-        data.temporal_type = TemporalType::AR1;
-    } else {
-        data.temporal_type = TemporalType::NONE;
-    }
-
-    if (data.temporal_type != TemporalType::NONE) {
-        data.temporal_time_idx = Rcpp::as<std::vector<int>>(temporal_params["time_idx"]);
-        data.temporal_group_idx = Rcpp::as<std::vector<int>>(temporal_params["group_idx"]);
-        data.n_times = Rcpp::as<int>(temporal_params["n_times"]);
-        data.n_temporal_groups = Rcpp::as<int>(temporal_params["n_groups"]);
-        data.n_temporal_params = Rcpp::as<int>(temporal_params["n_params"]);
-        data.temporal_cyclic = Rcpp::as<bool>(temporal_params["cyclic"]);
-        data.temporal_shared = Rcpp::as<bool>(temporal_params["shared"]);
-        data.tau_temporal_shape = Rcpp::as<double>(temporal_params["tau_shape"]);
-        data.tau_temporal_rate = Rcpp::as<double>(temporal_params["tau_rate"]);
-    } else {
-        data.n_times = 0;
-        data.n_temporal_groups = 0;
-        data.n_temporal_params = 0;
-        data.temporal_cyclic = false;
-        data.temporal_shared = true;
-    }
-
-    // Zero-inflation
-    std::string zi_type_str = Rcpp::as<std::string>(zi_params["type"]);
-    data.zi_type = ratiod_zi::parse_zi_type(zi_type_str);
-
-    if (data.zi_type != ZIType::NONE) {
-        NumericMatrix X_zi = Rcpp::as<NumericMatrix>(zi_params["X"]);
-        // Use explicit p_zi from R (not X_zi.ncol()) because OI-only models
-        // pass a 1-column placeholder X_zi but p_zi=0
-        SEXP p_zi_sexp = zi_params["p_zi"];
-        data.p_zi = (!Rf_isNull(p_zi_sexp)) ? Rcpp::as<int>(p_zi_sexp) : X_zi.ncol();
-        data.X_zi_flat.resize(N * data.p_zi);
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < data.p_zi; j++) {
-                data.X_zi_flat[i * data.p_zi + j] = X_zi(i, j);
-            }
-        }
-        data.zi_prior_sd = Rcpp::as<double>(zi_params["prior_sd"]);
-    } else {
-        data.p_zi = 0;
-        data.zi_prior_sd = 10.0;
-    }
-
-    // One-inflation (for OI-binomial and ZOIB)
-    data.p_oi = 0;
-    SEXP p_oi_sexp = zi_params["p_oi"];
-    if (!Rf_isNull(p_oi_sexp)) {
-        data.p_oi = Rcpp::as<int>(p_oi_sexp);
-    }
-    if (data.p_oi > 0) {
-        NumericMatrix X_oi = zi_params["X_oi"];
-        data.X_oi_flat.resize(N * data.p_oi);
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < data.p_oi; j++) {
-                data.X_oi_flat[i * data.p_oi + j] = X_oi(i, j);
-            }
-        }
-    }
-    data.oi_prior_sd = data.zi_prior_sd;
-    SEXP oi_prior_sd_sexp = zi_params["oi_prior_sd"];
-    if (!Rf_isNull(oi_prior_sd_sexp)) {
-        data.oi_prior_sd = Rcpp::as<double>(oi_prior_sd_sexp);
-    }
-
-    // Not supported
-    data.has_gp = false;
-    data.has_multiscale_gp = false;
-    data.has_hsgp = false;
-    data.has_svc = false;
-    data.has_rsr = false;
-    data.has_multiscale_temporal = false;
-    data.has_latent = false;
-    data.latent_n_factors = 0;
-    data.has_spatiotemporal = false;
+    ModelData data = build_model_data(y_num, y_denom, y_num_cont, y_denom_cont,
+                                      X_num, X_denom, family, re_params,
+                                      spatial_params, temporal_params,
+                                      prior_params, zi_params, latent_params,
+                                      st_params, tvc_params, svc_params);
     data.n_threads = 1;
+    const int N = data.N;
 
     // =========================================================================
     // Compute parameter layout

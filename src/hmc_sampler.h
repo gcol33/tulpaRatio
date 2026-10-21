@@ -566,6 +566,27 @@ void apply_response_data(ModelData& data,
                          const Rcpp::NumericMatrix& X_num,
                          const Rcpp::NumericMatrix& X_denom);
 
+// The model as the R backends hand it over in their parameter bundles, read
+// once through the apply_* blocks, so every sampler entry point that takes the
+// bundles fits the same ModelData. Threading is left to the caller.
+ModelData build_model_data(
+    const Rcpp::IntegerVector& y_num,
+    const Rcpp::IntegerVector& y_denom,
+    const Rcpp::NumericVector& y_num_cont,
+    const Rcpp::NumericVector& y_denom_cont,
+    const Rcpp::NumericMatrix& X_num,
+    const Rcpp::NumericMatrix& X_denom,
+    const Rcpp::List& family,
+    const Rcpp::List& re_params,
+    const Rcpp::List& spatial_params,
+    const Rcpp::List& temporal_params,
+    const Rcpp::List& prior_params,
+    const Rcpp::List& zi_params,
+    const Rcpp::List& latent_params,
+    const Rcpp::List& st_params,
+    const Rcpp::List& tvc_params,
+    const Rcpp::List& svc_params);
+
 // Names of the parameter vector, in layout order, for the blocks the ESS,
 // SGHMC, SGLD and VI samplers carry. Stops on a block it does not name.
 Rcpp::CharacterVector layout_param_names(const ModelData& data,

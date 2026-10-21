@@ -22,7 +22,7 @@ test_that("an unknown model type stops instead of fitting another family", {
       prior_params = list(sigma_beta = 10, sigma_re_scale = 1, phi_shape = 1,
                           phi_rate = 0.1),
       zi_params = list(type = "none"), latent_params = list(), st_params = list(),
-      n_iter = 10L, n_warmup = 5L, seed = 1L, verbose = FALSE),
+      tvc_params = list(), svc_params = list(), n_iter = 10L, n_warmup = 5L, seed = 1L, verbose = FALSE),
     "Unknown model type")
 })
 

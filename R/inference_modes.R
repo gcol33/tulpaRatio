@@ -224,21 +224,73 @@ laplace_spatial_support <- function(spatial, structures) {
 }
 
 
-#' Spatial support rule for backends without restricted spatial regression
+#' Spatial support rule for the ESS, SGHMC, SGLD and VI samplers
 #'
 #' @description
-#' A restricted field reaches the predictor projected onto the complement of
-#' the restricted covariates; a backend whose sampler reads the field directly
-#' would fit the unrestricted model, so it names the restriction instead.
+#' These samplers run on the HMC parameter vector of the areal fields: ICAR,
+#' BYM2 and proper CAR. Gaussian-process fields and spatially varying
+#' coefficients have their own blocks, which these samplers do not carry. A
+#' restricted field reaches the predictor projected onto the complement of the
+#' restricted covariates; a sampler that reads the field directly would fit the
+#' unrestricted model.
 #'
 #' @inheritParams laplace_spatial_support
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
-unrestricted_spatial_support <- function(spatial, structures) {
+areal_spatial_support <- function(spatial, structures) {
   if (inherits(spatial, "ratiod_rsr")) {
     return("restricted spatial regression (`spatial_rsr()`) is not implemented")
   }
+  if (is_gp_spatial(spatial)) {
+    return("Gaussian-process fields are implemented on HMC only")
+  }
+  if (inherits(spatial, "ratiod_svc") || identical(spatial$type, "svc")) {
+    return("spatially varying coefficients are implemented on HMC only")
+  }
   TRUE
+}
+
+
+#' Temporal support rule for the ESS, SGHMC, SGLD and VI samplers
+#'
+#' @description
+#' One temporal field: a random walk, AR1, iid or Gaussian-process margin. The
+#' multi-scale decomposition and time-varying coefficients have their own
+#' blocks, which these samplers do not carry.
+#'
+#' @inheritParams tvc_temporal_support
+#' @return `TRUE`, or a phrase naming the restriction
+#' @keywords internal
+single_temporal_support <- function(temporal, structures) {
+  if (is_multiscale_temporal(temporal)) {
+    return("the multi-scale temporal decomposition is implemented on HMC only")
+  }
+  if (inherits(temporal, "ratiod_tvc")) {
+    return("time-varying coefficients are implemented on HMC only")
+  }
+  TRUE
+}
+
+
+#' Stop unless the model has at most one random intercept
+#'
+#' @description
+#' The ESS, SGHMC, SGLD and VI samplers name one grouping factor's intercepts
+#' in their parameter vector; crossed or nested factors and random slopes are
+#' implemented on HMC only.
+#'
+#' @param hmc_data The list `prepare_hmc_data()` returns
+#' @param backend Character string naming the backend
+#' @return `invisible(TRUE)`, or an error
+#' @keywords internal
+assert_single_random_intercept <- function(hmc_data, backend) {
+  if ((hmc_data$n_re_terms %||% 0L) > 1L || isTRUE(hmc_data$has_slopes)) {
+    stop(sprintf(paste0(
+      "The %s backend fits one random intercept. Use `mode = \"hmc\"` ",
+      "for random slopes or several grouping factors."), toupper(backend)),
+      call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 
@@ -257,7 +309,7 @@ gibbs_spatial_support <- function(spatial, structures) {
   if (!is.null(spatial$component)) {
     return(disconnected_graph_restriction)
   }
-  unrestricted_spatial_support(spatial, structures)
+  areal_spatial_support(spatial, structures)
 }
 
 
@@ -309,7 +361,7 @@ BACKEND_STRUCTURE_SUPPORT <- list(
     zi = TRUE, latent = TRUE
   ),
   ess = list(
-    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatial = areal_spatial_support, temporal = single_temporal_support,
     spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   gibbs = list(
@@ -321,11 +373,11 @@ BACKEND_STRUCTURE_SUPPORT <- list(
     spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   sghmc = list(
-    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatial = areal_spatial_support, temporal = single_temporal_support,
     spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   sgld = list(
-    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatial = areal_spatial_support, temporal = single_temporal_support,
     spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   ),
   laplace = list(
@@ -333,7 +385,7 @@ BACKEND_STRUCTURE_SUPPORT <- list(
     spatiotemporal = FALSE, zi = FALSE, latent = FALSE
   ),
   vi = list(
-    spatial = unrestricted_spatial_support, temporal = TRUE,
+    spatial = areal_spatial_support, temporal = single_temporal_support,
     spatiotemporal = FALSE, zi = TRUE, latent = FALSE
   )
 )
