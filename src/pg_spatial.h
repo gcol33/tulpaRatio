@@ -1,11 +1,11 @@
 // pg_spatial.h
 // Spatial random effects for PG Gibbs sampler
-// Implements ICAR (Intrinsic CAR) and BYM2 priors
+// Implements ICAR (Intrinsic CAR) and BYM2 fields
 
 #ifndef RATIOD_PG_SPATIAL_H
 #define RATIOD_PG_SPATIAL_H
 
-#include <Rcpp.h>
+#include <RcppEigen.h>
 #include <vector>
 
 namespace ratiod {
@@ -50,52 +50,49 @@ double update_tau_icar(
 );
 
 // ---------------------------------------------------------------------
-// BYM2 prior (scaled version of BYM)
+// BYM2 field (Riebler et al. 2016)
 // ---------------------------------------------------------------------
 
-// BYM2 decomposes spatial effect as:
-// u = sigma * (sqrt(rho) * phi_scaled * scale_factor + sqrt(1-rho) * theta)
-// where phi_scaled is scaled ICAR and theta is iid N(0,1)
+// u_s = sigma * (sqrt(rho) * scale_factor * phi_s + sqrt(1 - rho) * theta_s),
+// phi an intrinsic CAR field with precision D - W on a connected graph and
+// sum(phi) = 0, theta iid N(0, 1). The priors are those of the HMC backend:
+// sigma ~ half-Cauchy(0, sigma_scale), rho ~ Uniform(0, 1).
 //
-// This gives better interpretability and mixing
+// Given the Polya-Gamma draws, the binomial likelihood is Gaussian in the
+// linear predictor, exp(kappa_i eta_i - omega_i eta_i^2 / 2). With
+// eta_i = offset_i + u_{s(i)} it reaches the field only through the per-unit
+// sums S_s = sum omega_i and R_s = sum (kappa_i - omega_i offset_i).
+class PGBym2 {
+public:
+  PGBym2(const Rcpp::List& adj_list, double scale_factor, double sigma_scale);
 
-// Update BYM2 spatial effects
-// Returns the combined effect u for each spatial unit
-// Also updates phi_scaled and theta in place via references
-Rcpp::NumericVector update_spatial_bym2(
-    const Rcpp::NumericVector& kappa,
-    const Rcpp::NumericVector& omega,
-    const Rcpp::NumericVector& offset,
-    const Rcpp::IntegerVector& group,
-    const Rcpp::List& adj_list,
-    const Rcpp::IntegerVector& n_neighbors,
-    Rcpp::NumericVector& phi_scaled,  // Input/output: structured component
-    Rcpp::NumericVector& theta,       // Input/output: unstructured component
-    double sigma_spatial,             // Total spatial SD
-    double rho,                       // Proportion of variance from structured component
-    double scale_factor               // BYM2 scaling factor (from eigenvalues)
-);
+  // One sweep: phi (block draw under the sum-to-zero constraint), theta,
+  // sigma and rho, each from its full conditional, then sigma and rho again
+  // given the centred field components.
+  void update(const Eigen::VectorXd& S, const Eigen::VectorXd& R);
 
-// Update sigma_spatial with half-Cauchy prior
-double update_sigma_spatial(
-    const Rcpp::NumericVector& u,  // Total spatial effect
-    double scale
-);
+  // Combined effect u_s of every unit
+  Eigen::VectorXd effect() const;
 
-// Update rho (mixing proportion) with beta prior
-// Uses grid search approach
-// rho ~ Beta(alpha, beta)
-double update_rho_bym2(
-    const Rcpp::NumericVector& phi_scaled,
-    const Rcpp::NumericVector& theta,
-    double sigma_spatial,
-    double scale_factor,
-    const Rcpp::NumericVector& sum_omega,
-    const Rcpp::NumericVector& sum_resid,
-    double alpha,
-    double beta
-);
+  Eigen::VectorXd phi;
+  Eigen::VectorXd theta;
+  double sigma;
+  double rho;
+
+private:
+  int J_;
+  double scale_factor_;
+  double sigma_scale_;
+  Eigen::SparseMatrix<double> Q_icar_;
+  Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> llt_;
+
+  void update_phi(const Eigen::VectorXd& S, const Eigen::VectorXd& R);
+  void update_theta(const Eigen::VectorXd& S, const Eigen::VectorXd& R);
+  void update_sigma(const Eigen::VectorXd& S, const Eigen::VectorXd& R);
+  void update_rho(const Eigen::VectorXd& S, const Eigen::VectorXd& R);
+  void interweave();
+};
 
 } // namespace ratiod
 
-#endif // QUOTR_PG_SPATIAL_H
+#endif // RATIOD_PG_SPATIAL_H

@@ -65,8 +65,8 @@ cpp_pg_binomial_gibbs_spatial <- function(y, n, X, re_group, n_re_groups, spatia
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_spatial`, y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads)
 }
 
-cpp_pg_binomial_gibbs_bym2 <- function(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, scale_factor, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_spatial_scale = 2.5, prior_rho_alpha = 0.5, prior_rho_beta = 0.5, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_bym2`, y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, scale_factor, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_scale, prior_rho_alpha, prior_rho_beta, store_eta, verbose, n_threads)
+cpp_pg_binomial_gibbs_bym2 <- function(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, scale_factor, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_spatial_scale = 2.5, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
+    .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_bym2`, y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, scale_factor, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_scale, store_eta, verbose, n_threads)
 }
 
 cpp_pg_nngp_conditional_probe <- function(i, w, sigma2, phi_gp, cov_type, coords, nn_idx, nn_dist, nn_order, nn) {

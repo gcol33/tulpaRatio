@@ -4,6 +4,7 @@
 
 #include "pg_binomial.h"
 #include "pg_rng.h"
+#include "pg_spatial.h"
 #include "hmc_cov.h"
 #include "cov_type_code.h"
 #include "linalg_fast.h"
@@ -466,27 +467,6 @@ int cpp_pg_get_max_threads() {
   #endif
 }
 
-// Forward declaration
-namespace ratiod {
-  Rcpp::NumericVector update_spatial_icar(
-      const Rcpp::NumericVector& kappa,
-      const Rcpp::NumericVector& omega,
-      const Rcpp::NumericVector& offset,
-      const Rcpp::IntegerVector& group,
-      const Rcpp::List& adj_list,
-      const Rcpp::IntegerVector& n_neighbors,
-      double tau
-  );
-
-  double update_tau_icar(
-      const Rcpp::NumericVector& phi,
-      const Rcpp::List& adj_list,
-      const Rcpp::IntegerVector& n_neighbors,
-      double prior_shape,
-      double prior_rate
-  );
-}
-
 // Binomial Gibbs sampler with random effects AND spatial effects (ICAR)
 // [[Rcpp::export]]
 Rcpp::List cpp_pg_binomial_gibbs_spatial(
@@ -689,39 +669,6 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
 // BYM2 Spatial Gibbs sampler
 // ---------------------------------------------------------------------
 
-// Forward declaration for BYM2 functions
-namespace ratiod {
-  Rcpp::NumericVector update_spatial_bym2(
-      const Rcpp::NumericVector& kappa,
-      const Rcpp::NumericVector& omega,
-      const Rcpp::NumericVector& offset,
-      const Rcpp::IntegerVector& group,
-      const Rcpp::List& adj_list,
-      const Rcpp::IntegerVector& n_neighbors,
-      Rcpp::NumericVector& phi_scaled,
-      Rcpp::NumericVector& theta,
-      double sigma_spatial,
-      double rho,
-      double scale_factor
-  );
-
-  double update_sigma_spatial(
-      const Rcpp::NumericVector& u,
-      double scale
-  );
-
-  double update_rho_bym2(
-      const Rcpp::NumericVector& phi_scaled,
-      const Rcpp::NumericVector& theta,
-      double sigma_spatial,
-      double scale_factor,
-      const Rcpp::NumericVector& sum_omega,
-      const Rcpp::NumericVector& sum_resid,
-      double alpha,
-      double beta
-  );
-}
-
 // Binomial Gibbs sampler with random effects AND spatial effects (BYM2)
 // [[Rcpp::export]]
 Rcpp::List cpp_pg_binomial_gibbs_bym2(
@@ -733,7 +680,6 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
     Rcpp::IntegerVector spatial_group,
     int n_spatial_units,
     Rcpp::List adj_list,
-    Rcpp::IntegerVector n_neighbors,
     double scale_factor,
     int n_iter = 2000,
     int n_warmup = 1000,
@@ -741,8 +687,6 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
     double prior_beta_sd = 10.0,
     double prior_sigma_re_scale = 2.5,
     double prior_sigma_spatial_scale = 2.5,
-    double prior_rho_alpha = 0.5,
-    double prior_rho_beta = 0.5,
     bool store_eta = false,
     bool verbose = true,
     int n_threads = 1
@@ -774,11 +718,9 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  Rcpp::NumericVector phi_scaled(n_spatial_units, 0.0);  // Structured component
-  Rcpp::NumericVector theta(n_spatial_units, 0.0);       // Unstructured component
-  Rcpp::NumericVector u(n_spatial_units, 0.0);           // Combined effect
-  double sigma_spatial = 1.0;
-  double rho = 0.5;  // Start with equal mix
+  ratiod::PGBym2 bym2(adj_list, scale_factor, prior_sigma_spatial_scale);
+  Eigen::VectorXd u = bym2.effect();
+  Eigen::VectorXd S(n_spatial_units), R(n_spatial_units);
   Rcpp::NumericVector omega(N, 1.0);
   Rcpp::NumericVector kappa(N);
   Rcpp::NumericVector eta(N);
@@ -865,7 +807,7 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       }
     }
 
-    // 6. Update BYM2 spatial effects | omega, beta, re, sigma_spatial, rho
+    // 6. Update the BYM2 field and its sigma and rho | omega, beta, re
     // Offset for spatial update = X*beta + re (parallelized)
     #ifdef _OPENMP
     #pragma omp parallel for schedule(static)
@@ -873,23 +815,15 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
     for (int i = 0; i < N; i++) {
       offset[i] = X_beta[i] + re_contrib[i];
     }
-    u = ratiod::update_spatial_bym2(kappa, omega, offset, spatial_group, adj_list, n_neighbors,
-                                   phi_scaled, theta, sigma_spatial, rho, scale_factor);
-
-    // 7. Update sigma_spatial
-    sigma_spatial = ratiod::update_sigma_spatial(u, prior_sigma_spatial_scale);
-
-    // 8. Update rho (mixing proportion)
-    // Need to compute sum_omega and sum_resid for rho update
-    Rcpp::NumericVector sum_omega_s(n_spatial_units, 0.0);
-    Rcpp::NumericVector sum_resid_s(n_spatial_units, 0.0);
+    S.setZero();
+    R.setZero();
     for (int i = 0; i < N; i++) {
       int s = spatial_group[i] - 1;
-      sum_omega_s[s] += omega[i];
-      sum_resid_s[s] += kappa[i] - omega[i] * offset[i];
+      S[s] += omega[i];
+      R[s] += kappa[i] - omega[i] * offset[i];
     }
-    rho = ratiod::update_rho_bym2(phi_scaled, theta, sigma_spatial, scale_factor,
-                                  sum_omega_s, sum_resid_s, prior_rho_alpha, prior_rho_beta);
+    bym2.update(S, R);
+    u = bym2.effect();
 
     // Update spatial contributions (parallelized)
     #ifdef _OPENMP
@@ -909,12 +843,12 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       }
       sigma_re_draws[save_idx] = sigma_re;
       for (int s = 0; s < n_spatial_units; s++) {
-        phi_scaled_draws(save_idx, s) = phi_scaled[s];
-        theta_draws(save_idx, s) = theta[s];
+        phi_scaled_draws(save_idx, s) = bym2.phi[s];
+        theta_draws(save_idx, s) = bym2.theta[s];
         u_draws(save_idx, s) = u[s];
       }
-      sigma_spatial_draws[save_idx] = sigma_spatial;
-      rho_draws[save_idx] = rho;
+      sigma_spatial_draws[save_idx] = bym2.sigma;
+      rho_draws[save_idx] = bym2.rho;
 
       if (store_eta) {
         refresh_eta();

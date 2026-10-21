@@ -191,8 +191,6 @@ fit_pg_binomial <- function(formula,
       if (is_bym2) {
         # BYM2 spatial model
         scale_factor <- spatial$scale_factor %||% 1.0
-        prior_rho_alpha <- spatial$prior_rho_alpha %||% 0.5
-        prior_rho_beta <- spatial$prior_rho_beta %||% 0.5
 
         chain_results[[chain]] <- cpp_pg_binomial_gibbs_bym2(
           y = as.integer(y),
@@ -203,7 +201,6 @@ fit_pg_binomial <- function(formula,
           spatial_group = spatial_info$group_idx,
           n_spatial_units = spatial_info$n_units,
           adj_list = spatial_info$adj_list,
-          n_neighbors = spatial_info$n_neighbors,
           scale_factor = scale_factor,
           n_iter = n_iter,
           n_warmup = n_warmup,
@@ -211,8 +208,6 @@ fit_pg_binomial <- function(formula,
           prior_beta_sd = prior_beta_sd,
           prior_sigma_re_scale = prior_sigma_scale,
           prior_sigma_spatial_scale = prior_sigma_scale,
-          prior_rho_alpha = prior_rho_alpha,
-          prior_rho_beta = prior_rho_beta,
           store_eta = TRUE,
           verbose = verbose,
           n_threads = as.integer(cores)
