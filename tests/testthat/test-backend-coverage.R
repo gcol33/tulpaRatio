@@ -10,9 +10,20 @@ test_that("can_use_pg_backend returns TRUE for binomial family", {
   expect_true(tulpaRatio:::can_use_pg_backend(fam))
 })
 
-test_that("can_use_pg_backend returns TRUE for negbin family (PG+CRT)", {
+test_that("can_use_pg_backend returns FALSE for negbin family", {
   fam <- ratiod_negbin_negbin()
-  expect_true(tulpaRatio:::can_use_pg_backend(fam))
+  expect_false(tulpaRatio:::can_use_pg_backend(fam))
+})
+
+test_that("mode = 'pg' refuses a negative binomial family", {
+  set.seed(1)
+  d <- data.frame(y_num = rpois(20, 5), y_denom = rpois(20, 3) + 1,
+                  x1 = rnorm(20))
+  expect_error(
+    tratio(y_num | y_denom ~ x1, data = d, family = ratiod_negbin_negbin(),
+           mode = "pg", control = list(iter = 20, chains = 1, verbose = FALSE)),
+    "PG backend fits ratiod_binomial\\(\\) only"
+  )
 })
 
 test_that("can_use_pg_backend returns FALSE for poisson_gamma family", {

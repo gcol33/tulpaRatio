@@ -80,7 +80,7 @@ test_that("PG Gibbs sampler recovers parameters", {
 
 test_that("can_use_pg_backend correctly identifies supported families", {
   expect_true(tulpaRatio:::can_use_pg_backend(ratiod_binomial()))
-  expect_true(tulpaRatio:::can_use_pg_backend(ratiod_negbin_negbin()))  # PG supports negbin via CRT augmentation
+  expect_false(tulpaRatio:::can_use_pg_backend(ratiod_negbin_negbin()))
   expect_false(tulpaRatio:::can_use_pg_backend(ratiod_poisson_gamma()))
 })
 

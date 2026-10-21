@@ -597,18 +597,9 @@ convert_pg_to_ratiod_fit <- function(fit_raw, formula, data, family,
 #' @return Logical indicating if PG backend can be used
 #' @keywords internal
 can_use_pg_backend <- function(family) {
-  # PG backend supports:
-  # 1. Binomial family (standard PG augmentation)
-  # 2. Negative binomial family (PG + CRT augmentation)
-  dist <- family$numerator$distribution
-
-  # Binomial family
-  if (isTRUE(dist == "binomial")) return(TRUE)
-
-  # Negative binomial family (NB2 parameterization)
-  if (isTRUE(dist == "neg_binomial_2")) return(TRUE)
-
-  FALSE
+  # tratio() dispatches the PG tier to fit_pg_binomial() only, which reads the
+  # denominator as binomial trials.
+  isTRUE(family$numerator$distribution == "binomial")
 }
 
 
