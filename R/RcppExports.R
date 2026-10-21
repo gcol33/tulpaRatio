@@ -289,8 +289,8 @@ cpp_test_pg_update_re <- function(kappa, omega, X_beta, group, n_groups, sigma_r
     .Call(`_tulpaRatio_cpp_test_pg_update_re`, kappa, omega, X_beta, group, n_groups, sigma_re)
 }
 
-cpp_test_pg_update_sigma_re <- function(re, scale) {
-    .Call(`_tulpaRatio_cpp_test_pg_update_sigma_re`, re, scale)
+cpp_test_pg_sigma_halfcauchy_chain <- function(re, scale, n_iter) {
+    .Call(`_tulpaRatio_cpp_test_pg_sigma_halfcauchy_chain`, re, scale, n_iter)
 }
 
 cpp_test_dot_product <- function(x, y) {

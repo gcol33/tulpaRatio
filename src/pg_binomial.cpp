@@ -243,37 +243,15 @@ NumericVector update_re(
   return re;
 }
 
-// Update sigma_re with half-Cauchy prior
-// p(sigma | b) ∝ p(b | sigma) * p(sigma)
-// Using auxiliary variable approach for half-Cauchy
-double update_sigma_re(
-    const NumericVector& re,
-    double scale
-) {
-  int J = re.size();
-
-  // Sum of squared random effects
+double HalfCauchyScale::update(const NumericVector& effects, double scale) {
+  const int J = effects.size();
   double ss = 0.0;
-  for (int j = 0; j < J; j++) {
-    ss += re[j] * re[j];
-  }
+  for (int j = 0; j < J; j++) ss += effects[j] * effects[j];
 
-  // Half-Cauchy prior: sample via inverse-gamma auxiliary
-  // sigma^2 | b, aux ~ IG((J+1)/2, ss/2 + 1/aux)
-  // aux | sigma^2 ~ IG(1, 1/scale^2 + 1/sigma^2)
-
-  // For simplicity, use direct sampling with truncated normal on log scale
-  // or inverse gamma approximation
-
-  // Simple approach: use conjugate inverse-gamma with weakly informative params
-  // sigma^2 ~ IG(0.5, 0.5 * scale^2) approximately matches half-Cauchy for moderate scale
-
-  // Posterior: sigma^2 | b ~ IG((J + 1)/2, ss/2 + 0.5 * scale^2)
-  double shape = (J + 1.0) / 2.0;
-  double rate = ss / 2.0 + 0.5 * scale * scale;
-
-  double sigma_sq = 1.0 / R::rgamma(shape, 1.0 / rate);
-  return std::sqrt(sigma_sq);
+  const double sigma_sq = 1.0 / R::rgamma((J + 1.0) / 2.0, 1.0 / (ss / 2.0 + 1.0 / aux));
+  aux = 1.0 / R::rgamma(1.0, 1.0 / (1.0 / (scale * scale) + 1.0 / sigma_sq));
+  sigma = std::sqrt(sigma_sq);
+  return sigma;
 }
 
 // ---------------------------------------------------------------------
@@ -314,6 +292,7 @@ List pg_binomial_gibbs_impl(
   NumericVector beta(p, 0.0);
   NumericVector re(n_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   NumericVector omega(N, 1.0);  // PG draws
   NumericVector kappa(N);       // y - n/2
   NumericVector eta(N);         // Linear predictor
@@ -378,7 +357,7 @@ List pg_binomial_gibbs_impl(
       re = update_re(kappa, omega, X_beta, group, n_groups, sigma_re);
 
       // 6. Update sigma_re | re
-      sigma_re = update_sigma_re(re, prior_sigma_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_scale);
     }
 
     // Save draws (after warmup, respecting thinning)
@@ -514,6 +493,7 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   Rcpp::NumericVector phi(n_spatial_units, 0.0);  // Spatial effects
   double tau = 1.0;  // Spatial precision
   Rcpp::NumericVector omega(N, 1.0);
@@ -591,7 +571,7 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
       re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
 
       // Update sigma_re
-      sigma_re = ratiod::update_sigma_re(re, prior_sigma_re_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
 
       // Update re_contrib (parallelized)
       #ifdef _OPENMP
@@ -718,6 +698,7 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   ratiod::PGBym2 bym2(adj_list, scale_factor, prior_sigma_spatial_scale);
   Eigen::VectorXd u = bym2.effect();
   Eigen::VectorXd S(n_spatial_units), R(n_spatial_units);
@@ -796,7 +777,7 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
 
       // Update sigma_re
-      sigma_re = ratiod::update_sigma_re(re, prior_sigma_re_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
 
       // Update re_contrib (parallelized)
       #ifdef _OPENMP
@@ -1334,6 +1315,7 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   std::vector<double> w(n_spatial, 0.0);
   double sigma2_gp = sigma2_gp_init;
   double phi_gp = phi_gp_init;
@@ -1400,7 +1382,7 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
         offset[i] = X_beta[i] + gp_contrib[i];
       }
       re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-      sigma_re = ratiod::update_sigma_re(re, prior_sigma_re_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
 
       for (int i = 0; i < N; i++) {
         re_contrib[i] = re[re_group[i] - 1];
@@ -1533,6 +1515,7 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   Rcpp::NumericVector trend(n_trend, 0.0);
   Rcpp::NumericVector seasonal(n_seasonal, 0.0);
   Rcpp::NumericVector short_term(n_short, 0.0);
@@ -1609,7 +1592,7 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
         offset[i] = X_beta[i] + temp_contrib[i];
       }
       re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-      sigma_re = ratiod::update_sigma_re(re, prior_sigma_re_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
 
       for (int i = 0; i < N; i++) {
         re_contrib[i] = re[re_group[i] - 1];
@@ -1881,6 +1864,7 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   Rcpp::NumericVector phi(n_spatial_units, 0.0);
   double tau = 1.0;
 
@@ -1989,7 +1973,7 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
       }
       re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
 
-      sigma_re = ratiod::update_sigma_re(re, prior_sigma_re_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
 
       #ifdef _OPENMP
       #pragma omp parallel for schedule(static)

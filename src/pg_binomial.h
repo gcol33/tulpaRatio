@@ -126,12 +126,16 @@ Rcpp::NumericVector update_re(
     double sigma_re
 );
 
-// Update sigma_re using half-Cauchy prior
-// p(sigma) ∝ 1/(1 + sigma^2/scale^2)
-double update_sigma_re(
-    const Rcpp::NumericVector& re,
-    double scale
-);
+// Scale sigma of J zero-mean Gaussian effects under sigma ~ half-Cauchy(0, scale),
+// written as sigma^2 | a ~ IG(1/2, 1/a), a ~ IG(1/2, 1/scale^2) (Makalic and
+// Schmidt 2016, IEEE Signal Process. Lett. 23:179). Both conditionals are
+// conjugate: sigma^2 | effects, a ~ IG((J + 1)/2, ss/2 + 1/a) and
+// a | sigma^2 ~ IG(1, 1/scale^2 + 1/sigma^2), ss the sum of squared effects.
+struct HalfCauchyScale {
+  double sigma = 1.0;
+  double aux = 1.0;
+  double update(const Rcpp::NumericVector& effects, double scale);
+};
 
 } // namespace ratiod
 

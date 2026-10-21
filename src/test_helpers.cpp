@@ -686,8 +686,12 @@ NumericVector cpp_test_pg_update_re(
 }
 
 // [[Rcpp::export]]
-double cpp_test_pg_update_sigma_re(NumericVector re, double scale) {
-  return ratiod::update_sigma_re(re, scale);
+NumericVector cpp_test_pg_sigma_halfcauchy_chain(NumericVector re, double scale,
+                                                 int n_iter) {
+  ratiod::HalfCauchyScale state;
+  NumericVector out(n_iter);
+  for (int t = 0; t < n_iter; t++) out[t] = state.update(re, scale);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

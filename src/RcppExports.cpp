@@ -1205,15 +1205,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_pg_update_sigma_re
-double cpp_test_pg_update_sigma_re(NumericVector re, double scale);
-RcppExport SEXP _tulpaRatio_cpp_test_pg_update_sigma_re(SEXP reSEXP, SEXP scaleSEXP) {
+// cpp_test_pg_sigma_halfcauchy_chain
+NumericVector cpp_test_pg_sigma_halfcauchy_chain(NumericVector re, double scale, int n_iter);
+RcppExport SEXP _tulpaRatio_cpp_test_pg_sigma_halfcauchy_chain(SEXP reSEXP, SEXP scaleSEXP, SEXP n_iterSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type re(reSEXP);
     Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_pg_update_sigma_re(re, scale));
+    Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_pg_sigma_halfcauchy_chain(re, scale, n_iter));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1951,7 +1952,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_autodiff_negbin_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_negbin_loglik, 3},
     {"_tulpaRatio_cpp_test_pg_update_beta", (DL_FUNC) &_tulpaRatio_cpp_test_pg_update_beta, 5},
     {"_tulpaRatio_cpp_test_pg_update_re", (DL_FUNC) &_tulpaRatio_cpp_test_pg_update_re, 6},
-    {"_tulpaRatio_cpp_test_pg_update_sigma_re", (DL_FUNC) &_tulpaRatio_cpp_test_pg_update_sigma_re, 2},
+    {"_tulpaRatio_cpp_test_pg_sigma_halfcauchy_chain", (DL_FUNC) &_tulpaRatio_cpp_test_pg_sigma_halfcauchy_chain, 3},
     {"_tulpaRatio_cpp_test_dot_product", (DL_FUNC) &_tulpaRatio_cpp_test_dot_product, 2},
     {"_tulpaRatio_cpp_test_norm_squared", (DL_FUNC) &_tulpaRatio_cpp_test_norm_squared, 1},
     {"_tulpaRatio_cpp_test_vector_sum", (DL_FUNC) &_tulpaRatio_cpp_test_vector_sum, 1},

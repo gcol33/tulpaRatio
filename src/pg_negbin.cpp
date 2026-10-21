@@ -4,6 +4,7 @@
 // Reference: Zhou et al. (2012) "Lognormal and Gamma Mixed Negative Binomial Regression"
 
 #include "pg_negbin.h"
+#include "pg_binomial.h"
 #include "pg_rng.h"
 #include "crt_rng.h"
 #include "linalg_fast.h"
@@ -187,63 +188,6 @@ NumericVector update_re_negbin(
   }
 
   return re;
-}
-
-// Update sigma_re with proper half-Cauchy prior using auxiliary variable
-// Reference: Gelman (2006) "Prior distributions for variance parameters"
-// Half-Cauchy(0, scale): use auxiliary a ~ IG(1/2, 1/scale^2)
-//                        and sigma^2 | a ~ IG(1/2, 1/a)
-struct SigmaReState {
-  double sigma_re;
-  double aux;  // auxiliary variable for half-Cauchy
-};
-
-SigmaReState update_sigma_re_negbin_hc(
-    const NumericVector& re,
-    double scale,
-    double aux_current
-) {
-  int J = re.size();
-  SigmaReState result;
-
-  double ss = 0.0;
-  for (int j = 0; j < J; j++) {
-    ss += re[j] * re[j];
-  }
-
-  // Update sigma^2 | b, a ~ IG((J + 1)/2, ss/2 + 1/a)
-  double shape_sigma = (J + 1.0) / 2.0;
-  double rate_sigma = ss / 2.0 + 1.0 / aux_current;
-
-  double sigma_sq = 1.0 / R::rgamma(shape_sigma, 1.0 / rate_sigma);
-  result.sigma_re = std::sqrt(sigma_sq);
-
-  // Update a | sigma^2 ~ IG(1, 1/scale^2 + 1/sigma^2)
-  double shape_aux = 1.0;
-  double rate_aux = 1.0 / (scale * scale) + 1.0 / sigma_sq;
-  result.aux = 1.0 / R::rgamma(shape_aux, 1.0 / rate_aux);
-
-  return result;
-}
-
-// Simple version for backward compatibility
-double update_sigma_re_negbin(
-    const NumericVector& re,
-    double scale
-) {
-  int J = re.size();
-
-  double ss = 0.0;
-  for (int j = 0; j < J; j++) {
-    ss += re[j] * re[j];
-  }
-
-  // Posterior: sigma^2 | b ~ IG((J + 1)/2, ss/2 + 0.5 * scale^2)
-  double shape = (J + 1.0) / 2.0;
-  double rate = ss / 2.0 + 0.5 * scale * scale;
-
-  double sigma_sq = 1.0 / R::rgamma(shape, 1.0 / rate);
-  return std::sqrt(sigma_sq);
 }
 
 // Center random effects (soft sum-to-zero constraint)
@@ -493,6 +437,7 @@ List pg_negbin_gibbs(
   NumericVector beta(p, 0.0);
   NumericVector re(n_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   double r;
 
   if (r_init <= 0) {
@@ -513,10 +458,6 @@ List pg_negbin_gibbs(
   NumericVector X_beta(N);
   NumericVector re_contrib(N);
   NumericVector p_success(N);  // p_i = logistic(eta_i)
-
-  // Initialize auxiliary variable for half-Cauchy prior on sigma_re
-  // a ~ IG(1/2, 1/scale^2) => E[a] = 2*scale^2
-  double sigma_aux = 2.0 * prior_sigma_scale * prior_sigma_scale;
 
   // The contributions of the current state, refreshed for the omega draw and
   // again at the save so the stored predictor matches the saved parameters.
@@ -624,13 +565,7 @@ List pg_negbin_gibbs(
         }
       }
 
-      // Update sigma_re with proper half-Cauchy prior using auxiliary variable
-      SigmaReState sigma_state = update_sigma_re_negbin_hc(re, prior_sigma_scale, sigma_aux);
-      if (!std::isnan(sigma_state.sigma_re) && !std::isinf(sigma_state.sigma_re) &&
-          sigma_state.sigma_re < 100.0) {
-        sigma_re = sigma_state.sigma_re;
-        sigma_aux = sigma_state.aux;
-      }
+      sigma_re = sigma_re_prior.update(re, prior_sigma_scale);
     }
 
     // 8. Update (r, beta_0) jointly to break confounding
@@ -756,6 +691,7 @@ List pg_negbin_negbin_gibbs(
   NumericVector beta_denom(p_denom, 0.0);
   NumericVector re(n_groups, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   double r_num = r_num_init;
   double r_denom = r_denom_init;
 
@@ -898,7 +834,7 @@ List pg_negbin_negbin_gibbs(
       }
 
       // Update sigma_re
-      sigma_re = update_sigma_re_negbin(re, prior_sigma_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_scale);
     }
 
     // Save draws
@@ -999,6 +935,7 @@ List pg_negbin_gibbs_spatial(
   NumericVector re(n_re_groups, 0.0);
   NumericVector spatial(n_spatial_units, 0.0);
   double sigma_re = 1.0;
+  ratiod::HalfCauchyScale sigma_re_prior;
   double tau = 1.0;  // Spatial precision
   double r = r_init;
 
@@ -1075,7 +1012,7 @@ List pg_negbin_gibbs_spatial(
         re[g] = R::rnorm(post_mean, std::sqrt(post_var));
       }
 
-      sigma_re = update_sigma_re_negbin(re, prior_sigma_re_scale);
+      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
 
       // Update re_contrib
       for (int i = 0; i < N; i++) {

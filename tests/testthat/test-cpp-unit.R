@@ -728,30 +728,28 @@ test_that("pg update_re returns finite values", {
   expect_true(all(is.finite(result)))
 })
 
-test_that("pg update_sigma_re returns positive value", {
+test_that("PG sigma update samples the half-Cauchy prior when there are no effects", {
   set.seed(101)
-  re <- rnorm(10, sd = 1.5)
   scale <- 2.5
-
-  result <- tulpaRatio:::cpp_test_pg_update_sigma_re(re, scale)
-  expect_true(result > 0)
+  draws <- tulpaRatio:::cpp_test_pg_sigma_halfcauchy_chain(numeric(0), scale, 40000L)
+  # half-Cauchy(0, scale): quartiles scale * tan(pi/8), scale, scale * tan(3 pi/8)
+  q <- quantile(draws, c(0.25, 0.5, 0.75))
+  expect_equal(unname(q), scale * tan(pi * c(1, 2, 3) / 8), tolerance = 0.06)
 })
 
-test_that("pg update_sigma_re is roughly proportional to RE standard deviation", {
+test_that("PG sigma update matches the half-Cauchy posterior by quadrature", {
   set.seed(202)
+  scale <- 2.5
+  re <- rnorm(8, sd = 1.5)
+  draws <- tulpaRatio:::cpp_test_pg_sigma_halfcauchy_chain(re, scale, 40000L)
 
-  # Small RE variance
-  re_small <- rnorm(20, sd = 0.5)
-  result_small <- tulpaRatio:::cpp_test_pg_update_sigma_re(re_small, 2.5)
-
-  # Large RE variance
-  re_large <- rnorm(20, sd = 3.0)
-  result_large <- tulpaRatio:::cpp_test_pg_update_sigma_re(re_large, 2.5)
-
-  # Larger RE should generally produce larger sigma estimate
-  # (stochastic so we just check they're both positive)
-  expect_true(result_small > 0)
-  expect_true(result_large > 0)
+  log_post <- function(s) {
+    sum(dnorm(re, 0, s, log = TRUE)) - log1p((s / scale)^2)
+  }
+  grid <- seq(1e-3, 15, length.out = 6000)
+  w <- exp(vapply(grid, log_post, numeric(1)) - max(vapply(grid, log_post, numeric(1))))
+  post_mean <- sum(grid * w) / sum(w)
+  expect_equal(mean(draws), post_mean, tolerance = 0.03)
 })
 
 # ---------------------------------------------------------------------------
