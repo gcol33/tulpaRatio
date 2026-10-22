@@ -77,3 +77,4 @@ benchmarks/*.log
 
 # Graphics written by the default device during test runs
 tests/testthat/Rplots.pdf
+.run*

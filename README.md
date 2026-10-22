@@ -1,35 +1,146 @@
-﻿# tulpaRatio
+
+# tulpaRatio
 
 *a ratio with its uncertainty kept*
 
+<!-- badges: start -->
+
 [![R-CMD-check](https://github.com/gcol33/tulpaRatio/actions/workflows/R-CMD-check.yml/badge.svg)](https://github.com/gcol33/tulpaRatio/actions/workflows/R-CMD-check.yml)
-[![Codecov test coverage](https://codecov.io/gh/gcol33/tulpaRatio/graph/badge.svg)](https://app.codecov.io/gh/gcol33/tulpaRatio)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Codecov test
+coverage](https://codecov.io/gh/gcol33/tulpaRatio/graph/badge.svg)](https://app.codecov.io/gh/gcol33/tulpaRatio)
+[![License:
+MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<!-- badges: end -->
 
-**Bayesian hierarchical models for ratios, rates, and proportions, with inference on the numerator and denominator rather than their quotient.**
+tulpaRatio fits Bayesian hierarchical models for ratios, rates and
+proportions, such as catch per unit effort, the share of one species in
+a sample, or successes out of a known number of trials.
 
-Give it the two counts, not the ratio. `tulpaRatio` fits the numerator and
-denominator processes jointly, with shared random effects between them, and
-derives the ratio posterior afterwards with uncertainty carried through from
-both components. Sampling runs on a native HMC/NUTS backend built on the
-[tulpa](https://github.com/gcol33/tulpa) engine, with no Stan or JAGS to
-install. The usual approach divides first and models the quotient (or pins
-the denominator into an `offset`); that discards the shared structure and
-mis-states the uncertainty.
+The package models the numerator and the denominator as two processes
+with linked linear predictors, and derives the ratio from their joint
+posterior. The denominator is either a second response or a known
+exposure, and the two processes can share random effects. The ratio
+posterior carries the uncertainty of both components, so you can report
+the ratio, compare groups on it and decide which effects matter for your
+question. tulpaRatio supports:
+
+- **Ratios of two measured quantities.** Families pair a numerator and a
+  denominator distribution: counts over counts, counts over continuous
+  effort, successes over known trials, and continuous over continuous
+  values ([reference
+  index](https://gillescolling.com/tulpaRatio/reference/)).
+- **Shared and process-specific structure.** Both predictors take shared
+  or separate random effects, latent factors, conditional autoregressive
+  and Besag-York-Mollie spatial fields, Gaussian processes, temporal
+  random walks and autoregressions, and Knorr-Held space-time
+  interactions ([Spatial and Temporal
+  Models](https://gillescolling.com/tulpaRatio/articles/spatial-temporal.html)).
+- **Excess zeros and ones.** Zero-inflated, one-inflated, hurdle, and
+  zero-and-one-inflated numerators are available for the families they
+  apply to ([Zero-Inflation and Hurdle
+  Models](https://gillescolling.com/tulpaRatio/articles/zero-inflation.html)).
+- **Model comparison and averaging.** `ratiod_compare()` ranks fitted
+  models by leave-one-out cross-validation or WAIC, and
+  `ratiod_average()` combines their ratio predictions with stacking or
+  pseudo-BMA weights.
+
+The default sampler is the No-U-Turn sampler with hand-coded gradients,
+written in C++ on the [tulpa](https://github.com/gcol33/tulpa) engine,
+so no Stan or JAGS installation is needed. Elliptical slice sampling,
+Pólya-Gamma Gibbs sampling and a nested Laplace approximation fit the
+subsets of models they apply to. Every fit reports the tier of guarantee
+its inference carries. `mode = "auto"` picks an exact or structured
+backend for the model, and the optimized tier runs only when you request
+it.
 
 ## Installation
 
-```r
-install.packages("pak")                   # development version
+The package compiles C++ code. Install the build tools for your
+operating system first:
+
+| Operating system | Build tools                                              |
+|------------------|----------------------------------------------------------|
+| Windows          | [Rtools](https://cran.r-project.org/bin/windows/Rtools/) |
+| macOS            | Run `xcode-select --install` in Terminal                 |
+| Debian / Ubuntu  | Install `r-base-dev`                                     |
+
+Check that R can find the compiler:
+
+``` r
+pkgbuild::has_build_tools(debug = TRUE)
+```
+
+Then install tulpaRatio:
+
+``` r
+# install.packages("pak")
 pak::pak("gcol33/tulpaRatio")
 ```
 
-## Quick start
+The code is compiled as C++17. The Eigen headers come from RcppEigen and
+the sampler headers from tulpa, both installed as dependencies, so no
+system library is needed.
 
-```r
+### Optional: multithreading
+
+OpenMP lets the package run MCMC chains in parallel, set through `cores`
+in the `control` argument of
+[`tratio()`](https://gillescolling.com/tulpaRatio/reference/tratio.html).
+
+Rtools on Windows and the default compiler on Linux include OpenMP.
+Without it, the package installs and runs the chains one after another.
+
+#### macOS setup
+
+Apple’s compiler needs an additional OpenMP runtime. Install it in
+Terminal:
+
+``` sh
+brew install libomp
+```
+
+Before installing tulpaRatio, add the settings for your Mac to
+`~/.R/Makevars`, R’s personal compiler-settings file. Create the
+directory and file if needed.
+
+**Apple Silicon:**
+
+``` makefile
+CPPFLAGS += -I/opt/homebrew/opt/libomp/include -Xclang -fopenmp
+LDFLAGS += -L/opt/homebrew/opt/libomp/lib -lomp
+```
+
+**Intel:**
+
+``` makefile
+CPPFLAGS += -I/usr/local/opt/libomp/include -Xclang -fopenmp
+LDFLAGS += -L/usr/local/opt/libomp/lib -lomp
+```
+
+#### Check available threads
+
+After installation, run:
+
+``` r
+tulpaRatio::ratiod_threads()
+```
+
+This returns the number of OpenMP threads available to the package.
+
+## Usage
+
+1.  Fit the model with `tratio()`. The formula names the numerator, then
+    the denominator after `|`, then the predictors.
+2.  Get the ratio posterior with `ratio()`.
+3.  Compare groups on the ratio with `ratio_contrast()`.
+
+The input is a data frame with one row per observation. The family sets
+the distribution of each process; `ratiod_poisson_gamma()` treats the
+numerator as a count and the denominator as continuous effort.
+
+``` r
 library(tulpaRatio)
 
-# simulated trawl survey: 12 sites, 10 hauls each
 set.seed(1)
 trawl <- data.frame(
   site   = factor(rep(1:12, each = 10)),
@@ -39,127 +150,176 @@ trawl <- data.frame(
 trawl$effort <- rgamma(120, shape = 6, rate = 1)
 trawl$catch  <- rpois(120, trawl$effort * exp(0.5 + 0.3 * trawl$depth))
 
-# catch-per-unit-effort: model catch and effort, derive CPUE
 fit <- tratio(
   catch | effort ~ depth + season + (1 | site),
   data   = trawl,
   family = ratiod_poisson_gamma()
 )
-
-ratio(fit)                    # CPUE posteriors, uncertainty propagated
-ratio_contrast(fit, ~ season) # compare seasons on the derived ratio
+fit
+#> ratio model fit: catch | effort ~ depth + season + (1 | site)
+#> Family: poisson_gamma (Poisson numerator, Gamma denominator (CPUE-type))
+#> Inference: Exact (Tier 1) via hmc; credible intervals are posterior uncertainty
+#> Observations: 120; random effects: site (12)
+#> Use summary() for estimates and ratio() for ratio posteriors.
 ```
 
-## Derived, not divided
+The data simulate a trawl survey of 12 sites with 10 hauls each.
+`(1 | site)` adds a site random effect, shared by catch and effort by
+default. The printed fit states its inference tier.
 
-Dividing two measured quantities inherits the error of both and creates
-heteroscedasticity by construction: a site with more effort gives a more
-precise CPUE, yet a model fit to the quotient treats every ratio as equally
-informative. The offset fix assumes effort acts on catch with a coefficient of
-exactly 1 and that effort carries no structure of its own. `tulpaRatio` keeps
-both processes as what they are, models them together, and computes the ratio
-from the joint posterior.
+The ratio here is catch per unit effort. `ratio()` returns its posterior
+for every observation, summarised with `summary = TRUE`, and
+`ratio_contrast()` compares the seasons on it:
 
-```r
-# the offset approach assumes proportionality and a structureless denominator
-glm(catch ~ depth + season + offset(log(effort)), family = poisson, data = df)
+``` r
+cpue <- ratio(fit, summary = TRUE)
+head(cpue)
+#> tulpaRatio ratio summary (response scale)
+#> ===========================================
+#> 
+#>  obs     mean        sd      q2.5      q50    q97.5
+#>    1 1.265194 0.1058698 1.0691947 1.259819 1.483303
+#>    2 1.839405 0.1263989 1.5985339 1.835237 2.096420
+#>    3 1.191068 0.1081630 0.9914735 1.185735 1.412453
+#>    4 2.784215 0.2861958 2.2688690 2.765384 3.379809
+#>    5 1.670186 0.1169916 1.4489908 1.667464 1.909893
+#>    6 1.375038 0.1260676 1.1492059 1.370815 1.634085
 
-# tulpaRatio models both processes, derives the ratio post hoc
-tratio(catch | effort ~ depth + season + (1 | site),
-       data = df, family = ratiod_poisson_gamma())
+ratio_contrast(fit, ~ season)
+#> tulpaRatio ratio contrasts
+#> =====================
+#> 
+#> Type: difference 
+#> Variable: season 
+#> Reference: summer 
+#> 
+#>          contrast      mean         sd        q2.5       q50     q97.5
+#>  winter vs summer 0.1112132 0.09829348 -0.08689166 0.1124141 0.3020628
+#>  prob_positive
+#>          0.869
 ```
 
-See [Why Ratios Are Not Data](https://gillescolling.com/tulpaRatio/articles/philosophy.html)
-for the full argument.
+[Quick
+Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html)
+continues with the formula syntax, random effects and model checking.
 
-## Model families
+## Modelling the counts instead of the quotient
 
-| Family | Numerator | Denominator | Use case |
-|--------|-----------|-------------|----------|
-| `ratiod_negbin_negbin()` | NegBin | NegBin | Count/count ratios (relative abundance) |
-| `ratiod_poisson_gamma()` | Poisson | Gamma | Count/continuous effort (CPUE) |
-| `ratiod_binomial()` | Binomial | Known trials | Success/trial proportions |
-| `ratiod_negbin_gamma()` | NegBin | Gamma | Overdispersed count/effort |
-| `ratiod_beta_binomial()` | Beta-Binomial | Known trials | Overdispersed proportions |
-| `ratiod_gamma_gamma()` | Gamma | Gamma | Continuous/continuous ratios |
-| `ratiod_lognormal()` | Lognormal | Lognormal | Continuous ratios on the log scale |
+A quotient of two measured quantities inherits the error of both. A haul
+with more effort gives a more precise catch per unit effort, yet a model
+fitted to the quotient weights every ratio equally. An offset,
+`offset(log(effort))`, assumes that catch scales with effort with a
+coefficient of exactly 1 and that effort has no structure of its own.
+tulpaRatio fits both processes and derives the ratio from them. [Why
+Ratios Are Not
+Data](https://gillescolling.com/tulpaRatio/articles/philosophy.html)
+sets out the argument with examples.
 
-Zero-inflation, one-inflation, hurdle, and zero-and-one-inflated variants are
-available for the relevant families.
+## Different predictors for numerator and denominator
 
-## Hierarchical, spatial, and temporal structure
+The numerator and the denominator can take their own predictors. The
+formula then keeps the shared random effects, and `formula_num` and
+`formula_denom` give each process its fixed effects:
 
-- **Shared random effects** between numerator and denominator by default;
-  `(1 + x | site)` correlated and `(1 + x || site)` uncorrelated slopes;
-  nested `(1 | site/plot)` and crossed `(1 | site) + (1 | year)`.
-- **Latent factors** (`latent_factor()`) for unmeasured confounders shared
-  across the two processes.
-- **Spatial**: `spatial_car()`, `spatial_bym2()`, and Gaussian-process priors
-  for areal or point-referenced data.
-- **Temporal**: `temporal_ar1()`, `temporal_rw1()`, `temporal_rw2()`.
-- **Spatiotemporal**: `spatiotemporal()` for Knorr-Held Type I-IV interactions.
-
-## Inference backends and tiers
-
-`mode = "auto"` picks an exact or structured backend for the model and never
-silently drops to an approximation that lacks a convergence guarantee.
-
-- **Tier 1 (exact):** HMC/NUTS (default), elliptical slice sampling,
-  Pólya-Gamma Gibbs for binomial models.
-- **Tier 2 (structured):** nested Laplace approximation for large datasets, integrating the hyperparameters on an outer grid.
-- **Tier 3 (optimized):** variational inference and stochastic-gradient MCMC,
-  available by explicit opt-in only.
-
-LOO and WAIC are provided for model comparison. See
-`inference_mode_info()` for the tier system.
-
-## Process-specific predictors
-
-The numerator and denominator can take different predictors:
-
-```r
-fit <- tratio(
-  species_count | total_count ~ (1 | site),
-  formula_num   = ~ depth + temperature,   # numerator process
-  formula_denom = ~ sampling_effort,        # denominator process
-  data   = df,
-  family = ratiod_negbin_negbin()
+``` r
+fit2 <- tratio(
+  catch | effort ~ (1 | site),
+  formula_num   = ~ depth + season,
+  formula_denom = ~ season,
+  data   = trawl,
+  family = ratiod_poisson_gamma()
 )
 ```
 
+[Random
+Effects](https://gillescolling.com/tulpaRatio/articles/random-effects.html)
+covers correlated, uncorrelated, nested and crossed random effects and
+latent factors.
+
+## Inference backends and tiers
+
+Each backend carries one of three tiers. Tier 1 covers the samplers that
+converge to the exact posterior: the No-U-Turn sampler (the default),
+elliptical slice sampling and Pólya-Gamma Gibbs sampling for binomial
+models. Tier 2 is the nested Laplace approximation for large datasets,
+which integrates the hyperparameters on an outer grid. Tier 3 covers
+variational inference and stochastic-gradient MCMC, used only when you
+request them through `mode`. `inference_mode_info()` lists the backends
+and the models each one fits.
+
 ## Documentation
 
-- [Quick Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html)
-- [Why Ratios Are Not Data](https://gillescolling.com/tulpaRatio/articles/philosophy.html)
-- [Complete Workflows](https://gillescolling.com/tulpaRatio/articles/workflows.html)
-- [Spatial and Temporal Models](https://gillescolling.com/tulpaRatio/articles/spatial-temporal.html)
-- [Random Effects](https://gillescolling.com/tulpaRatio/articles/random-effects.html)
-- [Zero-Inflation](https://gillescolling.com/tulpaRatio/articles/zero-inflation.html)
+Start with [Quick
+Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html):
+one path from simulated trawl data to catch per unit effort, then
+formula syntax, random effects and model checking.
+
+- [Why Ratios Are Not
+  Data](https://gillescolling.com/tulpaRatio/articles/philosophy.html):
+  the statistical case for modelling the numerator and denominator.
+- [Complete
+  Workflows](https://gillescolling.com/tulpaRatio/articles/workflows.html):
+  four analyses from data to reported ratios: catch per unit effort,
+  relative abundance, detection probability and temporal trends.
+- [Spatial and Temporal
+  Models](https://gillescolling.com/tulpaRatio/articles/spatial-temporal.html):
+  areal fields, Gaussian processes, temporal and space-time terms.
+- [Random
+  Effects](https://gillescolling.com/tulpaRatio/articles/random-effects.html):
+  shared, process-specific, nested and crossed random effects.
+- [Zero-Inflation and Hurdle
+  Models](https://gillescolling.com/tulpaRatio/articles/zero-inflation.html):
+  numerators with excess zeros or ones.
+- [Full reference](https://gillescolling.com/tulpaRatio/reference/):
+  every function, grouped by job.
+
+## Getting help
+
+Questions and bug reports go to the [GitHub
+issues](https://github.com/gcol33/tulpaRatio/issues). A bug report is
+easiest to act on with a small reproducible example, for instance made
+with [reprex](https://reprex.tidyverse.org/).
 
 ## Support
 
-> "Software is like sex: it's better when it's free." — Linus Torvalds
+> “Software is like sex: it’s better when it’s free.” — Linus Torvalds
 
-I'm a PhD student who builds R packages in my free time because I believe good tools
-should be free and open. I started these projects for my own work and figured others
-might find them useful too.
+I’m a PhD student who builds R packages in my free time because I
+believe good tools should be free and open. I started these projects for
+my own work and figured others might find them useful too.
 
-If this package saved you some time, buying me a coffee is a nice way to say thanks.
-It helps with my coffee addiction.
+If this package saved you some time, buying me a coffee is a nice way to
+say thanks. It helps with my coffee addiction.
 
-[![Buy Me A Coffee](https://img.shields.io/badge/-Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/gcol33)
+[![Buy Me A
+Coffee](https://img.shields.io/badge/-Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/gcol33)
 
 ## License
 
-MIT (see the LICENSE file)
+tulpaRatio is licensed under MIT.
 
 ## Citation
 
-```bibtex
-@software{tulpaRatio,
-  author = {Colling, Gilles},
-  title  = {tulpaRatio: Bayesian Hierarchical Models for Ratios, Rates, and Proportions},
-  year   = {2025},
-  url    = {https://github.com/gcol33/tulpaRatio}
+To cite tulpaRatio in publications, please use:
+
+``` text
+Colling G (2026). _tulpaRatio: Bayesian Hierarchical Models for Ratios,
+Rates, and Proportions_. R package version 1.7.3,
+<https://github.com/gcol33/tulpaRatio>.
+```
+
+BibTeX:
+
+``` bibtex
+@Manual{colling2026tulparatio,
+  title = {tulpaRatio: Bayesian Hierarchical Models for Ratios, Rates, and Proportions},
+  author = {Gilles Colling},
+  year = {2026},
+  note = {R package version 1.7.3},
+  url = {https://github.com/gcol33/tulpaRatio},
 }
 ```
+
+Download the citation as
+[BibTeX](https://gillescolling.com/tulpaRatio/tulpaRatio.bib) or
+[RIS](https://gillescolling.com/tulpaRatio/tulpaRatio.ris).

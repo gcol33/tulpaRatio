@@ -43,3 +43,6 @@
 ^\.git-blame-ignore-revs$
 ^data-raw$
 ^paper$
+^\.run.*$
+^sidecars$
+^CITATION\.cff$
