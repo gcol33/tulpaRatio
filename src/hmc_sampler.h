@@ -316,14 +316,10 @@ struct ModelData {
   double ms_sigma2_short_prior_U = 1.0;
   double ms_sigma2_short_prior_alpha = 0.01;
 
-  // Temporal GP structure (for irregularly-spaced time series)
+  // Temporal GP structure (for irregularly-spaced time series), with its priors
+  // and coordinate
   TemporalGPData temporal_gp_data;
   bool has_temporal_gp = false;
-  double temporal_gp_sigma2_prior_U = 1.0;    // PC prior: P(sigma > U) = alpha
-  double temporal_gp_sigma2_prior_alpha = 0.01;
-  double temporal_gp_phi_prior_lower = 0.01;  // Uniform prior bounds for range
-  double temporal_gp_phi_prior_upper = 10.0;
-  int temporal_gp_parameterization = 1;       // 0=centered, 1=non-centered (default NC)
 
   // HSGP (Hilbert Space GP) structure
   ratiod_hsgp::HSGPData hsgp_data;

@@ -1,474 +1,409 @@
 // hmc_temporal_gp.h
-// Gaussian Process temporal effects for irregularly-spaced time series
-// Supports exponential, Matern, Gaussian, and periodic covariance functions
+// Gaussian-process temporal effect over the distinct time instants.
+//
+// Each group's effect is f_g ~ N(0, sigma2 R(phi)) on the time grid, with R the
+// correlation of the chosen kernel. The exponential kernel is Markov, so its
+// density factorizes into the AR(1) recursion rho_t = exp(-dt_t / phi) and
+// costs O(T). Every other kernel goes through a dense Cholesky factor of
+// R(phi) + TGP_NUGGET I, shared by the groups, at O(T^3).
+//
+// In the non-centred coordinate the sampled block is z_g ~ N(0, I) and
+// f_g = sigma L(phi) z_g with L L' the correlation; the AR(1) recursion is that
+// same product for the exponential kernel. In the centred coordinate the block
+// is f_g itself.
+//
+// temporal_gp_log_prior() is the density for every scalar type the templated
+// log posterior is evaluated in; TemporalGPBlock evaluates it at a double state
+// and differentiates it analytically for the hand-coded gradients.
 
 #ifndef RATIOD_HMC_TEMPORAL_GP_H
 #define RATIOD_HMC_TEMPORAL_GP_H
 
 #include <vector>
 #include <cmath>
-#include <algorithm>
-#include "ar1_shared.h"  // the floored 1 - rho^2
+#include <limits>
+#include <Eigen/Dense>
+#include "ar1_shared.h"
+#include "autodiff_utils.h"
+#include "hmc_cov.h"
 
 namespace ratiod_temporal_gp {
 
-// Covariance function types for temporal GP
-enum class TemporalCovType { EXPONENTIAL, MATERN, GAUSSIAN, PERIODIC };
+using namespace ratiod::math;
 
-// Temporal GP data structure
+enum class TemporalCovType { EXPONENTIAL, MATERN32, MATERN52, GAUSSIAN, PERIODIC };
+
 struct TemporalGPData {
-  int n_obs = 0;                      // Number of unique time points (NOT total obs)
-  int n_groups = 1;                   // Number of groups (for panel data)
-
-  std::vector<double> time_values;    // Numeric time values (length n_obs)
-  std::vector<int> group_index;       // Group index for each obs (1-based)
+  int n_times = 0;                    // Distinct time instants, the grid size
+  int n_groups = 1;                   // One effect per group on the shared grid
+  std::vector<double> time_values;    // Sorted, length n_times
 
   TemporalCovType cov_type = TemporalCovType::EXPONENTIAL;
-  double nu = 1.5;                    // Matern smoothness (if applicable)
-  double period = 1.0;                // Period for periodic covariance
-  bool shared = true;                 // Whether GP is shared between num/denom
+  double period = 1.0;                // Periodic kernel only
+  bool shared = true;                 // Effect enters both processes
+
+  // PC prior on sigma, P(sigma > U) = alpha, and a uniform prior on phi.
+  double sigma2_prior_U = 1.0;
+  double sigma2_prior_alpha = 0.01;
+  double phi_lower = 0.01;
+  double phi_upper = 10.0;
+
+  bool noncentered = true;
 };
 
+// The nugget, as a fraction of the marginal variance, that keeps the dense
+// correlation positive definite: a periodic kernel repeats exactly after one
+// period, and a smooth kernel on a fine grid is numerically singular.
+constexpr double TGP_NUGGET = 1e-6;
+
 // -----------------------------------------------------------------------------
-// Temporal covariance functions
+// Kernels. phi is the lengthscale; the four shared with the spatial GP come from
+// ratiod_cov, so the two use the same Gaussian and Matern forms.
 // -----------------------------------------------------------------------------
 
-// Exponential covariance: sigma^2 * exp(-d / phi)
-inline double temporal_cov_exponential(double d, double sigma2, double phi) {
-  return sigma2 * std::exp(-d / phi);
-}
-
-// Matern 3/2 covariance: sigma^2 * (1 + sqrt(3)*d/phi) * exp(-sqrt(3)*d/phi)
-inline double temporal_cov_matern32(double d, double sigma2, double phi) {
-  double r = std::sqrt(3.0) * d / phi;
-  return sigma2 * (1.0 + r) * std::exp(-r);
-}
-
-// Matern 5/2 covariance
-inline double temporal_cov_matern52(double d, double sigma2, double phi) {
-  double r = std::sqrt(5.0) * d / phi;
-  return sigma2 * (1.0 + r + r * r / 3.0) * std::exp(-r);
-}
-
-// Gaussian (squared exponential) covariance: sigma^2 * exp(-(d/phi)^2)
-inline double temporal_cov_gaussian(double d, double sigma2, double phi) {
-  double r = d / phi;
-  return sigma2 * std::exp(-r * r);
-}
-
-// Periodic covariance: sigma^2 * exp(-2 * sin^2(pi * d / period) / phi^2)
-inline double temporal_cov_periodic(double d, double sigma2, double phi, double period) {
-  double sin_term = std::sin(M_PI * d / period);
-  return sigma2 * std::exp(-2.0 * sin_term * sin_term / (phi * phi));
-}
-
-// Generic covariance function dispatcher
-inline double compute_temporal_cov(double d, double sigma2, double phi,
-                                   TemporalCovType cov_type, double nu = 1.5,
-                                   double period = 1.0) {
-  switch (cov_type) {
+template <typename T>
+inline T temporal_corr(double d, const T& phi, const TemporalGPData& gp) {
+  const T one(1.0);
+  switch (gp.cov_type) {
     case TemporalCovType::EXPONENTIAL:
-      return temporal_cov_exponential(d, sigma2, phi);
-    case TemporalCovType::MATERN:
-      if (nu <= 1.0) {
-        return temporal_cov_exponential(d, sigma2, phi);  // nu=0.5 equivalent
-      } else if (nu <= 2.0) {
-        return temporal_cov_matern32(d, sigma2, phi);  // nu=1.5
-      } else {
-        return temporal_cov_matern52(d, sigma2, phi);  // nu=2.5
-      }
+      return ratiod_cov::cov_exponential(d, one, phi);
+    case TemporalCovType::MATERN32:
+      return ratiod_cov::cov_matern32(d, one, phi);
+    case TemporalCovType::MATERN52:
+      return ratiod_cov::cov_matern52(d, one, phi);
     case TemporalCovType::GAUSSIAN:
-      return temporal_cov_gaussian(d, sigma2, phi);
-    case TemporalCovType::PERIODIC:
-      return temporal_cov_periodic(d, sigma2, phi, period);
-    default:
-      return temporal_cov_exponential(d, sigma2, phi);
+      return ratiod_cov::cov_gaussian(d, one, phi);
+    case TemporalCovType::PERIODIC: {
+      // exp(-2 sin^2(pi d / period) / phi^2)
+      const double s = std::sin(M_PI * d / gp.period);
+      return safe_exp(T(-2.0 * s * s) / (phi * phi));
+    }
   }
+  return ratiod_cov::cov_exponential(d, one, phi);
+}
+
+// d corr / d phi at corr value k, written against temporal_corr() above.
+inline double temporal_dcorr_dphi(double d, double phi, double k,
+                                  const TemporalGPData& gp) {
+  switch (gp.cov_type) {
+    case TemporalCovType::EXPONENTIAL:
+      return ratiod_cov::dcov_dphi(d, 1.0, phi, k, ratiod_cov::CovType::EXPONENTIAL);
+    case TemporalCovType::MATERN32:
+      return ratiod_cov::dcov_dphi(d, 1.0, phi, k, ratiod_cov::CovType::MATERN);
+    case TemporalCovType::GAUSSIAN:
+      return ratiod_cov::dcov_dphi(d, 1.0, phi, k, ratiod_cov::CovType::GAUSSIAN);
+    case TemporalCovType::MATERN52: {
+      // k = (1 + u + u^2/3) exp(-u), u = sqrt(5) d / phi;
+      // dk/dphi = u^2 (1 + u) exp(-u) / (3 phi)
+      const double u = std::sqrt(5.0) * d / phi;
+      return u * u * (1.0 + u) * std::exp(-u) / (3.0 * phi);
+    }
+    case TemporalCovType::PERIODIC: {
+      // k = exp(-2 s^2 / phi^2), s = sin(pi d / period); dk/dphi = 4 s^2 k / phi^3
+      const double s = std::sin(M_PI * d / gp.period);
+      return 4.0 * s * s * k / (phi * phi * phi);
+    }
+  }
+  return 0.0;
 }
 
 // -----------------------------------------------------------------------------
-// State-space representation for efficient O(n) inference
-// (Only for exponential and Matern with half-integer nu)
+// Hyperparameters, sampled as log sigma2 and logit-bounded phi
 // -----------------------------------------------------------------------------
 
-// AR(1) representation for exponential covariance
-// phi[t] = rho * phi[t-1] + epsilon, where rho = exp(-dt / range)
-struct StateSpaceAR1 {
-  double marginal_var;    // sigma^2
-  double range;           // phi (range parameter)
-};
-
-// Compute AR(1) transition parameters given time gap dt
-inline void ar1_transition(double dt, const StateSpaceAR1& ss,
-                           double& rho, double& cond_var) {
-  rho = std::exp(-dt / ss.range);
-  cond_var = ss.marginal_var * ratiod_ar1::one_minus_rho2(rho);
+template <typename T>
+inline T temporal_gp_phi(const T& logit_phi, const TemporalGPData& gp) {
+  return T(gp.phi_lower) + T(gp.phi_upper - gp.phi_lower) * inv_logit(logit_phi);
 }
 
-// Compute log-likelihood using state-space (O(n) algorithm)
-// Assumes observations are sorted by time!
-inline double temporal_gp_log_lik_statespace(
-    const std::vector<double>& f,        // Temporal effect values
-    const std::vector<double>& times,    // Time values (sorted)
-    double sigma2,                        // Marginal variance
-    double phi,                           // Range parameter
-    TemporalCovType cov_type
-) {
-  int N = f.size();
-  if (N == 0) return 0.0;
-
-  // Only use state-space for exponential covariance
-  if (cov_type != TemporalCovType::EXPONENTIAL) {
-    // Fall back to direct computation for other covariance types
-    return -1.0;  // Signal to use direct method
-  }
-
-  double log_lik = 0.0;
-
-  // First observation: marginal N(0, sigma2)
-  log_lik += -0.5 * std::log(2.0 * M_PI * sigma2) -
-             0.5 * f[0] * f[0] / sigma2;
-
-  // Remaining observations: conditional on previous
-  for (int i = 1; i < N; i++) {
-    double dt = times[i] - times[i-1];
-
-    // AR(1) transition
-    double rho = std::exp(-dt / phi);
-    double cond_var = sigma2 * ratiod_ar1::one_minus_rho2(rho);
-
-    double cond_mean = rho * f[i-1];
-    double resid = f[i] - cond_mean;
-
-    log_lik += -0.5 * std::log(2.0 * M_PI * cond_var) -
-               0.5 * resid * resid / cond_var;
-  }
-
-  return log_lik;
+// PC prior on sigma and uniform prior on phi, on the sampled coordinates with
+// the Jacobians of both transforms.
+template <typename T>
+inline T temporal_gp_hyper_log_prior(const T& log_sigma2, const T& phi,
+                                     const TemporalGPData& gp) {
+  const double rate = -std::log(gp.sigma2_prior_alpha) / gp.sigma2_prior_U;
+  const double range = gp.phi_upper - gp.phi_lower;
+  const T sigma = safe_sqrt(safe_exp(log_sigma2));
+  return T(std::log(rate)) - T(rate) * sigma - safe_log(T(2.0) * sigma) + log_sigma2
+       + safe_log(phi - T(gp.phi_lower)) + safe_log(T(gp.phi_upper) - phi)
+       - T(std::log(range));
 }
 
-// -----------------------------------------------------------------------------
-// Direct GP log-likelihood (for general covariance)
-// O(n^3) but works for any covariance function
-// Use only for small n or when state-space not applicable
-// -----------------------------------------------------------------------------
-
-inline double temporal_gp_log_lik_direct(
-    const std::vector<double>& f,        // Temporal effect values
-    const std::vector<double>& times,    // Time values
-    double sigma2,                        // Marginal variance
-    double phi,                           // Range parameter
-    TemporalCovType cov_type,
-    double nu = 1.5,
-    double period = 1.0
-) {
-  int N = f.size();
-  if (N == 0) return 0.0;
-
-  // Build covariance matrix
-  std::vector<double> K(N * N);
-  for (int i = 0; i < N; i++) {
+// L L' = R(phi) + TGP_NUGGET I over the time grid, row-major, lower triangular.
+template <typename T>
+inline bool temporal_gp_dense_factor(const T& phi, const TemporalGPData& gp,
+                                     std::vector<T>& L) {
+  const int n = gp.n_times;
+  std::vector<T> R(static_cast<size_t>(n) * n);
+  for (int i = 0; i < n; i++) {
     for (int j = 0; j <= i; j++) {
-      double d = std::abs(times[i] - times[j]);
-      double cov = compute_temporal_cov(d, sigma2, phi, cov_type, nu, period);
-      K[i * N + j] = cov;
-      K[j * N + i] = cov;  // Symmetric
+      const T k = temporal_corr(std::abs(gp.time_values[i] - gp.time_values[j]), phi, gp);
+      R[i * n + j] = k;
+      R[j * n + i] = k;
     }
-    // Add small nugget for numerical stability
-    K[i * N + i] += 1e-8;
+  }
+  return ratiod_cov::nngp_chol(R, n, L, TGP_NUGGET);
+}
+
+// -----------------------------------------------------------------------------
+// The density
+// -----------------------------------------------------------------------------
+
+// Log density of the block x (z non-centred, f centred) and of its
+// hyperparameters, writing the effects f that enter eta. -inf when the dense
+// correlation does not factor. `chol`, when given, receives the dense factor.
+template <typename T>
+inline T temporal_gp_log_prior(const T* x, const T& log_sigma2, const T& logit_phi,
+                               const TemporalGPData& gp, std::vector<T>& f,
+                               std::vector<T>* chol = nullptr) {
+  const int n = gp.n_times;
+  const int G = gp.n_groups;
+  const T sigma2 = safe_exp(log_sigma2);
+  const T sigma = safe_sqrt(sigma2);
+  const T phi = temporal_gp_phi(logit_phi, gp);
+  T lp = temporal_gp_hyper_log_prior(log_sigma2, phi, gp);
+  f.assign(static_cast<size_t>(G) * n, T(0.0));
+
+  if (gp.noncentered) {
+    for (int k = 0; k < G * n; k++) lp = lp - T(0.5) * x[k] * x[k];
   }
 
-  // Cholesky decomposition: K = L * L^T
-  std::vector<double> L(N * N, 0.0);
-  for (int j = 0; j < N; j++) {
-    for (int k = 0; k <= j; k++) {
-      double sum = K[j * N + k];
-      for (int m = 0; m < k; m++) {
-        sum -= L[j * N + m] * L[k * N + m];
-      }
-      if (j == k) {
-        L[j * N + j] = std::sqrt(std::max(1e-10, sum));
+  if (gp.cov_type == TemporalCovType::EXPONENTIAL) {
+    std::vector<T> rho(n > 1 ? n - 1 : 0), omr2(n > 1 ? n - 1 : 0);
+    for (int t = 1; t < n; t++) {
+      const double dt = gp.time_values[t] - gp.time_values[t - 1];
+      rho[t - 1] = safe_exp(T(-dt) / phi);
+      omr2[t - 1] = ratiod_ar1::one_minus_rho2(rho[t - 1]);
+    }
+    for (int g = 0; g < G; g++) {
+      const int o = g * n;
+      if (gp.noncentered) {
+        f[o] = sigma * x[o];
+        for (int t = 1; t < n; t++) {
+          f[o + t] = rho[t - 1] * f[o + t - 1] + sigma * safe_sqrt(omr2[t - 1]) * x[o + t];
+        }
       } else {
-        L[j * N + k] = sum / L[k * N + k];
+        lp = lp - T(0.5) * safe_log(T(2.0 * M_PI) * sigma2)
+                - T(0.5) * x[o] * x[o] / sigma2;
+        for (int t = 1; t < n; t++) {
+          const T cv = sigma2 * omr2[t - 1];
+          const T r = x[o + t] - rho[t - 1] * x[o + t - 1];
+          lp = lp - T(0.5) * safe_log(T(2.0 * M_PI) * cv) - T(0.5) * r * r / cv;
+        }
+        for (int t = 0; t < n; t++) f[o + t] = x[o + t];
       }
     }
+    return lp;
   }
 
-  // Solve L * y = f (forward substitution)
-  std::vector<double> y(N);
-  for (int j = 0; j < N; j++) {
-    double sum = f[j];
-    for (int k = 0; k < j; k++) {
-      sum -= L[j * N + k] * y[k];
+  std::vector<T> L_local;
+  std::vector<T>& L = chol ? *chol : L_local;
+  if (!temporal_gp_dense_factor(phi, gp, L)) {
+    return T(-std::numeric_limits<double>::infinity());
+  }
+
+  if (gp.noncentered) {
+    for (int g = 0; g < G; g++) {
+      const int o = g * n;
+      for (int i = 0; i < n; i++) {
+        T s = T(0.0);
+        for (int j = 0; j <= i; j++) s = s + L[i * n + j] * x[o + j];
+        f[o + i] = sigma * s;
+      }
     }
-    y[j] = sum / L[j * N + j];
+    return lp;
   }
 
-  // Log-likelihood: -0.5 * (N * log(2*pi) + log|K| + f' K^{-1} f)
-  // log|K| = 2 * sum(log(L_ii))
-  // f' K^{-1} f = y' y
-  double log_det = 0.0;
-  for (int j = 0; j < N; j++) {
-    log_det += std::log(L[j * N + j]);
+  T log_det_L = T(0.0);
+  for (int i = 0; i < n; i++) log_det_L = log_det_L + safe_log(L[i * n + i]);
+  std::vector<T> y(n);
+  for (int g = 0; g < G; g++) {
+    const int o = g * n;
+    ratiod_cov::nngp_forward_solve(L.data(), n, x + o, y.data());
+    T q = T(0.0);
+    for (int i = 0; i < n; i++) q = q + y[i] * y[i];
+    lp = lp - T(0.5 * n * std::log(2.0 * M_PI)) - T(0.5 * n) * log_sigma2
+            - log_det_L - T(0.5) * q / sigma2;
+    for (int i = 0; i < n; i++) f[o + i] = x[o + i];
   }
-  log_det *= 2.0;
-
-  double quad = 0.0;
-  for (int j = 0; j < N; j++) {
-    quad += y[j] * y[j];
-  }
-
-  return -0.5 * (N * std::log(2.0 * M_PI) + log_det + quad);
+  return lp;
 }
 
 // -----------------------------------------------------------------------------
-// Main GP log-likelihood dispatcher
+// The block at a double state, for the hand-coded gradients
 // -----------------------------------------------------------------------------
 
-inline double temporal_gp_log_lik(
-    const std::vector<double>& f,
-    const TemporalGPData& gp_data,
-    double sigma2,
-    double phi
-) {
-  int N = gp_data.n_obs;
-
-  // Try state-space first (exponential covariance)
-  if (gp_data.cov_type == TemporalCovType::EXPONENTIAL) {
-    return temporal_gp_log_lik_statespace(f, gp_data.time_values,
-                                           sigma2, phi, gp_data.cov_type);
+class TemporalGPBlock {
+ public:
+  // Evaluates the block at x (n_groups * n_times entries) and the two sampled
+  // hyperparameters. Returns false when the dense correlation does not factor;
+  // log_prior() is then -inf.
+  bool forward(const double* x, double log_sigma2, double logit_phi,
+               const TemporalGPData& gp) {
+    gp_ = &gp;
+    x_ = x;
+    log_sigma2_ = log_sigma2;
+    sigma2_ = std::exp(log_sigma2);
+    sigma_ = std::sqrt(sigma2_);
+    phi_ = temporal_gp_phi(logit_phi, gp);
+    dphi_dlogit_ = (phi_ - gp.phi_lower) * (gp.phi_upper - phi_) /
+                   (gp.phi_upper - gp.phi_lower);
+    lp_ = temporal_gp_log_prior(x, log_sigma2, logit_phi, gp, f_, &L_);
+    return std::isfinite(lp_);
   }
 
-  // Fall back to direct computation
-  return temporal_gp_log_lik_direct(f, gp_data.time_values, sigma2, phi,
-                                     gp_data.cov_type, gp_data.nu, gp_data.period);
-}
+  const double* f() const { return f_.data(); }
+  double log_prior() const { return lp_; }
 
-// -----------------------------------------------------------------------------
-// Priors for GP hyperparameters
-// -----------------------------------------------------------------------------
-
-// Log prior for temporal range (uniform or PC)
-inline double log_prior_temporal_phi_uniform(double phi, double lower, double upper) {
-  if (phi < lower || phi > upper) return -INFINITY;
-  return -std::log(upper - lower);
-}
-
-// -----------------------------------------------------------------------------
-// Gradient computation (for HMC)
-// -----------------------------------------------------------------------------
-
-// Numerical gradient of GP log-likelihood w.r.t. f (temporal effects)
-inline void temporal_gp_gradient_f(
-    const std::vector<double>& f,
-    const TemporalGPData& gp_data,
-    double sigma2,
-    double phi,
-    std::vector<double>& grad_f,
-    double epsilon = 1e-6
-) {
-  int N = gp_data.n_obs;
-  grad_f.resize(N);
-
-  double base_ll = temporal_gp_log_lik(f, gp_data, sigma2, phi);
-
-  std::vector<double> f_plus = f;
-  for (int i = 0; i < N; i++) {
-    f_plus[i] = f[i] + epsilon;
-    double ll_plus = temporal_gp_log_lik(f_plus, gp_data, sigma2, phi);
-    grad_f[i] = (ll_plus - base_ll) / epsilon;
-    f_plus[i] = f[i];  // Reset
-  }
-}
-
-// Parse covariance type from string
-inline TemporalCovType parse_temporal_cov_type(const std::string& cov_str) {
-  if (cov_str == "exponential") return TemporalCovType::EXPONENTIAL;
-  if (cov_str == "matern") return TemporalCovType::MATERN;
-  if (cov_str == "gaussian") return TemporalCovType::GAUSSIAN;
-  if (cov_str == "periodic") return TemporalCovType::PERIODIC;
-  return TemporalCovType::EXPONENTIAL;  // Default
-}
-
-// -----------------------------------------------------------------------------
-// Non-centered parameterization helpers
-// Store z ~ N(0,1) in params, reconstruct f via state-space forward pass.
-// Eliminates funnel geometry → shallower NUTS trees.
-// -----------------------------------------------------------------------------
-
-// Workspace for NC forward/backward (avoids per-call allocation)
-struct TemporalGPNCWorkspace {
-    int T = 0;
-    int n_groups = 0;
-    std::vector<double> f;           // Reconstructed f[g*T + t]
-    std::vector<double> rho;         // rho[t] for t=1..T-1 (length T-1, shared across groups)
-    std::vector<double> a;           // scale factors a[t] for t=0..T-1 (length T)
-    std::vector<double> dL_df;       // Likelihood gradient w.r.t. f[g*T + t]
-    std::vector<double> adj;         // Adjoint buffer for backward pass (length T per group)
-
-    void init(int T_times, int ng) {
-        if (T_times == T && ng == n_groups) return;
-        T = T_times;
-        n_groups = ng;
-        f.resize(ng * T);
-        rho.resize(T > 0 ? T - 1 : 0);
-        a.resize(T);
-        dL_df.resize(ng * T);
-        adj.resize(T);
+  // The block's whole gradient given the likelihood's dL/df: grad_x is
+  // assigned for every entry of the block, the two hyperparameter gradients
+  // are assigned, prior and likelihood included.
+  void backward(const double* dL_df, double* grad_x, double& grad_log_sigma2,
+                double& grad_logit_phi) {
+    const TemporalGPData& gp = *gp_;
+    const int n = gp.n_times;
+    const int G = gp.n_groups;
+    const double rate = -std::log(gp.sigma2_prior_alpha) / gp.sigma2_prior_U;
+    double g_s = 0.5 - 0.5 * rate * sigma_;
+    double g_logit = (gp.phi_upper + gp.phi_lower - 2.0 * phi_) /
+                     (gp.phi_upper - gp.phi_lower);
+    if (!std::isfinite(lp_)) {
+      for (int k = 0; k < G * n; k++) grad_x[k] = 0.0;
+      grad_log_sigma2 = g_s;
+      grad_logit_phi = g_logit;
+      return;
     }
+    double g_phi = (gp.cov_type == TemporalCovType::EXPONENTIAL)
+        ? backward_markov(dL_df, grad_x, g_s)
+        : backward_dense(dL_df, grad_x, g_s);
+    grad_log_sigma2 = g_s;
+    grad_logit_phi = g_logit + g_phi * dphi_dlogit_;
+  }
+
+ private:
+  // Returns d/dphi; adds d/d(log sigma2) into g_s.
+  double backward_markov(const double* dL_df, double* grad_x, double& g_s) {
+    const TemporalGPData& gp = *gp_;
+    const int n = gp.n_times;
+    const int G = gp.n_groups;
+    rho_.resize(n > 1 ? n - 1 : 0);
+    drho_.resize(rho_.size());
+    dlog_omr2_.resize(rho_.size());
+    a_.resize(n);
+    a_[0] = sigma_;
+    for (int t = 1; t < n; t++) {
+      const double dt = gp.time_values[t] - gp.time_values[t - 1];
+      const double rho = std::exp(-dt / phi_);
+      rho_[t - 1] = rho;
+      drho_[t - 1] = rho * dt / (phi_ * phi_);
+      dlog_omr2_[t - 1] = ratiod_ar1::dlog_one_minus_rho2_drho(rho);
+      a_[t] = sigma_ * std::sqrt(ratiod_ar1::one_minus_rho2(rho));
+    }
+
+    double g_phi = 0.0;
+    if (gp.noncentered) {
+      adj_.resize(n);
+      for (int g = 0; g < G; g++) {
+        const int o = g * n;
+        adj_[n - 1] = dL_df[o + n - 1];
+        for (int t = n - 2; t >= 0; t--) adj_[t] = dL_df[o + t] + rho_[t] * adj_[t + 1];
+        for (int t = 0; t < n; t++) {
+          grad_x[o + t] = -x_[o + t] + a_[t] * adj_[t];
+          g_s += 0.5 * adj_[t] * a_[t] * x_[o + t];
+        }
+        for (int t = 1; t < n; t++) {
+          // f_t = rho f_{t-1} + a_t z_t, both rho and a_t moving with phi
+          const double da_drho = 0.5 * a_[t] * dlog_omr2_[t - 1];
+          g_phi += adj_[t] * drho_[t - 1] *
+                   (f_[o + t - 1] + da_drho * x_[o + t]);
+        }
+      }
+      return g_phi;
+    }
+
+    for (int g = 0; g < G; g++) {
+      const int o = g * n;
+      for (int t = 0; t < n; t++) grad_x[o + t] = dL_df[o + t];
+      grad_x[o] += -x_[o] / sigma2_;
+      g_s += -0.5 + 0.5 * x_[o] * x_[o] / sigma2_;
+      for (int t = 1; t < n; t++) {
+        const double cv = a_[t] * a_[t];
+        const double r = x_[o + t] - rho_[t - 1] * x_[o + t - 1];
+        grad_x[o + t] += -r / cv;
+        grad_x[o + t - 1] += rho_[t - 1] * r / cv;
+        g_s += -0.5 + 0.5 * r * r / cv;
+        // d/drho of -0.5 log cv - 0.5 r^2 / cv, with cv = sigma2 (1 - rho^2)
+        const double dlog = dlog_omr2_[t - 1];
+        const double d_rho = -0.5 * dlog * (1.0 - r * r / cv) + r * x_[o + t - 1] / cv;
+        g_phi += d_rho * drho_[t - 1];
+      }
+    }
+    return g_phi;
+  }
+
+  // Returns d/dphi; adds d/d(log sigma2) into g_s.
+  double backward_dense(const double* dL_df, double* grad_x, double& g_s) {
+    using RowMat = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    const TemporalGPData& gp = *gp_;
+    const int n = gp.n_times;
+    const int G = gp.n_groups;
+    Eigen::Map<const RowMat> L(L_.data(), n, n);
+    const auto Lt = L.triangularView<Eigen::Lower>();
+
+    Eigen::MatrixXd dR(n, n);
+    for (int i = 0; i < n; i++) {
+      for (int j = 0; j <= i; j++) {
+        const double d = std::abs(gp.time_values[i] - gp.time_values[j]);
+        const double k = temporal_corr(d, phi_, gp);
+        dR(i, j) = dR(j, i) = temporal_dcorr_dphi(d, phi_, k, gp);
+      }
+    }
+    // P = L^{-1} dR L^{-T}, symmetric
+    Eigen::MatrixXd P = Lt.solve(dR);
+    P = Lt.solve(P.transpose()).eval();
+
+    double g_phi = 0.0;
+    if (gp.noncentered) {
+      // dL/dphi = L Phi(P), Phi the lower triangle with the diagonal halved
+      Eigen::MatrixXd Phi = P.triangularView<Eigen::StrictlyLower>();
+      Phi.diagonal() = 0.5 * P.diagonal();
+      for (int g = 0; g < G; g++) {
+        const int o = g * n;
+        Eigen::Map<const Eigen::VectorXd> z(x_ + o, n);
+        Eigen::Map<const Eigen::VectorXd> dl(dL_df + o, n);
+        Eigen::Map<const Eigen::VectorXd> fg(f_.data() + o, n);
+        Eigen::Map<Eigen::VectorXd> gz(grad_x + o, n);
+        const Eigen::VectorXd Ltdl = Lt.transpose() * dl;
+        gz = -z + sigma_ * Ltdl;
+        g_s += 0.5 * dl.dot(fg);
+        const Eigen::VectorXd w = L * (Phi * z);
+        g_phi += sigma_ * dl.dot(w);
+      }
+      return g_phi;
+    }
+
+    const double tr_P = P.trace();
+    for (int g = 0; g < G; g++) {
+      const int o = g * n;
+      Eigen::Map<const Eigen::VectorXd> xg(x_ + o, n);
+      Eigen::Map<const Eigen::VectorXd> dl(dL_df + o, n);
+      Eigen::Map<Eigen::VectorXd> gx(grad_x + o, n);
+      const Eigen::VectorXd alpha = Lt.transpose().solve(Lt.solve(xg));
+      gx = dl - alpha / sigma2_;
+      g_s += -0.5 * n + 0.5 * xg.dot(alpha) / sigma2_;
+      g_phi += 0.5 * alpha.dot(dR * alpha) / sigma2_ - 0.5 * tr_P;
+    }
+    return g_phi;
+  }
+
+  const TemporalGPData* gp_ = nullptr;
+  const double* x_ = nullptr;
+  double log_sigma2_ = 0.0, sigma2_ = 1.0, sigma_ = 1.0;
+  double phi_ = 1.0, dphi_dlogit_ = 0.0;
+  double lp_ = 0.0;
+  std::vector<double> f_, L_;
+  std::vector<double> rho_, drho_, dlog_omr2_, a_, adj_;
 };
-
-// Forward pass: z[g*T + t] -> f[g*T + t] using state-space AR(1)
-// f[0] = a[0] * z[0],  where a[0] = sqrt(sigma2)
-// f[t] = rho[t] * f[t-1] + a[t] * z[t],  where a[t] = sqrt(sigma2 * (1 - rho[t]^2))
-// rho[t] = exp(-dt[t] / phi)
-//
-// rho and a are shared across groups (same time grid), computed once.
-// f is group-specific because z is group-specific.
-static inline void temporal_gp_nc_forward(
-    const double* z,              // z[g*T + t], length n_groups * T
-    int T, int n_groups,
-    double sigma2, double phi,
-    const std::vector<double>& time_values,
-    TemporalGPNCWorkspace& ws
-) {
-    // Compute shared rho and a vectors
-    double sigma = std::sqrt(sigma2);
-    ws.a[0] = sigma;
-
-    for (int t = 1; t < T; t++) {
-        double dt = time_values[t] - time_values[t - 1];
-        double rho_t = std::exp(-dt / phi);
-        ws.rho[t - 1] = rho_t;
-        double one_minus_rho2 = ratiod_ar1::one_minus_rho2(rho_t);
-        ws.a[t] = sigma * std::sqrt(one_minus_rho2);
-    }
-
-    // Forward pass per group
-    for (int g = 0; g < n_groups; g++) {
-        int off = g * T;
-        ws.f[off] = ws.a[0] * z[off];
-        for (int t = 1; t < T; t++) {
-            ws.f[off + t] = ws.rho[t - 1] * ws.f[off + t - 1] + ws.a[t] * z[off + t];
-        }
-    }
-}
-
-// Backward pass: given dL/df from likelihood, compute full gradient for z, sigma2, phi.
-//
-// Uses adjoint method per group:
-//   adj[T-1] = dL_df[T-1]
-//   adj[t]   = dL_df[t] + rho[t+1] * adj[t+1]     (for t = T-2 ... 0)
-//
-// Then:
-//   grad_z[g*T + t] = -z[t] + a[t] * adj[t]        (prior + likelihood chain rule)
-//
-// For hyperparameters (sigma2, phi), accumulate via forward sensitivity:
-//   grad_log_sigma2 from prior: sum_g [ -0.5*T + 0.5 * sum_t z[t]^2 ]
-//                                (since z ~ N(0,I), log p(z) = -0.5*sum(z^2), Jacobian = T*log(a) terms)
-//   Hyperparameter gradients from likelihood are computed via chain rule through a[] and rho[].
-static inline void temporal_gp_nc_backward(
-    const double* z,
-    int T, int n_groups,
-    double sigma2, double phi,
-    const std::vector<double>& time_values,
-    const TemporalGPNCWorkspace& ws,
-    double* grad_z,               // output: full gradient for z[g*T + t] (prior already included)
-    double& grad_log_sigma2_lik,  // output: sigma2 likelihood contribution
-    double& grad_log_phi_lik      // output: phi likelihood contribution
-) {
-    grad_log_sigma2_lik = 0.0;
-    grad_log_phi_lik = 0.0;
-
-    double sigma = std::sqrt(sigma2);
-    // Precompute da/d(log_sigma2) and da/d(log_phi) for each t
-    // a[0] = sqrt(sigma2), so da[0]/d(log_sigma2) = d(sqrt(sigma2))/d(log_sigma2) = 0.5*sqrt(sigma2) = a[0]/2
-    // For t >= 1: a[t] = sqrt(sigma2) * sqrt(1 - rho_t^2)
-    //   da[t]/d(log_sigma2) = a[t] / 2
-    //   da[t]/d(log_phi) = sqrt(sigma2) * 0.5 / sqrt(1-rho^2) * (-2*rho*drho/d(log_phi))
-    //     where drho/d(log_phi) = (dt/phi) * rho  (since d(log_phi) = d(phi)/phi, d(exp(-dt/phi))/d(phi) = (dt/phi^2)*rho)
-    //   = sqrt(sigma2) * (-rho * (dt/phi) * rho) / sqrt(1-rho^2)
-    //   = -sigma * rho^2 * (dt/phi) / sqrt(1-rho^2)
-
-    for (int g = 0; g < n_groups; g++) {
-        int off = g * T;
-
-        // --- Backward adjoint recursion ---
-        // adj[t] accumulates the total derivative of L w.r.t. f[t] including
-        // indirect effects through f[t+1], f[t+2], ...
-        double adj_prev;  // adj[t+1] from the previous (later) time step
-
-        // Build adjoint from T-1 down to 0
-        // We process from t = T-1 backward. Store in a local buffer.
-        // Since we need adj for computing grad_z and hyperparameter grads,
-        // we do the full backward then apply.
-
-        // Use workspace adj buffer
-        double* adj = const_cast<TemporalGPNCWorkspace&>(ws).adj.data();
-        adj[T - 1] = ws.dL_df[off + T - 1];
-        for (int t = T - 2; t >= 0; t--) {
-            adj[t] = ws.dL_df[off + t] + ws.rho[t] * adj[t + 1];
-        }
-
-        // --- z gradients: prior (-z) + likelihood (a[t] * adj[t]) ---
-        for (int t = 0; t < T; t++) {
-            grad_z[off + t] = -z[off + t] + ws.a[t] * adj[t];
-        }
-
-        // --- Hyperparameter gradients from likelihood via chain rule ---
-        // The likelihood depends on sigma2 and phi only through f[t].
-        // dL/d(log_sigma2) = sum_t (dL/df[t]) * (df[t]/d(log_sigma2))
-        // But df[t]/d(log_sigma2) involves the full forward recursion sensitivity.
-        //
-        // Using the adjoint method:
-        // dL/d(log_sigma2) = sum_t adj[t] * (da[t]/d(log_sigma2)) * z[t]
-        //                  = sum_t adj[t] * (a[t]/2) * z[t]
-        //                  = 0.5 * sum_t adj[t] * a[t] * z[t]
-        //                  = 0.5 * sum_t adj[t] * (f[t] - rho[t]*f[t-1])  [since a[t]*z[t] = f[t] - rho[t]*f[t-1]]
-        // Actually the sensitivity of a[t] to log_sigma2 is da[t]/d(log_sigma2) = a[t]/2
-        // (because a[t] = sigma * sqrt(1-rho^2) and d(sigma)/d(log_sigma2) = sigma/2)
-        // So: dL/d(log_sigma2) via a = sum_t adj[t] * (a[t]/2) * z[off+t]
-
-        double g_sigma2 = 0.0;
-        for (int t = 0; t < T; t++) {
-            g_sigma2 += adj[t] * ws.a[t] * z[off + t] * 0.5;
-        }
-        grad_log_sigma2_lik += g_sigma2;
-
-        // dL/d(log_phi): two sources:
-        // 1. Through a[t] for t >= 1: da[t]/d(log_phi) * z[t]
-        //    da[t]/d(log_phi) = -sigma * rho^2 * (dt/phi) / sqrt(1-rho^2)
-        //                     = -(a[t] == 0 ? 0 : sigma * rho^2 * (dt/phi) / sqrt(1-rho^2))
-        //    Contribution: sum_{t>=1} adj[t] * da[t]/d(log_phi) * z[off+t]
-        //
-        // 2. Through rho[t] in the recursion f[t] = rho[t]*f[t-1] + a[t]*z[t]:
-        //    drho/d(log_phi) = (dt/phi) * rho
-        //    Contribution: sum_{t>=1} adj[t] * (dt/phi) * rho[t] * f[t-1]
-        //    (This uses the adjoint directly: the partial derivative of f[t] w.r.t. rho[t] is f[t-1])
-
-        double g_phi = 0.0;
-        for (int t = 1; t < T; t++) {
-            double dt = time_values[t] - time_values[t - 1];
-            double dt_over_phi = dt / phi;
-            double rho_t = ws.rho[t - 1];
-            double rho2 = rho_t * rho_t;
-
-            // Source 1: through a[t]
-            // da[t]/d(log_phi) = -sigma * rho^2 * (dt/phi) / sqrt(1-rho^2)
-            // Reuse cached ws.a[t] = sigma * sqrt(1-rho^2), so sqrt(1-rho^2) = ws.a[t]/sigma
-            double sqrt_1mr2 = (sigma > 1e-15) ? ws.a[t] / sigma : 0.0;
-            double da_dphi = (sqrt_1mr2 > 1e-15)
-                ? -sigma * rho2 * dt_over_phi / sqrt_1mr2
-                : 0.0;
-            g_phi += adj[t] * da_dphi * z[off + t];
-
-            // Source 2: through rho[t]
-            // drho/d(log_phi) = (dt/phi) * rho, and df[t]/drho = f[t-1]
-            g_phi += adj[t] * dt_over_phi * rho_t * ws.f[off + t - 1];
-        }
-        grad_log_phi_lik += g_phi;
-    }
-}
 
 } // namespace ratiod_temporal_gp
 

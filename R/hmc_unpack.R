@@ -683,13 +683,16 @@ unpack_temporal <- function(samples, lay, temporal_info) {
     phi_lower <- temporal_info$phi_prior_lower %||% 0.01
     phi_upper <- temporal_info$phi_prior_upper %||% 10.0
     out$phi <- phi_lower + (phi_upper - phi_lower) * inv_logit(samples[, lay$logit_phi])
-    z <- block_draws(samples, lay$effects)
-    param <- temporal_info$parameterization %||% "noncentered"
-    out$field <- if (identical(param, "noncentered")) {
-      temporal_gp_forward(z, out$sigma2, out$phi, temporal_info)
-    } else {
-      z
-    }
+    x <- block_draws(samples, lay$effects)
+    params <- c(list(n_times = as.integer(temporal_info$n_times),
+                     n_groups = as.integer(temporal_info$n_groups),
+                     shared = temporal_info$shared %||% TRUE),
+                temporal_gp_fields(temporal_info))
+    field <- cpp_temporal_gp_field(unname(as.matrix(x)),
+                                   samples[, lay$log_sigma2],
+                                   samples[, lay$logit_phi], params)
+    dimnames(field) <- dimnames(x)
+    out$field <- field
     return(out)
   }
 
@@ -700,35 +703,6 @@ unpack_temporal <- function(samples, lay, temporal_info) {
   }
   out$field <- block_draws(samples, lay$effects)
   out
-}
-
-
-#' Forward transform of the non-centred temporal GP
-#'
-#' `f[1] = sigma z[1]`, `f[t] = rho_t f[t-1] + sigma sqrt(1 - rho_t^2) z[t]`
-#' with `rho_t = exp(-dt / phi)`, matching the state-space form the sampler uses.
-#'
-#' @keywords internal
-temporal_gp_forward <- function(z, sigma2, phi, temporal_info) {
-  n_samples <- nrow(z)
-  T_times <- temporal_info$n_times
-  n_groups <- temporal_info$n_groups
-  time_vals <- temporal_info$time_values
-  sigma <- sqrt(sigma2)
-
-  f <- z
-  for (g in seq_len(n_groups)) {
-    off <- (g - 1L) * T_times
-    f[, off + 1L] <- sigma * z[, off + 1L]
-    if (T_times < 2L) next
-    for (tt in seq.int(2L, T_times)) {
-      dt <- time_vals[tt] - time_vals[tt - 1L]
-      rho_t <- exp(-dt / phi)
-      a_t <- sigma * sqrt(pmax(1 - rho_t^2, 1e-10))
-      f[, off + tt] <- rho_t * f[, off + tt - 1L] + a_t * z[, off + tt]
-    }
-  }
-  f
 }
 
 

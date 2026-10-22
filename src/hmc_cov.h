@@ -53,6 +53,13 @@ inline T cov_matern32(double d, const T& sigma2, const T& phi) {
   return sigma2 * (T(1.0) + r) * safe_exp(-r);
 }
 
+// Matern 5/2: sigma2 * (1 + u + u^2 / 3) * exp(-u), u = sqrt(5) d / phi
+template <typename T>
+inline T cov_matern52(double d, const T& sigma2, const T& phi) {
+  T u = T(std::sqrt(5.0) * d) / phi;
+  return sigma2 * (T(1.0) + u + u * u / T(3.0)) * safe_exp(-u);
+}
+
 // Gaussian (squared exponential): sigma2 * exp(-0.5 * (d / phi)^2).
 //
 // The 0.5 is what makes phi the lengthscale here as well: it is the standard
@@ -132,20 +139,21 @@ inline double dcov_dphi(double d, double sigma2, double phi, double cov_val,
 constexpr double NNGP_RIDGE = 1e-8;
 
 // Cholesky A = L L' of the n x n neighbour block, lower triangular, with
-// NNGP_RIDGE added to each diagonal entry. Returns false if a pivot is
-// non-positive even so, which the callers turn into a rejected parameter state
-// rather than a factor built from a substituted pivot.
+// `ridge` (NNGP_RIDGE unless the caller's matrix already carries its own)
+// added to each diagonal entry. Returns false if a pivot is non-positive even
+// so, which the callers turn into a rejected parameter state rather than a
+// factor built from a substituted pivot.
 //
 // The pointer forms write into a caller-owned buffer, since the gradient paths
 // carry one workspace across the whole location loop; the vector forms size
 // their output and forward to them. Only the lower triangle of L is read, and
 // the strict upper triangle is zeroed.
 template <typename T>
-inline bool nngp_chol(const T* A, int n, T* L) {
+inline bool nngp_chol(const T* A, int n, T* L, double ridge = NNGP_RIDGE) {
   for (int j = 0; j < n; j++) {
     for (int i = 0; i < j; i++) L[i * n + j] = T(0.0);
 
-    T sum = A[j * n + j] + T(NNGP_RIDGE);
+    T sum = A[j * n + j] + T(ridge);
     for (int k = 0; k < j; k++) {
       sum = sum - L[j * n + k] * L[j * n + k];
     }
@@ -188,9 +196,10 @@ inline void nngp_back_solve(const T* L, int n, const T* y, T* x) {
 }
 
 template <typename T>
-inline bool nngp_chol(const std::vector<T>& A, int n, std::vector<T>& L) {
+inline bool nngp_chol(const std::vector<T>& A, int n, std::vector<T>& L,
+                      double ridge = NNGP_RIDGE) {
   L.assign(static_cast<size_t>(n) * n, T(0.0));
-  return nngp_chol(A.data(), n, L.data());
+  return nngp_chol(A.data(), n, L.data(), ridge);
 }
 
 template <typename T>

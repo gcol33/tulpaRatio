@@ -522,6 +522,47 @@ inline void apply_rsr_params(ModelData& data, const Rcpp::List& rsr_params) {
                 Rcpp::as<int>(rsr_params["rank"]));
 }
 
+// The continuous-time GP margin as the R bundle describes it. Matern takes the
+// three half-integer smoothnesses with a closed form; nu = 1/2 is the
+// exponential kernel.
+inline ratiod_temporal_gp::TemporalGPData temporal_gp_data_from(const Rcpp::List& p) {
+  using ratiod_temporal_gp::TemporalCovType;
+  ratiod_temporal_gp::TemporalGPData gp;
+  gp.n_times = Rcpp::as<int>(p["n_times"]);
+  gp.n_groups = Rcpp::as<int>(p["n_groups"]);
+  gp.time_values = Rcpp::as<std::vector<double>>(p["time_values"]);
+  gp.shared = Rcpp::as<bool>(p["shared"]);
+
+  const std::string cov = Rcpp::as<std::string>(p["cov_type"]);
+  if (cov == "exponential") {
+    gp.cov_type = TemporalCovType::EXPONENTIAL;
+  } else if (cov == "matern") {
+    const double nu = Rcpp::as<double>(p["nu"]);
+    if (nu == 0.5) gp.cov_type = TemporalCovType::EXPONENTIAL;
+    else if (nu == 1.5) gp.cov_type = TemporalCovType::MATERN32;
+    else if (nu == 2.5) gp.cov_type = TemporalCovType::MATERN52;
+    else Rcpp::stop("Temporal Matern smoothness nu = %g; use 0.5, 1.5 or 2.5.", nu);
+  } else if (cov == "gaussian") {
+    gp.cov_type = TemporalCovType::GAUSSIAN;
+  } else if (cov == "periodic") {
+    gp.cov_type = TemporalCovType::PERIODIC;
+    gp.period = Rcpp::as<double>(p["period"]);
+  } else {
+    Rcpp::stop("Unknown temporal GP covariance '%s'.", cov);
+  }
+
+  gp.sigma2_prior_U = Rcpp::as<double>(p["gp_sigma2_prior_U"]);
+  gp.sigma2_prior_alpha = Rcpp::as<double>(p["gp_sigma2_prior_alpha"]);
+  gp.phi_lower = Rcpp::as<double>(p["gp_phi_prior_lower"]);
+  gp.phi_upper = Rcpp::as<double>(p["gp_phi_prior_upper"]);
+  gp.noncentered = Rcpp::as<std::string>(p["gp_parameterization"]) != "centered";
+  if (static_cast<int>(gp.time_values.size()) != gp.n_times) {
+    Rcpp::stop("Temporal GP: %d time values for %d time points.",
+               static_cast<int>(gp.time_values.size()), gp.n_times);
+  }
+  return gp;
+}
+
 // The temporal block: the RW1 / RW2 / AR1 margin, the continuous-time GP
 // margin, the multi-scale decomposition, and the prior anchors each of them
 // reads. Every field the bundle carries is assigned here, so a knob the R
@@ -560,28 +601,7 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
 
   if (temporal_type_str == "gp") {
     data.has_temporal_gp = true;
-    data.temporal_gp_data.n_obs = data.n_times;  // Use n_times, not N (total obs)
-    data.temporal_gp_data.n_groups = n_temporal_groups;
-    data.temporal_gp_data.time_values = Rcpp::as<std::vector<double>>(temporal_params["time_values"]);
-    data.temporal_gp_data.group_index = temporal_group_idx;
-
-    std::string cov_type_str = Rcpp::as<std::string>(temporal_params["cov_type"]);
-    data.temporal_gp_data.cov_type = ratiod_temporal_gp::parse_temporal_cov_type(cov_type_str);
-    data.temporal_gp_data.nu = Rcpp::as<double>(temporal_params["nu"]);
-    data.temporal_gp_data.period = Rcpp::as<double>(temporal_params["period"]);
-    data.temporal_gp_data.shared = temporal_shared;
-
-    data.temporal_gp_sigma2_prior_U = Rcpp::as<double>(temporal_params["gp_sigma2_prior_U"]);
-    data.temporal_gp_sigma2_prior_alpha = Rcpp::as<double>(temporal_params["gp_sigma2_prior_alpha"]);
-    data.temporal_gp_phi_prior_lower = Rcpp::as<double>(temporal_params["gp_phi_prior_lower"]);
-    data.temporal_gp_phi_prior_upper = Rcpp::as<double>(temporal_params["gp_phi_prior_upper"]);
-
-    // Parameterization: 0=centered, 1=non-centered (default NC)
-    std::string gp_param_str = "noncentered";
-    if (temporal_params.containsElementNamed("gp_parameterization")) {
-        gp_param_str = Rcpp::as<std::string>(temporal_params["gp_parameterization"]);
-    }
-    data.temporal_gp_parameterization = (gp_param_str == "centered") ? 0 : 1;
+    data.temporal_gp_data = temporal_gp_data_from(temporal_params);
   } else if (temporal_type_str == "multiscale") {
     data.temporal_type = TemporalType::NONE;  // MS_t uses its own data path
     data.has_multiscale_temporal = true;

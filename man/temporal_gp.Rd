@@ -27,7 +27,8 @@ numeric (continuous time) or convertible to numeric.}
 \code{"matern"} (tunable smoothness), \code{"gaussian"} (very smooth), or
 \code{"periodic"} (for seasonal patterns).}
 
-\item{nu}{Smoothness parameter for Matern covariance. Common values:
+\item{nu}{Smoothness parameter for Matern covariance, one of the three
+values with a closed form:
 \itemize{
 \item 0.5: Equivalent to exponential (rough)
 \item 1.5: Once differentiable (moderate smoothness)
@@ -35,8 +36,9 @@ numeric (continuous time) or convertible to numeric.}
 Ignored for non-Matern covariance functions.
 }}
 
-\item{period}{Period for periodic covariance (e.g., 12 for monthly, 365 for
-daily data with annual cycle). Only used when \code{cov = "periodic"}.}
+\item{period}{Period for periodic covariance, in the units of \code{time_var}
+(e.g., 12 for monthly, 365 for daily data with annual cycle). Only used
+when \code{cov = "periodic"}.}
 
 \item{group_var}{Optional name of grouping variable for panel data.
 If provided, separate GPs are estimated for each group.}
@@ -83,13 +85,17 @@ where \eqn{f(t)} follows a Gaussian process:
 The correlation function \eqn{C(d; \phi)} depends on time distance \eqn{d}:
 \itemize{
 \item \strong{Exponential}: \eqn{C(d) = \exp(-d/\phi)} - continuous but not differentiable
-\item \strong{Matern}: Smooth with tunable roughness via \eqn{\nu}
-\item \strong{Gaussian}: \eqn{C(d) = \exp(-(d/\phi)^2)} - infinitely differentiable
+\item \strong{Matern} (\eqn{\nu = 3/2}): \eqn{C(d) = (1 + u)\exp(-u)},
+\eqn{u = \sqrt{3} d/\phi}; (\eqn{\nu = 5/2}):
+\eqn{C(d) = (1 + u + u^2/3)\exp(-u)}, \eqn{u = \sqrt{5} d/\phi}
+\item \strong{Gaussian}: \eqn{C(d) = \exp(-d^2/(2\phi^2))} - infinitely differentiable
 \item \strong{Periodic}: \eqn{C(d) = \exp(-2\sin^2(\pi d/p)/\phi^2)} - for seasonal data
 }
 
-\strong{Implementation}: Uses a state-space representation for O(n) computational
-complexity when possible (exponential, Matern with half-integer nu).
+\strong{Implementation}: the exponential kernel is Markov and is evaluated as an
+AR(1) recursion over the sorted time points, at O(n) cost. The other kernels
+use a dense Cholesky factor of the n x n correlation over the distinct time
+points, with a nugget of \eqn{10^{-6}} on its diagonal, at O(n^3) cost.
 }
 \examples{
 # Create GP temporal specification

@@ -158,7 +158,13 @@ const char* const KNOWN_FIELDS[] = {
   // of these is what says the function it lands on writes both blocks.
   "gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4", "gp_collapsed_st4",
   "icar_collapsed_st4", "bym2_collapsed_st4", "tvc_st4", "temporal_gp_st4",
-  "gp_tgp", "svc_ms", "svc_ms_nc", "gp_slopes", "gp_slopes_corr", "gp_crossed"
+  "gp_tgp", "svc_ms", "svc_ms_nc", "gp_slopes", "gp_slopes_corr", "gp_crossed",
+  // The temporal GP under each kernel and in either coordinate, alone and
+  // beside a spatial GP (which sends it to the composite).
+  "temporal_gp_centered", "temporal_gp_matern32", "temporal_gp_matern52",
+  "temporal_gp_gaussian", "temporal_gp_periodic",
+  "temporal_gp_matern32_centered", "temporal_gp_periodic_centered",
+  "gp_tgp_matern32", "gp_tgp_centered", "gp_tgp_gaussian_centered"
 };
 
 // The spatial fields make_model() also builds under restricted spatial
@@ -449,7 +455,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                         field == "gp_temporal" || want_gp_nc ||
                         want_gp_collapsed ||
                         field == "gp_st4" || field == "gp_stgp" ||
-                        field == "gp_temporal_st4" || field == "gp_tgp" ||
+                        field == "gp_temporal_st4" ||
+                        field.rfind("gp_tgp", 0) == 0 ||
                         field == "gp_slopes" || field == "gp_slopes_corr" ||
                         field == "gp_crossed");
   // The multi-scale field: two scales on one shared spectral basis, with a PC
@@ -464,9 +471,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   const bool want_svc_nc = (field == "svc_nc" || field == "svc_ms_nc");
   const bool want_svc = (field == "svc" || want_svc_hsgp || field == "svc_ms" ||
                          want_svc_nc);
-  const bool want_temporal_gp = (field == "temporal_gp" ||
-                                 field == "temporal_gp_st4" ||
-                                 field == "gp_tgp");
+  // temporal_gp* and gp_tgp*: the kernel and the coordinate are read off the
+  // name's suffixes below.
+  const bool want_temporal_gp = (field.rfind("temporal_gp", 0) == 0 ||
+                                 field.rfind("gp_tgp", 0) == 0);
   const bool want_latent = (field == "latent" || field == "stgp_latent" ||
                              field == "latent2" || field == "latent_num" ||
                              field == "latent2_first_zero" ||
@@ -876,7 +884,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     for (int i = 0; i < n_obs; i++) data.temporal_time_idx[i] = (i % n_times) + 1;
 
     auto& tgp = data.temporal_gp_data;
-    tgp.n_obs = n_times;
+    tgp.n_times = n_times;
     tgp.n_groups = 1;
     tgp.time_values.resize(n_times);
     double t_val = 0.0;
@@ -884,16 +892,21 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       t_val += 0.6 + 0.4 * static_cast<double>((t * 7) % 5) / 4.0;
       tgp.time_values[t] = t_val;
     }
-    tgp.group_index = data.temporal_group_idx;
-    tgp.cov_type = ratiod_temporal_gp::TemporalCovType::EXPONENTIAL;
-    tgp.nu = 1.5;
-    tgp.period = 1.0;
+    using ratiod_temporal_gp::TemporalCovType;
+    const auto has = [&](const char* s) { return field.find(s) != std::string::npos; };
+    tgp.cov_type = has("matern32") ? TemporalCovType::MATERN32
+                 : has("matern52") ? TemporalCovType::MATERN52
+                 : has("gaussian") ? TemporalCovType::GAUSSIAN
+                 : has("periodic") ? TemporalCovType::PERIODIC
+                 : TemporalCovType::EXPONENTIAL;
+    // Shorter than the span of the grid, so the periodic kernel wraps.
+    tgp.period = 2.5;
     tgp.shared = temporal_shared;
-    data.temporal_gp_sigma2_prior_U = 1.0;
-    data.temporal_gp_sigma2_prior_alpha = 0.01;
-    data.temporal_gp_phi_prior_lower = 0.01;
-    data.temporal_gp_phi_prior_upper = 10.0;
-    data.temporal_gp_parameterization = 1;
+    tgp.sigma2_prior_U = 1.0;
+    tgp.sigma2_prior_alpha = 0.01;
+    tgp.phi_lower = 0.01;
+    tgp.phi_upper = 10.0;
+    tgp.noncentered = !has("centered");
   } else if (want_rw1 || want_rw2 || want_temporal_ar1 || want_temporal_iid) {
     data.temporal_type = want_temporal_ar1  ? TemporalType::AR1
                        : want_temporal_iid  ? TemporalType::IID

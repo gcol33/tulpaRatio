@@ -151,7 +151,14 @@ KERNEL_FIELDS <- c("gp", "gp_matern", "gp_gaussian", "gp_spherical",
                    # as well as through its own prior, and the RW2 keeps a free
                    # linear direction the transform has to leave alone.
                    "ms_temporal_nc", "ms_temporal_rw2", "ms_temporal_rw2_nc",
-                   "ms_temporal_seasonal", "ms_temporal_seasonal_nc")
+                   "ms_temporal_seasonal", "ms_temporal_seasonal_nc",
+                   # The temporal GP under every kernel: the exponential one
+                   # through its AR(1) recursion, the others through a dense
+                   # Cholesky factor, each in either coordinate.
+                   "temporal_gp_centered", "temporal_gp_matern32",
+                   "temporal_gp_matern52", "temporal_gp_gaussian",
+                   "temporal_gp_periodic", "temporal_gp_matern32_centered",
+                   "temporal_gp_periodic_centered")
 # The kernel field the templated density declares a gap for: gp_collapsed
 # marginalizes its field out, as the collapsed areal fields do, so it has no
 # autodiff case and is checked against compute_log_post alone.
@@ -181,7 +188,8 @@ BLOCKED_FIELDS <- character(0)
 DISPATCH_MASK_FIELDS <- c("gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4",
                           "tvc_st4", "temporal_gp_st4", "gp_tgp", "svc_ms",
                           "svc_ms_nc", "gp_slopes", "gp_slopes_corr",
-                          "gp_crossed")
+                          "gp_crossed", "gp_tgp_matern32", "gp_tgp_centered",
+                          "gp_tgp_gaussian_centered")
 # The same, for a collapsed field. Its marginal is an inner Laplace at a mode
 # that moves with every other block in eta, which nothing but the collapsed
 # kernels' own companion-temporal path carries, so the dispatch returns the
@@ -270,7 +278,8 @@ test_that("resolve_gradient_fn sends each model to the function written for it",
     gp = "gp", gp_temporal = "gp_temporal", msgp_hsgp = "msgp_hsgp",
     msgp_temporal = "msgp_hsgp", hsgp = "hsgp",
     svc = "svc", svc_hsgp = "svc_hsgp", svc_nc = "svc", tvc = "tvc",
-    temporal_gp = "temporal_gp", ms_temporal = "ms_temporal",
+    temporal_gp = "temporal_gp", temporal_gp_matern32 = "temporal_gp",
+    temporal_gp_periodic_centered = "temporal_gp", ms_temporal = "ms_temporal",
     ms_temporal_nc = "ms_temporal", ms_temporal_rw2 = "ms_temporal",
     ms_temporal_rw2_nc = "ms_temporal",
     ms_temporal_seasonal = "ms_temporal",
@@ -285,7 +294,9 @@ test_that("resolve_gradient_fn sends each model to the function written for it",
     gp_st4 = "composite", gp_stgp = "composite",
     gp_temporal_st4 = "composite", msgp_st4 = "composite",
     tvc_st4 = "composite", temporal_gp_st4 = "composite",
-    gp_tgp = "composite", svc_ms = "composite", svc_ms_nc = "composite",
+    gp_tgp = "composite", gp_tgp_matern32 = "composite",
+    gp_tgp_centered = "composite",
+    svc_ms = "composite", svc_ms_nc = "composite",
     gp_slopes = "composite",
     gp_slopes_corr = "composite", gp_crossed = "composite",
     stgp_latent = "composite", stgp_latent2 = "composite",

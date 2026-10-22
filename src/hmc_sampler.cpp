@@ -4441,8 +4441,8 @@ void compute_gradient_gp_temporal_handcoded(
 }
 
 // =====================================================================
-// Temporal GP (standalone) hand-coded gradients
-// Temporal GP with exponential covariance uses state-space AR(1) form
+// Temporal GP (standalone) hand-coded gradients; the block's density and
+// gradient come from ratiod_temporal_gp::TemporalGPBlock
 // =====================================================================
 
 void compute_gradient_temporal_gp_handcoded(
@@ -4471,144 +4471,22 @@ void compute_gradient_temporal_gp_handcoded(
     double phi_num = cp.phi_num;
     double phi_denom = cp.phi_denom;
 
-    // Temporal GP hyperparameters
-    double sigma2_tgp = std::exp(params[layout.log_sigma2_temporal_gp_idx]);
-    double logit_phi_val = params[layout.logit_phi_temporal_gp_idx];
-
-    // Logit-bounded phi: phi = lower + range * sigmoid(logit_phi)
-    double phi_lower = data.temporal_gp_phi_prior_lower;
-    double phi_upper = data.temporal_gp_phi_prior_upper;
-    double phi_range = phi_upper - phi_lower;
-    double sigmoid_val = 1.0 / (1.0 + std::exp(-logit_phi_val));
-    double phi_tgp = phi_lower + phi_range * sigmoid_val;
-
-    // Conversion factor: grad_logit = grad_log * chi
-    // where chi = (phi - lower)(upper - phi) / (phi * range)
-    double chi_tgp = (phi_tgp - phi_lower) * (phi_upper - phi_tgp) / (phi_tgp * phi_range);
-
     // Temporal effects: n_temporal_groups * n_times parameters
     int T_times = data.n_times;
-    int n_groups = data.n_temporal_groups;
-    const double* phi_temporal = &params[layout.temporal_start];
     int T_len = layout.temporal_end - layout.temporal_start;
 
-    // Non-centered parameterization: params store z ~ N(0,1), reconstruct f
-    const bool use_nc = (data.temporal_gp_parameterization == 1);
-    RATIOD_TLS_WORKSPACE(ratiod_temporal_gp::TemporalGPNCWorkspace, nc_ws);
-    const double* f_temporal = phi_temporal;  // Default: centered, f stored directly
-
-    if (use_nc) {
-        nc_ws.init(T_times, n_groups);
-        ratiod_temporal_gp::temporal_gp_nc_forward(
-            phi_temporal, T_times, n_groups,
-            sigma2_tgp, phi_tgp,
-            data.temporal_gp_data.time_values, nc_ws);
-        f_temporal = nc_ws.f.data();  // Use reconstructed f for eta
-        std::memset(nc_ws.dL_df.data(), 0, T_len * sizeof(double));
-    }
+    RATIOD_TLS_WORKSPACE(ratiod_temporal_gp::TemporalGPBlock, tgp_block);
+    tgp_block.forward(&params[layout.temporal_start],
+                      params[layout.log_sigma2_temporal_gp_idx],
+                      params[layout.logit_phi_temporal_gp_idx],
+                      data.temporal_gp_data);
+    const double* f_temporal = tgp_block.f();
+    tgp_lp_accum = tgp_block.log_prior();
 
     // ---- Prior gradients ----
     beta_gradient_prior(data, layout, beta_num, beta_denom, grad.data());
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
-
-    // Temporal GP hyperparameter priors
-    // sigma2: PC prior => d/d(log_sigma2) [ log(rate) - rate*sqrt(sigma2) - log(2*sqrt(sigma2)) + log_sigma2 ]
-    //       = -0.5 * rate * sqrt(sigma2) + 0.5
-    double sigma_tgp = std::sqrt(sigma2_tgp);
-    double rate_tgp = -std::log(data.temporal_gp_sigma2_prior_alpha) / data.temporal_gp_sigma2_prior_U;
-    grad[layout.log_sigma2_temporal_gp_idx] = -0.5 * rate_tgp * sigma_tgp + 0.5;
-
-    // phi: Logit-bounded Jacobian gradient
-    // Jacobian = log(phi - lower) + log(upper - phi) - log(range)
-    // d/d(logit_phi) = (upper + lower - 2*phi) / range
-    grad[layout.logit_phi_temporal_gp_idx] = (phi_upper + phi_lower - 2.0 * phi_tgp) / phi_range;
-
-    if (use_nc) {
-        // ---- NC prior: z ~ N(0, I) ----
-        // Jacobian of transform f = g(z, sigma2, phi):
-        //   log|det(df/dz)| = T*log(sigma) + 0.5*sum_{t>=1} log(1-rho_t^2)
-        // d/d(log_sigma2) of Jacobian = T/2 per group
-        grad[layout.log_sigma2_temporal_gp_idx] += 0.5 * T_times * n_groups;
-
-        // d/d(log_phi) of Jacobian = -sum rho^2*(dt/phi) / (1-rho^2)
-        // Convert to logit scale: multiply by chi
-        double jac_phi_log = 0.0;
-        for (int t = 1; t < T_times; t++) {
-            double rho_t = nc_ws.rho[t - 1];
-            double rho2 = rho_t * rho_t;
-            double dt = data.temporal_gp_data.time_values[t] - data.temporal_gp_data.time_values[t - 1];
-            double dt_over_phi = dt / phi_tgp;
-            double one_minus_rho2 = ratiod_ar1::one_minus_rho2(rho_t);
-            jac_phi_log -= rho2 * dt_over_phi / one_minus_rho2;
-        }
-        grad[layout.logit_phi_temporal_gp_idx] += jac_phi_log * n_groups * chi_tgp;
-
-        // z prior: d/dz = -z (each z ~ N(0,1))
-        for (int t = 0; t < T_len; t++) {
-            grad[layout.temporal_start + t] = -phi_temporal[t];
-        }
-
-        // Fuse temporal GP prior log-prob (avoids redundant NC forward pass in compute_log_post)
-        if (fuse_lp) {
-            double log_sigma2 = params[layout.log_sigma2_temporal_gp_idx];
-            // sigma2 PC prior + Jacobian
-            tgp_lp_accum += std::log(rate_tgp) - rate_tgp * sigma_tgp
-                          - std::log(2.0 * sigma_tgp) + log_sigma2;
-            // phi logit Jacobian
-            tgp_lp_accum += std::log(phi_tgp - phi_lower)
-                          + std::log(phi_upper - phi_tgp)
-                          - std::log(phi_range);
-            // NC Jacobian: T*log(sigma) + 0.5*sum log(1-rho^2)  per group
-            double nc_jac = T_times * std::log(sigma_tgp);
-            for (int t = 1; t < T_times; t++) {
-                double one_m_rho2 = ratiod_ar1::one_minus_rho2(nc_ws.rho[t-1]);
-                nc_jac += 0.5 * std::log(one_m_rho2);
-            }
-            tgp_lp_accum += nc_jac * n_groups;
-            // z ~ N(0,I) prior
-            for (int t = 0; t < T_len; t++) {
-                tgp_lp_accum += -0.5 * phi_temporal[t] * phi_temporal[t];
-            }
-        }
-    } else {
-        // ---- Centered: temporal GP prior gradients (state-space exponential form) ----
-        for (int g = 0; g < n_groups; g++) {
-            int offset = g * T_times;
-
-            double f0 = phi_temporal[offset];
-            grad[layout.temporal_start + offset] += -f0 / sigma2_tgp;
-
-            double grad_log_sigma2_prior = -0.5 + 0.5 * f0 * f0 / sigma2_tgp;
-            double grad_log_phi_prior = 0.0;
-
-            for (int t = 1; t < T_times; t++) {
-                double dt = data.temporal_gp_data.time_values[t] - data.temporal_gp_data.time_values[t - 1];
-                double rho = std::exp(-dt / phi_tgp);
-                double rho2 = rho * rho;
-                double cv = sigma2_tgp * ratiod_ar1::one_minus_rho2(rho);
-
-                double f_prev = phi_temporal[offset + t - 1];
-                double f_curr = phi_temporal[offset + t];
-                double r = f_curr - rho * f_prev;
-
-                grad[layout.temporal_start + offset + t] += -r / cv;
-                grad[layout.temporal_start + offset + t - 1] += rho * r / cv;
-
-                grad_log_sigma2_prior += -0.5 + 0.5 * r * r / cv;
-
-                double dt_over_phi = dt / phi_tgp;
-                grad_log_phi_prior += dt_over_phi * (
-                    sigma2_tgp * rho2 / cv
-                    + rho * r * f_prev / cv
-                    + sigma2_tgp * rho2 * r * r / (cv * cv)
-                );
-            }
-
-            grad[layout.log_sigma2_temporal_gp_idx] += grad_log_sigma2_prior;
-            grad[layout.logit_phi_temporal_gp_idx] += grad_log_phi_prior * chi_tgp;
-        }
-    }
 
     // ---- Likelihood gradients (vectorized) ----
     // Thread-local buffer avoids heap allocation per gradient call
@@ -4696,26 +4574,9 @@ void compute_gradient_temporal_gp_handcoded(
         }
     }
 
-    if (use_nc) {
-        // NC: backward pass converts dL/df -> dL/dz and accumulates sigma2/phi grads
-        std::memcpy(nc_ws.dL_df.data(), grad_temporal_lik.data(), T_len * sizeof(double));
-
-        double grad_log_sigma2_lik = 0.0, grad_log_phi_lik_tgp = 0.0;
-        // Write z gradients directly to grad[] (backward uses = not +=, safe)
-        ratiod_temporal_gp::temporal_gp_nc_backward(
-            phi_temporal, T_times, n_groups,
-            sigma2_tgp, phi_tgp,
-            data.temporal_gp_data.time_values,
-            nc_ws, &grad[layout.temporal_start],
-            grad_log_sigma2_lik, grad_log_phi_lik_tgp);
-        grad[layout.log_sigma2_temporal_gp_idx] += grad_log_sigma2_lik;
-        grad[layout.logit_phi_temporal_gp_idx] += grad_log_phi_lik_tgp * chi_tgp;
-    } else {
-        // Centered: add likelihood contribution to temporal effects directly
-        for (int t = 0; t < T_len; t++) {
-            grad[layout.temporal_start + t] += grad_temporal_lik[t];
-        }
-    }
+    tgp_block.backward(grad_temporal_lik.data(), &grad[layout.temporal_start],
+                       grad[layout.log_sigma2_temporal_gp_idx],
+                       grad[layout.logit_phi_temporal_gp_idx]);
 
     // Phi gradients already applied by dispatch_residuals_and_beta_grads() (log-transform Jacobian included)
 
@@ -4723,14 +4584,10 @@ void compute_gradient_temporal_gp_handcoded(
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
 
     if (fuse_lp) {
-        if (use_nc && tgp_lp_accum != 0.0) {
-            // Fused: temporal GP prior already accumulated, skip in compute_log_post
-            *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true,
-                                             &tgp_lp_accum) + obs_log_lik;
-        } else {
-            // Centered or no accumulation: let compute_log_post do the temporal GP prior
-            *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true) + obs_log_lik;
-        }
+        // The block's density is already evaluated; compute_log_post adds it
+        // instead of evaluating it a second time.
+        *log_post_out = compute_log_post(params, data, layout, /*skip_obs_loop=*/true,
+                                         &tgp_lp_accum) + obs_log_lik;
     }
 }
 
@@ -6633,37 +6490,16 @@ void compute_gradient_composite(
     // --- Temporal GP ---
     const bool has_temporal_gp = layout.is_temporal_gp && layout.has_temporal;
     int T_gp = 0;
-    const double* z_temporal_gp = nullptr;
-    RATIOD_TLS_WORKSPACE(ratiod_temporal_gp::TemporalGPNCWorkspace, nc_ws_composite);
+    RATIOD_TLS_WORKSPACE(ratiod_temporal_gp::TemporalGPBlock, tgp_block_composite);
     RATIOD_TLS_WORKSPACE(std::vector<double>, temporal_gp_f);
-    double sigma2_tgp_comp = 0.0, phi_tgp_comp = 0.0;
-    double phi_lower_tgp = 0.0, phi_upper_tgp = 0.0;
-    bool use_nc_tgp = false;
-    int n_groups_gp = 0;
     if (has_temporal_gp) {
         T_gp = data.n_times;
-        n_groups_gp = data.n_temporal_groups;
-        z_temporal_gp = &params[layout.temporal_start];
-        int total_gp = n_groups_gp * T_gp;
-        temporal_gp_f.resize(total_gp);
-
-        sigma2_tgp_comp = std::exp(params[layout.log_sigma2_temporal_gp_idx]);
-        double phi_gp_raw = params[layout.logit_phi_temporal_gp_idx];
-        phi_lower_tgp = data.temporal_gp_phi_prior_lower;
-        phi_upper_tgp = data.temporal_gp_phi_prior_upper;
-        double phi_range = phi_upper_tgp - phi_lower_tgp;
-        phi_tgp_comp = phi_lower_tgp + phi_range / (1.0 + std::exp(-phi_gp_raw));
-
-        use_nc_tgp = (data.temporal_gp_parameterization == 1);
-        if (use_nc_tgp) {
-            nc_ws_composite.init(T_gp, n_groups_gp);
-            ratiod_temporal_gp::temporal_gp_nc_forward(
-                z_temporal_gp, T_gp, n_groups_gp, sigma2_tgp_comp, phi_tgp_comp,
-                data.temporal_gp_data.time_values, nc_ws_composite);
-            for (int k = 0; k < total_gp; k++) temporal_gp_f[k] = nc_ws_composite.f[k];
-        } else {
-            for (int k = 0; k < total_gp; k++) temporal_gp_f[k] = z_temporal_gp[k];
-        }
+        tgp_block_composite.forward(&params[layout.temporal_start],
+                                    params[layout.log_sigma2_temporal_gp_idx],
+                                    params[layout.logit_phi_temporal_gp_idx],
+                                    data.temporal_gp_data);
+        const int total_gp = data.temporal_gp_data.n_groups * T_gp;
+        temporal_gp_f.assign(tgp_block_composite.f(), tgp_block_composite.f() + total_gp);
     }
 
     // --- TVC ---
@@ -6978,34 +6814,6 @@ void compute_gradient_composite(
     if (has_gmrf_temporal) {
         tau_temporal_prior_grad(data, layout, tau_temporal, grad.data());
         temporal_rho_prior_grad(data, layout, rho_ar1, grad.data());
-    }
-
-    // Temporal GP priors
-    if (has_temporal_gp) {
-        double sigma_gp = std::sqrt(sigma2_tgp_comp);
-        double rate_gp = -std::log(data.temporal_gp_sigma2_prior_alpha) / data.temporal_gp_sigma2_prior_U;
-        grad[layout.log_sigma2_temporal_gp_idx] = -0.5 * rate_gp * sigma_gp + 0.5;
-        // Phi: logit-bounded Jacobian
-        double phi_range_tgp = phi_upper_tgp - phi_lower_tgp;
-        grad[layout.logit_phi_temporal_gp_idx] = (phi_upper_tgp + phi_lower_tgp - 2.0 * phi_tgp_comp) / phi_range_tgp;
-
-        if (use_nc_tgp) {
-            // NC Jacobian: d/d(log_sigma2) of log|det(df/dz)| = T/2 per group
-            grad[layout.log_sigma2_temporal_gp_idx] += 0.5 * T_gp * n_groups_gp;
-
-            // NC Jacobian: d/d(log_phi) = -sum rho^2*(dt/phi) / (1-rho^2) per group
-            double chi_tgp_prior = (phi_tgp_comp - phi_lower_tgp) * (phi_upper_tgp - phi_tgp_comp) /
-                                   (phi_tgp_comp * phi_range_tgp);
-            double jac_phi_log = 0.0;
-            for (int t = 1; t < T_gp; t++) {
-                double rho_t = nc_ws_composite.rho[t - 1];
-                double rho2 = rho_t * rho_t;
-                double dt = data.temporal_gp_data.time_values[t] - data.temporal_gp_data.time_values[t - 1];
-                double one_minus_rho2 = ratiod_ar1::one_minus_rho2(rho_t);
-                jac_phi_log -= rho2 * (dt / phi_tgp_comp) / one_minus_rho2;
-            }
-            grad[layout.logit_phi_temporal_gp_idx] += jac_phi_log * n_groups_gp * chi_tgp_prior;
-        }
     }
 
     // TVC priors: Gamma on tau at the configured hyperparameters.
@@ -7465,31 +7273,11 @@ void compute_gradient_composite(
                                  tview, T_temporal, grad_temporal_lik.data(), grad.data());
     }
 
-    // Temporal GP backward pass
+    // Temporal GP: the block's prior and the likelihood through its effects
     if (has_temporal_gp) {
-        int T_len_gp = layout.temporal_end - layout.temporal_start;
-
-        if (use_nc_tgp) {
-            // Copy likelihood gradients to nc workspace
-            for (int k = 0; k < n_groups_gp * T_gp; k++)
-                nc_ws_composite.dL_df[k] = grad_temporal_lik[k];
-
-            double grad_log_sigma2_gp = 0.0, grad_log_phi_gp = 0.0;
-            ratiod_temporal_gp::temporal_gp_nc_backward(
-                z_temporal_gp, T_gp, n_groups_gp, sigma2_tgp_comp, phi_tgp_comp,
-                data.temporal_gp_data.time_values, nc_ws_composite,
-                &grad[layout.temporal_start],
-                grad_log_sigma2_gp, grad_log_phi_gp);
-            grad[layout.log_sigma2_temporal_gp_idx] += grad_log_sigma2_gp;
-            // Convert log_phi gradient to logit_phi gradient
-            double chi_tgp = (phi_tgp_comp - phi_lower_tgp) * (phi_upper_tgp - phi_tgp_comp) /
-                             (phi_tgp_comp * (phi_upper_tgp - phi_lower_tgp));
-            grad[layout.logit_phi_temporal_gp_idx] += grad_log_phi_gp * chi_tgp;
-        } else {
-            // Centered: just add likelihood gradients
-            for (int k = 0; k < T_len_gp; k++)
-                grad[layout.temporal_start + k] = grad_temporal_lik[k];
-        }
+        tgp_block_composite.backward(grad_temporal_lik.data(), &grad[layout.temporal_start],
+                                     grad[layout.log_sigma2_temporal_gp_idx],
+                                     grad[layout.logit_phi_temporal_gp_idx]);
     }
 
     // Multiscale temporal GMRF prior gradients
@@ -7803,9 +7591,7 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
         layout.st_delta_start >= 0 && layout.log_tau_st_idx >= 0 &&
         covers(GF_AREAL | GF_TEMPORAL | GF_SPATIOTEMPORAL))
         return &compute_gradient_spatiotemporal_handcoded;
-    if (layout.is_temporal_gp && layout.has_temporal &&
-        data.temporal_gp_data.cov_type == ratiod_temporal_gp::TemporalCovType::EXPONENTIAL &&
-        covers(GF_TEMPORAL_GP))
+    if (layout.is_temporal_gp && layout.has_temporal && covers(GF_TEMPORAL_GP))
         return &compute_gradient_temporal_gp_handcoded;
     if (layout.has_multiscale_temporal &&
         covers(GF_AREAL | GF_MS_TEMPORAL))
@@ -9715,11 +9501,11 @@ HMCResultCpp run_hmc_chain_cpp(
       if (verbose && layout.is_temporal_gp) {
         REprintf("  [Z-DEBUG] Window %d (iter %d): use_mass=%d, tgp=%d, nc=%d, ts=%d, te=%d, mass_n=%d\n",
                  next_window_idx, iter, (int)use_mass_matrix,
-                 (int)layout.is_temporal_gp, data.temporal_gp_parameterization,
+                 (int)layout.is_temporal_gp, (int)data.temporal_gp_data.noncentered,
                  layout.temporal_start, layout.temporal_end, mass_stats.n);
       }
       if (use_mass_matrix && layout.is_temporal_gp &&
-          data.temporal_gp_parameterization == 1 &&
+          data.temporal_gp_data.noncentered &&
           layout.temporal_start >= 0 && layout.temporal_end > layout.temporal_start) {
         if (verbose) {
           REprintf("  [Z-FREEZE] Window %d: z mass before=[", next_window_idx);

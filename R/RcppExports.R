@@ -117,6 +117,14 @@ cpp_sgld_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num
     .Call(`_tulpaRatio_cpp_sgld_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose)
 }
 
+cpp_temporal_gp_field <- function(x, log_sigma2, logit_phi, temporal_params) {
+    .Call(`_tulpaRatio_cpp_temporal_gp_field`, x, log_sigma2, logit_phi, temporal_params)
+}
+
+cpp_temporal_gp_log_prior <- function(x, log_sigma2, logit_phi, temporal_params) {
+    .Call(`_tulpaRatio_cpp_temporal_gp_log_prior`, x, log_sigma2, logit_phi, temporal_params)
+}
+
 cpp_chain_concurrency <- function(n_chains, max_concurrent) {
     .Call(`_tulpaRatio_cpp_chain_concurrency`, n_chains, max_concurrent)
 }

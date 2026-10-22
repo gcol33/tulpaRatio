@@ -1080,13 +1080,15 @@ validate_temporal_multiscale <- function(temporal, data) {
 #' @param cov Covariance function: `"exponential"` (default, rough),
 #'   `"matern"` (tunable smoothness), `"gaussian"` (very smooth), or
 #'   `"periodic"` (for seasonal patterns).
-#' @param nu Smoothness parameter for Matern covariance. Common values:
+#' @param nu Smoothness parameter for Matern covariance, one of the three
+#'   values with a closed form:
 #'   - 0.5: Equivalent to exponential (rough)
 #'   - 1.5: Once differentiable (moderate smoothness)
 #'   - 2.5: Twice differentiable (smooth)
 #'   Ignored for non-Matern covariance functions.
-#' @param period Period for periodic covariance (e.g., 12 for monthly, 365 for
-#'   daily data with annual cycle). Only used when `cov = "periodic"`.
+#' @param period Period for periodic covariance, in the units of `time_var`
+#'   (e.g., 12 for monthly, 365 for daily data with annual cycle). Only used
+#'   when `cov = "periodic"`.
 #' @param group_var Optional name of grouping variable for panel data.
 #'   If provided, separate GPs are estimated for each group.
 #' @param shared Logical; if TRUE (default), temporal effect enters both
@@ -1111,12 +1113,16 @@ validate_temporal_multiscale <- function(temporal, data) {
 #' The correlation function \eqn{C(d; \phi)} depends on time distance \eqn{d}:
 #'
 #' - **Exponential**: \eqn{C(d) = \exp(-d/\phi)} - continuous but not differentiable
-#' - **Matern**: Smooth with tunable roughness via \eqn{\nu}
-#' - **Gaussian**: \eqn{C(d) = \exp(-(d/\phi)^2)} - infinitely differentiable
+#' - **Matern** (\eqn{\nu = 3/2}): \eqn{C(d) = (1 + u)\exp(-u)},
+#'   \eqn{u = \sqrt{3} d/\phi}; (\eqn{\nu = 5/2}):
+#'   \eqn{C(d) = (1 + u + u^2/3)\exp(-u)}, \eqn{u = \sqrt{5} d/\phi}
+#' - **Gaussian**: \eqn{C(d) = \exp(-d^2/(2\phi^2))} - infinitely differentiable
 #' - **Periodic**: \eqn{C(d) = \exp(-2\sin^2(\pi d/p)/\phi^2)} - for seasonal data
 #'
-#' **Implementation**: Uses a state-space representation for O(n) computational
-#' complexity when possible (exponential, Matern with half-integer nu).
+#' **Implementation**: the exponential kernel is Markov and is evaluated as an
+#' AR(1) recursion over the sorted time points, at O(n) cost. The other kernels
+#' use a dense Cholesky factor of the n x n correlation over the distinct time
+#' points, with a nugget of \eqn{10^{-6}} on its diagonal, at O(n^3) cost.
 #'
 #' @examples
 #' # Create GP temporal specification
@@ -1172,8 +1178,8 @@ temporal_gp <- function(time_var,
 
   # Validate nu for Matern
   if (cov == "matern") {
-    if (!is.numeric(nu) || length(nu) != 1 || nu <= 0) {
-      stop("`nu` must be a positive number for Matern covariance", call. = FALSE)
+    if (!is.numeric(nu) || length(nu) != 1 || !(nu %in% c(0.5, 1.5, 2.5))) {
+      stop("`nu` must be 0.5, 1.5 or 2.5 for Matern covariance", call. = FALSE)
     }
   }
 
@@ -1289,8 +1295,11 @@ validate_temporal_gp <- function(temporal, data) {
     stop("Time variable contains missing values", call. = FALSE)
   }
 
-  # Scale time values if requested
+  # Scale time values if requested. time_scale is the unit the kernel's
+  # distances are in, so a period given in the data's units is divided by it.
+  temporal$time_scale <- 1
   if (temporal$scale_coords) {
+    temporal$time_scale <- stats::sd(time_vals)
     time_vals <- as.vector(scale(time_vals))
   }
 

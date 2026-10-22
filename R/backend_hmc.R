@@ -841,16 +841,6 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     tau_rate = tau_temporal_rate,
     rho_prior_a = rho_temporal_ab[["a"]],
     rho_prior_b = rho_temporal_ab[["b"]],
-    # GP-specific fields (only used when type = "gp")
-    time_values = temporal_info$time_values %||% numeric(0),
-    cov_type = temporal_info$cov_type %||% "exponential",
-    nu = temporal_info$nu %||% 1.5,
-    period = temporal_info$period %||% 1.0,
-    gp_sigma2_prior_U = priors$temporal_gp_sigma2_prior_U %||% 1.0,
-    gp_sigma2_prior_alpha = priors$temporal_gp_sigma2_prior_alpha %||% 0.01,
-    gp_phi_prior_lower = priors$temporal_gp_phi_prior_lower %||% 0.01,
-    gp_phi_prior_upper = priors$temporal_gp_phi_prior_upper %||% 10.0,
-    gp_parameterization = temporal_info$parameterization %||% "noncentered",
     # AR1's own coordinate, read only when type = "ar1"
     # The standalone temporal block's own coordinate, read for the structures
     # that offer one: AR1's innovations and the intrinsic walks' z.
@@ -869,6 +859,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     sigma2_short_prior_U = priors$ms_sigma2_short_prior_U %||% 1.0,
     sigma2_short_prior_alpha = priors$ms_sigma2_short_prior_alpha %||% 0.01
   )
+  temporal_params <- c(temporal_params, temporal_gp_fields(temporal_info, priors))
 
   latent_params <- list(
     has_latent = latent_info$type != "none",
@@ -1091,6 +1082,31 @@ model_data_args <- function(inputs, family) {
       family = family_params(family, inputs$model_type)
     ),
     inputs$bundles
+  )
+}
+
+
+#' The temporal GP fields of the temporal bundle
+#'
+#' What C++ reads to build the GP margin: the time grid, the kernel and the
+#' priors on its two hyperparameters. The sampler bundle and the reconstruction
+#' of non-centred effects from draws both read it, so the two use one kernel.
+#'
+#' @param temporal_info Prepared temporal information
+#' @param priors Prior list; read for the PC prior on the GP scale
+#' @return A named list
+#' @keywords internal
+temporal_gp_fields <- function(temporal_info, priors = list()) {
+  list(
+    time_values = temporal_info$time_values %||% numeric(0),
+    cov_type = temporal_info$cov_type %||% "exponential",
+    nu = temporal_info$nu %||% 1.5,
+    period = temporal_info$period %||% 1.0,
+    gp_sigma2_prior_U = priors$temporal_gp_sigma2_prior_U %||% 1.0,
+    gp_sigma2_prior_alpha = priors$temporal_gp_sigma2_prior_alpha %||% 0.01,
+    gp_phi_prior_lower = temporal_info$phi_prior_lower %||% 0.01,
+    gp_phi_prior_upper = temporal_info$phi_prior_upper %||% 10.0,
+    gp_parameterization = temporal_info$parameterization %||% "noncentered"
   )
 }
 
@@ -1576,7 +1592,8 @@ prepare_temporal_for_hmc <- function(temporal, data, N) {
       time_values = temporal$unique_time_values,  # Unique time values (length n_times)
       cov_type = temporal$cov,
       nu = temporal$nu %||% 1.5,
-      period = temporal$period %||% 1.0,
+      # On the scale of the distances the kernel sees
+      period = (temporal$period %||% 1.0) / (temporal$time_scale %||% 1),
       parameterization = temporal$parameterization %||% "noncentered",
       phi_prior_lower = temporal$phi_prior_lower %||% 0.01,
       phi_prior_upper = temporal$phi_prior_upper %||% 10.0,

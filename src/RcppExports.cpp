@@ -655,6 +655,34 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_temporal_gp_field
+Rcpp::NumericMatrix cpp_temporal_gp_field(const Rcpp::NumericMatrix& x, const Rcpp::NumericVector& log_sigma2, const Rcpp::NumericVector& logit_phi, const Rcpp::List& temporal_params);
+RcppExport SEXP _tulpaRatio_cpp_temporal_gp_field(SEXP xSEXP, SEXP log_sigma2SEXP, SEXP logit_phiSEXP, SEXP temporal_paramsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type log_sigma2(log_sigma2SEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type logit_phi(logit_phiSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type temporal_params(temporal_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_temporal_gp_field(x, log_sigma2, logit_phi, temporal_params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_temporal_gp_log_prior
+Rcpp::List cpp_temporal_gp_log_prior(const Rcpp::NumericVector& x, double log_sigma2, double logit_phi, const Rcpp::List& temporal_params);
+RcppExport SEXP _tulpaRatio_cpp_temporal_gp_log_prior(SEXP xSEXP, SEXP log_sigma2SEXP, SEXP logit_phiSEXP, SEXP temporal_paramsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< double >::type log_sigma2(log_sigma2SEXP);
+    Rcpp::traits::input_parameter< double >::type logit_phi(logit_phiSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type temporal_params(temporal_paramsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_temporal_gp_log_prior(x, log_sigma2, logit_phi, temporal_params));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_chain_concurrency
 int cpp_chain_concurrency(int n_chains, int max_concurrent);
 RcppExport SEXP _tulpaRatio_cpp_chain_concurrency(SEXP n_chainsSEXP, SEXP max_concurrentSEXP) {
@@ -1917,6 +1945,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_rpg", (DL_FUNC) &_tulpaRatio_cpp_rpg, 2},
     {"_tulpaRatio_cpp_sghmc_fit", (DL_FUNC) &_tulpaRatio_cpp_sghmc_fit, 25},
     {"_tulpaRatio_cpp_sgld_fit", (DL_FUNC) &_tulpaRatio_cpp_sgld_fit, 27},
+    {"_tulpaRatio_cpp_temporal_gp_field", (DL_FUNC) &_tulpaRatio_cpp_temporal_gp_field, 4},
+    {"_tulpaRatio_cpp_temporal_gp_log_prior", (DL_FUNC) &_tulpaRatio_cpp_temporal_gp_log_prior, 4},
     {"_tulpaRatio_cpp_chain_concurrency", (DL_FUNC) &_tulpaRatio_cpp_chain_concurrency, 2},
     {"_tulpaRatio_cpp_chain_visits", (DL_FUNC) &_tulpaRatio_cpp_chain_visits, 2},
     {"_tulpaRatio_cpp_set_max_threads", (DL_FUNC) &_tulpaRatio_cpp_set_max_threads, 1},
