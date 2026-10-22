@@ -3,12 +3,19 @@
 
 #include <vector>
 
-// Restricted spatial regression. A field restricted to the orthogonal
-// complement of the restricted covariates reaches the linear predictor as
-// P f, where f is the field's value at each observation and P = I - Q Q',
-// Q the N x r orthonormal basis of the covariates held row-major. The field's
-// own prior reads f; only the predictor reads P f.
+// Restricted regression, spatial (spatial_rsr()) or temporal (temporal_rtr()).
+// An effect restricted to the orthogonal complement of the restricted
+// covariates reaches the linear predictor as P f, where f is the effect's value
+// at each observation and P = I - Q Q', Q the N x r orthonormal basis of the
+// covariates held row-major. The effect's own prior reads f; only the
+// predictor reads P f.
 namespace ratiod_rsr {
+
+struct Restriction {
+  bool active = false;
+  std::vector<double> basis;  // N x rank, row-major, orthonormal columns
+  int rank = 0;
+};
 
 template <typename T>
 inline void project_out(std::vector<T>& f, const std::vector<double>& Q, int r) {
@@ -22,6 +29,11 @@ inline void project_out(std::vector<T>& f, const std::vector<double>& Q, int r) 
     for (int k = 0; k < r; k++) s = s + T(Q[i * r + k]) * c[k];
     f[i] = f[i] - s;
   }
+}
+
+template <typename T>
+inline void project_out(std::vector<T>& f, const Restriction& r) {
+  project_out(f, r.basis, r.rank);
 }
 
 }  // namespace ratiod_rsr

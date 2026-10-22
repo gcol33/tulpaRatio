@@ -1169,13 +1169,15 @@ hmc_structure_contributions <- function(unpacked, design) {
     )
   }
 
-  # A restricted spatial field reaches the predictors projected onto the
-  # complement of the restricted covariates, as the sampler reads it.
-  Q <- spatial_info$rsr_basis
-  restrict <- function(eta) {
+  # A restricted spatial field or temporal effect reaches the predictors
+  # projected onto the complement of its restricted covariates, as the sampler
+  # reads it.
+  project_out <- function(eta, Q) {
     if (is.null(Q) || is.null(eta)) return(eta)
     eta - (eta %*% Q) %*% t(Q)
   }
+  restrict <- function(eta) project_out(eta, spatial_info$rsr_basis)
+  restrict_temporal <- function(eta) project_out(eta, temporal_info$rtr_basis)
 
   # Areal spatial: always shared between the two linear predictors
   if (!is.null(unpacked$spatial)) {
@@ -1207,7 +1209,7 @@ hmc_structure_contributions <- function(unpacked, design) {
   # Temporal
   if (!is.null(unpacked$temporal)) {
     idx <- temporal_param_index(temporal_info)
-    add("temporal", spread_effect(unpacked$temporal$field, idx, N),
+    add("temporal", restrict_temporal(spread_effect(unpacked$temporal$field, idx, N)),
         temporal_info$shared %||% TRUE)
   }
 
@@ -1232,7 +1234,7 @@ hmc_structure_contributions <- function(unpacked, design) {
         eta <- eta + spread_effect(ms$seasonal$field, season_idx, N)
       }
     }
-    add("ms_temporal", eta, info$shared %||% TRUE,
+    add("ms_temporal", restrict_temporal(eta), info$shared %||% TRUE,
         if (is.null(eta)) "time_index_unavailable" else NULL)
   }
 

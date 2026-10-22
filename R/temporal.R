@@ -1958,7 +1958,10 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #' \deqn{f_{RTR}(t) = (I - P_X) f(t)}
 #'
 #' where \eqn{P_X = X(X'X)^{-1}X'} is the projection matrix onto the column
-#' space of X.
+#' space of X, the covariates in `restrict_to`, and \eqn{f} is the temporal
+#' effect at each observation. The effect's own prior is unchanged; only the
+#' linear predictor reads the projection. RTR is implemented on the HMC
+#' backend, for every temporal effect except time-varying coefficients.
 #'
 #' **When to use RTR:**
 #' - Covariates have temporal trends (e.g., increasing/decreasing over time)
@@ -2031,23 +2034,15 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 #'
 #' @export
 temporal_rtr <- function(temporal, restrict_to) {
-
   if (!inherits(temporal, "ratiod_temporal")) {
     stop("`temporal` must be a tulpaRatio temporal specification", call. = FALSE)
   }
-
-  if (!inherits(restrict_to, "formula")) {
-    stop("`restrict_to` must be a formula", call. = FALSE)
+  if (inherits(temporal, "ratiod_tvc")) {
+    stop("`temporal_rtr()` restricts a temporal effect; time-varying ",
+         "coefficients (`temporal_tvc()`) are coefficients, not an effect.",
+         call. = FALSE)
   }
-
-  # Store RTR information in the temporal object
-  temporal$rtr <- TRUE
-  temporal$rtr_formula <- restrict_to
-
-  # Add RTR class for dispatch
-  class(temporal) <- c("ratiod_rtr", class(temporal))
-
-  temporal
+  restricted_spec(temporal, restrict_to, "temporal")
 }
 
 
@@ -2057,97 +2052,8 @@ temporal_rtr <- function(temporal, restrict_to) {
 #'
 #' @export
 print.ratiod_rtr <- function(x, ...) {
-  # Print underlying temporal type
   NextMethod()
-
-  cat("\nRestricted Temporal Regression (RTR):\n")
-  cat("  Orthogonal to:", deparse(x$rtr_formula), "\n")
-  cat("  (Temporal effect constrained to be orthogonal to covariate space)\n")
-
-  invisible(x)
-}
-
-
-#' Validate RTR specification
-#'
-#' @param temporal ratiod_rtr object
-#' @param data Data frame
-#' @param formula Model formula (to extract design matrix)
-#'
-#' @return Updated temporal object with projection matrix
-#' @keywords internal
-validate_rtr <- function(temporal, data, formula) {
-  if (is.null(temporal) || !inherits(temporal, "ratiod_rtr")) {
-    return(temporal)
-  }
-
-  # Build design matrix for RTR covariates
-  rtr_formula <- temporal$rtr_formula
-
-  # Check if terms exist in data
-  rtr_vars <- all.vars(rtr_formula)
-  missing_vars <- setdiff(rtr_vars, names(data))
-  if (length(missing_vars) > 0) {
-    stop(sprintf("RTR variables not found in data: %s",
-                 paste(missing_vars, collapse = ", ")), call. = FALSE)
-  }
-
-  # Build design matrix
-  X_rtr <- model.matrix(rtr_formula, data = data)
-
-  # Compute projection matrix (using QR for numerical stability)
-  temporal$rtr_projection <- compute_rtr_projection(X_rtr)
-  temporal$rtr_vars <- rtr_vars
-
-  temporal
-}
-
-
-#' Compute RTR projection matrix
-#'
-#' @description
-#' Compute the orthogonal projection matrix P_perp = I - P_X that projects
-#' the temporal effect into the space orthogonal to the covariates.
-#'
-#' @param X Design matrix of covariates to orthogonalize against
-#'
-#' @return Projection matrix (n x n)
-#' @keywords internal
-compute_rtr_projection <- function(X) {
-  n <- nrow(X)
-  p <- ncol(X)
-
-  if (p >= n) {
-    warning("More covariates than observations; RTR may not be effective",
-            call. = FALSE)
-  }
-
-  # QR decomposition is more numerically stable than direct inverse
-  qr_X <- qr(X)
-
-  # P_X = Q %*% Q' where Q is orthonormal basis for col(X)
-  Q <- qr.Q(qr_X)
-
-  # P_perp = I - Q %*% Q'
-  P_perp <- diag(n) - Q %*% t(Q)
-
-  P_perp
-}
-
-
-#' Apply RTR projection to temporal effect
-#'
-#' @description
-#' Project temporal effect into the space orthogonal to covariates.
-#' Called during posterior computation.
-#'
-#' @param f Temporal effect vector (length n)
-#' @param P_perp Projection matrix from compute_rtr_projection
-#'
-#' @return Projected temporal effect (length n)
-#' @keywords internal
-apply_rtr_projection <- function(f, P_perp) {
-  as.vector(P_perp %*% f)
+  print_restriction(x, "temporal")
 }
 
 

@@ -150,6 +150,14 @@ get_mode_backends <- function(mode) {
 MODEL_STRUCTURES <- c("spatial", "temporal", "spatiotemporal", "zi", "latent")
 
 
+#' The phrase naming a restricted temporal effect on a backend that reads
+#' the effect directly, without the projection
+#' @keywords internal
+rtr_restriction <- paste0(
+  "restricted temporal regression (`temporal_rtr()`) is implemented on ",
+  "HMC only")
+
+
 #' Temporal support rule for the Gibbs sampler
 #'
 #' @param temporal The temporal specification
@@ -174,6 +182,7 @@ tvc_temporal_support <- function(temporal, structures) {
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 multiscale_temporal_support <- function(temporal, structures) {
+  if (inherits(temporal, "ratiod_rtr")) return(rtr_restriction)
   if (!inherits(temporal, "ratiod_temporal_multiscale")) {
     return("only temporal_multiscale() terms are implemented")
   }
@@ -195,6 +204,7 @@ multiscale_temporal_support <- function(temporal, structures) {
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 laplace_temporal_support <- function(temporal, structures) {
+  if (inherits(temporal, "ratiod_rtr")) return(rtr_restriction)
   if (!inherits(temporal, "ratiod_temporal_multiscale")) {
     return("only temporal_multiscale() terms are implemented")
   }
@@ -262,6 +272,7 @@ areal_spatial_support <- function(spatial, structures) {
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 single_temporal_support <- function(temporal, structures) {
+  if (inherits(temporal, "ratiod_rtr")) return(rtr_restriction)
   if (is_multiscale_temporal(temporal)) {
     return("the multi-scale temporal decomposition is implemented on HMC only")
   }

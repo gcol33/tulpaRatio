@@ -39,7 +39,10 @@ temporal random effect to be orthogonal to the fixed effect design matrix:
 \deqn{f_{RTR}(t) = (I - P_X) f(t)}
 
 where \eqn{P_X = X(X'X)^{-1}X'} is the projection matrix onto the column
-space of X.
+space of X, the covariates in \code{restrict_to}, and \eqn{f} is the temporal
+effect at each observation. The effect's own prior is unchanged; only the
+linear predictor reads the projection. RTR is implemented on the HMC
+backend, for every temporal effect except time-varying coefficients.
 
 \strong{When to use RTR:}
 \itemize{

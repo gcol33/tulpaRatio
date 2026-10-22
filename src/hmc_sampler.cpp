@@ -7513,10 +7513,10 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
     if (mode == GradientMode::AUTODIFF_FORWARD)
         return &compute_gradient_forward;
 
-    // A restricted spatial field reaches eta through a projection across all
-    // observations, which no hand-coded gradient carries; the arena gradient
-    // differentiates the log posterior that does.
-    if (data.has_rsr)
+    // A restricted spatial field or temporal effect reaches eta through a
+    // projection across all observations, which no hand-coded gradient
+    // carries; the arena gradient differentiates the log posterior that does.
+    if (data.rsr.active || data.rtr.active)
         return &compute_gradient_arena;
 
     // The non-centred GP interaction reaches delta through the NNGP
@@ -7675,9 +7675,9 @@ void require_gradient_supported(const ModelData& data, const ParamLayout& layout
       Rcpp::stop("The collapsed GP interaction does not take zero or one "
                  "inflation, whose likelihood is not log-concave.");
     }
-    if (data.has_rsr) {
+    if (data.rsr.active || data.rtr.active) {
       Rcpp::stop("The collapsed GP interaction does not take a restricted "
-                 "spatial field.");
+                 "spatial field or temporal effect.");
     }
   }
 
@@ -10673,7 +10673,7 @@ ModelData build_model_data(
       }
   }
   if (spatial_params.containsElementNamed("rsr")) {
-    apply_rsr_params(data, Rcpp::as<Rcpp::List>(spatial_params["rsr"]));
+    data.rsr = restriction_from(Rcpp::as<Rcpp::List>(spatial_params["rsr"]), data.N);
   }
 
   // Temporal structure
@@ -10944,9 +10944,6 @@ Rcpp::List cpp_hmc_fit_gp(
   double ms_sigma2_short_prior_alpha = Rcpp::as<double>(ms_temporal_params["sigma2_short_prior_alpha"]);
 
   // Extract RSR parameters - eager copy
-  bool has_rsr = Rcpp::as<bool>(rsr_params["has_rsr"]);
-  std::vector<double> rsr_basis_vec = Rcpp::as<std::vector<double>>(rsr_params["basis"]);
-  int rsr_rank = Rcpp::as<int>(rsr_params["rank"]);
 
   // Second memory barrier after all Rcpp extractions
   std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -11133,7 +11130,7 @@ Rcpp::List cpp_hmc_fit_gp(
     data.multiscale_temporal_data.seasonal_period = 0;
   }
 
-  set_rsr_basis(data, has_rsr, std::move(rsr_basis_vec), rsr_rank);
+  data.rsr = restriction_from(rsr_params, data.N);
 
   // Zero-inflation structure (GP interface: no OI support, use matrix directly)
   data.zi_type = ratiod_zi::parse_zi_type(zi_type_str);

@@ -168,24 +168,36 @@ const char* const KNOWN_FIELDS[] = {
 };
 
 // The spatial fields make_model() also builds under restricted spatial
-// regression, named with the suffix `_rsr`.
+// regression, named with the suffix `_rsr`, and the temporal effects it builds
+// under restricted temporal regression, named with `_rtr`.
 const char* const RSR_FIELDS[] = {"icar", "bym2", "hsgp", "gp"};
 const char* const RSR_SUFFIX = "_rsr";
+const char* const RTR_FIELDS[] = {"rw1", "temporal_ar1", "temporal_gp",
+                                  "temporal_gp_matern32", "ms_temporal"};
+const char* const RTR_SUFFIX = "_rtr";
 
-bool is_rsr_field(const std::string& field) {
-  const std::string suffix(RSR_SUFFIX);
+bool has_suffix(const std::string& field, const char* s) {
+  const std::string suffix(s);
   return field.size() > suffix.size() &&
          field.compare(field.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-bool is_known_field(const std::string& field) {
-  if (is_rsr_field(field)) {
-    const std::string base = field.substr(0, field.size() - std::string(RSR_SUFFIX).size());
-    for (const char* known : RSR_FIELDS) {
-      if (base == known) return true;
-    }
-    return false;
+bool is_rsr_field(const std::string& field) { return has_suffix(field, RSR_SUFFIX); }
+bool is_rtr_field(const std::string& field) { return has_suffix(field, RTR_SUFFIX); }
+
+template <size_t K>
+bool restricted_base_known(const std::string& field, const char* suffix,
+                           const char* const (&bases)[K]) {
+  const std::string base = field.substr(0, field.size() - std::string(suffix).size());
+  for (const char* known : bases) {
+    if (base == known) return true;
   }
+  return false;
+}
+
+bool is_known_field(const std::string& field) {
+  if (is_rsr_field(field)) return restricted_base_known(field, RSR_SUFFIX, RSR_FIELDS);
+  if (is_rtr_field(field)) return restricted_base_known(field, RTR_SUFFIX, RTR_FIELDS);
   for (const char* known : KNOWN_FIELDS) {
     if (field == known) return true;
   }
@@ -268,10 +280,10 @@ STNNGPNeighbors build_nngp_st(const std::vector<double>& coords,
 // is what exercises the paths that treat the two linear predictors
 // differently, `temporal_shared` among them. `zi` attaches a zero-inflation or
 // hurdle structure to the numerator, with its own two-column design matrix.
-// Restricted spatial regression on the numerator's own design: the basis is
-// the two orthonormalized columns (intercept, x), so the field reaches eta
-// with both directions removed.
-void restrict_to_numerator_design(ModelData& data) {
+// A restriction to the numerator's own design: the basis is the two
+// orthonormalized columns (intercept, x), so the effect reaches eta with both
+// directions removed.
+ratiod_rsr::Restriction numerator_design_restriction(const ModelData& data) {
   const int n = data.N;
   std::vector<double> q0(n), q1(n);
   double n0 = 0.0;
@@ -291,13 +303,15 @@ void restrict_to_numerator_design(ModelData& data) {
     n1 += q1[i] * q1[i];
   }
   n1 = std::sqrt(n1);
-  data.has_rsr = true;
-  data.rsr_rank = 2;
-  data.rsr_basis.resize(static_cast<size_t>(n) * 2);
+  ratiod_rsr::Restriction r;
+  r.active = true;
+  r.rank = 2;
+  r.basis.resize(static_cast<size_t>(n) * 2);
   for (int i = 0; i < n; i++) {
-    data.rsr_basis[static_cast<size_t>(i) * 2 + 0] = q0[i];
-    data.rsr_basis[static_cast<size_t>(i) * 2 + 1] = q1[i] / n1;
+    r.basis[static_cast<size_t>(i) * 2 + 0] = q0[i];
+    r.basis[static_cast<size_t>(i) * 2 + 1] = q1[i] / n1;
   }
+  return r;
 }
 
 ModelData make_model(const std::string& field_in, int n_obs, int n_units,
@@ -306,8 +320,11 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
                      bool temporal_shared = true,
                      const std::string& zi = "none") {
   const bool want_rsr = is_rsr_field(field_in);
+  const bool want_rtr = is_rtr_field(field_in);
   const std::string field = want_rsr
       ? field_in.substr(0, field_in.size() - std::string(RSR_SUFFIX).size())
+      : want_rtr
+      ? field_in.substr(0, field_in.size() - std::string(RTR_SUFFIX).size())
       : field_in;
   if (!is_known_field(field_in)) {
     Rcpp::stop("cpp_gradient_check: unknown field '" + field_in +
@@ -1127,7 +1144,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   data.p_oi = has_oi ? 2 : 0;
   data.oi_prior_sd = 1.0;
 
-  if (want_rsr) restrict_to_numerator_design(data);
+  if (want_rsr) data.rsr = numerator_design_restriction(data);
+  if (want_rtr) data.rtr = numerator_design_restriction(data);
 
   return data;
 }

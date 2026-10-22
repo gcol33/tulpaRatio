@@ -223,6 +223,11 @@ spatiotemporal <- function(spatial,
          "(from temporal_rw1, temporal_rw2, temporal_ar1, temporal_gp, etc.)",
          call. = FALSE)
   }
+  if (inherits(spatial, "ratiod_rsr") || inherits(temporal, "ratiod_rtr")) {
+    stop("The interaction's margins only set its structure; restrict the ",
+         "spatial field or temporal effect passed to `tratio()` instead.",
+         call. = FALSE)
+  }
 
   # Normalize type
   type <- match.arg(type)

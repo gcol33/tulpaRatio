@@ -260,7 +260,7 @@ fit_hmc <- function(formula,
       sigma2_short_prior_alpha = priors$ms_sigma2_short_prior_alpha %||% 0.01
     )
 
-    rsr_params <- hmc_rsr_params(spatial_info)
+    rsr_params <- restriction_params(spatial_info$rsr_basis)
 
     # Use O2-safe interface with single List parameter
     # This minimizes Rcpp template instantiation at ABI boundary
@@ -350,13 +350,14 @@ fit_hmc <- function(formula,
     spatial_supported <- identical(spatial_type_v, "none") ||
       (spatial_type_v %in% c("icar", "bym2") &&
        !identical(spatial_param_v, "collapsed") &&
-       !isTRUE(spatial_info$has_rsr))
+       is.null(spatial_info$rsr_basis))
     # B1d Step 3: allow RW1 / RW2 / AR1 temporal. Temporal GP / multiscale /
     # cyclic still fall back to legacy.
     temporal_type_v <- temporal_info$type %||% "none"
     temporal_supported <- identical(temporal_type_v, "none") ||
       (temporal_type_v %in% TEMPORAL_TYPES_SINGLE &&
-       !isTRUE(temporal_info$precision_structure$cyclic))
+       !isTRUE(temporal_info$precision_structure$cyclic) &&
+       is.null(temporal_info$rtr_basis))
     specs_eligible <- use_specs_path &&
       family_handcoded(family, model_type) &&
       zi_supported &&
@@ -738,6 +739,14 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   # Prepare temporal structure
   temporal_info <- prepare_temporal_for_hmc(temporal, data, hmc_data$N)
   temporal_info$time_levels <- temporal$time_levels
+  temporal_info$rtr_basis <- rtr_basis(temporal, data)
+  if (!is.null(temporal_info$rtr_basis) &&
+      identical(spatial_info$parameterization, "collapsed")) {
+    stop("A restricted temporal effect (`temporal_rtr()`) cannot sit beside a ",
+         "collapsed spatial field: the collapsed marginal reads the temporal ",
+         "effect unprojected. Use the default spatial parameterization.",
+         call. = FALSE)
+  }
 
   # Prepare zero-inflation structure. Handles both an explicit `zi = `
   # argument and auto-detection from a ZI/hurdle/OI/ZOIB family (e.g.
@@ -859,7 +868,8 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     sigma2_short_prior_U = priors$ms_sigma2_short_prior_U %||% 1.0,
     sigma2_short_prior_alpha = priors$ms_sigma2_short_prior_alpha %||% 0.01
   )
-  temporal_params <- c(temporal_params, temporal_gp_fields(temporal_info, priors))
+  temporal_params <- c(temporal_params, temporal_gp_fields(temporal_info, priors),
+                       list(rtr = restriction_params(temporal_info$rtr_basis)))
 
   latent_params <- list(
     has_latent = latent_info$type != "none",
@@ -1010,7 +1020,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     rho_prior_a = spatial_info$rho_prior_a %||% 1.0,
     rho_prior_b = spatial_info$rho_prior_b %||% 1.0,
     center = spatial_info$center %||% TRUE,
-    rsr = hmc_rsr_params(spatial_info)
+    rsr = restriction_params(spatial_info$rsr_basis)
   )
 
   prior_params <- list(
@@ -2531,18 +2541,17 @@ prepare_multiscale_temporal_for_hmc <- function(temporal, data, N) {
   )
 }
 
-#' RSR block of the sampler's data
+#' A restriction as the sampler reads it
 #'
-#' The restricted covariate basis `Q` (`N x r`, orthonormal columns) as the
-#' sampler reads it: `basis` row-major, so observation `i`'s row is
-#' `basis[i * r + (0:(r - 1))]`.
+#' The restricted covariate basis `Q` (`N x r`, orthonormal columns) of a
+#' `spatial_rsr()` field or a `temporal_rtr()` effect: `basis` row-major, so
+#' observation `i`'s row is `basis[i * r + (0:(r - 1))]`.
 #'
-#' @param spatial_info Output of `prepare_spatial_for_hmc()` or the GP branch
+#' @param Q The basis from [rsr_basis()] or [rtr_basis()], `NULL` for none
 #' @keywords internal
-hmc_rsr_params <- function(spatial_info) {
-  Q <- spatial_info$rsr_basis
+restriction_params <- function(Q) {
   if (is.null(Q)) {
-    return(list(has_rsr = FALSE, basis = numeric(0), rank = 0L))
+    return(list(active = FALSE, basis = numeric(0), rank = 0L))
   }
-  list(has_rsr = TRUE, basis = as.numeric(t(Q)), rank = ncol(Q))
+  list(active = TRUE, basis = as.numeric(t(Q)), rank = ncol(Q))
 }

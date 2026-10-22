@@ -817,7 +817,7 @@ test_that("temporal_rtr print method works", {
 })
 
 
-test_that("validate_rtr computes projection matrix", {
+test_that("rtr_basis spans the restricted covariates", {
   df <- data.frame(
     y = rpois(50, 10),
     year = rep(2020:2024, each = 10),
@@ -826,16 +826,15 @@ test_that("validate_rtr computes projection matrix", {
   )
 
   rtr <- temporal_rtr(temporal_rw2("year"), restrict_to = ~ temp + precip)
-  validated <- tulpaRatio:::validate_rtr(rtr, df, ~ y ~ temp + precip)
+  Q <- tulpaRatio:::rtr_basis(rtr, df)
+  X <- model.matrix(~ temp + precip, df)
 
-  expect_true(!is.null(validated$rtr_projection))
-  expect_equal(nrow(validated$rtr_projection), 50)
-  expect_equal(ncol(validated$rtr_projection), 50)
-  expect_equal(validated$rtr_vars, c("temp", "precip"))
+  expect_equal(dim(Q), c(50L, 3L))
+  expect_equal(X - Q %*% crossprod(Q, X), 0 * X, tolerance = 1e-10)
 })
 
 
-test_that("validate_rtr errors on missing variables", {
+test_that("rtr_basis errors on missing variables", {
   df <- data.frame(
     y = rpois(50, 10),
     year = rep(2020:2024, each = 10),
@@ -844,45 +843,7 @@ test_that("validate_rtr errors on missing variables", {
 
   rtr <- temporal_rtr(temporal_rw2("year"), restrict_to = ~ temp + missing)
 
-  expect_error(
-    tulpaRatio:::validate_rtr(rtr, df, ~ y ~ temp),
-    regexp = "not found in data"
-  )
-})
-
-
-test_that("compute_rtr_projection is orthogonal", {
-  X <- matrix(rnorm(100), 50, 2)
-  P_perp <- tulpaRatio:::compute_rtr_projection(X)
-
-  # P_perp should be symmetric
-  expect_true(all(abs(P_perp - t(P_perp)) < 1e-10))
-
-  # P_perp * X should be approximately zero (orthogonal)
-  result <- P_perp %*% X
-  expect_true(all(abs(result) < 1e-10))
-
-  # P_perp should be idempotent (projection property)
-  P_perp_squared <- P_perp %*% P_perp
-  expect_true(all(abs(P_perp - P_perp_squared) < 1e-10))
-})
-
-
-test_that("apply_rtr_projection works correctly", {
-  X <- matrix(rnorm(100), 50, 2)
-  P_perp <- tulpaRatio:::compute_rtr_projection(X)
-
-  # Random temporal effect
-  f <- rnorm(50)
-
-  # Projected effect
-  f_rtr <- tulpaRatio:::apply_rtr_projection(f, P_perp)
-
-  # f_rtr should be orthogonal to X columns
-  for (j in 1:2) {
-    dot_product <- sum(f_rtr * X[, j])
-    expect_true(abs(dot_product) < 1e-10)
-  }
+  expect_error(tulpaRatio:::rtr_basis(rtr, df), regexp = "RTR variables not found in data")
 })
 
 

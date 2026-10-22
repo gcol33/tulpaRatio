@@ -2347,23 +2347,82 @@ validate_areal_groups <- function(spatial, data) {
 #'
 #' @export
 spatial_rsr <- function(spatial, restrict_to) {
-
   if (!inherits(spatial, "ratiod_spatial")) {
     stop("`spatial` must be a tulpaRatio spatial specification", call. = FALSE)
   }
+  restricted_spec(spatial, restrict_to, "spatial")
+}
 
+
+#' What distinguishes a restricted spatial effect from a restricted temporal one
+#'
+#' @description
+#' `spatial_rsr()` and `temporal_rtr()` restrict an effect the same way; this
+#' table holds the names each one uses.
+#'
+#' @keywords internal
+RESTRICTIONS <- list(
+  spatial = list(class = "ratiod_rsr", flag = "rsr", formula = "rsr_formula",
+                 label = "RSR", title = "Restricted Spatial Regression (RSR)",
+                 effect = "Spatial"),
+  temporal = list(class = "ratiod_rtr", flag = "rtr", formula = "rtr_formula",
+                  label = "RTR", title = "Restricted Temporal Regression (RTR)",
+                  effect = "Temporal")
+)
+
+
+#' Restrict an effect to the complement of covariates
+#'
+#' @param spec A spatial or temporal specification
+#' @param restrict_to One-sided formula of the covariates to protect
+#' @param kind `"spatial"` or `"temporal"`, a name in `RESTRICTIONS`
+#' @return `spec` carrying the formula, with the restriction's class prepended
+#' @keywords internal
+restricted_spec <- function(spec, restrict_to, kind) {
   if (!inherits(restrict_to, "formula")) {
     stop("`restrict_to` must be a formula", call. = FALSE)
   }
+  r <- RESTRICTIONS[[kind]]
+  spec[[r$flag]] <- TRUE
+  spec[[r$formula]] <- restrict_to
+  class(spec) <- c(r$class, class(spec))
+  spec
+}
 
-  # Store RSR information in the spatial object
-  spatial$rsr <- TRUE
-  spatial$rsr_formula <- restrict_to
 
-  # Add RSR class for dispatch
-  class(spatial) <- c("ratiod_rsr", class(spatial))
+#' Print the restriction below the underlying specification
+#'
+#' @param x A restricted specification
+#' @param kind `"spatial"` or `"temporal"`
+#' @keywords internal
+print_restriction <- function(x, kind) {
+  r <- RESTRICTIONS[[kind]]
+  cat("\n", r$title, ":\n", sep = "")
+  cat("  Orthogonal to:", deparse(x[[r$formula]]), "\n")
+  cat("  (", r$effect, " effect constrained to be orthogonal to covariate space)\n",
+      sep = "")
+  invisible(x)
+}
 
-  spatial
+
+#' Restricted-covariate basis of a restricted specification
+#'
+#' @param spec A spatial or temporal specification
+#' @param data Data frame
+#' @param kind `"spatial"` or `"temporal"`
+#' @return The basis from [rsr_basis_of()] when `spec` carries the restriction
+#'   of that kind, `NULL` otherwise
+#' @keywords internal
+restriction_basis <- function(spec, data, kind) {
+  r <- RESTRICTIONS[[kind]]
+  if (!inherits(spec, r$class)) return(NULL)
+  f <- spec[[r$formula]]
+  missing_vars <- setdiff(all.vars(f), names(data))
+  if (length(missing_vars) > 0) {
+    stop(sprintf("%s variables not found in data: %s", r$label,
+                 paste(missing_vars, collapse = ", ")), call. = FALSE)
+  }
+  rsr_basis_of(model.matrix(f, data = data))
 }
 
 
@@ -2373,14 +2432,8 @@ spatial_rsr <- function(spatial, restrict_to) {
 #'
 #' @export
 print.ratiod_rsr <- function(x, ...) {
-  # Print underlying spatial type
   NextMethod()
-
-  cat("\nRestricted Spatial Regression (RSR):\n")
-  cat("  Orthogonal to:", deparse(x$rsr_formula), "\n")
-  cat("  (Spatial effect constrained to be orthogonal to covariate space)\n")
-
-  invisible(x)
+  print_restriction(x, "spatial")
 }
 
 
@@ -2412,31 +2465,24 @@ compute_rsr_projection <- function(X) {
 #' @keywords internal
 rsr_basis_of <- function(X) {
   if (ncol(X) >= nrow(X)) {
-    warning("More covariates than observations; RSR may not be effective",
-            call. = FALSE)
+    warning("More covariates than observations; the restriction may not be ",
+            "effective", call. = FALSE)
   }
   qr_X <- qr(X)
   qr.Q(qr_X)[, seq_len(qr_X$rank), drop = FALSE]
 }
 
 
-#' Restricted-covariate basis of a spatial specification
-#'
+#' @rdname restriction_basis
 #' @param spatial A spatial specification
-#' @param data Data frame
-#' @return The basis from [rsr_basis_of()] for a `spatial_rsr()`
-#'   specification, `NULL` otherwise
 #' @keywords internal
-rsr_basis <- function(spatial, data) {
-  if (!inherits(spatial, "ratiod_rsr")) return(NULL)
-  rsr_vars <- all.vars(spatial$rsr_formula)
-  missing_vars <- setdiff(rsr_vars, names(data))
-  if (length(missing_vars) > 0) {
-    stop(sprintf("RSR variables not found in data: %s",
-                 paste(missing_vars, collapse = ", ")), call. = FALSE)
-  }
-  rsr_basis_of(model.matrix(spatial$rsr_formula, data = data))
-}
+rsr_basis <- function(spatial, data) restriction_basis(spatial, data, "spatial")
+
+
+#' @rdname restriction_basis
+#' @param temporal A temporal specification
+#' @keywords internal
+rtr_basis <- function(temporal, data) restriction_basis(temporal, data, "temporal")
 
 
 #' Validate RSR specification

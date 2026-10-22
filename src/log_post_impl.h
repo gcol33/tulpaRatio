@@ -1355,14 +1355,50 @@ T compute_log_post_impl(
     // Under restricted spatial regression the predictors read the field's
     // projection onto the complement of the restricted covariates (rsr.h).
     std::vector<T> rsr_shared, rsr_num_only;
-    if (data.has_rsr && has_spatial_field) {
+    if (data.rsr.active && has_spatial_field) {
         rsr_shared.assign(data.N, T(0.0));
         rsr_num_only.assign(data.N, T(0.0));
         for (int i = 0; i < data.N; i++) {
             spatial_field_at(i, rsr_shared[i], rsr_num_only[i]);
         }
-        ratiod_rsr::project_out(rsr_shared, data.rsr_basis, data.rsr_rank);
-        ratiod_rsr::project_out(rsr_num_only, data.rsr_basis, data.rsr_rank);
+        ratiod_rsr::project_out(rsr_shared, data.rsr);
+        ratiod_rsr::project_out(rsr_num_only, data.rsr);
+    }
+
+    // The temporal effect at observation i: the single temporal margin or the
+    // multi-scale decomposition, split by whether it enters both predictors.
+    const bool has_temporal_effect =
+        (layout.has_temporal && !data.temporal_time_idx.empty()) ||
+        (layout.has_multiscale_temporal && !ms_temporal_eta.empty());
+    auto temporal_effect_at = [&](int i, T& shared, T& num_only) {
+        if (layout.has_temporal && !data.temporal_time_idx.empty() &&
+            data.temporal_time_idx[i] > 0) {
+            int t = data.temporal_time_idx[i] - 1;
+            int g = data.temporal_group_idx[i] - 1;
+            // Intrinsic walks are centred on the way in; their augmented
+            // constant carries tau, so leaving it in eta would free the level.
+            T e = center_temporal
+                ? phi_temporal[g * data.n_times + t] - phi_temporal_mean[g]
+                : phi_temporal[g * data.n_times + t];
+            if (data.temporal_shared) shared = shared + e; else num_only = num_only + e;
+        }
+        if (layout.has_multiscale_temporal && !ms_temporal_eta.empty()) {
+            if (data.multiscale_temporal_data.shared) shared = shared + ms_temporal_eta[i];
+            else num_only = num_only + ms_temporal_eta[i];
+        }
+    };
+
+    // Under restricted temporal regression the predictors read the effect's
+    // projection onto the complement of the restricted covariates.
+    std::vector<T> rtr_shared, rtr_num_only;
+    if (data.rtr.active && has_temporal_effect) {
+        rtr_shared.assign(data.N, T(0.0));
+        rtr_num_only.assign(data.N, T(0.0));
+        for (int i = 0; i < data.N; i++) {
+            temporal_effect_at(i, rtr_shared[i], rtr_num_only[i]);
+        }
+        ratiod_rsr::project_out(rtr_shared, data.rtr);
+        ratiod_rsr::project_out(rtr_num_only, data.rtr);
     }
 
     // One observation's two linear predictors and inflation logits, written
@@ -1390,7 +1426,7 @@ T compute_log_post_impl(
         // Add the spatial field.
         if (has_spatial_field) {
             T shared = T(0.0), num_only = T(0.0);
-            if (data.has_rsr) {
+            if (data.rsr.active) {
                 shared = rsr_shared[i];
                 num_only = rsr_num_only[i];
             } else {
@@ -1400,33 +1436,17 @@ T compute_log_post_impl(
             eta_denom = eta_denom + shared;
         }
 
-        // Add temporal effects
-        if (layout.has_temporal && !data.temporal_time_idx.empty() && data.temporal_time_idx[i] > 0) {
-            int t = data.temporal_time_idx[i] - 1;
-            int g = data.temporal_group_idx[i] - 1;
-            // Intrinsic walks are centred on the way in; their augmented
-            // constant carries tau, so leaving it in eta would free the level.
-            T temporal_effect = center_temporal
-                ? phi_temporal[g * data.n_times + t] - phi_temporal_mean[g]
-                : phi_temporal[g * data.n_times + t];
-
-            if (data.temporal_shared) {
-                eta_num = eta_num + temporal_effect;
-                eta_denom = eta_denom + temporal_effect;
+        // Add the temporal effect.
+        if (has_temporal_effect) {
+            T shared = T(0.0), num_only = T(0.0);
+            if (data.rtr.active) {
+                shared = rtr_shared[i];
+                num_only = rtr_num_only[i];
             } else {
-                eta_num = eta_num + temporal_effect;
+                temporal_effect_at(i, shared, num_only);
             }
-        }
-
-        // Add multiscale temporal effect
-        if (layout.has_multiscale_temporal && !ms_temporal_eta.empty()) {
-            T ms_temp_effect = ms_temporal_eta[i];
-            if (data.multiscale_temporal_data.shared) {
-                eta_num = eta_num + ms_temp_effect;
-                eta_denom = eta_denom + ms_temp_effect;
-            } else {
-                eta_num = eta_num + ms_temp_effect;
-            }
+            eta_num = eta_num + shared + num_only;
+            eta_denom = eta_denom + shared;
         }
 
         // Add SVC (Spatially-Varying Coefficients) effect

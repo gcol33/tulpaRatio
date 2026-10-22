@@ -498,28 +498,19 @@ inline void apply_re_params(ModelData& data, const Rcpp::List& re_params) {
   }
 }
 
-// The restricted-spatial-regression block, as hmc_rsr_params() builds it:
-// `has_rsr`, the row-major basis `basis` and its column count `rank`.
-inline void set_rsr_basis(ModelData& data, bool has_rsr,
-                          std::vector<double> basis, int rank) {
-  data.has_rsr = has_rsr;
-  data.rsr_basis = std::move(basis);
-  data.rsr_rank = rank;
-  if (!data.has_rsr) {
-    data.rsr_basis.clear();
-    data.rsr_rank = 0;
-  } else if (data.rsr_rank <= 0 ||
-             static_cast<int>(data.rsr_basis.size()) != data.N * data.rsr_rank) {
-    Rcpp::stop("The restricted spatial regression basis has %d entries for %d "
-               "observations and rank %d.",
-               static_cast<int>(data.rsr_basis.size()), data.N, data.rsr_rank);
+// A restriction as restriction_params() builds it: `active`, the row-major
+// basis `basis` over the N observations and its column count `rank`.
+inline ratiod_rsr::Restriction restriction_from(const Rcpp::List& p, int N) {
+  ratiod_rsr::Restriction r;
+  r.active = Rcpp::as<bool>(p["active"]);
+  if (!r.active) return r;
+  r.basis = Rcpp::as<std::vector<double>>(p["basis"]);
+  r.rank = Rcpp::as<int>(p["rank"]);
+  if (r.rank <= 0 || static_cast<int>(r.basis.size()) != N * r.rank) {
+    Rcpp::stop("A restriction basis has %d entries for %d observations and "
+               "rank %d.", static_cast<int>(r.basis.size()), N, r.rank);
   }
-}
-
-inline void apply_rsr_params(ModelData& data, const Rcpp::List& rsr_params) {
-  set_rsr_basis(data, Rcpp::as<bool>(rsr_params["has_rsr"]),
-                Rcpp::as<std::vector<double>>(rsr_params["basis"]),
-                Rcpp::as<int>(rsr_params["rank"]));
+  return r;
 }
 
 // The continuous-time GP margin as the R bundle describes it. Matern takes the
@@ -583,6 +574,10 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
       ? Rcpp::as<double>(temporal_params["rho_prior_a"]) : ratiod_ar1::RHO_PRIOR_A;
   double temporal_rho_prior_b = temporal_params.containsElementNamed("rho_prior_b")
       ? Rcpp::as<double>(temporal_params["rho_prior_b"]) : ratiod_ar1::RHO_PRIOR_B;
+
+  data.rtr = temporal_params.containsElementNamed("rtr")
+      ? restriction_from(Rcpp::as<Rcpp::List>(temporal_params["rtr"]), data.N)
+      : ratiod_rsr::Restriction();
 
   // The single-component types read straight off the shared parser; the two
   // names below carry data of their own on top of it.
