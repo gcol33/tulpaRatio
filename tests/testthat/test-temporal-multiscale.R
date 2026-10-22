@@ -191,15 +191,11 @@ test_that("validate_temporal_multiscale handles factor time variable", {
 # The multi-scale block under the non-GP sampler entry (#74)
 # ============================================================================
 #
-# use_gp_sampler is is_gp_spatial(spatial) || (is_multiscale_temporal(temporal)
-# && !has_areal_spatial), so a multi-scale temporal term paired with an AREAL
-# spatial field is the one combination that routes to cpp_hmc_fit rather than
-# the GP entry. That entry set data.has_multiscale_temporal from the temporal
-# bundle and then cleared it a hundred lines later, among flags belonging to
-# cpp_hmc_fit_gp. compute_param_layout() reads that field to allocate the
-# trend/seasonal/short-term blocks, so it allocated none of them while R went
-# on naming their columns, and every multi-scale column was read at an offset
-# holding something else.
+# A multi-scale temporal term paired with an AREAL spatial field. Were
+# data.has_multiscale_temporal cleared after the temporal bundle set it,
+# compute_param_layout() would allocate none of the trend/seasonal/short-term
+# blocks while R went on naming their columns, and every multi-scale column
+# would be read at an offset holding something else.
 #
 # The arbiter is the prior support, as in test-gp-sampler-blocks.R: rho_short
 # is logit-mapped onto the OPEN interval (-1, 1) and the variances are

@@ -108,7 +108,6 @@ fit_hmc <- function(formula,
                         spatiotemporal, zi, latent, priors, re_param)
   model_type <- inp$model_type
   hmc_data <- inp$hmc_data
-  use_gp_sampler <- inp$use_gp_sampler
   gp_info <- inp$gp_info
   spatial_info <- inp$spatial_info
   temporal_info <- inp$temporal_info
@@ -121,6 +120,7 @@ fit_hmc <- function(formula,
   priors <- inp$priors
   re_params <- inp$bundles$re_params
   spatial_params <- inp$bundles$spatial_params
+  gp_params <- inp$bundles$gp_params
   temporal_params <- inp$bundles$temporal_params
   prior_params <- inp$bundles$prior_params
   zi_params <- inp$bundles$zi_params
@@ -198,102 +198,300 @@ fit_hmc <- function(formula,
   concurrent_chains <- min(cores, chains)
   n_threads_within <- as.integer(cores %/% concurrent_chains)
 
-  # Run sampler - branch based on GP vs non-GP spatial
-  if (use_gp_sampler) {
-    # Bundle GP parameters into list for C++
-    gp_params <- list(
-      gp_type = gp_info$gp_type,
-      coords = gp_info$coords,
-      nn_idx = as.integer(gp_info$nn_idx),
-      nn_dist = gp_info$nn_dist,
-      nn_order = as.integer(gp_info$nn_order),
-      nn_order_inv = as.integer(gp_info$nn_order_inv),
-      nn_neighbor_dist = gp_info$nn_neighbor_dist,  # Phase 1.3: cached pairwise distances
-      nn = as.integer(gp_info$nn),
-      cov_type = gp_info$cov_type,
-      nu = gp_info$nu %||% 1.5,  # Default nu for non-Matern covariances
-      shared = gp_info$shared,
-      sigma2_prior_U = priors$gp_sigma2_prior_U %||% 1.0,
-      sigma2_prior_alpha = priors$gp_sigma2_prior_alpha %||% 0.01,
-      phi_prior_lower = priors$gp_phi_prior_lower %||% 0.01,
-      phi_prior_upper = priors$gp_phi_prior_upper %||% 100.0,
-      # HSGP parameters
-      hsgp_m = as.integer(gp_info$hsgp_m %||% 8L),
-      hsgp_c = gp_info$hsgp_c %||% 1.5,
-      # GP solver configuration
-      # Observation-to-location mapping (1-based)
-      gp_obs_to_loc = as.integer(gp_info$gp_obs_to_loc),
-      n_unique = as.integer(gp_info$n_unique),
-      # GP parameterization
-      parameterization = gp_info$parameterization %||% "centered"
+  # B1b feature flag: route the 7 ratio families through the LikelihoodSpec
+  # path (autodiff only — no spatial / temporal / RE / latent factors,
+  # single chain, L = 0). B1c relaxed the ZI gate so the 8 ZI/hurdle/OI/ZOIB
+  # variants flow through the same path when the family supports them. Off
+  # by default; enabled only for the narrowest scope so the legacy backend
+  # stays the default for every other config.
+  SUPPORTED_SPEC_FAMILIES <- c("binomial", "poisson_gamma", "negbin_gamma",
+                               "negbin_negbin", "gamma_gamma", "lognormal",
+                               "beta_binomial")
+  SPEC_ZI_COMPAT <- list(
+    binomial      = c("none", "zi_binomial", "hurdle_binomial",
+                      "oi_binomial", "zoib"),
+    poisson_gamma = c("none", "zi_poisson", "hurdle_poisson"),
+    negbin_gamma  = c("none", "zi_negbin", "hurdle_negbin"),
+    negbin_negbin = c("none", "zi_negbin", "hurdle_negbin"),
+    gamma_gamma   = "none",
+    lognormal     = "none",
+    beta_binomial = "none"
+  )
+  use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", FALSE)) ||
+    identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
+  zi_type_str <- zi_info$type %||% "none"
+  zi_supported <- (model_type %in% SUPPORTED_SPEC_FAMILIES) &&
+    (zi_type_str %in% (SPEC_ZI_COMPAT[[model_type]] %||% "none"))
+  # B1d-1: allow single-grouping-factor RE on the spec path — random
+  # intercepts AND uncorrelated random slopes (n_coefs >= 1, correlated
+  # off). Multi-term (crossed/nested) and correlated slopes (LKJ) still
+  # fall back to legacy until B1d-2 wires them up.
+  n_re_groups_v <- hmc_data$n_re_groups %||% 0L
+  n_re_terms_v  <- hmc_data$n_re_terms %||% 0L
+  re_supported <- (n_re_groups_v == 0L && n_re_terms_v == 0L) ||
+    (n_re_groups_v > 0L && n_re_terms_v <= 1L &&
+     isFALSE(has_re_correlated_slopes))
+  # B1d Step 2: allow ICAR / BYM2 (non-collapsed) on the spec path. Collapsed
+  # parameterisations, CAR_PROPER, GP / HSGP / multiscale GP, and RSR still
+  # fall back to legacy.
+  spatial_type_v <- spatial_info$type %||% "none"
+  spatial_param_v <- spatial_info$parameterization %||% "standard"
+  spatial_supported <- identical(spatial_type_v, "none") ||
+    (spatial_type_v %in% c("icar", "bym2") &&
+     !identical(spatial_param_v, "collapsed") &&
+     is.null(spatial_info$rsr_basis))
+  # B1d Step 3: allow RW1 / RW2 / AR1 temporal. Temporal GP / multiscale /
+  # cyclic still fall back to legacy.
+  temporal_type_v <- temporal_info$type %||% "none"
+  temporal_supported <- identical(temporal_type_v, "none") ||
+    (temporal_type_v %in% TEMPORAL_TYPES_SINGLE &&
+     !isTRUE(temporal_info$precision_structure$cyclic) &&
+     is.null(temporal_info$rtr_basis))
+  specs_eligible <- use_specs_path &&
+    family_handcoded(family, model_type) &&
+    zi_supported &&
+    re_supported &&
+    spatial_supported &&
+    temporal_supported &&
+    identical(latent_info$type, "none") &&
+    isFALSE(svc_params$has_svc) &&
+    isFALSE(tvc_params$has_tvc) &&
+    isFALSE(st_params$has_spatiotemporal) &&
+    as.integer(L) == 0L &&
+    as.integer(chains) == 1L
+
+  if (specs_eligible) {
+    num_link   <- if (model_type %in% c("binomial", "beta_binomial")) "logit" else "log"
+    denom_link <- "log"
+    cfg <- list(family = model_type, zi = zi_type_str,
+                num_link = num_link, denom_link = denom_link)
+    # OI uses X_oi only (no ZI block); ZOIB uses both; all other inflation
+    # types use X_zi only. Mirrors zi_info shape from prepare_zi_for_hmc /
+    # the family-built-in ZI path.
+    has_zi_block <- !(zi_type_str %in% c("none", "oi_binomial"))
+    has_oi_block <- zi_type_str %in% c("oi_binomial", "zoib")
+    if (has_zi_block) cfg$X_zi <- zi_info$X_zi
+    if (has_oi_block) cfg$X_oi <- zi_info$X_oi
+    # Pass the same ZI / OI prior scales the legacy backend uses so a path
+    # switch does not silently change the prior (the bridge defaults to
+    # tulpa's engine default of 2.5 otherwise; legacy default is 10.0).
+    if (has_zi_block || has_oi_block) {
+      cfg$zi_prior_sd <- sp$zi_prior_sd
+      cfg$oi_prior_sd <- sp$zi_prior_sd
+    }
+    # X_list carries one design matrix per process. Single-process families
+    # (binomial / beta_binomial) pass length-1; two-process families append
+    # X_denom. Adding a 3-process family is a list element, not a new arg.
+    # NOTE: this set must mirror the n_processes value each builder returns
+    # in lik_dispatch.cpp. The bridge cross-checks and errors on mismatch.
+    ONE_PROCESS_FAMILIES <- c("binomial", "beta_binomial")
+    X_list <- if (model_type %in% ONE_PROCESS_FAMILIES) {
+      list(hmc_data$X_num)
+    } else {
+      list(hmc_data$X_num, hmc_data$X_denom)
+    }
+
+    # Reorder q_init from the legacy layout to tulpa's generic layout. With
+    # only ZI/OI present (B1c) the difference reduces to extras position;
+    # B1d Step 1 also adds an RE block (1 + n_re_groups) between betas and
+    # extras in BOTH layouts. The reorder rule generalises:
+    #   Legacy: [betas | re | extras | zi | oi]
+    #   Spec  : [betas | re | zi | oi | extras]
+    # i.e. every middle block keeps its position; only `extras` moves to the
+    # tail. Slicing by known block sizes reconstructs the right ordering
+    # without parsing the engine's ParamLayout struct.
+    n_extra_per_family <- switch(model_type,
+      binomial = 0L, beta_binomial = 1L, poisson_gamma = 1L,
+      negbin_gamma = 2L, negbin_negbin = 2L, gamma_gamma = 2L,
+      lognormal = 2L, 0L
+    )
+    p_total_design <- (hmc_data$p_num %||% 0L) +
+      (if (model_type %in% ONE_PROCESS_FAMILIES) 0L else (hmc_data$p_denom %||% 0L))
+    # RE block size on the engine's layout. With slopes, each group carries
+    # n_coefs values (intercept + slope coefficients) and there is one
+    # log_sigma per coefficient; without slopes the legacy single-term
+    # branch is `1 + n_re_groups`.
+    n_coefs_re_v <- if (has_re_slopes && n_re_terms_v > 0L) {
+      as.integer(hmc_data$re_terms[[1]]$n_coefs)
+    } else {
+      1L
+    }
+    p_re_n <- if (n_re_groups_v > 0L) {
+      if (has_re_slopes) {
+        n_coefs_re_v + n_re_groups_v * n_coefs_re_v
+      } else {
+        1L + n_re_groups_v
+      }
+    } else {
+      0L
+    }
+    p_spatial_n <- switch(spatial_type_v,
+      icar = 1L + (spatial_info$n_units %||% 0L),
+      bym2 = 2L + 2L * (spatial_info$n_units %||% 0L),
+      0L
+    )
+    p_temporal_n <- if (temporal_type_v %in% TEMPORAL_TYPES_SINGLE) {
+      hyper <- if (temporal_type_v == "ar1") 2L else 1L
+      hyper + (temporal_info$n_temporal_params %||% 0L)
+    } else 0L
+    p_zi_n <- if (has_zi_block) ncol(zi_info$X_zi) else 0L
+    p_oi_n <- if (has_oi_block) ncol(zi_info$X_oi) else 0L
+
+    q_init_spec <- as.numeric(q_init)
+    # Reorder rule (legacy q produced by initialize_hmc_params_full):
+    #   Legacy: [betas | re | extras | spatial | temporal | zi | oi]
+    #   Spec  : [betas | re | spatial | temporal | zi | oi | extras]
+    # `extras` (phi/shape/sigma) sits BEFORE spatial in legacy and AT THE END
+    # in the generic spec layout. Every other middle block keeps its slot.
+    need_reorder <- (n_extra_per_family > 0L) &&
+      (p_re_n > 0L || p_spatial_n > 0L || p_temporal_n > 0L ||
+       has_zi_block || has_oi_block)
+    if (need_reorder) {
+      s <- 1L
+      beta_seg <- q_init_spec[s:(s + p_total_design - 1L)]; s <- s + p_total_design
+      re_seg <- if (p_re_n > 0L) {
+        v <- q_init_spec[s:(s + p_re_n - 1L)]; s <- s + p_re_n; v
+      } else numeric(0)
+      extras_seg <- if (n_extra_per_family > 0L) {
+        v <- q_init_spec[s:(s + n_extra_per_family - 1L)]; s <- s + n_extra_per_family; v
+      } else numeric(0)
+      spatial_seg <- if (p_spatial_n > 0L) {
+        v <- q_init_spec[s:(s + p_spatial_n - 1L)]; s <- s + p_spatial_n; v
+      } else numeric(0)
+      temporal_seg <- if (p_temporal_n > 0L) {
+        v <- q_init_spec[s:(s + p_temporal_n - 1L)]; s <- s + p_temporal_n; v
+      } else numeric(0)
+      zi_seg <- if (p_zi_n > 0L) {
+        v <- q_init_spec[s:(s + p_zi_n - 1L)]; s <- s + p_zi_n; v
+      } else numeric(0)
+      oi_seg <- if (p_oi_n > 0L) {
+        v <- q_init_spec[s:(s + p_oi_n - 1L)]; s <- s + p_oi_n; v
+      } else numeric(0)
+      q_init_spec <- c(beta_seg, re_seg, spatial_seg, temporal_seg,
+                       zi_seg, oi_seg, extras_seg)
+    }
+
+    # Bridge accepts a re_params list shaped like the legacy backend's;
+    # for B1d-1 we pass enough for both intercept-only and intercept+slopes
+    # single-grouping-factor RE. When RE is absent we pass an empty list so
+    # the bridge skips the RE block.
+    re_params_spec <- if (p_re_n > 0L) {
+      out <- list(
+        group           = as.integer(hmc_data$re_group),
+        n_groups        = as.integer(n_re_groups_v),
+        n_terms         = as.integer(n_re_terms_v),
+        has_slopes      = isTRUE(has_re_slopes),
+        has_correlated_slopes = FALSE,  # B1d-1 gates correlated out
+        parameterization = as.integer(if (re_param == "centered") 0L else 1L)
+      )
+      if (isTRUE(has_re_slopes)) {
+        slope_mat <- hmc_data$slope_matrices[[1]]
+        out$n_coefs       <- as.integer(n_coefs_re_v)
+        out$slope_matrix  <- as.matrix(slope_mat)
+      }
+      out
+    } else list()
+
+    # Bridge accepts a spatial_params list mirroring the legacy backend.
+    # ICAR / BYM2 (non-collapsed) only — both require adjacency + Q_inv/L_Q
+    # (precomputed in R). Empty list means "no spatial".
+    spatial_params_spec <- if (p_spatial_n > 0L) {
+      list(
+        type             = spatial_type_v,
+        group            = as.integer(spatial_info$group),
+        n_units          = as.integer(spatial_info$n_units),
+        adj_row_ptr      = as.integer(spatial_info$adj_row_ptr),
+        adj_col_idx      = as.integer(spatial_info$adj_col_idx),
+        n_neighbors      = as.integer(spatial_info$n_neighbors),
+        bym2_scale       = spatial_info$bym2_scale %||% 1.0,
+        Q_inv            = spatial_info$Q_inv,
+        L_Q              = spatial_info$L_Q,
+        parameterization = spatial_param_v
+      )
+    } else list()
+
+    # Bridge accepts a temporal_params list. RW1/RW2/AR1 only on the spec
+    # path; GP / multiscale / cyclic still fall back to legacy (gated above).
+    temporal_params_spec <- if (p_temporal_n > 0L) {
+      list(
+        type      = temporal_type_v,
+        time_idx  = as.integer(temporal_info$time_index),
+        group_idx = as.integer(temporal_info$group_index),
+        n_times   = as.integer(temporal_info$n_times),
+        n_groups  = as.integer(temporal_info$n_groups),
+        n_params  = as.integer(temporal_info$n_temporal_params),
+        cyclic    = isTRUE(temporal_info$precision_structure$cyclic),
+        shared    = isTRUE(temporal_info$shared %||% TRUE),
+        tau_shape = tau_temporal_shape,
+        tau_rate  = tau_temporal_rate,
+        rho_prior_a = rho_temporal_ab[["a"]],
+        rho_prior_b = rho_temporal_ab[["b"]]
+      )
+    } else list()
+
+    fit_raw <- cpp_tulpaRatio_run_nuts_specs(
+      y_num             = as.integer(hmc_data$y_num),
+      y_denom           = as.integer(hmc_data$y_denom),
+      y_num_cont        = as.numeric(hmc_data$y_num_cont),
+      y_denom_cont      = as.numeric(hmc_data$y_denom_cont),
+      X_list            = X_list,
+      cfg_list          = cfg,
+      init              = q_init_spec,
+      n_iter            = as.integer(iter),
+      n_warmup          = as.integer(warmup),
+      max_treedepth     = as.integer(max_treedepth %||% 10L),
+      adapt_delta       = if (adapt_delta_value < 0) 0.8 else adapt_delta_value,
+      seed              = as.integer(seed),
+      verbose           = isTRUE(verbose),
+      gradient_mode     = if (identical(gradient_mode, "auto")) "A_r" else gradient_mode,
+      sigma_beta        = sigma_beta,
+      phi_prior_shape   = phi_shape,
+      phi_prior_rate    = phi_rate,
+      sigma_prior_scale = sigma_re_scale,
+      re_params         = re_params_spec,
+      spatial_params    = spatial_params_spec,
+      temporal_params   = temporal_params_spec
     )
 
-    # Bundle multiscale GP parameters
-    ms_gp_params <- list(
-      range_local_lower = gp_info$range_local_lower,
-      range_local_upper = gp_info$range_local_upper,
-      range_regional_lower = gp_info$range_regional_lower,
-      range_regional_upper = gp_info$range_regional_upper,
-      sigma2_local_prior_U = priors$ms_sigma2_local_prior_U %||% 1.0,
-      sigma2_local_prior_alpha = priors$ms_sigma2_local_prior_alpha %||% 0.01,
-      sigma2_regional_prior_U = priors$ms_sigma2_regional_prior_U %||% 1.0,
-      sigma2_regional_prior_alpha = priors$ms_sigma2_regional_prior_alpha %||% 0.01,
-      sampler = gp_info$sampler %||% "auto"
-    )
-
-    # Bundle multiscale temporal parameters
-    ms_temporal_params <- list(
-      type = ms_temporal_info$ms_temporal_type,
-      time_index = as.integer(ms_temporal_info$ms_time_index),
-      group_index = as.integer(ms_temporal_info$ms_group_index),
-      n_times = as.integer(ms_temporal_info$ms_n_times),
-      n_groups = as.integer(ms_temporal_info$ms_n_groups),
-      trend_type = ms_temporal_info$trend_type,
-      seasonal_period = as.integer(ms_temporal_info$seasonal_period),
-      short_term_type = ms_temporal_info$short_term_type,
-      shared = ms_temporal_info$shared,
-      sigma2_trend_prior_U = priors$ms_sigma2_trend_prior_U %||% 1.0,
-      sigma2_trend_prior_alpha = priors$ms_sigma2_trend_prior_alpha %||% 0.01,
-      sigma2_seasonal_prior_U = priors$ms_sigma2_seasonal_prior_U %||% 1.0,
-      sigma2_seasonal_prior_alpha = priors$ms_sigma2_seasonal_prior_alpha %||% 0.01,
-      sigma2_short_prior_U = priors$ms_sigma2_short_prior_U %||% 1.0,
-      sigma2_short_prior_alpha = priors$ms_sigma2_short_prior_alpha %||% 0.01
-    )
-
-    rsr_params <- restriction_params(spatial_info$rsr_basis)
-
-    # Use O2-safe interface with single List parameter
-    # This minimizes Rcpp template instantiation at ABI boundary
-    fit_raw <- cpp_hmc_fit_gp_v2(list(
+    # Reorder samples columns from tulpa's generic layout
+    # ([betas | re | spatial | temporal | zi | oi | extras]) back to legacy
+    # ordering ([betas | re | extras | spatial | temporal | zi | oi]) so
+    # hmc_param_layout() reads each block from the slot it expects.
+    if (need_reorder) {
+      S <- fit_raw$samples
+      n_total <- ncol(S)
+      off <- 0L
+      beta_cols <- if (p_total_design > 0L) (off + 1L):(off + p_total_design) else integer(0); off <- off + p_total_design
+      re_cols   <- if (p_re_n > 0L)         (off + 1L):(off + p_re_n)         else integer(0); off <- off + p_re_n
+      sp_cols   <- if (p_spatial_n > 0L)    (off + 1L):(off + p_spatial_n)    else integer(0); off <- off + p_spatial_n
+      t_cols    <- if (p_temporal_n > 0L)   (off + 1L):(off + p_temporal_n)   else integer(0); off <- off + p_temporal_n
+      zi_cols   <- if (p_zi_n > 0L)         (off + 1L):(off + p_zi_n)         else integer(0); off <- off + p_zi_n
+      oi_cols   <- if (p_oi_n > 0L)         (off + 1L):(off + p_oi_n)         else integer(0); off <- off + p_oi_n
+      ex_cols   <- if (n_extra_per_family > 0L) (off + 1L):n_total            else integer(0)
+      new_order <- c(beta_cols, re_cols, ex_cols,
+                     sp_cols, t_cols, zi_cols, oi_cols)
+      fit_raw$samples <- S[, new_order, drop = FALSE]
+    }
+  } else {
+    fit_raw <- cpp_hmc_fit(
       q_init = q_init,
       y_num = as.integer(hmc_data$y_num),
       y_denom = as.integer(hmc_data$y_denom),
-      y_num_cont = as.numeric(hmc_data$y_num_cont),
+      y_num_cont = hmc_data$y_num_cont,
       y_denom_cont = hmc_data$y_denom_cont,
       X_num = hmc_data$X_num,
       X_denom = hmc_data$X_denom,
-      re_params = re_params,
       family = family_params(family, model_type),
-      # Bundled parameter lists
+      re_params = re_params,
+      spatial_params = spatial_params,
       gp_params = gp_params,
-      ms_gp_params = ms_gp_params,
-      ms_temporal_params = ms_temporal_params,
-      rsr_params = rsr_params,
       temporal_params = temporal_params,
+      prior_params = prior_params,
+      zi_params = zi_params,
       latent_params = latent_params,
       st_params = st_params,
       tvc_params = tvc_params,
       svc_params = svc_params,
-      # Priors
-      sigma_beta = sigma_beta,
-      sigma_re_scale = sigma_re_scale,
-      phi_prior_shape = phi_shape,
-      phi_prior_rate = phi_rate,
-      # Zero-inflation
-      zi_type_str = zi_info$type,
-      X_zi = zi_info$X_zi,
-      zi_prior_sd = sp$zi_prior_sd,
-      # Sampler
       n_iter = as.integer(iter),
       n_warmup = as.integer(warmup),
       L = as.integer(L),
@@ -303,320 +501,11 @@ fit_hmc <- function(formula,
       verbose = verbose,
       gradient_mode_str = gradient_mode,
       max_treedepth = as.integer(max_treedepth),
+      metric_str = metric,
       adapt_delta = adapt_delta_value,
-      metric_str = metric
-    ))
-  } else {
-
-
-    # B1b feature flag: route the 7 ratio families through the LikelihoodSpec
-    # path (autodiff only — no spatial / temporal / RE / latent factors,
-    # single chain, L = 0). B1c relaxed the ZI gate so the 8 ZI/hurdle/OI/ZOIB
-    # variants flow through the same path when the family supports them. Off
-    # by default; enabled only for the narrowest scope so the legacy backend
-    # stays the default for every other config.
-    SUPPORTED_SPEC_FAMILIES <- c("binomial", "poisson_gamma", "negbin_gamma",
-                                 "negbin_negbin", "gamma_gamma", "lognormal",
-                                 "beta_binomial")
-    SPEC_ZI_COMPAT <- list(
-      binomial      = c("none", "zi_binomial", "hurdle_binomial",
-                        "oi_binomial", "zoib"),
-      poisson_gamma = c("none", "zi_poisson", "hurdle_poisson"),
-      negbin_gamma  = c("none", "zi_negbin", "hurdle_negbin"),
-      negbin_negbin = c("none", "zi_negbin", "hurdle_negbin"),
-      gamma_gamma   = "none",
-      lognormal     = "none",
-      beta_binomial = "none"
+      walnuts = isTRUE(walnuts),
+      n_cores = as.integer(concurrent_chains)
     )
-    use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", FALSE)) ||
-      identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
-    zi_type_str <- zi_info$type %||% "none"
-    zi_supported <- (model_type %in% SUPPORTED_SPEC_FAMILIES) &&
-      (zi_type_str %in% (SPEC_ZI_COMPAT[[model_type]] %||% "none"))
-    # B1d-1: allow single-grouping-factor RE on the spec path — random
-    # intercepts AND uncorrelated random slopes (n_coefs >= 1, correlated
-    # off). Multi-term (crossed/nested) and correlated slopes (LKJ) still
-    # fall back to legacy until B1d-2 wires them up.
-    n_re_groups_v <- hmc_data$n_re_groups %||% 0L
-    n_re_terms_v  <- hmc_data$n_re_terms %||% 0L
-    re_supported <- (n_re_groups_v == 0L && n_re_terms_v == 0L) ||
-      (n_re_groups_v > 0L && n_re_terms_v <= 1L &&
-       isFALSE(has_re_correlated_slopes))
-    # B1d Step 2: allow ICAR / BYM2 (non-collapsed) on the spec path. Collapsed
-    # parameterisations, CAR_PROPER, GP / HSGP / multiscale GP, and RSR still
-    # fall back to legacy.
-    spatial_type_v <- spatial_info$type %||% "none"
-    spatial_param_v <- spatial_info$parameterization %||% "standard"
-    spatial_supported <- identical(spatial_type_v, "none") ||
-      (spatial_type_v %in% c("icar", "bym2") &&
-       !identical(spatial_param_v, "collapsed") &&
-       is.null(spatial_info$rsr_basis))
-    # B1d Step 3: allow RW1 / RW2 / AR1 temporal. Temporal GP / multiscale /
-    # cyclic still fall back to legacy.
-    temporal_type_v <- temporal_info$type %||% "none"
-    temporal_supported <- identical(temporal_type_v, "none") ||
-      (temporal_type_v %in% TEMPORAL_TYPES_SINGLE &&
-       !isTRUE(temporal_info$precision_structure$cyclic) &&
-       is.null(temporal_info$rtr_basis))
-    specs_eligible <- use_specs_path &&
-      family_handcoded(family, model_type) &&
-      zi_supported &&
-      re_supported &&
-      spatial_supported &&
-      temporal_supported &&
-      identical(latent_info$type, "none") &&
-      isFALSE(svc_params$has_svc) &&
-      isFALSE(tvc_params$has_tvc) &&
-      isFALSE(st_params$has_spatiotemporal) &&
-      as.integer(L) == 0L &&
-      as.integer(chains) == 1L
-
-    if (specs_eligible) {
-      num_link   <- if (model_type %in% c("binomial", "beta_binomial")) "logit" else "log"
-      denom_link <- "log"
-      cfg <- list(family = model_type, zi = zi_type_str,
-                  num_link = num_link, denom_link = denom_link)
-      # OI uses X_oi only (no ZI block); ZOIB uses both; all other inflation
-      # types use X_zi only. Mirrors zi_info shape from prepare_zi_for_hmc /
-      # the family-built-in ZI path.
-      has_zi_block <- !(zi_type_str %in% c("none", "oi_binomial"))
-      has_oi_block <- zi_type_str %in% c("oi_binomial", "zoib")
-      if (has_zi_block) cfg$X_zi <- zi_info$X_zi
-      if (has_oi_block) cfg$X_oi <- zi_info$X_oi
-      # Pass the same ZI / OI prior scales the legacy backend uses so a path
-      # switch does not silently change the prior (the bridge defaults to
-      # tulpa's engine default of 2.5 otherwise; legacy default is 10.0).
-      if (has_zi_block || has_oi_block) {
-        cfg$zi_prior_sd <- sp$zi_prior_sd
-        cfg$oi_prior_sd <- sp$zi_prior_sd
-      }
-      # X_list carries one design matrix per process. Single-process families
-      # (binomial / beta_binomial) pass length-1; two-process families append
-      # X_denom. Adding a 3-process family is a list element, not a new arg.
-      # NOTE: this set must mirror the n_processes value each builder returns
-      # in lik_dispatch.cpp. The bridge cross-checks and errors on mismatch.
-      ONE_PROCESS_FAMILIES <- c("binomial", "beta_binomial")
-      X_list <- if (model_type %in% ONE_PROCESS_FAMILIES) {
-        list(hmc_data$X_num)
-      } else {
-        list(hmc_data$X_num, hmc_data$X_denom)
-      }
-
-      # Reorder q_init from the legacy layout to tulpa's generic layout. With
-      # only ZI/OI present (B1c) the difference reduces to extras position;
-      # B1d Step 1 also adds an RE block (1 + n_re_groups) between betas and
-      # extras in BOTH layouts. The reorder rule generalises:
-      #   Legacy: [betas | re | extras | zi | oi]
-      #   Spec  : [betas | re | zi | oi | extras]
-      # i.e. every middle block keeps its position; only `extras` moves to the
-      # tail. Slicing by known block sizes reconstructs the right ordering
-      # without parsing the engine's ParamLayout struct.
-      n_extra_per_family <- switch(model_type,
-        binomial = 0L, beta_binomial = 1L, poisson_gamma = 1L,
-        negbin_gamma = 2L, negbin_negbin = 2L, gamma_gamma = 2L,
-        lognormal = 2L, 0L
-      )
-      p_total_design <- (hmc_data$p_num %||% 0L) +
-        (if (model_type %in% ONE_PROCESS_FAMILIES) 0L else (hmc_data$p_denom %||% 0L))
-      # RE block size on the engine's layout. With slopes, each group carries
-      # n_coefs values (intercept + slope coefficients) and there is one
-      # log_sigma per coefficient; without slopes the legacy single-term
-      # branch is `1 + n_re_groups`.
-      n_coefs_re_v <- if (has_re_slopes && n_re_terms_v > 0L) {
-        as.integer(hmc_data$re_terms[[1]]$n_coefs)
-      } else {
-        1L
-      }
-      p_re_n <- if (n_re_groups_v > 0L) {
-        if (has_re_slopes) {
-          n_coefs_re_v + n_re_groups_v * n_coefs_re_v
-        } else {
-          1L + n_re_groups_v
-        }
-      } else {
-        0L
-      }
-      p_spatial_n <- switch(spatial_type_v,
-        icar = 1L + (spatial_info$n_units %||% 0L),
-        bym2 = 2L + 2L * (spatial_info$n_units %||% 0L),
-        0L
-      )
-      p_temporal_n <- if (temporal_type_v %in% TEMPORAL_TYPES_SINGLE) {
-        hyper <- if (temporal_type_v == "ar1") 2L else 1L
-        hyper + (temporal_info$n_temporal_params %||% 0L)
-      } else 0L
-      p_zi_n <- if (has_zi_block) ncol(zi_info$X_zi) else 0L
-      p_oi_n <- if (has_oi_block) ncol(zi_info$X_oi) else 0L
-
-      q_init_spec <- as.numeric(q_init)
-      # Reorder rule (legacy q produced by initialize_hmc_params_full):
-      #   Legacy: [betas | re | extras | spatial | temporal | zi | oi]
-      #   Spec  : [betas | re | spatial | temporal | zi | oi | extras]
-      # `extras` (phi/shape/sigma) sits BEFORE spatial in legacy and AT THE END
-      # in the generic spec layout. Every other middle block keeps its slot.
-      need_reorder <- (n_extra_per_family > 0L) &&
-        (p_re_n > 0L || p_spatial_n > 0L || p_temporal_n > 0L ||
-         has_zi_block || has_oi_block)
-      if (need_reorder) {
-        s <- 1L
-        beta_seg <- q_init_spec[s:(s + p_total_design - 1L)]; s <- s + p_total_design
-        re_seg <- if (p_re_n > 0L) {
-          v <- q_init_spec[s:(s + p_re_n - 1L)]; s <- s + p_re_n; v
-        } else numeric(0)
-        extras_seg <- if (n_extra_per_family > 0L) {
-          v <- q_init_spec[s:(s + n_extra_per_family - 1L)]; s <- s + n_extra_per_family; v
-        } else numeric(0)
-        spatial_seg <- if (p_spatial_n > 0L) {
-          v <- q_init_spec[s:(s + p_spatial_n - 1L)]; s <- s + p_spatial_n; v
-        } else numeric(0)
-        temporal_seg <- if (p_temporal_n > 0L) {
-          v <- q_init_spec[s:(s + p_temporal_n - 1L)]; s <- s + p_temporal_n; v
-        } else numeric(0)
-        zi_seg <- if (p_zi_n > 0L) {
-          v <- q_init_spec[s:(s + p_zi_n - 1L)]; s <- s + p_zi_n; v
-        } else numeric(0)
-        oi_seg <- if (p_oi_n > 0L) {
-          v <- q_init_spec[s:(s + p_oi_n - 1L)]; s <- s + p_oi_n; v
-        } else numeric(0)
-        q_init_spec <- c(beta_seg, re_seg, spatial_seg, temporal_seg,
-                         zi_seg, oi_seg, extras_seg)
-      }
-
-      # Bridge accepts a re_params list shaped like the legacy backend's;
-      # for B1d-1 we pass enough for both intercept-only and intercept+slopes
-      # single-grouping-factor RE. When RE is absent we pass an empty list so
-      # the bridge skips the RE block.
-      re_params_spec <- if (p_re_n > 0L) {
-        out <- list(
-          group           = as.integer(hmc_data$re_group),
-          n_groups        = as.integer(n_re_groups_v),
-          n_terms         = as.integer(n_re_terms_v),
-          has_slopes      = isTRUE(has_re_slopes),
-          has_correlated_slopes = FALSE,  # B1d-1 gates correlated out
-          parameterization = as.integer(if (re_param == "centered") 0L else 1L)
-        )
-        if (isTRUE(has_re_slopes)) {
-          slope_mat <- hmc_data$slope_matrices[[1]]
-          out$n_coefs       <- as.integer(n_coefs_re_v)
-          out$slope_matrix  <- as.matrix(slope_mat)
-        }
-        out
-      } else list()
-
-      # Bridge accepts a spatial_params list mirroring the legacy backend.
-      # ICAR / BYM2 (non-collapsed) only — both require adjacency + Q_inv/L_Q
-      # (precomputed in R). Empty list means "no spatial".
-      spatial_params_spec <- if (p_spatial_n > 0L) {
-        list(
-          type             = spatial_type_v,
-          group            = as.integer(spatial_info$group),
-          n_units          = as.integer(spatial_info$n_units),
-          adj_row_ptr      = as.integer(spatial_info$adj_row_ptr),
-          adj_col_idx      = as.integer(spatial_info$adj_col_idx),
-          n_neighbors      = as.integer(spatial_info$n_neighbors),
-          bym2_scale       = spatial_info$bym2_scale %||% 1.0,
-          Q_inv            = spatial_info$Q_inv,
-          L_Q              = spatial_info$L_Q,
-          parameterization = spatial_param_v
-        )
-      } else list()
-
-      # Bridge accepts a temporal_params list. RW1/RW2/AR1 only on the spec
-      # path; GP / multiscale / cyclic still fall back to legacy (gated above).
-      temporal_params_spec <- if (p_temporal_n > 0L) {
-        list(
-          type      = temporal_type_v,
-          time_idx  = as.integer(temporal_info$time_index),
-          group_idx = as.integer(temporal_info$group_index),
-          n_times   = as.integer(temporal_info$n_times),
-          n_groups  = as.integer(temporal_info$n_groups),
-          n_params  = as.integer(temporal_info$n_temporal_params),
-          cyclic    = isTRUE(temporal_info$precision_structure$cyclic),
-          shared    = isTRUE(temporal_info$shared %||% TRUE),
-          tau_shape = tau_temporal_shape,
-          tau_rate  = tau_temporal_rate,
-          rho_prior_a = rho_temporal_ab[["a"]],
-          rho_prior_b = rho_temporal_ab[["b"]]
-        )
-      } else list()
-
-      fit_raw <- cpp_tulpaRatio_run_nuts_specs(
-        y_num             = as.integer(hmc_data$y_num),
-        y_denom           = as.integer(hmc_data$y_denom),
-        y_num_cont        = as.numeric(hmc_data$y_num_cont),
-        y_denom_cont      = as.numeric(hmc_data$y_denom_cont),
-        X_list            = X_list,
-        cfg_list          = cfg,
-        init              = q_init_spec,
-        n_iter            = as.integer(iter),
-        n_warmup          = as.integer(warmup),
-        max_treedepth     = as.integer(max_treedepth %||% 10L),
-        adapt_delta       = if (adapt_delta_value < 0) 0.8 else adapt_delta_value,
-        seed              = as.integer(seed),
-        verbose           = isTRUE(verbose),
-        gradient_mode     = if (identical(gradient_mode, "auto")) "A_r" else gradient_mode,
-        sigma_beta        = sigma_beta,
-        phi_prior_shape   = phi_shape,
-        phi_prior_rate    = phi_rate,
-        sigma_prior_scale = sigma_re_scale,
-        re_params         = re_params_spec,
-        spatial_params    = spatial_params_spec,
-        temporal_params   = temporal_params_spec
-      )
-
-      # Reorder samples columns from tulpa's generic layout
-      # ([betas | re | spatial | temporal | zi | oi | extras]) back to legacy
-      # ordering ([betas | re | extras | spatial | temporal | zi | oi]) so
-      # hmc_param_layout() reads each block from the slot it expects.
-      if (need_reorder) {
-        S <- fit_raw$samples
-        n_total <- ncol(S)
-        off <- 0L
-        beta_cols <- if (p_total_design > 0L) (off + 1L):(off + p_total_design) else integer(0); off <- off + p_total_design
-        re_cols   <- if (p_re_n > 0L)         (off + 1L):(off + p_re_n)         else integer(0); off <- off + p_re_n
-        sp_cols   <- if (p_spatial_n > 0L)    (off + 1L):(off + p_spatial_n)    else integer(0); off <- off + p_spatial_n
-        t_cols    <- if (p_temporal_n > 0L)   (off + 1L):(off + p_temporal_n)   else integer(0); off <- off + p_temporal_n
-        zi_cols   <- if (p_zi_n > 0L)         (off + 1L):(off + p_zi_n)         else integer(0); off <- off + p_zi_n
-        oi_cols   <- if (p_oi_n > 0L)         (off + 1L):(off + p_oi_n)         else integer(0); off <- off + p_oi_n
-        ex_cols   <- if (n_extra_per_family > 0L) (off + 1L):n_total            else integer(0)
-        new_order <- c(beta_cols, re_cols, ex_cols,
-                       sp_cols, t_cols, zi_cols, oi_cols)
-        fit_raw$samples <- S[, new_order, drop = FALSE]
-      }
-    } else {
-      fit_raw <- cpp_hmc_fit(
-        q_init = q_init,
-        y_num = as.integer(hmc_data$y_num),
-        y_denom = as.integer(hmc_data$y_denom),
-        y_num_cont = hmc_data$y_num_cont,
-        y_denom_cont = hmc_data$y_denom_cont,
-        X_num = hmc_data$X_num,
-        X_denom = hmc_data$X_denom,
-        family = family_params(family, model_type),
-        re_params = re_params,
-        spatial_params = spatial_params,
-        temporal_params = temporal_params,
-        prior_params = prior_params,
-        zi_params = zi_params,
-        latent_params = latent_params,
-        st_params = st_params,
-        tvc_params = tvc_params,
-        svc_params = svc_params,
-        n_iter = as.integer(iter),
-        n_warmup = as.integer(warmup),
-        L = as.integer(L),
-        n_chains = as.integer(chains),
-        seed = as.integer(seed),
-        n_threads = n_threads_within,
-        verbose = verbose,
-        gradient_mode_str = gradient_mode,
-        max_treedepth = as.integer(max_treedepth),
-        metric_str = metric,
-        adapt_delta = adapt_delta_value,
-        walnuts = isTRUE(walnuts),
-        n_cores = as.integer(concurrent_chains)
-      )
-    }
   }
 
   # Divergences bias the draws whether or not progress is printed
@@ -668,8 +557,8 @@ fit_hmc <- function(formula,
 #' @inheritParams fit_hmc
 #' @return A list: `model_type`, `hmc_data`, the prepared structures
 #'   (`spatial_info`, `gp_info`, `temporal_info`, `zi_info`, `latent_info`,
-#'   `spatiotemporal_info`, `ms_temporal_info`, `svc_info`), `use_gp_sampler`,
-#'   the sampler priors `sp`, the filled `priors`, and `bundles`, the nine
+#'   `spatiotemporal_info`, `ms_temporal_info`, `svc_info`),
+#'   the sampler priors `sp`, the filled `priors`, and `bundles`, the ten
 #'   parameter lists in the order `build_model_data()` takes them
 #' @keywords internal
 sampler_inputs <- function(formula, data, family, spatial = NULL,
@@ -682,16 +571,9 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   # Extract data
   hmc_data <- prepare_hmc_data(formula, data, family, model_type)
 
-  # Prepare spatial structure
-  # Check if GP-based spatial (requires GP sampler) or multiscale temporal
-  # without areal spatial (ICAR/BYM2/pCAR can pair with MS_t via regular sampler)
-  has_areal_spatial <- !is.null(spatial) && !is.null(spatial$type) &&
-    spatial$type %in% c("car", "car_proper", "bym2")
-  use_gp_sampler <- is_gp_spatial(spatial) ||
-    (is_multiscale_temporal(temporal) && !has_areal_spatial)
-
-  if (use_gp_sampler) {
-    # GP spatial uses dedicated sampler
+  # Prepare spatial structure: a GP-type field (NNGP, HSGP, multi-scale GP)
+  # goes to the GP bundle, an areal one to the spatial bundle
+  if (is_gp_spatial(spatial)) {
     gp_info <- prepare_gp_for_hmc(spatial, data, hmc_data$N)
     gp_n_units <- if (gp_info$n_unique > 0L) gp_info$n_unique else hmc_data$N
     gp_group <- if (length(gp_info$gp_obs_to_loc) > 0) gp_info$gp_obs_to_loc else seq_len(hmc_data$N)
@@ -838,7 +720,9 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   )
 
   temporal_params <- list(
-    type = temporal_info$type,
+    # A time-varying coefficient travels in the TVC bundle and has no temporal
+    # main effect of its own
+    type = if (identical(temporal_info$type, "tvc")) "none" else temporal_info$type,
     time_idx = as.integer(temporal_info$time_index),
     group_idx = as.integer(temporal_info$group_index),
     n_times = as.integer(temporal_info$n_times),
@@ -862,9 +746,11 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     } else "centered",
     trend_type = temporal_info$trend %||% "rw1",
     short_term_type = temporal_info$short_term %||% "ar1",
-    seasonal_period = as.integer(temporal_info$precision_structure$seasonal_period %||% 0L),
+    seasonal_period = as.integer(temporal_info$seasonal %||% 0L),
     sigma2_trend_prior_U = priors$ms_sigma2_trend_prior_U %||% 1.0,
     sigma2_trend_prior_alpha = priors$ms_sigma2_trend_prior_alpha %||% 0.01,
+    sigma2_seasonal_prior_U = priors$ms_sigma2_seasonal_prior_U %||% 1.0,
+    sigma2_seasonal_prior_alpha = priors$ms_sigma2_seasonal_prior_alpha %||% 0.01,
     sigma2_short_prior_U = priors$ms_sigma2_short_prior_U %||% 1.0,
     sigma2_short_prior_alpha = priors$ms_sigma2_short_prior_alpha %||% 0.01
   )
@@ -1032,6 +918,8 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     tau_spatial_rate = tau_spatial_rate
   )
 
+  gp_params <- gp_bundle(gp_info, priors)
+
   zi_params <- list(
     type = zi_info$type,
     X = zi_info$X_zi,
@@ -1046,7 +934,6 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   list(
     model_type = model_type,
     hmc_data = hmc_data,
-    use_gp_sampler = use_gp_sampler,
     gp_info = gp_info,
     spatial_info = spatial_info,
     temporal_info = temporal_info,
@@ -1060,6 +947,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     bundles = list(
       re_params = re_params,
       spatial_params = spatial_params,
+      gp_params = gp_params,
       temporal_params = temporal_params,
       prior_params = prior_params,
       zi_params = zi_params,
@@ -1072,11 +960,58 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
 }
 
 
+#' The GP-type spatial field as the sampler reads it
+#'
+#' A NNGP, HSGP or multi-scale GP spatial field, with the priors on its
+#' hyperparameters; `gp_type = "none"` when the model has none.
+#'
+#' @param gp_info The list `prepare_gp_for_hmc()` returns, or `NULL`
+#' @param priors Filled prior list
+#' @return A named list
+#' @keywords internal
+gp_bundle <- function(gp_info, priors) {
+  if (is.null(gp_info) || identical(gp_info$gp_type %||% "none", "none")) {
+    return(list(gp_type = "none"))
+  }
+  list(
+    gp_type = gp_info$gp_type,
+    coords = gp_info$coords,
+    nn_idx = as.integer(gp_info$nn_idx),
+    nn_dist = as.numeric(gp_info$nn_dist),
+    nn_order = as.integer(gp_info$nn_order),
+    nn_order_inv = as.integer(gp_info$nn_order_inv),
+    nn_neighbor_dist = as.numeric(gp_info$nn_neighbor_dist),
+    nn = as.integer(gp_info$nn),
+    cov_type = gp_info$cov_type,
+    nu = gp_info$nu %||% 1.5,
+    shared = gp_info$shared,
+    parameterization = gp_info$parameterization %||% "centered",
+    gp_obs_to_loc = as.integer(gp_info$gp_obs_to_loc),
+    n_unique = as.integer(gp_info$n_unique),
+    sigma2_prior_U = priors$gp_sigma2_prior_U %||% 1.0,
+    sigma2_prior_alpha = priors$gp_sigma2_prior_alpha %||% 0.01,
+    phi_prior_lower = priors$gp_phi_prior_lower %||% 0.01,
+    phi_prior_upper = priors$gp_phi_prior_upper %||% 100.0,
+    hsgp_m = as.integer(gp_info$hsgp_m %||% 8L),
+    hsgp_c = gp_info$hsgp_c %||% 1.5,
+    range_local_lower = gp_info$range_local_lower,
+    range_local_upper = gp_info$range_local_upper,
+    range_regional_lower = gp_info$range_regional_lower,
+    range_regional_upper = gp_info$range_regional_upper,
+    sigma2_local_prior_U = priors$ms_sigma2_local_prior_U %||% 1.0,
+    sigma2_local_prior_alpha = priors$ms_sigma2_local_prior_alpha %||% 0.01,
+    sigma2_regional_prior_U = priors$ms_sigma2_regional_prior_U %||% 1.0,
+    sigma2_regional_prior_alpha = priors$ms_sigma2_regional_prior_alpha %||% 0.01,
+    sampler = gp_info$sampler %||% "auto"
+  )
+}
+
+
 #' The arguments `build_model_data()` reads, for a sampler entry point
 #'
 #' @param inputs The list `sampler_inputs()` returns
 #' @param family Model family
-#' @return A named list: responses, design matrices, family and the nine
+#' @return A named list: responses, design matrices, family and the ten
 #'   parameter bundles
 #' @keywords internal
 model_data_args <- function(inputs, family) {
@@ -2038,7 +1973,6 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
   }
 
   # Temporal (regular temporal effects, not TVC or multiscale)
-  # Note: multiscale temporal is handled by the GP sampler path which has its own param layout
   if (temporal_info$type != "none" && temporal_info$type != "tvc" &&
       temporal_info$type != "multiscale") {
     if (temporal_info$type == "gp") {
@@ -2054,7 +1988,7 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
     q_init <- c(q_init, rep(0.0, n_temporal_params))
   }
 
-  # Multiscale temporal: handled by GP sampler path
+  # Multiscale temporal
   # Layout: [log_sigma2_trend, trend[n_times], log_sigma2_seasonal, seasonal[period],
   #          log_sigma2_short, (logit_rho if AR1), short[n_times]]
   if (temporal_info$type == "multiscale") {
@@ -2370,7 +2304,7 @@ is_multiscale_temporal <- function(temporal) {
 #' @param gp A ratiod_gp or ratiod_multiscale spatial specification
 #' @param data Data frame with coordinate columns
 #' @param N Number of observations
-#' @return List of GP parameters for cpp_hmc_fit_gp
+#' @return List of GP parameters, read by gp_bundle()
 #' @keywords internal
 prepare_gp_for_hmc <- function(gp, data, N) {
   if (is.null(gp)) {

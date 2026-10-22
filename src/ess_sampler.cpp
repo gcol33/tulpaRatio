@@ -40,6 +40,7 @@ Rcpp::List cpp_ess_fit(
     Rcpp::List family,
     Rcpp::List re_params,
     Rcpp::List spatial_params,
+    Rcpp::List gp_params,
     Rcpp::List temporal_params,
     Rcpp::List prior_params,
     Rcpp::List zi_params,
@@ -60,7 +61,7 @@ Rcpp::List cpp_ess_fit(
 
     ModelData data = build_model_data(y_num, y_denom, y_num_cont, y_denom_cont,
                                       X_num, X_denom, family, re_params,
-                                      spatial_params, temporal_params,
+                                      spatial_params, gp_params, temporal_params,
                                       prior_params, zi_params, latent_params,
                                       st_params, tvc_params, svc_params);
     data.n_threads = 1;

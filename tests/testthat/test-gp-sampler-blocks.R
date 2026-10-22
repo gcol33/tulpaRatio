@@ -1,9 +1,7 @@
-# A GP spatial main effect routes the whole model to cpp_hmc_fit_gp_v2. That
-# entry used to be handed no spatiotemporal, latent, TVC or SVC bundle, so it
-# built a ModelData without those blocks while q_init and hmc_param_layout()
-# above it allocated and named their parameters. Every column from the dropped
-# block onward was then read at the wrong offset and reported under the wrong
-# name (gcol33/tulpaRatio#70).
+# A GP spatial main effect has to carry every other block the model names: a
+# block the sampler leaves out of ModelData while q_init and hmc_param_layout()
+# allocate and name its parameters shifts every later column to the wrong
+# offset and reports it under the wrong name (gcol33/tulpaRatio#70).
 #
 # The arbiter is the prior support. A hyperparameter whose prior is uniform on
 # (l, u) has a density of -Inf outside those bounds, so no draw of it can land
@@ -234,4 +232,26 @@ test_that("the AR1 rho prior reaches both sampler entry points", {
     # Beta(50, 1) on u = (rho + 1) / 2 puts its mass at rho near 1.
     expect_gt(mean(tight), mean(flat) + 0.5)
   }
+})
+
+test_that("a GP main effect carries one inflation", {
+  # The GP field and the inflation blocks are read by one model builder, so
+  # an OI coefficient is sampled beside a GP field rather than left at its
+  # starting value.
+  skip_on_cran()
+  d <- gp_st_data()
+  d$num[d$unit %in% 1:2] <- d$denom[d$unit %in% 1:2]
+  fit <- tratio(
+    num | denom ~ x,
+    data = d,
+    family = ratiod_oibinomial(),
+    mode = "hmc",
+    spatial = spatial_gp(~ lon + lat, nn = 4),
+    control = list(iter = 200, warmup = 100, chains = 1, seed = 1,
+                   verbose = FALSE)
+  )
+  dr <- as.matrix(fit$draws)
+  oi <- grep("^beta_oi", colnames(dr), value = TRUE)
+  expect_gt(length(oi), 0L)
+  for (col in oi) expect_gt(sd(dr[, col]), 0, label = col)
 })

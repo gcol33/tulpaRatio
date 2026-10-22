@@ -12,7 +12,7 @@ model_data_args(inputs, family)
 \item{family}{Model family}
 }
 \value{
-A named list: responses, design matrices, family and the nine
+A named list: responses, design matrices, family and the ten
 parameter bundles
 }
 \description{

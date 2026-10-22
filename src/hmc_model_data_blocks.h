@@ -618,20 +618,17 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
           (Rcpp::as<std::string>(temporal_params["ms_parameterization"]) == "noncentered");
     }
 
-    data.ms_sigma2_trend_prior_U = 1.0;
-    data.ms_sigma2_trend_prior_alpha = 0.01;
-    data.ms_sigma2_seasonal_prior_U = 1.0;
-    data.ms_sigma2_seasonal_prior_alpha = 0.01;
-    data.ms_sigma2_short_prior_U = 1.0;
-    data.ms_sigma2_short_prior_alpha = 0.01;
-    if (temporal_params.containsElementNamed("sigma2_trend_prior_U"))
-      data.ms_sigma2_trend_prior_U = Rcpp::as<double>(temporal_params["sigma2_trend_prior_U"]);
-    if (temporal_params.containsElementNamed("sigma2_trend_prior_alpha"))
-      data.ms_sigma2_trend_prior_alpha = Rcpp::as<double>(temporal_params["sigma2_trend_prior_alpha"]);
-    if (temporal_params.containsElementNamed("sigma2_short_prior_U"))
-      data.ms_sigma2_short_prior_U = Rcpp::as<double>(temporal_params["sigma2_short_prior_U"]);
-    if (temporal_params.containsElementNamed("sigma2_short_prior_alpha"))
-      data.ms_sigma2_short_prior_alpha = Rcpp::as<double>(temporal_params["sigma2_short_prior_alpha"]);
+    // PC priors on the three component variances, P(sigma > U) = alpha
+    auto prior_or = [&](const char* key, double fallback) {
+      return temporal_params.containsElementNamed(key)
+          ? Rcpp::as<double>(temporal_params[key]) : fallback;
+    };
+    data.ms_sigma2_trend_prior_U = prior_or("sigma2_trend_prior_U", 1.0);
+    data.ms_sigma2_trend_prior_alpha = prior_or("sigma2_trend_prior_alpha", 0.01);
+    data.ms_sigma2_seasonal_prior_U = prior_or("sigma2_seasonal_prior_U", 1.0);
+    data.ms_sigma2_seasonal_prior_alpha = prior_or("sigma2_seasonal_prior_alpha", 0.01);
+    data.ms_sigma2_short_prior_U = prior_or("sigma2_short_prior_U", 1.0);
+    data.ms_sigma2_short_prior_alpha = prior_or("sigma2_short_prior_alpha", 0.01);
   }
 
   data.temporal_time_idx = temporal_time_idx;

@@ -18,7 +18,7 @@ test_that("an unknown model type stops instead of fitting another family", {
       y_num_cont = d$a, y_denom_cont = d$b, X_num = X, X_denom = X,
       family = list(model_type = "gamma_gama"),
       re_params = list(group = rep(0L, 20), n_groups = 0L),
-      spatial_params = list(type = "none"), temporal_params = list(type = "none"),
+      spatial_params = list(type = "none"), gp_params = list(gp_type = "none"), temporal_params = list(type = "none"),
       prior_params = list(sigma_beta = 10, sigma_re_scale = 1, phi_shape = 1,
                           phi_rate = 0.1),
       zi_params = list(type = "none"), latent_params = list(), st_params = list(),

@@ -14,7 +14,7 @@ prepare_gp_for_hmc(gp, data, N)
 \item{N}{Number of observations}
 }
 \value{
-List of GP parameters for cpp_hmc_fit_gp
+List of GP parameters, read by gp_bundle()
 }
 \description{
 Computes nearest neighbor structure for NNGP approximation.

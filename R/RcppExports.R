@@ -21,8 +21,8 @@ cpp_enum_names <- function(kind) {
     .Call(`_tulpaRatio_cpp_enum_names`, kind)
 }
 
-cpp_ess_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose) {
-    .Call(`_tulpaRatio_cpp_ess_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose)
+cpp_ess_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose) {
+    .Call(`_tulpaRatio_cpp_ess_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose)
 }
 
 cpp_gibbs_spatial <- function(data_list) {
@@ -37,20 +37,12 @@ cpp_gpu_info <- function() {
     .Call(`_tulpaRatio_cpp_gpu_info`)
 }
 
-cpp_hmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str = "auto", max_treedepth = 10L, metric_str = "auto", adapt_delta = -1.0, walnuts = FALSE, n_cores = 0L) {
-    .Call(`_tulpaRatio_cpp_hmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str, max_treedepth, metric_str, adapt_delta, walnuts, n_cores)
+cpp_hmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str = "auto", max_treedepth = 10L, metric_str = "auto", adapt_delta = -1.0, walnuts = FALSE, n_cores = 0L) {
+    .Call(`_tulpaRatio_cpp_hmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str, max_treedepth, metric_str, adapt_delta, walnuts, n_cores)
 }
 
 cpp_get_max_threads <- function() {
     .Call(`_tulpaRatio_cpp_get_max_threads`)
-}
-
-cpp_hmc_fit_gp <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, re_params, family, gp_params, ms_gp_params, ms_temporal_params, rsr_params, temporal_params, latent_params, st_params, tvc_params, svc_params, sigma_beta, sigma_re_scale, phi_prior_shape, phi_prior_rate, zi_type_str, X_zi, zi_prior_sd, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, max_treedepth = 10L, adapt_delta = -1.0, metric_str = "auto", gradient_mode_str = "auto") {
-    .Call(`_tulpaRatio_cpp_hmc_fit_gp`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, re_params, family, gp_params, ms_gp_params, ms_temporal_params, rsr_params, temporal_params, latent_params, st_params, tvc_params, svc_params, sigma_beta, sigma_re_scale, phi_prior_shape, phi_prior_rate, zi_type_str, X_zi, zi_prior_sd, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, max_treedepth, adapt_delta, metric_str, gradient_mode_str)
-}
-
-cpp_hmc_fit_gp_v2 <- function(args) {
-    .Call(`_tulpaRatio_cpp_hmc_fit_gp_v2`, args)
 }
 
 cpp_kriging_predict <- function(coords_train, coords_new, w_train, sigma2, phi, cov_type, nn) {
@@ -113,12 +105,12 @@ cpp_rpg <- function(b, z) {
     .Call(`_tulpaRatio_cpp_rpg`, b, z)
 }
 
-cpp_sghmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose) {
-    .Call(`_tulpaRatio_cpp_sghmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose)
+cpp_sghmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose) {
+    .Call(`_tulpaRatio_cpp_sghmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose)
 }
 
-cpp_sgld_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose) {
-    .Call(`_tulpaRatio_cpp_sgld_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose)
+cpp_sgld_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose) {
+    .Call(`_tulpaRatio_cpp_sgld_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose)
 }
 
 cpp_temporal_gp_field <- function(x, log_sigma2, logit_phi, temporal_params) {
@@ -485,7 +477,7 @@ cpp_tulpaRatio_run_nuts_specs <- function(y_num, y_denom, y_num_cont, y_denom_co
     .Call(`_tulpaRatio_cpp_tulpaRatio_run_nuts_specs`, y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params)
 }
 
-cpp_vi_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose = TRUE) {
-    .Call(`_tulpaRatio_cpp_vi_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose)
+cpp_vi_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose = TRUE) {
+    .Call(`_tulpaRatio_cpp_vi_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose)
 }
 

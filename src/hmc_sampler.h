@@ -580,6 +580,7 @@ ModelData build_model_data(
     const Rcpp::List& family,
     const Rcpp::List& re_params,
     const Rcpp::List& spatial_params,
+    const Rcpp::List& gp_params,
     const Rcpp::List& temporal_params,
     const Rcpp::List& prior_params,
     const Rcpp::List& zi_params,

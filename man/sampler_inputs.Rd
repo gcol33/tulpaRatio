@@ -37,8 +37,8 @@ sampler_inputs(
 \value{
 A list: \code{model_type}, \code{hmc_data}, the prepared structures
 (\code{spatial_info}, \code{gp_info}, \code{temporal_info}, \code{zi_info}, \code{latent_info},
-\code{spatiotemporal_info}, \code{ms_temporal_info}, \code{svc_info}), \code{use_gp_sampler},
-the sampler priors \code{sp}, the filled \code{priors}, and \code{bundles}, the nine
+\code{spatiotemporal_info}, \code{ms_temporal_info}, \code{svc_info}),
+the sampler priors \code{sp}, the filled \code{priors}, and \code{bundles}, the ten
 parameter lists in the order \code{build_model_data()} takes them
 }
 \description{

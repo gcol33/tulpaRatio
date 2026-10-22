@@ -510,6 +510,24 @@ test_that("the hand-coded gradient reports the density's own log posterior", {
   }
 })
 
+test_that("an inflated model never reaches a gradient written without inflation", {
+  # The specialized hand-coded gradients take plain-family residuals and write
+  # no beta_zi / beta_oi block; inflation has its own feature bit, so these
+  # fall through to the composite (gcol33/tulpaRatio#214)
+  cases <- list(c("binomial", "zi_binomial"), c("binomial", "oi_binomial"),
+                c("binomial", "zoib"), c("binomial", "hurdle_binomial"),
+                c("poisson_gamma", "zi_poisson"), c("negbin_negbin", "hurdle_negbin"))
+  for (field in c("gp", "hsgp", "svc", "tvc", "temporal_gp", "ms_temporal",
+                  "latent", "st2")) {
+    for (cs in cases) {
+      r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded",
+                                           family = cs[1], zi = cs[2])
+      expect_lt(max(grad_rel_dev(r)), 1e-4,
+                label = sprintf("%s / %s / %s", field, cs[1], cs[2]))
+    }
+  }
+})
+
 test_that("the collapsed GP interaction carries the log-concave families", {
   for (field in c("stgp_collapsed", "stgp_gneiting_collapsed")) {
     for (family in setdiff(HANDCODED_FAMILIES, "beta_binomial")) {
