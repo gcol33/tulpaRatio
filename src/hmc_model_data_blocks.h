@@ -336,20 +336,7 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
       data.svc_data.nn_order = Rcpp::as<std::vector<int>>(svc_params["nn_order"]);
       data.svc_data.nn_order_inv = Rcpp::as<std::vector<int>>(svc_params["nn_order_inv"]);
 
-      // Parse SVC covariance type
-      if (svc_cov_type_str == "exponential") {
-        data.svc_data.cov_type = ratiod_svc::CovType::EXPONENTIAL;
-      } else if (svc_cov_type_str == "matern") {
-        data.svc_data.cov_type = ratiod_svc::CovType::MATERN;
-      } else if (svc_cov_type_str == "gaussian") {
-        data.svc_data.cov_type = ratiod_svc::CovType::GAUSSIAN;
-      } else if (svc_cov_type_str == "spherical") {
-        data.svc_data.cov_type = ratiod_svc::CovType::SPHERICAL;
-      } else {
-        Rcpp::stop("Unknown SVC covariance type '%s'. Expected one of "
-                   "exponential, matern, gaussian, spherical.",
-                   svc_cov_type_str);
-      }
+      data.svc_data.cov_type = ratiod_cov::parse_cov_type(svc_cov_type_str);
 
       const std::string svc_param_str =
           Rcpp::as<std::string>(svc_params["parameterization"]);
@@ -579,9 +566,12 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
       ? restriction_from(Rcpp::as<Rcpp::List>(temporal_params["rtr"]), data.N)
       : ratiod_rsr::Restriction();
 
-  // The single-component types read straight off the shared parser; the two
-  // names below carry data of their own on top of it.
-  data.temporal_type = ratiod_temporal::parse_temporal_type(temporal_type_str);
+  // The single-component types read straight off the shared parser; "gp"
+  // carries data of its own on top of it, and "multiscale" is a composite
+  // with its own data path.
+  data.temporal_type = (temporal_type_str == "multiscale")
+      ? TemporalType::NONE
+      : ratiod_temporal::parse_temporal_type(temporal_type_str);
   data.has_temporal_gp = false;
 
   // AR1 alone carries a second coordinate; the string is read for every type
@@ -598,7 +588,6 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
     data.has_temporal_gp = true;
     data.temporal_gp_data = temporal_gp_data_from(temporal_params);
   } else if (temporal_type_str == "multiscale") {
-    data.temporal_type = TemporalType::NONE;  // MS_t uses its own data path
     data.has_multiscale_temporal = true;
 
     data.multiscale_temporal_data.n_times = n_times;

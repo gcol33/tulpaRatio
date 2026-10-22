@@ -271,13 +271,13 @@ inline void rw2_gradient(
   }
 }
 
-// Parse temporal structure type from string
-inline TemporalType parse_tvc_structure(const std::string& struct_str) {
-  if (struct_str == "rw1") return TemporalType::RW1;
-  if (struct_str == "rw2") return TemporalType::RW2;
-  if (struct_str == "ar1") return TemporalType::AR1;
-  if (struct_str == "iid") return TemporalType::IID;
-  return TemporalType::RW1;  // Default
+// The structures a time-varying coefficient can follow
+inline constexpr ratiod_enum::EnumName<TemporalType> TVC_STRUCTURE_NAMES[] = {
+  {"rw1", TemporalType::RW1}, {"rw2", TemporalType::RW2},
+  {"ar1", TemporalType::AR1}, {"iid", TemporalType::IID}};
+
+inline TemporalType parse_tvc_structure(const std::string& s) {
+  return ratiod_enum::parse_enum(TVC_STRUCTURE_NAMES, s, "time-varying coefficient structure");
 }
 
 } // namespace ratiod_tvc

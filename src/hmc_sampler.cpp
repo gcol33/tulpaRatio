@@ -12,6 +12,7 @@
 #include "hmc_progress.h"
 #include "autodiff.h"
 #include "autodiff_utils.h"
+#include "beta_binomial_obs.h"
 #include "ar1_shared.h"
 #include "hmc_gp_autodiff.h"
 #include "hmc_gp_collapsed.h"
@@ -809,40 +810,6 @@ int get_n_params(const ModelData& data) {
   return layout.total_params;
 }
 
-// =====================================================================
-// Likelihood functions
-// =====================================================================
-
-inline double log_lik_binomial(int y, int n, double eta) {
-  // Numerically stable binomial log-likelihood
-  if (eta > 0) {
-    return y * eta - n * eta - n * std::log(1.0 + std::exp(-eta));
-  } else {
-    return y * eta - n * std::log(1.0 + std::exp(eta));
-  }
-}
-
-inline double log_lik_negbin(int y, double mu, double phi) {
-  if (mu <= 0 || phi <= 0) return -1e10;
-  return std::lgamma(y + phi) - std::lgamma(phi) - std::lgamma(y + 1.0)
-       + phi * std::log(phi / (mu + phi))
-       + y * std::log(mu / (mu + phi));
-}
-
-inline double log_lik_poisson(int y, double mu) {
-  if (mu <= 0) return -1e10;
-  return y * std::log(mu) - mu - std::lgamma(y + 1.0);
-}
-
-inline double log_lik_gamma(double y, double shape, double mu) {
-  if (y <= 0 || shape <= 0 || mu <= 0) return -1e10;
-  double rate = shape / mu;
-  return shape * std::log(rate) + (shape - 1.0) * std::log(y)
-       - rate * y - std::lgamma(shape);
-}
-
-// Include vectorized gradient header AFTER log_lik_* functions and hmc_sampler.h
-// so all types and helpers are defined.
 #include "hmc_gradient_vectorized.h"
 
 // Thread-local vectorized gradient workspace (avoids per-call allocation)
@@ -1599,138 +1566,41 @@ void compute_gradient_analytical(
 
       // Compute ZI linear predictor if applicable
       double logit_zi = 0.0;
-      double zi_prob = 0.0;
       if (layout.has_zi && data.p_zi > 0) {
         logit_zi = ratiod_linalg::dot_product(
             &data.X_zi_flat[i * data.p_zi], beta_zi, data.p_zi);
-        zi_prob = 1.0 / (1.0 + std::exp(-logit_zi));
       }
 
       // Compute OI linear predictor if applicable
       double logit_oi = 0.0;
-      double oi_prob = 0.0;
       if (layout.has_oi && data.p_oi > 0) {
         logit_oi = ratiod_linalg::dot_product(
             &data.X_oi_flat[i * data.p_oi], beta_oi, data.p_oi);
-        oi_prob = 1.0 / (1.0 + std::exp(-logit_oi));
       }
 
-      if (data.model_type == ModelType::BINOMIAL) {
+      if (layout.has_zi || layout.has_oi) {
+        // An inflated or hurdle margin: the residuals are the derivatives of
+        // the density the log posterior evaluates
+        unsigned want = 0u;
+        if (layout.has_phi_num) want |= ratiod::OBS_D_PHI_NUM;
+        if (layout.has_phi_denom) want |= ratiod::OBS_D_PHI_DENOM;
+        if (acc_zi) want |= ratiod::OBS_D_ZI;
+        if (acc_oi) want |= ratiod::OBS_D_OI;
+        const ratiod::ObsDerivs od = ratiod::ratio_obs_derivs(
+            data, layout, i, eta_num, eta_denom, phi_num, phi_denom,
+            logit_zi, logit_oi, want);
+        resid_num = od.eta_num;
+        resid_denom = od.eta_denom;
+        grad_phi_num_i = od.phi_num;
+        grad_phi_denom_i = od.phi_denom;
+        grad_logit_zi_i = od.logit_zi;
+        grad_logit_oi_i = od.logit_oi;
+
+      } else if (data.model_type == ModelType::BINOMIAL) {
         // ---- BINOMIAL ----
         // p = inv_logit(eta_num), LL = y*log(p) + (n-y)*log(1-p)
         // d(LL)/d(eta) = y - n*p
-        double p = 1.0 / (1.0 + std::exp(-eta_num));
-        int n_trials = data.y_denom[i];
-        int y_num_i = data.y_num[i];
-
-        if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::ZI_BINOMIAL) {
-          // ZI-Binomial
-          if (y_num_i == 0) {
-            // P(Y=0) = zi + (1-zi)*(1-p)^n
-            double p0_binom = std::pow(1.0 - p, n_trials);  // (1-p)^n
-            double p0 = zi_prob + (1.0 - zi_prob) * p0_binom;
-            // d(LL)/d(eta) = (1-zi) * d((1-p)^n)/d(eta) / p0
-            // d((1-p)^n)/d(eta) = n*(1-p)^(n-1) * (-p*(1-p)) = -n*p*(1-p)^n
-            resid_num = -(1.0 - zi_prob) * n_trials * p * p0_binom / p0;
-            // Gradient w.r.t. logit_zi
-            grad_logit_zi_i = zi_prob * (1.0 - zi_prob) * (1.0 - p0_binom) / p0;
-          } else {
-            // P(Y=y) = (1-zi) * Binomial(y|n,p)
-            resid_num = y_num_i - n_trials * p;
-            grad_logit_zi_i = -zi_prob;  // d/d(logit_zi) log(1-zi) = -zi
-          }
-        } else if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::HURDLE_BINOMIAL) {
-          // Hurdle-Binomial
-          if (y_num_i == 0) {
-            // P(Y=0) = 1 - theta
-            resid_num = 0.0;  // No p contribution when y=0
-            grad_logit_zi_i = -zi_prob;  // d/d(logit_theta) log(1-theta) = -theta
-          } else {
-            // P(Y=y|Y>0) * theta = theta * TruncBinomial(y|n,p)
-            // Gradient from truncated binomial:
-            // d(log(1-(1-p)^n))/d(eta) = n*p*(1-p)^n / (1-(1-p)^n)
-            double grad_normalizer = n_trials * p *
-                ratiod_zi::zero_odds(n_trials * std::log1p(-p));
-            resid_num = (y_num_i - n_trials * p) - grad_normalizer;
-            grad_logit_zi_i = 1.0 - zi_prob;  // d/d(logit_theta) log(theta) = 1-theta
-          }
-        } else if (layout.has_oi && data.zi_type == ratiod_zi::ZIType::OI_BINOMIAL) {
-          // OI-Binomial (One-inflation only)
-          // P(Y=n) = oi + (1-oi) * p^n
-          // P(Y=y, y<n) = (1-oi) * Binomial(y|n,p)
-          if (y_num_i == n_trials) {
-            // y = n (structural one or binomial one)
-            double pn = std::pow(p, n_trials);  // p^n
-            double P_yn = oi_prob + (1.0 - oi_prob) * pn;
-            if (P_yn < 1e-12) P_yn = 1e-12;
-            // d(log P)/d(eta) = (1-oi) * n * p^(n-1) * p*(1-p) / P
-            //                 = (1-oi) * n * p^n * (1-p) / P
-            resid_num = (1.0 - oi_prob) * n_trials * pn * (1.0 - p) / P_yn;
-            // d(log P)/d(logit_oi) = oi*(1-oi)*(1 - p^n) / P
-            grad_logit_oi_i = oi_prob * (1.0 - oi_prob) * (1.0 - pn) / P_yn;
-          } else {
-            // y < n: P(Y=y) = (1-oi) * Binomial(y|n,p)
-            resid_num = y_num_i - n_trials * p;  // Standard binomial residual
-            grad_logit_oi_i = -oi_prob;  // d/d(logit_oi) log(1-oi) = -oi
-          }
-        } else if (layout.has_oi && data.zi_type == ratiod_zi::ZIType::ZOIB) {
-          // ZOIB (Zero-One Inflated Binomial) - MIXTURE MODEL
-          // P(Y=0) = zi + (1-zi)*(1-oi)*(1-p)^n
-          // P(Y=n) = (1-zi)*(oi + (1-oi)*p^n)
-          // P(Y=y, 0<y<n) = (1-zi)*(1-oi)*Binomial(y|n,p)
-          // Note: zi_prob = zi, oi_prob = oi
-          if (y_num_i == 0) {
-            // y = 0: P = zi + (1-zi)*(1-oi)*(1-p)^n = A + B
-            double binom_zero = std::pow(1.0 - p, n_trials);  // (1-p)^n
-            double A = zi_prob;  // structural zero component
-            double B = (1.0 - zi_prob) * (1.0 - oi_prob) * binom_zero;  // binomial zero
-            double P = A + B;
-            if (P < 1e-12) P = 1e-12;
-
-            // d(log P)/d(eta) = (1-zi)*(1-oi) * d((1-p)^n)/d(eta) / P
-            // d((1-p)^n)/d(eta) = n*(1-p)^(n-1) * (-p*(1-p)) = -n*(1-p)^n * p
-            double d_binom_d_eta = -n_trials * binom_zero * p;
-            resid_num = (1.0 - zi_prob) * (1.0 - oi_prob) * d_binom_d_eta / P;
-
-            // d(log P)/d(logit_zi) = [dA - B] * zi*(1-zi) / P
-            // dA/d(logit_zi) = zi*(1-zi), dB/d(logit_zi) = -(1-oi)*binom_zero * zi*(1-zi)
-            grad_logit_zi_i = zi_prob * (1.0 - zi_prob) * (1.0 - (1.0 - oi_prob) * binom_zero) / P;
-
-            // d(log P)/d(logit_oi) = dB/d(logit_oi) / P
-            // dB/d(logit_oi) = -(1-zi)*binom_zero * oi*(1-oi)
-            grad_logit_oi_i = -(1.0 - zi_prob) * binom_zero * oi_prob * (1.0 - oi_prob) / P;
-
-          } else if (y_num_i == n_trials) {
-            // y = n: P = (1-zi)*(oi + (1-oi)*p^n) = (1-zi)*C
-            double pn = std::pow(p, n_trials);  // p^n
-            double C = oi_prob + (1.0 - oi_prob) * pn;  // oi + (1-oi)*p^n
-            double P = (1.0 - zi_prob) * C;
-            if (P < 1e-12) P = 1e-12;
-
-            // d(log P)/d(eta) = (1-zi)*(1-oi) * d(p^n)/d(eta) / P
-            // d(p^n)/d(eta) = n*p^(n-1) * p*(1-p) = n*p^n*(1-p)
-            double d_pn_d_eta = n_trials * pn * (1.0 - p);
-            resid_num = (1.0 - zi_prob) * (1.0 - oi_prob) * d_pn_d_eta / P;
-
-            // d(log P)/d(logit_zi) = d(log(1-zi))/d(logit_zi) = -zi
-            grad_logit_zi_i = -zi_prob;
-
-            // d(log P)/d(logit_oi) = dC/d(logit_oi) / C
-            // dC/d(logit_oi) = oi*(1-oi) - p^n * oi*(1-oi) = oi*(1-oi)*(1 - p^n)
-            grad_logit_oi_i = oi_prob * (1.0 - oi_prob) * (1.0 - pn) / C;
-
-          } else {
-            // 0 < y < n: P = (1-zi)*(1-oi)*Binomial
-            // log P = log(1-zi) + log(1-oi) + log_binom
-            resid_num = y_num_i - n_trials * p;  // Standard binomial residual
-            grad_logit_zi_i = -zi_prob;  // d/d(logit_zi) log(1-zi) = -zi
-            grad_logit_oi_i = -oi_prob;  // d/d(logit_oi) log(1-oi) = -oi
-          }
-        } else {
-          // Standard binomial (no ZI)
-          resid_num = y_num_i - n_trials * p;
-        }
-        // No denominator contribution for binomial
+        resid_num = data.y_num[i] - data.y_denom[i] * ratiod::math::inv_logit(eta_num);
 
       } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
         // ---- NEGBIN_NEGBIN ----
@@ -1738,174 +1608,49 @@ void compute_gradient_analytical(
         double mu_denom = std::exp(eta_denom);
         int y_num_i = data.y_num[i];
         int y_denom_i = data.y_denom[i];
-
-        // Denominator NegBin gradient (always standard, not ZI)
         double denom_d = mu_denom + phi_denom;
         resid_denom = y_denom_i - mu_denom * (y_denom_i + phi_denom) / denom_d;
         grad_phi_denom_i = ratiod::math::portable_digamma(y_denom_i + phi_denom) - ratiod::math::portable_digamma(phi_denom)
                            + std::log(phi_denom / denom_d)
                            + (mu_denom - y_denom_i) / denom_d;
-
-        // Numerator with ZI handling
-        if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::ZI_NEGBIN) {
-          // ZI-NegBin numerator
-          double p0_nb = std::pow(phi_num / (phi_num + mu_num), phi_num);
-
-          if (y_num_i == 0) {
-            // P(Y=0) = zi + (1-zi)*p0_nb
-            double p0 = zi_prob + (1.0 - zi_prob) * p0_nb;
-            // d(LL)/d(mu) = (1-zi) * d(p0_nb)/d(mu) / p0
-            // d(p0_nb)/d(mu) = phi * (phi/(phi+mu))^phi * (-1/(phi+mu)) = -phi * p0_nb / (phi+mu)
-            double d_p0_nb_d_mu = -phi_num * p0_nb / (phi_num + mu_num);
-            resid_num = (1.0 - zi_prob) * d_p0_nb_d_mu * mu_num / p0;
-            // Gradient w.r.t. logit_zi
-            grad_logit_zi_i = zi_prob * (1.0 - zi_prob) * (1.0 - p0_nb) / p0;
-            // phi gradient for ZI-NegBin at y=0 (complex, using approximation)
-            grad_phi_num_i = (1.0 - zi_prob) * p0_nb * (std::log(phi_num / (phi_num + mu_num)) + mu_num / (phi_num + mu_num)) / p0;
-          } else {
-            // P(Y=y) = (1-zi) * NB(y|mu,phi)
-            double denom_num = mu_num + phi_num;
-            resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-            grad_logit_zi_i = -zi_prob;  // d/d(logit_zi) log(1-zi) = -zi
-            grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                             + std::log(phi_num / denom_num)
-                             + (mu_num - y_num_i) / denom_num;
-          }
-        } else if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::HURDLE_NEGBIN) {
-          // Hurdle-NegBin numerator
-          if (y_num_i == 0) {
-            // P(Y=0) = 1 - theta, where theta = sigmoid(logit_zi) here represents P(Y>0)
-            // Note: for hurdle, logit_zi parameterizes theta = P(Y>0), so zi_prob IS theta
-            resid_num = 0.0;  // No mu contribution when y=0
-            grad_logit_zi_i = -zi_prob;  // d/d(logit_theta) log(1-theta) = -theta
-            grad_phi_num_i = 0.0;
-          } else {
-            // P(Y=y|Y>0) * theta = theta * TruncNB(y|mu,phi)
-            ratiod_zi::hurdle_negbin_positive_grads(y_num_i, mu_num, phi_num,
-                                                   resid_num, grad_phi_num_i);
-            grad_logit_zi_i = 1.0 - zi_prob;  // d/d(logit_theta) log(theta) = 1-theta
-          }
-        } else {
-          // Standard NegBin (no ZI)
-          double denom_num = mu_num + phi_num;
-          resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-          grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                           + std::log(phi_num / denom_num)
-                           + (mu_num - y_num_i) / denom_num;
-        }
+        double denom_num = mu_num + phi_num;
+        resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
+        grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
+                         + std::log(phi_num / denom_num)
+                         + (mu_num - y_num_i) / denom_num;
 
       } else if (data.model_type == ModelType::POISSON_GAMMA) {
         // ---- POISSON_GAMMA ----
         double mu_num = std::exp(eta_num);
         double mu_denom = std::exp(eta_denom);
-        int y_num_i = data.y_num[i];
-
-        // Denominator: Gamma (always standard) — skip if y <= 0
+        // Denominator: Gamma — skip if y <= 0
         double y_denom_i = data.y_denom_cont[i];
-        double grad_phi_gamma = 0.0;
         if (y_denom_i > 0.0) {
           resid_denom = phi_denom * (y_denom_i / mu_denom - 1.0);
           double rate = phi_denom / mu_denom;
-          grad_phi_gamma = std::log(rate) + 1.0 + std::log(y_denom_i)
-                                  - ratiod::math::portable_digamma(phi_denom) - rate * y_denom_i / phi_denom;
+          grad_phi_denom_i = std::log(rate) + 1.0 + std::log(y_denom_i)
+                             - ratiod::math::portable_digamma(phi_denom) - rate * y_denom_i / phi_denom;
         }
-
-        // Numerator with ZI handling
-        if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::ZI_POISSON) {
-          // ZI-Poisson numerator
-          double exp_neg_mu = std::exp(-mu_num);
-
-          if (y_num_i == 0) {
-            // P(Y=0) = zi + (1-zi)*exp(-mu)
-            double p0 = zi_prob + (1.0 - zi_prob) * exp_neg_mu;
-            // d(LL)/d(eta) = d(LL)/d(mu) * mu = -(1-zi)*exp(-mu)*mu / p0
-            resid_num = -(1.0 - zi_prob) * exp_neg_mu * mu_num / p0;
-            grad_logit_zi_i = zi_prob * (1.0 - zi_prob) * (1.0 - exp_neg_mu) / p0;
-            grad_phi_denom_i = grad_phi_gamma;  // Only gamma part
-          } else {
-            // P(Y=y) = (1-zi) * Poisson(y|mu)
-            resid_num = y_num_i - mu_num;
-            grad_logit_zi_i = -zi_prob;
-            grad_phi_denom_i = grad_phi_gamma;
-          }
-        } else if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::HURDLE_POISSON) {
-          // Hurdle-Poisson numerator
-          if (y_num_i == 0) {
-            resid_num = 0.0;
-            grad_logit_zi_i = -zi_prob;  // zi_prob is theta here
-            grad_phi_denom_i = grad_phi_gamma;
-          } else {
-            // Truncated Poisson: d(LL)/d(eta) = y - mu - mu*exp(-mu)/(1-exp(-mu))
-            // LL = log Poi(y) - log(1-exp(-mu)), correction is SUBTRACTED
-            resid_num = y_num_i - mu_num - mu_num * ratiod_zi::zero_odds(-mu_num);
-            grad_logit_zi_i = 1.0 - zi_prob;
-            grad_phi_denom_i = grad_phi_gamma;
-          }
-        } else {
-          // Standard Poisson (no ZI)
-          resid_num = y_num_i - mu_num;
-          grad_phi_denom_i = grad_phi_gamma;
-        }
+        resid_num = data.y_num[i] - mu_num;
 
       } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
         // ---- NEGBIN_GAMMA ----
-        // NegBin numerator + Gamma denominator
         double mu_num = std::exp(eta_num);
         double mu_denom = std::exp(eta_denom);
         int y_num_i = data.y_num[i];
-
-        // Denominator: Gamma (always standard) — skip if y <= 0
+        // Denominator: Gamma — skip if y <= 0
         double y_denom_i = data.y_denom_cont[i];
-        double grad_phi_gamma = 0.0;
         if (y_denom_i > 0.0) {
           resid_denom = phi_denom * (y_denom_i / mu_denom - 1.0);
           double rate = phi_denom / mu_denom;
-          grad_phi_gamma = std::log(rate) + 1.0 + std::log(y_denom_i)
-                                  - ratiod::math::portable_digamma(phi_denom) - rate * y_denom_i / phi_denom;
+          grad_phi_denom_i = std::log(rate) + 1.0 + std::log(y_denom_i)
+                             - ratiod::math::portable_digamma(phi_denom) - rate * y_denom_i / phi_denom;
         }
-
-        // Numerator with ZI handling (same as NEGBIN_NEGBIN)
-        if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::ZI_NEGBIN) {
-          // ZI-NegBin numerator (same logic as NEGBIN_NEGBIN ZI case)
-          double p0_nb = std::pow(phi_num / (phi_num + mu_num), phi_num);
-
-          if (y_num_i == 0) {
-            double p0 = zi_prob + (1.0 - zi_prob) * p0_nb;
-            // d(p0_nb)/d(mu) = -phi * p0_nb / (phi+mu)
-            double d_p0_nb_d_mu = -phi_num * p0_nb / (phi_num + mu_num);
-            resid_num = (1.0 - zi_prob) * d_p0_nb_d_mu * mu_num / p0;
-            grad_logit_zi_i = zi_prob * (1.0 - zi_prob) * (1.0 - p0_nb) / p0;
-            grad_phi_num_i = (1.0 - zi_prob) * p0_nb * (std::log(phi_num / (phi_num + mu_num)) + mu_num / (phi_num + mu_num)) / p0;
-          } else {
-            double denom_num = mu_num + phi_num;
-            resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-            grad_logit_zi_i = -zi_prob;
-            grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                             + std::log(phi_num / denom_num)
-                             + (mu_num - y_num_i) / denom_num;
-          }
-          grad_phi_denom_i = grad_phi_gamma;
-        } else if (layout.has_zi && data.zi_type == ratiod_zi::ZIType::HURDLE_NEGBIN) {
-          // Hurdle-NegBin numerator (same as NEGBIN_NEGBIN hurdle)
-          if (y_num_i == 0) {
-            resid_num = 0.0;
-            grad_logit_zi_i = -zi_prob;  // d/d(logit_theta) log(1-theta)
-            grad_phi_num_i = 0.0;
-          } else {
-            ratiod_zi::hurdle_negbin_positive_grads(y_num_i, mu_num, phi_num,
-                                                   resid_num, grad_phi_num_i);
-            grad_logit_zi_i = 1.0 - zi_prob;  // d/d(logit_theta) log(theta)
-          }
-          grad_phi_denom_i = grad_phi_gamma;
-        } else {
-          // Standard NegBin numerator (no ZI)
-          double denom_num = mu_num + phi_num;
-          resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-          grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                           + std::log(phi_num / denom_num)
-                           + (mu_num - y_num_i) / denom_num;
-          grad_phi_denom_i = grad_phi_gamma;
-        }
+        double denom_num = mu_num + phi_num;
+        resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
+        grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
+                         + std::log(phi_num / denom_num)
+                         + (mu_num - y_num_i) / denom_num;
 
       } else if (data.model_type == ModelType::GAMMA_GAMMA) {
         // ---- GAMMA_GAMMA ----
@@ -1962,36 +1707,11 @@ void compute_gradient_analytical(
 
       } else if (data.model_type == ModelType::BETA_BINOMIAL) {
         // ---- BETA_BINOMIAL ----
-        // Overdispersed binomial: y ~ BetaBinom(n, alpha, beta)
-        // where p = alpha/(alpha+beta), phi = alpha + beta (concentration)
-        // We parameterize: logit(p) = eta, phi = overdispersion
-        // alpha = p * phi, beta_param = (1-p) * phi
-        // LL = lgamma(y+alpha) + lgamma(n-y+beta) - lgamma(n+phi)
-        //      - lgamma(alpha) - lgamma(beta) + lgamma(phi) + lchoose(n,y)
-        double p = 1.0 / (1.0 + std::exp(-eta_num));
-        int y_i = data.y_num[i];
-        int n_i = data.y_denom[i];
-        double alpha = p * phi_num;
-        double beta_param = (1.0 - p) * phi_num;
-
-        // d(LL)/d(eta) = d(LL)/d(p) * d(p)/d(eta) where d(p)/d(eta) = p*(1-p)
-        // d(LL)/d(p) = phi * (digamma(y+alpha) - digamma(n-y+beta) - digamma(alpha) + digamma(beta))
-        double psi_y_alpha = ratiod::math::portable_digamma(y_i + alpha);
-        double psi_nmy_beta = ratiod::math::portable_digamma(n_i - y_i + beta_param);
-        double psi_alpha = ratiod::math::portable_digamma(alpha);
-        double psi_beta = ratiod::math::portable_digamma(beta_param);
-        double dLL_dp = phi_num * (psi_y_alpha - psi_nmy_beta - psi_alpha + psi_beta);
-        resid_num = dLL_dp * p * (1.0 - p);
-
-        // d(LL)/d(phi) where phi = alpha + beta
-        // d(LL)/d(phi) = p*digamma(y+alpha) + (1-p)*digamma(n-y+beta) - digamma(n+phi)
-        //               - p*digamma(alpha) - (1-p)*digamma(beta) + digamma(phi)
-        double psi_n_phi = ratiod::math::portable_digamma(n_i + phi_num);
-        double psi_phi = ratiod::math::portable_digamma(phi_num);
-        grad_phi_num_i = p * psi_y_alpha + (1.0 - p) * psi_nmy_beta - psi_n_phi
-                         - p * psi_alpha - (1.0 - p) * psi_beta + psi_phi;
-
-        // No denominator contribution for beta-binomial (like binomial)
+        // logit(p) = eta, phi = alpha + beta; no denominator contribution
+        const ratiod::math::BetaBinomialObs bb = ratiod::math::beta_binomial_obs(
+            data.y_num[i], data.y_denom[i], eta_num, phi_num);
+        resid_num = bb.d_eta;
+        grad_phi_num_i = bb.d_phi + ratiod::math::portable_digamma(phi_num);
       }
 
       // Accumulate ZI coefficient gradients
@@ -2090,79 +1810,11 @@ void compute_gradient_analytical(
       acc[acc_at.phi_num] += grad_phi_num_i;
       acc[acc_at.phi_denom] += grad_phi_denom_i;
 
-      // Fused log-likelihood: compute per-observation log_lik using already-computed
-      // intermediates. This avoids a separate O(N) pass through compute_log_post.
+      // The observation's log-likelihood, fused into this pass rather than a
+      // separate one through compute_log_post
       if (compute_lp) {
-        double ll_i = 0.0;
-        if (data.model_type == ModelType::BINOMIAL) {
-          double p_i = 1.0 / (1.0 + std::exp(-eta_num));
-          int n_trials = data.y_denom[i];
-          int y_i = data.y_num[i];
-          // The density's own binomial inflation terms (log_post_impl.h)
-          if (data.zi_type == ratiod_zi::ZIType::ZI_BINOMIAL) {
-            ll_i = ratiod::math::log_lik_zi_binomial(y_i, n_trials, p_i, logit_zi);
-          } else if (data.zi_type == ratiod_zi::ZIType::HURDLE_BINOMIAL) {
-            ll_i = ratiod::math::log_lik_hurdle_binomial(y_i, n_trials, p_i, logit_zi);
-          } else if (data.zi_type == ratiod_zi::ZIType::OI_BINOMIAL) {
-            ll_i = ratiod::math::log_lik_oi_binomial(y_i, n_trials, p_i, logit_oi);
-          } else if (data.zi_type == ratiod_zi::ZIType::ZOIB) {
-            ll_i = ratiod::math::log_lik_zoib(y_i, n_trials, p_i, logit_zi, logit_oi);
-          } else {
-            ll_i = log_lik_binomial(y_i, n_trials, eta_num);
-          }
-        } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
-          double mu_num_i = std::exp(eta_num);
-          double mu_denom_i = std::exp(eta_denom);
-          if (layout.has_zi) {
-            ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num_i, phi_num,
-                                               logit_zi, data.zi_type);
-          } else {
-            ll_i = log_lik_negbin(data.y_num[i], mu_num_i, phi_num);
-          }
-          ll_i += log_lik_negbin(data.y_denom[i], mu_denom_i, phi_denom);
-        } else if (data.model_type == ModelType::POISSON_GAMMA) {
-          double mu_num_i = std::exp(eta_num);
-          double mu_denom_i = std::exp(eta_denom);
-          if (layout.has_zi) {
-            ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num_i, phi_num,
-                                               logit_zi, data.zi_type);
-          } else {
-            ll_i = log_lik_poisson(data.y_num[i], mu_num_i);
-          }
-          ll_i += log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom_i);
-        } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
-          double mu_num_i = std::exp(eta_num);
-          double mu_denom_i = std::exp(eta_denom);
-          if (layout.has_zi) {
-            ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num_i, phi_num,
-                                               logit_zi, data.zi_type);
-          } else {
-            ll_i = log_lik_negbin(data.y_num[i], mu_num_i, phi_num);
-          }
-          ll_i += log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom_i);
-        } else if (data.model_type == ModelType::GAMMA_GAMMA) {
-          double mu_num_i = std::exp(eta_num);
-          double mu_denom_i = std::exp(eta_denom);
-          ll_i = log_lik_gamma(data.y_num_cont[i], phi_num, mu_num_i);
-          ll_i += log_lik_gamma(data.y_denom_cont[i], phi_denom, mu_denom_i);
-        } else if (data.model_type == ModelType::LOGNORMAL) {
-          double log_y_num_i = std::log(data.y_num_cont[i]);
-          double log_y_denom_i = std::log(data.y_denom_cont[i]);
-          double z_num_i = (log_y_num_i - eta_num) / phi_num;
-          double z_denom_i = (log_y_denom_i - eta_denom) / phi_denom;
-          ll_i = -log_y_num_i - std::log(phi_num) - 0.5 * z_num_i * z_num_i;
-          ll_i += -log_y_denom_i - std::log(phi_denom) - 0.5 * z_denom_i * z_denom_i;
-        } else if (data.model_type == ModelType::BETA_BINOMIAL) {
-          double p_i = 1.0 / (1.0 + std::exp(-eta_num));
-          int y_i = data.y_num[i];
-          int n_i = data.y_denom[i];
-          double alpha_i = p_i * phi_num;
-          double beta_i = (1.0 - p_i) * phi_num;
-          ll_i = std::lgamma(y_i + alpha_i) + std::lgamma(n_i - y_i + beta_i) - std::lgamma(n_i + phi_num);
-          ll_i += -std::lgamma(alpha_i) - std::lgamma(beta_i) + std::lgamma(phi_num);
-          ll_i += ratiod::math::portable_lchoose(n_i, y_i);
-        }
-        acc[acc_at.ll] += ll_i;
+        acc[acc_at.ll] += ratiod::ratio_obs_log_lik(
+            data, layout, i, eta_num, eta_denom, phi_num, phi_denom, logit_zi, logit_oi);
       }
     }
   }  // end parallel
@@ -10963,20 +10615,7 @@ Rcpp::List cpp_hmc_fit_gp(
 
   apply_family_params(data, family);
 
-  // Covariance type
-  ratiod_gp::CovType cov_type;
-  if (cov_type_str == "exponential") {
-    cov_type = ratiod_gp::CovType::EXPONENTIAL;
-  } else if (cov_type_str == "matern") {
-    cov_type = ratiod_gp::CovType::MATERN;
-  } else if (cov_type_str == "gaussian") {
-    cov_type = ratiod_gp::CovType::GAUSSIAN;
-  } else if (cov_type_str == "spherical") {
-    cov_type = ratiod_gp::CovType::SPHERICAL;
-  } else {
-    Rcpp::stop("Unknown covariance type '%s'. Expected one of exponential, "
-               "matern, gaussian, spherical.", cov_type_str);
-  }
+  const ratiod_gp::CovType cov_type = ratiod_cov::parse_cov_type(cov_type_str);
 
   // GP spatial structure
   if (gp_type_str == "gp") {

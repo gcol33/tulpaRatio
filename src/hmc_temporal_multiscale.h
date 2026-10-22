@@ -407,20 +407,6 @@ inline T log_prior_sigma2_temporal_pc(const T& sigma2, double U, double alpha) {
   return safe_log(rate) - rate * sigma - safe_log(T(2.0) * sigma);
 }
 
-// The R-side name of a temporal structure, read into the enum every branch
-// dispatches on. A name with no case here reads NONE, which leaves the field
-// out of the density entirely, so every constructor's `type` string has to
-// appear below.
-inline TemporalType parse_temporal_type(const std::string& type_str) {
-  if (type_str == "rw1") return TemporalType::RW1;
-  if (type_str == "rw2") return TemporalType::RW2;
-  if (type_str == "ar1") return TemporalType::AR1;
-  if (type_str == "iid") return TemporalType::IID;
-  if (type_str == "gp") return TemporalType::GP;
-  if (type_str == "none") return TemporalType::NONE;
-  return TemporalType::NONE;
-}
-
 } // namespace ratiod_temporal
 
 #endif // RATIOD_HMC_TEMPORAL_MULTISCALE_H

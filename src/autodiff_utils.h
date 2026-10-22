@@ -7,6 +7,7 @@
 #define RATIOD_AUTODIFF_UTILS_H
 
 #include <cmath>
+#include <limits>
 #include <vector>
 #include <Rcpp.h>
 #include "autodiff.h"
@@ -430,6 +431,43 @@ inline T dot_product_mixed(const double* x, const T* y, int n) {
 // Likelihood functions (templated)
 // ============================================================================
 
+// log(1 + exp(x)) without overflow at either end
+template<typename T>
+inline T log1p_exp(const T& x) {
+    if (get_value(x) > 0.0) return x + log1p_fn(safe_exp(-x));
+    return log1p_fn(safe_exp(x));
+}
+
+// log(inv_logit(x)) and log(1 - inv_logit(x)), finite for every finite x:
+// forming 1 - inv_logit(x) first rounds to zero once x > ~36.7
+template<typename T>
+inline T log_inv_logit(const T& x) {
+    return -log1p_exp(-x);
+}
+
+template<typename T>
+inline T log1m_inv_logit(const T& x) {
+    return -log1p_exp(x);
+}
+
+// log(exp(a) + exp(b))
+template<typename T>
+inline T log_add_exp(const T& a, const T& b) {
+    const bool a_hi = get_value(a) >= get_value(b);
+    const T& hi = a_hi ? a : b;
+    const T& lo = a_hi ? b : a;
+    if (get_value(hi) == -std::numeric_limits<double>::infinity()) return hi;
+    return hi + log1p_fn(safe_exp(lo - hi));
+}
+
+// The negative binomial's log zero mass phi log(phi / (phi + mu)), written as
+// -phi log1p(mu / phi) so it stays exact as phi outgrows mu, where the ratio
+// rounds to one
+template<typename T>
+inline T negbin_log_p0(const T& mu, const T& phi) {
+    return -phi * log1p_fn(mu / phi);
+}
+
 template<typename T>
 inline T log_lik_poisson(int y, const T& mu) {
     // y * log(mu) - mu - lgamma(y+1)
@@ -450,89 +488,64 @@ inline T log_lik_negbin(int y, const T& mu, const T& phi) {
     // Negative binomial with mean mu and overdispersion phi
     // Using the Gamma-Poisson mixture parameterization
     T log_lik = lgamma_fn(T(y) + phi) - lgamma_fn(T(y + 1.0)) - lgamma_fn(phi);
-    log_lik = log_lik + phi * safe_log(phi / (mu + phi));
-    log_lik = log_lik + y * safe_log(mu / (mu + phi));
+    log_lik = log_lik + negbin_log_p0(mu, phi);
+    log_lik = log_lik + y * (safe_log(mu) - safe_log(mu + phi));
     return log_lik;
 }
 
+// ============================================================================
+// Binomial-type log-likelihoods (templated)
+// ============================================================================
+
+// Each takes the success probability through its logit q, so log p and
+// log(1 - p) stay finite at every q.
+
 template<typename T>
-inline T log_lik_binomial(int y, int n, const T& p) {
+inline T log_lik_binomial(int y, int n, const T& q) {
     // y * log(p) + (n-y) * log(1-p) + lchoose(n, y)
     // lchoose is constant w.r.t. p
-    T log_lik = y * safe_log(p) + (n - y) * safe_log(T(1.0) - p);
+    T log_lik = y * log_inv_logit(q) + (n - y) * log1m_inv_logit(q);
     log_lik = log_lik + portable_lchoose(n, y);  // constant
     return log_lik;
 }
 
-// ============================================================================
-// ZI/OI/Hurdle binomial log-likelihoods (templated)
-// ============================================================================
-
 // Zero-inflated binomial: P(Y=0) = zi + (1-zi) * Binom(0|n,p)
 template<typename T>
-inline T log_lik_zi_binomial(int y, int n, const T& p, const T& logit_zi) {
-    T log_zi = -safe_log(T(1.0) + safe_exp(-logit_zi));  // log(sigmoid(logit_zi))
-    T log_1m_zi = -safe_log(T(1.0) + safe_exp(logit_zi)); // log(1 - sigmoid(logit_zi))
-
+inline T log_lik_zi_binomial(int y, int n, const T& q, const T& logit_zi) {
     if (y == 0) {
-        // log(zi + (1-zi) * (1-p)^n)
-        T log_binom_zero = n * safe_log(T(1.0) - p);
-        // log-sum-exp: log(exp(log_zi) + exp(log_1m_zi + log_binom_zero))
-        T a = log_zi;
-        T b = log_1m_zi + log_binom_zero;
-        T max_ab = (get_value(a) > get_value(b)) ? a : b;
-        return max_ab + safe_log(safe_exp(a - max_ab) + safe_exp(b - max_ab));
-    } else {
-        // log((1-zi) * Binom(y|n,p))
-        return log_1m_zi + log_lik_binomial(y, n, p);
+        return log_add_exp(log_inv_logit(logit_zi),
+                           log1m_inv_logit(logit_zi) + n * log1m_inv_logit(q));
     }
+    return log1m_inv_logit(logit_zi) + log_lik_binomial(y, n, q);
 }
 
 // One-inflated binomial: P(Y=n) = oi + (1-oi) * Binom(n|n,p)
 template<typename T>
-inline T log_lik_oi_binomial(int y, int n, const T& p, const T& logit_oi) {
-    T log_oi = -safe_log(T(1.0) + safe_exp(-logit_oi));  // log(sigmoid(logit_oi))
-    T log_1m_oi = -safe_log(T(1.0) + safe_exp(logit_oi)); // log(1 - sigmoid(logit_oi))
-
+inline T log_lik_oi_binomial(int y, int n, const T& q, const T& logit_oi) {
     if (y == n) {
-        // log(oi + (1-oi) * p^n)
-        T log_binom_n = n * safe_log(p);
-        T a = log_oi;
-        T b = log_1m_oi + log_binom_n;
-        T max_ab = (get_value(a) > get_value(b)) ? a : b;
-        return max_ab + safe_log(safe_exp(a - max_ab) + safe_exp(b - max_ab));
-    } else {
-        // log((1-oi) * Binom(y|n,p))
-        return log_1m_oi + log_lik_binomial(y, n, p);
+        return log_add_exp(log_inv_logit(logit_oi),
+                           log1m_inv_logit(logit_oi) + n * log_inv_logit(q));
     }
+    return log1m_inv_logit(logit_oi) + log_lik_binomial(y, n, q);
 }
 
 // Zero-and-one inflated binomial (ZOIB)
+//   P(Y=0) = zi + (1-zi) (1-oi) Binom(0|n,p)
+//   P(Y=n) = (1-zi) (oi + (1-oi) Binom(n|n,p))
+//   P(Y=y) = (1-zi) (1-oi) Binom(y|n,p) otherwise
 template<typename T>
-inline T log_lik_zoib(int y, int n, const T& p, const T& logit_zi, const T& logit_oi) {
-    T log_zi = -safe_log(T(1.0) + safe_exp(-logit_zi));
-    T log_1m_zi = -safe_log(T(1.0) + safe_exp(logit_zi));
-    T log_oi = -safe_log(T(1.0) + safe_exp(-logit_oi));
-    T log_1m_oi = -safe_log(T(1.0) + safe_exp(logit_oi));
-
+inline T log_lik_zoib(int y, int n, const T& q, const T& logit_zi, const T& logit_oi) {
+    const T log_1m_zi = log1m_inv_logit(logit_zi);
+    const T log_1m_oi = log1m_inv_logit(logit_oi);
     if (y == 0) {
-        // P(Y=0) = zi + (1-zi) * (1-oi) * Binom(0|n,p)
-        T log_binom_zero = n * safe_log(T(1.0) - p);
-        T a = log_zi;
-        T b = log_1m_zi + log_1m_oi + log_binom_zero;
-        T max_ab = (get_value(a) > get_value(b)) ? a : b;
-        return max_ab + safe_log(safe_exp(a - max_ab) + safe_exp(b - max_ab));
-    } else if (y == n) {
-        // P(Y=n) = (1-zi) * (oi + (1-oi) * Binom(n|n,p))
-        T log_binom_n = n * safe_log(p);
-        T a = log_1m_zi + log_oi;
-        T b = log_1m_zi + log_1m_oi + log_binom_n;
-        T max_ab = (get_value(a) > get_value(b)) ? a : b;
-        return max_ab + safe_log(safe_exp(a - max_ab) + safe_exp(b - max_ab));
-    } else {
-        // P(Y=y) = (1-zi) * (1-oi) * Binom(y|n,p)
-        return log_1m_zi + log_1m_oi + log_lik_binomial(y, n, p);
+        return log_add_exp(log_inv_logit(logit_zi),
+                           log_1m_zi + log_1m_oi + n * log1m_inv_logit(q));
     }
+    if (y == n) {
+        return log_1m_zi + log_add_exp(log_inv_logit(logit_oi),
+                                       log_1m_oi + n * log_inv_logit(q));
+    }
+    return log_1m_zi + log_1m_oi + log_lik_binomial(y, n, q);
 }
 
 // PC prior on the standard deviation sigma = tau^(-1/2) of a field with
@@ -568,18 +581,11 @@ inline T log1m_exp(const T& x) {
 
 // Hurdle binomial: separate zero vs non-zero
 template<typename T>
-inline T log_lik_hurdle_binomial(int y, int n, const T& p, const T& logit_theta) {
-    T log_theta = -safe_log(T(1.0) + safe_exp(-logit_theta));  // P(Y > 0)
-    T log_1m_theta = -safe_log(T(1.0) + safe_exp(logit_theta)); // P(Y = 0)
-
-    if (y == 0) {
-        return log_1m_theta;
-    } else {
-        // P(Y=y|Y>0) = Binom(y|n,p) / (1 - (1-p)^n)
-        T log_binom = log_lik_binomial(y, n, p);
-        T log_1m_zero = log1m_exp(T(double(n)) * log1p_fn(-p));
-        return log_theta + log_binom - log_1m_zero;
-    }
+inline T log_lik_hurdle_binomial(int y, int n, const T& q, const T& logit_theta) {
+    if (y == 0) return log1m_inv_logit(logit_theta);
+    // theta P(Y=y|Y>0), P(Y=y|Y>0) = Binom(y|n,p) / (1 - (1-p)^n)
+    return log_inv_logit(logit_theta) + log_lik_binomial(y, n, q)
+        - log1m_exp(n * log1m_inv_logit(q));
 }
 
 // ============================================================================
@@ -626,11 +632,11 @@ inline T log_lik_lognormal_lognormal(double y_num, double y_denom,
 
 // Beta-Binomial: y ~ BetaBinomial(n, alpha, beta)
 // Using mean-precision parameterization: mu = alpha/(alpha+beta), phi = alpha+beta
-// So alpha = mu*phi, beta = (1-mu)*phi
+// So alpha = mu*phi, beta = (1-mu)*phi, mu taken through its logit q
 template<typename T>
-inline T log_lik_beta_binomial(int y, int n, const T& mu, const T& phi) {
-    T alpha = mu * phi;
-    T beta = (T(1.0) - mu) * phi;
+inline T log_lik_beta_binomial(int y, int n, const T& q, const T& phi) {
+    T alpha = safe_exp(log_inv_logit(q)) * phi;
+    T beta = safe_exp(log1m_inv_logit(q)) * phi;
 
     // log P(y|n,alpha,beta) = log(B(y+alpha, n-y+beta)) - log(B(alpha, beta)) + log(C(n,y))
     // = lgamma(y+alpha) + lgamma(n-y+beta) - lgamma(n+alpha+beta)

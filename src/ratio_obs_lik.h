@@ -35,21 +35,21 @@ inline T ratio_obs_log_lik(const ModelData& data, const ParamLayout& layout,
     T ll_i = T(0.0);
 
     if (data.model_type == ModelType::BINOMIAL) {
-        T p = inv_logit(prob_logit(eta_num, data.link_num));
+        T q = prob_logit(eta_num, data.link_num);
         int y = data.y_num[i];
         int n = data.y_denom[i];
 
         // Handle different ZI types for binomial
         if (data.zi_type == ZIType::ZI_BINOMIAL) {
-            ll_i = log_lik_zi_binomial(y, n, p, logit_zi);
+            ll_i = log_lik_zi_binomial(y, n, q, logit_zi);
         } else if (data.zi_type == ZIType::OI_BINOMIAL) {
-            ll_i = log_lik_oi_binomial(y, n, p, logit_oi);
+            ll_i = log_lik_oi_binomial(y, n, q, logit_oi);
         } else if (data.zi_type == ZIType::ZOIB) {
-            ll_i = log_lik_zoib(y, n, p, logit_zi, logit_oi);
+            ll_i = log_lik_zoib(y, n, q, logit_zi, logit_oi);
         } else if (data.zi_type == ZIType::HURDLE_BINOMIAL) {
-            ll_i = log_lik_hurdle_binomial(y, n, p, logit_zi);
+            ll_i = log_lik_hurdle_binomial(y, n, q, logit_zi);
         } else {
-            ll_i = log_lik_binomial(y, n, p);
+            ll_i = log_lik_binomial(y, n, q);
         }
 
     } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
@@ -60,6 +60,7 @@ inline T ratio_obs_log_lik(const ModelData& data, const ParamLayout& layout,
         // other.
         T mu_num = link_mean(eta_num, data.link_num);
         T mu_denom = link_mean(eta_denom, data.link_denom);
+        if (get_value(mu_num) < 0.0 || get_value(mu_denom) < 0.0) return neg_inf;
         if (layout.has_zi) {
             ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                 logit_zi, data.zi_type);
@@ -71,7 +72,7 @@ inline T ratio_obs_log_lik(const ModelData& data, const ParamLayout& layout,
     } else if (data.model_type == ModelType::POISSON_GAMMA) {
         T mu_num = link_mean(eta_num, data.link_num);
         T mu_denom = link_mean(eta_denom, data.link_denom);
-        if (get_value(mu_denom) <= 0.0) return neg_inf;
+        if (get_value(mu_num) < 0.0 || get_value(mu_denom) <= 0.0) return neg_inf;
         if (layout.has_zi) {
             ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                 logit_zi, data.zi_type);
@@ -83,7 +84,7 @@ inline T ratio_obs_log_lik(const ModelData& data, const ParamLayout& layout,
     } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
         T mu_num = link_mean(eta_num, data.link_num);
         T mu_denom = link_mean(eta_denom, data.link_denom);
-        if (get_value(mu_denom) <= 0.0) return neg_inf;
+        if (get_value(mu_num) < 0.0 || get_value(mu_denom) <= 0.0) return neg_inf;
         if (layout.has_zi) {
             ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                 logit_zi, data.zi_type);
@@ -110,16 +111,15 @@ inline T ratio_obs_log_lik(const ModelData& data, const ParamLayout& layout,
     } else if (data.model_type == ModelType::BETA_BINOMIAL) {
         // Beta-Binomial: overdispersed binomial
         // phi_num = precision parameter (alpha + beta)
-        T p = inv_logit(prob_logit(eta_num, data.link_num));
-        int y = data.y_num[i];
-        int n = data.y_denom[i];
-        ll_i = log_lik_beta_binomial(y, n, p, phi_num);
+        ll_i = log_lik_beta_binomial(data.y_num[i], data.y_denom[i],
+                                     prob_logit(eta_num, data.link_num), phi_num);
 
     } else if (data.model_type == ModelType::POISSON_FIXED ||
                data.model_type == ModelType::NEGBIN_FIXED) {
         // A known exposure E scales the mean: mu = E * linkinv(eta), the
         // rate being linkinv(eta)
         T mu_num = link_mean(eta_num, data.link_num) * data.y_denom_cont[i];
+        if (get_value(mu_num) < 0.0) return neg_inf;
         if (layout.has_zi) {
             ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                 logit_zi, data.zi_type);
@@ -137,6 +137,7 @@ inline T ratio_obs_log_lik(const ModelData& data, const ParamLayout& layout,
     } else if (data.model_type == ModelType::POISSON_NEGBIN) {
         T mu_num = link_mean(eta_num, data.link_num);
         T mu_denom = link_mean(eta_denom, data.link_denom);
+        if (get_value(mu_num) < 0.0 || get_value(mu_denom) < 0.0) return neg_inf;
         if (layout.has_zi) {
             ll_i = ratiod_zi::zi_log_likelihood(data.y_num[i], mu_num, phi_num,
                                                 logit_zi, data.zi_type);

@@ -1698,7 +1698,7 @@ validate_svc <- function(svc, data, X) {
 #'
 #' @keywords internal
 cov_type_code <- function(cov) {
-  known <- c("exponential", "matern", "gaussian", "spherical")
+  known <- cpp_enum_names("cov")
   cov <- cov %||% "exponential"
   code <- match(cov, known)
   if (length(code) != 1L || is.na(code)) {

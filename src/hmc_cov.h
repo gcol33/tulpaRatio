@@ -21,8 +21,10 @@
 
 #include <vector>
 #include <cmath>
+#include <string>
 
 #include "autodiff_utils.h"
+#include "enum_names.h"
 
 namespace ratiod_cov {
 
@@ -30,6 +32,16 @@ using namespace ratiod::math;
 
 // Covariance function types
 enum class CovType { EXPONENTIAL, MATERN, GAUSSIAN, SPHERICAL };
+
+// The cov = names, in the order of the integer codes R/spatial.R's
+// cov_type_code() sends
+inline constexpr ratiod_enum::EnumName<CovType> COV_TYPE_NAMES[] = {
+  {"exponential", CovType::EXPONENTIAL}, {"matern", CovType::MATERN},
+  {"gaussian", CovType::GAUSSIAN},       {"spherical", CovType::SPHERICAL}};
+
+inline CovType parse_cov_type(const std::string& s) {
+  return ratiod_enum::parse_enum(COV_TYPE_NAMES, s, "covariance");
+}
 
 // sqrt(3), to the precision of the type rather than of a typed-out literal.
 inline double sqrt3() { return std::sqrt(3.0); }

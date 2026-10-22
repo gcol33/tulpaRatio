@@ -1260,11 +1260,7 @@ Rcpp::List cpp_gradient_check(std::string field,
   ParamLayout layout = compute_param_layout(data);
   const int n_params = get_n_params(data);
 
-  GradientMode gm = GradientMode::HANDCODED;
-  if (mode == "arena")    gm = GradientMode::AUTODIFF_ARENA;
-  if (mode == "forward")  gm = GradientMode::AUTODIFF_FORWARD;
-  if (mode == "tape")     gm = GradientMode::AUTODIFF_TAPE;
-  set_gradient_mode(gm);
+  set_gradient_mode(parse_gradient_mode(mode));
   // Not fatal here: the harness has to be able to measure how far the templated
   // density is from the analytic one on a structure it cannot express, which is
   // what the gap is. Report it so a caller can assert on it.
@@ -1660,8 +1656,13 @@ double cpp_ms_temporal_nc_coordinate_spread(std::string field = "ms_temporal_nc"
                                             int n_groups = 1) {
   int order = 1;
   bool cyclic = false;
-  if (field == "ms_temporal_rw2_nc") order = 2;
-  if (field == "ms_temporal_seasonal_nc") cyclic = true;
+  if (field == "ms_temporal_rw2_nc") {
+    order = 2;
+  } else if (field == "ms_temporal_seasonal_nc") {
+    cyclic = true;
+  } else if (field != "ms_temporal_nc") {
+    Rcpp::stop("Unknown multi-scale temporal field '%s'.", field);
+  }
 
   std::mt19937 rng(seed + 7000u);
   std::normal_distribution<double> rnorm(0.0, 1.0);

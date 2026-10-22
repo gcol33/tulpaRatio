@@ -91,13 +91,8 @@ Rcpp::List cpp_gibbs_spatial(Rcpp::List data_list) {
                   Rcpp::as<int>(data_list["n_cores"]) : 1;
     if (n_cores < 1) n_cores = 1;
 
-    // Map family string
-    GibbsFamily family;
-    if (family_str == "poisson_gamma") family = GibbsFamily::POISSON_GAMMA;
-    else if (family_str == "negbin_negbin") family = GibbsFamily::NEGBIN_NEGBIN;
-    else if (family_str == "binomial") family = GibbsFamily::BINOMIAL;
-    else if (family_str == "negbin_gamma") family = GibbsFamily::NEGBIN_GAMMA;
-    else Rcpp::stop("Gibbs sampler: unsupported family '%s'", family_str.c_str());
+    const GibbsFamily family =
+        ratiod_enum::parse_enum(GIBBS_FAMILY_NAMES, family_str, "Gibbs sampler family");
 
     bool is_binomial = (family == GibbsFamily::BINOMIAL);
 

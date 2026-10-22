@@ -8,8 +8,10 @@
 #define _USE_MATH_DEFINES  // For M_PI on Windows
 #include <vector>
 #include <cmath>
+#include <string>
 #include <utility>
 
+#include "enum_names.h"
 #include <tulpa/sum_to_zero.h>  // rw1_rank / rw2_rank / s2z_component_sum
 #include "ar1_shared.h"              // the floored 1 - rho^2
 
@@ -25,6 +27,17 @@ namespace ratiod_temporal {
 // =====================================================================
 
 enum class TemporalType { NONE, RW1, RW2, AR1, IID, GP };
+
+// The R-side name of each temporal structure. "multiscale" is not here: it is
+// a composite the data builder reads before any single structure.
+inline constexpr ratiod_enum::EnumName<TemporalType> TEMPORAL_TYPE_NAMES[] = {
+  {"none", TemporalType::NONE}, {"rw1", TemporalType::RW1},
+  {"rw2", TemporalType::RW2},   {"ar1", TemporalType::AR1},
+  {"iid", TemporalType::IID},   {"gp", TemporalType::GP}};
+
+inline TemporalType parse_temporal_type(const std::string& s) {
+  return ratiod_enum::parse_enum(TEMPORAL_TYPE_NAMES, s, "temporal structure");
+}
 
 // Temporal data container
 struct TemporalData {

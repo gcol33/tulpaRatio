@@ -13,7 +13,7 @@
 // instruction cache pressure from ~30-50KB to ~5KB per instantiation.
 //
 // IMPORTANT: This header must be included from hmc_sampler.cpp AFTER
-// hmc_sampler.h and the log_lik_* inline functions are defined.
+// hmc_sampler.h.
 
 #ifndef RATIOD_HMC_GRADIENT_VECTORIZED_H
 #define RATIOD_HMC_GRADIENT_VECTORIZED_H
@@ -23,7 +23,6 @@
 #include <cstring>
 
 // Assumes hmc_sampler.h and RcppEigen.h are already included by the .cpp file.
-// Assumes log_lik_binomial/negbin/poisson/gamma are defined above in the .cpp.
 // IMPORTANT: This file is included from within namespace ratiod_hmc {} in hmc_sampler.cpp.
 // Do NOT wrap contents in namespace ratiod_hmc — it would be doubly nested.
 
@@ -618,34 +617,12 @@ inline void compute_residuals_impl(
   double ll = 0.0;
 
   for (int i = 0; i < N; i++) {
-    // Numerically stable sigmoid (avoids exp overflow for |eta| > 700)
-    const double eta = eta_num[i];
-    const double p = (eta >= 0.0)
-        ? 1.0 / (1.0 + std::exp(-eta))
-        : std::exp(eta) / (1.0 + std::exp(eta));
-    const int y_i = data.y_num[i];
-    const int n_i = data.y_denom[i];
-    const double alpha = p * phi_num;
-    const double beta_param = (1.0 - p) * phi_num;
-
-    // Fused digamma+lgamma: saves 5 log() per obs vs separate calls
-    auto [psi_y_alpha, lg_y_alpha] = ratiod::math::portable_digamma_lgamma(y_i + alpha);
-    auto [psi_nmy_beta, lg_nmy_beta] = ratiod::math::portable_digamma_lgamma(n_i - y_i + beta_param);
-    auto [psi_alpha, lg_alpha] = ratiod::math::portable_digamma_lgamma(alpha);
-    auto [psi_beta, lg_beta] = ratiod::math::portable_digamma_lgamma(beta_param);
-    auto [psi_n_phi, lg_n_phi] = ratiod::math::portable_digamma_lgamma(n_i + phi_num);
-    const double dLL_dp = phi_num * (psi_y_alpha - psi_nmy_beta - psi_alpha + psi_beta);
-    resid_num[i] = dLL_dp * p * (1.0 - p);
+    const ratiod::math::BetaBinomialObs bb = ratiod::math::beta_binomial_obs(
+        data.y_num[i], data.y_denom[i], eta_num[i], phi_num);
+    resid_num[i] = bb.d_eta;
     resid_denom[i] = 0.0;
-
-    gpn += p * psi_y_alpha + (1.0 - p) * psi_nmy_beta - psi_n_phi
-         - p * psi_alpha - (1.0 - p) * psi_beta + psi_phi;
-
-    if (compute_lp) {
-      ll += lg_y_alpha + lg_nmy_beta - lg_n_phi;
-      ll += -lg_alpha - lg_beta + lgamma_phi;
-      ll += ws.lchoose_cache[i];
-    }
+    gpn += bb.d_phi + psi_phi;
+    if (compute_lp) ll += bb.ll + lgamma_phi + ws.lchoose_cache[i];
   }
   grad_phi_num_lik += gpn;
   obs_ll += ll;
@@ -1261,28 +1238,11 @@ void compute_gradient_fused(
         }
       }
       else if constexpr (MT == ModelType::BETA_BINOMIAL) {
-        // Numerically stable sigmoid (avoids exp overflow for |eta| > 700)
-        const double p = (eta_n >= 0.0)
-            ? 1.0 / (1.0 + std::exp(-eta_n))
-            : std::exp(eta_n) / (1.0 + std::exp(eta_n));
-        const int y_i = data.y_num[i];
-        const int n_i = data.y_denom[i];
-        const double alpha = p * phi_num;
-        const double beta_param = (1.0 - p) * phi_num;
-        auto [psi_y_alpha, lg_y_alpha] = ratiod::math::portable_digamma_lgamma(y_i + alpha);
-        auto [psi_nmy_beta, lg_nmy_beta] = ratiod::math::portable_digamma_lgamma(n_i - y_i + beta_param);
-        auto [psi_alpha, lg_alpha] = ratiod::math::portable_digamma_lgamma(alpha);
-        auto [psi_beta, lg_beta] = ratiod::math::portable_digamma_lgamma(beta_param);
-        auto [psi_n_phi, lg_n_phi] = ratiod::math::portable_digamma_lgamma(n_i + phi_num);
-        const double dLL_dp = phi_num * (psi_y_alpha - psi_nmy_beta - psi_alpha + psi_beta);
-        resid_n = dLL_dp * p * (1.0 - p);
-        grad_phi_num_lik += p * psi_y_alpha + (1.0 - p) * psi_nmy_beta - psi_n_phi
-                          - p * psi_alpha - (1.0 - p) * psi_beta + h_psi_phi_bb;
-        if (compute_lp) {
-          ll += lg_y_alpha + lg_nmy_beta - lg_n_phi;
-          ll += -lg_alpha - lg_beta + h_lgamma_phi_bb;
-          ll += ws.lchoose_cache[i];
-        }
+        const ratiod::math::BetaBinomialObs bb = ratiod::math::beta_binomial_obs(
+            data.y_num[i], data.y_denom[i], eta_n, phi_num);
+        resid_n = bb.d_eta;
+        grad_phi_num_lik += bb.d_phi + h_psi_phi_bb;
+        if (compute_lp) ll += bb.ll + h_lgamma_phi_bb + ws.lchoose_cache[i];
       }
 
       scatter_gradients_i(i, resid_n, resid_d);

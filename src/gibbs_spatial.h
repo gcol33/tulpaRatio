@@ -17,6 +17,7 @@
 #pragma once
 
 #include <Rcpp.h>
+#include "enum_names.h"
 #include <vector>
 #include <cmath>
 #include <random>
@@ -31,6 +32,13 @@ namespace gibbs {
 // =========================================================================
 
 enum class GibbsFamily { POISSON_GAMMA, NEGBIN_NEGBIN, BINOMIAL, NEGBIN_GAMMA };
+
+// The families the Gibbs sampler carries
+inline constexpr ratiod_enum::EnumName<GibbsFamily> GIBBS_FAMILY_NAMES[] = {
+    {"poisson_gamma", GibbsFamily::POISSON_GAMMA},
+    {"negbin_negbin", GibbsFamily::NEGBIN_NEGBIN},
+    {"binomial", GibbsFamily::BINOMIAL},
+    {"negbin_gamma", GibbsFamily::NEGBIN_GAMMA}};
 
 struct GibbsData {
     int N;                              // Total observations

@@ -61,6 +61,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_enum_names
+std::vector<std::string> cpp_enum_names(std::string kind);
+RcppExport SEXP _tulpaRatio_cpp_enum_names(SEXP kindSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type kind(kindSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_enum_names(kind));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_ess_fit
 Rcpp::List cpp_ess_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, int n_iter, int n_warmup, unsigned int seed, bool verbose);
 RcppExport SEXP _tulpaRatio_cpp_ess_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP seedSEXP, SEXP verboseSEXP) {
@@ -1488,17 +1499,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_zi_logistic
-double cpp_test_zi_logistic(double x);
-RcppExport SEXP _tulpaRatio_cpp_test_zi_logistic(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_zi_logistic(x));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_log_logistic
 double cpp_test_log_logistic(double x);
 RcppExport SEXP _tulpaRatio_cpp_test_log_logistic(SEXP xSEXP) {
@@ -1543,6 +1543,36 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type mu(muSEXP);
     Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_zi_negbin_lpmf(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_binomial_lpmf
+double cpp_test_binomial_lpmf(int y, int n, double q, double logit_zi, double logit_oi, std::string zi_type_str);
+RcppExport SEXP _tulpaRatio_cpp_test_binomial_lpmf(SEXP ySEXP, SEXP nSEXP, SEXP qSEXP, SEXP logit_ziSEXP, SEXP logit_oiSEXP, SEXP zi_type_strSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type q(qSEXP);
+    Rcpp::traits::input_parameter< double >::type logit_zi(logit_ziSEXP);
+    Rcpp::traits::input_parameter< double >::type logit_oi(logit_oiSEXP);
+    Rcpp::traits::input_parameter< std::string >::type zi_type_str(zi_type_strSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_binomial_lpmf(y, n, q, logit_zi, logit_oi, zi_type_str));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_beta_binomial_lpmf
+double cpp_test_beta_binomial_lpmf(int y, int n, double q, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_beta_binomial_lpmf(SEXP ySEXP, SEXP nSEXP, SEXP qSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type q(qSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_beta_binomial_lpmf(y, n, q, phi));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1637,45 +1667,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type logit_zi(logit_ziSEXP);
     Rcpp::traits::input_parameter< std::string >::type zi_type_str(zi_type_strSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_zi_log_likelihood(y, mu, phi, logit_zi, zi_type_str));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_zi_poisson_grad_logit_zi
-double cpp_test_zi_poisson_grad_logit_zi(int y, double mu, double logit_zi);
-RcppExport SEXP _tulpaRatio_cpp_test_zi_poisson_grad_logit_zi(SEXP ySEXP, SEXP muSEXP, SEXP logit_ziSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< double >::type logit_zi(logit_ziSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_zi_poisson_grad_logit_zi(y, mu, logit_zi));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_zi_negbin_grad_logit_zi
-double cpp_test_zi_negbin_grad_logit_zi(int y, double mu, double phi, double logit_zi);
-RcppExport SEXP _tulpaRatio_cpp_test_zi_negbin_grad_logit_zi(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP logit_ziSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< double >::type logit_zi(logit_ziSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_zi_negbin_grad_logit_zi(y, mu, phi, logit_zi));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_hurdle_grad_logit_theta
-double cpp_test_hurdle_grad_logit_theta(int y, double logit_theta);
-RcppExport SEXP _tulpaRatio_cpp_test_hurdle_grad_logit_theta(SEXP ySEXP, SEXP logit_thetaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type logit_theta(logit_thetaSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_hurdle_grad_logit_theta(y, logit_theta));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1920,6 +1911,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_sample_crt", (DL_FUNC) &_tulpaRatio_cpp_sample_crt, 2},
     {"_tulpaRatio_cpp_sample_crt_sum", (DL_FUNC) &_tulpaRatio_cpp_sample_crt_sum, 2},
     {"_tulpaRatio_cpp_crt_mean", (DL_FUNC) &_tulpaRatio_cpp_crt_mean, 2},
+    {"_tulpaRatio_cpp_enum_names", (DL_FUNC) &_tulpaRatio_cpp_enum_names, 1},
     {"_tulpaRatio_cpp_ess_fit", (DL_FUNC) &_tulpaRatio_cpp_ess_fit, 21},
     {"_tulpaRatio_cpp_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_gibbs_spatial, 1},
     {"_tulpaRatio_cpp_gpu_available", (DL_FUNC) &_tulpaRatio_cpp_gpu_available, 0},
@@ -2010,11 +2002,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_temporal_log_prior", (DL_FUNC) &_tulpaRatio_cpp_test_temporal_log_prior, 5},
     {"_tulpaRatio_cpp_test_ms_rw_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_ms_rw_log_lik, 5},
     {"_tulpaRatio_cpp_test_log1pexp", (DL_FUNC) &_tulpaRatio_cpp_test_log1pexp, 1},
-    {"_tulpaRatio_cpp_test_zi_logistic", (DL_FUNC) &_tulpaRatio_cpp_test_zi_logistic, 1},
     {"_tulpaRatio_cpp_test_log_logistic", (DL_FUNC) &_tulpaRatio_cpp_test_log_logistic, 1},
     {"_tulpaRatio_cpp_test_log1m_logistic", (DL_FUNC) &_tulpaRatio_cpp_test_log1m_logistic, 1},
     {"_tulpaRatio_cpp_test_zi_poisson_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_zi_poisson_lpmf, 2},
     {"_tulpaRatio_cpp_test_zi_negbin_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_zi_negbin_lpmf, 3},
+    {"_tulpaRatio_cpp_test_binomial_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_binomial_lpmf, 6},
+    {"_tulpaRatio_cpp_test_beta_binomial_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_beta_binomial_lpmf, 4},
     {"_tulpaRatio_cpp_test_zi_poisson_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_zi_poisson_lpmf_logit, 3},
     {"_tulpaRatio_cpp_test_zi_negbin_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_zi_negbin_lpmf_logit, 4},
     {"_tulpaRatio_cpp_test_truncated_poisson_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_truncated_poisson_lpmf, 2},
@@ -2022,9 +2015,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_hurdle_poisson_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_hurdle_poisson_lpmf_logit, 3},
     {"_tulpaRatio_cpp_test_hurdle_negbin_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_hurdle_negbin_lpmf_logit, 4},
     {"_tulpaRatio_cpp_test_zi_log_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_zi_log_likelihood, 5},
-    {"_tulpaRatio_cpp_test_zi_poisson_grad_logit_zi", (DL_FUNC) &_tulpaRatio_cpp_test_zi_poisson_grad_logit_zi, 3},
-    {"_tulpaRatio_cpp_test_zi_negbin_grad_logit_zi", (DL_FUNC) &_tulpaRatio_cpp_test_zi_negbin_grad_logit_zi, 4},
-    {"_tulpaRatio_cpp_test_hurdle_grad_logit_theta", (DL_FUNC) &_tulpaRatio_cpp_test_hurdle_grad_logit_theta, 2},
     {"_tulpaRatio_cpp_test_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_test_get_max_threads, 0},
     {"_tulpaRatio_cpp_test_parallel_dot_products", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_dot_products, 3},
     {"_tulpaRatio_cpp_test_parallel_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_likelihood, 3},

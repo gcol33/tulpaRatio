@@ -491,6 +491,25 @@ for (field in PER_OBS_FIELDS) {
   })
 }
 
+test_that("the hand-coded gradient reports the density's own log posterior", {
+  # lp__ is read from whichever gradient mode the run uses, so it cannot
+  # depend on the mode: the hand-coded pass once dropped lchoose(n, y) for
+  # the plain binomial (gcol33/tulpaRatio#172)
+  cases <- c(lapply(HANDCODED_FAMILIES, function(f) list(family = f, zi = "none")),
+             PER_OBS_ZI_CASES,
+             list(list(family = "binomial", zi = "oi_binomial"),
+                  list(family = "binomial", zi = "hurdle_binomial")))
+  for (field in c("rw1", "icar")) {
+    for (case in cases) {
+      r <- tulpaRatio:::cpp_gradient_check(field, mode = "handcoded",
+                                           family = case$family, zi = case$zi)
+      info <- sprintf("%s / %s / %s", field, case$family, case$zi)
+      expect_equal(r$log_post_mode, r$log_post, tolerance = 1e-10, info = info)
+      expect_lt(max(grad_rel_dev(r)), 1e-4, label = info)
+    }
+  }
+})
+
 test_that("the collapsed GP interaction carries the log-concave families", {
   for (field in c("stgp_collapsed", "stgp_gneiting_collapsed")) {
     for (family in setdiff(HANDCODED_FAMILIES, "beta_binomial")) {

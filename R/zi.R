@@ -317,8 +317,7 @@ validate_zi <- function(zi, data = NULL) {
          "oi_binomial(), or zoib())", call. = FALSE)
   }
 
-  valid_types <- c("zi_poisson", "zi_negbin", "hurdle_poisson", "hurdle_negbin",
-                    "zi_binomial", "hurdle_binomial", "oi_binomial", "zoib")
+  valid_types <- setdiff(cpp_enum_names("zi"), "none")
   if (!zi$type %in% valid_types) {
     stop("Unknown ZI type: ", zi$type, call. = FALSE)
   }
@@ -370,8 +369,7 @@ family_zi_info <- function(family, N) {
     switch(dist,
       "hurdle_binomial" = "hurdle_binomial",
       "hurdle_poisson" = "hurdle_poisson",
-      "hurdle_neg_binomial" = "hurdle_negbin",
-      "hurdle_binomial"  # fallback
+      "hurdle_neg_binomial" = "hurdle_negbin"
     )
   } else if (family$zi_type == "one_inflated") {
     # One-inflated models (excess at upper boundary)
@@ -384,9 +382,12 @@ family_zi_info <- function(family, N) {
     switch(dist,
       "zero_inflated_binomial" = "zi_binomial",
       "zero_inflated_poisson" = "zi_poisson",
-      "zero_inflated_neg_binomial" = "zi_negbin",
-      "zi_binomial"  # fallback
+      "zero_inflated_neg_binomial" = "zi_negbin"
     )
+  }
+  if (is.null(zi_type)) {
+    stop(sprintf("No zero/one inflation structure for a %s numerator.", dist),
+         call. = FALSE)
   }
 
   if (family$zi_type == "one_inflated") {

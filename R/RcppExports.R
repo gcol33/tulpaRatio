@@ -17,6 +17,10 @@ cpp_crt_mean <- function(y, r) {
     .Call(`_tulpaRatio_cpp_crt_mean`, y, r)
 }
 
+cpp_enum_names <- function(kind) {
+    .Call(`_tulpaRatio_cpp_enum_names`, kind)
+}
+
 cpp_ess_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose) {
     .Call(`_tulpaRatio_cpp_ess_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose)
 }
@@ -377,10 +381,6 @@ cpp_test_log1pexp <- function(x) {
     .Call(`_tulpaRatio_cpp_test_log1pexp`, x)
 }
 
-cpp_test_zi_logistic <- function(x) {
-    .Call(`_tulpaRatio_cpp_test_zi_logistic`, x)
-}
-
 cpp_test_log_logistic <- function(x) {
     .Call(`_tulpaRatio_cpp_test_log_logistic`, x)
 }
@@ -395,6 +395,14 @@ cpp_test_zi_poisson_lpmf <- function(y, mu) {
 
 cpp_test_zi_negbin_lpmf <- function(y, mu, phi) {
     .Call(`_tulpaRatio_cpp_test_zi_negbin_lpmf`, y, mu, phi)
+}
+
+cpp_test_binomial_lpmf <- function(y, n, q, logit_zi, logit_oi, zi_type_str) {
+    .Call(`_tulpaRatio_cpp_test_binomial_lpmf`, y, n, q, logit_zi, logit_oi, zi_type_str)
+}
+
+cpp_test_beta_binomial_lpmf <- function(y, n, q, phi) {
+    .Call(`_tulpaRatio_cpp_test_beta_binomial_lpmf`, y, n, q, phi)
 }
 
 cpp_test_zi_poisson_lpmf_logit <- function(y, mu, logit_zi) {
@@ -423,18 +431,6 @@ cpp_test_hurdle_negbin_lpmf_logit <- function(y, mu, phi, logit_theta) {
 
 cpp_test_zi_log_likelihood <- function(y, mu, phi, logit_zi, zi_type_str) {
     .Call(`_tulpaRatio_cpp_test_zi_log_likelihood`, y, mu, phi, logit_zi, zi_type_str)
-}
-
-cpp_test_zi_poisson_grad_logit_zi <- function(y, mu, logit_zi) {
-    .Call(`_tulpaRatio_cpp_test_zi_poisson_grad_logit_zi`, y, mu, logit_zi)
-}
-
-cpp_test_zi_negbin_grad_logit_zi <- function(y, mu, phi, logit_zi) {
-    .Call(`_tulpaRatio_cpp_test_zi_negbin_grad_logit_zi`, y, mu, phi, logit_zi)
-}
-
-cpp_test_hurdle_grad_logit_theta <- function(y, logit_theta) {
-    .Call(`_tulpaRatio_cpp_test_hurdle_grad_logit_theta`, y, logit_theta)
 }
 
 cpp_test_get_max_threads <- function() {

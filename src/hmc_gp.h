@@ -31,10 +31,12 @@ enum class MSGPSampler {
   LBFGS   // L-BFGS quasi-Newton mass matrix adaptation - O(md) per step
 };
 
-// Parse sampler string to enum
+// The spatial_multiscale(sampler =) names
+inline constexpr ratiod_enum::EnumName<MSGPSampler> MSGP_SAMPLER_NAMES[] = {
+  {"auto", MSGPSampler::AUTO}, {"lbfgs", MSGPSampler::LBFGS}};
+
 inline MSGPSampler parse_msgp_sampler(const std::string& s) {
-  if (s == "lbfgs") return MSGPSampler::LBFGS;
-  return MSGPSampler::AUTO;
+  return ratiod_enum::parse_enum(MSGP_SAMPLER_NAMES, s, "multi-scale GP sampler");
 }
 
 // =============================================================================

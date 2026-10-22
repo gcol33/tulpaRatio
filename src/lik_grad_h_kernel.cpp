@@ -69,6 +69,7 @@
 
 #include "lik_specs/lik_grad_h_kernel.h"
 #include "lik_specs/lik_helpers.h"
+#include "beta_binomial_obs.h"
 
 #include <Rcpp.h>
 #include <cmath>
@@ -475,35 +476,14 @@ struct BetaBinomialFn {
     int N;
     double dig_phi;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const double eta_i = eta[i];
         const int y = resp->y[i];
         const int n = resp->n[i];
-        const double p     = 1.0 / (1.0 + std::exp(-eta_i));
-        const double alpha = p * phi;
-        const double beta_p = (1.0 - p) * phi;
-
-        const double psi_y_a   = tulpa::math::portable_digamma(y + alpha);
-        const double psi_nmy_b = tulpa::math::portable_digamma(n - y + beta_p);
-        const double psi_alpha = tulpa::math::portable_digamma(alpha);
-        const double psi_beta  = tulpa::math::portable_digamma(beta_p);
-        const double psi_n_phi = tulpa::math::portable_digamma(n + phi);
-
-        const double dLL_dp = phi * (psi_y_a - psi_nmy_b - psi_alpha + psi_beta);
-        resid[0] = dLL_dp * p * (1.0 - p);
-
+        const ratiod::math::BetaBinomialObs bb =
+            ratiod::math::beta_binomial_obs(y, n, eta[i], phi);
+        resid[0] = bb.d_eta;
         // d/dphi (will be multiplied by phi at the end of the loop)
-        extra[0] += p * psi_y_a + (1.0 - p) * psi_nmy_b - psi_n_phi
-                  - p * psi_alpha - (1.0 - p) * psi_beta + dig_phi;
-
-        // Log-likelihood
-        const double lg_y_a   = std::lgamma(y + alpha);
-        const double lg_nmy_b = std::lgamma(n - y + beta_p);
-        const double lg_n_phi = std::lgamma(n + phi);
-        const double lg_alpha = std::lgamma(alpha);
-        const double lg_beta  = std::lgamma(beta_p);
-        const double lg_phi   = std::lgamma(phi);
-        return lg_y_a + lg_nmy_b - lg_n_phi - lg_alpha - lg_beta + lg_phi
-             + tulpa::math::portable_lchoose(n, y);
+        extra[0] += bb.d_phi + dig_phi;
+        return bb.ll + std::lgamma(phi) + tulpa::math::portable_lchoose(n, y);
     }
 };
 

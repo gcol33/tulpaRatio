@@ -96,34 +96,39 @@ enum class GradientMode { AUTO, NUMERICAL, AUTODIFF_TAPE, AUTODIFF_ARENA, AUTODI
 // Mass matrix type for NUTS
 enum class MassMatrixType { DIAG, DENSE, BLOCK_DIAG, AUTO };
 
-// Parse gradient mode from string
-inline GradientMode parse_gradient_mode(const std::string& mode_str) {
-    if (mode_str == "auto" || mode_str == "AUTO") return GradientMode::AUTO;
-    if (mode_str == "N" || mode_str == "numerical") return GradientMode::NUMERICAL;
-    if (mode_str == "A_t" || mode_str == "autodiff_tape") return GradientMode::AUTODIFF_TAPE;
-    if (mode_str == "A_r" || mode_str == "arena" || mode_str == "autodiff_arena") return GradientMode::AUTODIFF_ARENA;
-    if (mode_str == "A" || mode_str == "autodiff" || mode_str == "forward") return GradientMode::AUTODIFF_FORWARD;
-    if (mode_str == "H" || mode_str == "handcoded" || mode_str == "analytical") return GradientMode::HANDCODED;
-    return GradientMode::AUTO;  // Default
+// The gradient_mode = names: the short codes tratio_control() takes first, then
+// the long names the test harness uses
+inline constexpr ratiod_enum::EnumName<GradientMode> GRADIENT_MODE_NAMES[] = {
+    {"auto", GradientMode::AUTO},
+    {"N", GradientMode::NUMERICAL},
+    {"A", GradientMode::AUTODIFF_FORWARD},
+    {"A_r", GradientMode::AUTODIFF_ARENA},
+    {"A_t", GradientMode::AUTODIFF_TAPE},
+    {"H", GradientMode::HANDCODED},
+    {"numerical", GradientMode::NUMERICAL},
+    {"forward", GradientMode::AUTODIFF_FORWARD},
+    {"arena", GradientMode::AUTODIFF_ARENA},
+    {"tape", GradientMode::AUTODIFF_TAPE},
+    {"handcoded", GradientMode::HANDCODED}};
+
+inline GradientMode parse_gradient_mode(const std::string& s) {
+    return ratiod_enum::parse_enum(GRADIENT_MODE_NAMES, s, "gradient mode");
 }
 
-// Parse metric type from string
-inline MassMatrixType parse_metric_type(const std::string& metric_str) {
-    if (metric_str == "dense" || metric_str == "DENSE") return MassMatrixType::DENSE;
-    if (metric_str == "block_diag" || metric_str == "BLOCK_DIAG") return MassMatrixType::BLOCK_DIAG;
-    if (metric_str == "auto" || metric_str == "AUTO") return MassMatrixType::AUTO;
-    return MassMatrixType::DIAG;  // Default
+// The metric = names
+inline constexpr ratiod_enum::EnumName<MassMatrixType> METRIC_NAMES[] = {
+    {"auto", MassMatrixType::AUTO},
+    {"dense", MassMatrixType::DENSE},
+    {"diag", MassMatrixType::DIAG},
+    {"block_diag", MassMatrixType::BLOCK_DIAG}};
+
+inline MassMatrixType parse_metric_type(const std::string& s) {
+    return ratiod_enum::parse_enum(METRIC_NAMES, s, "metric");
 }
 
 // Human-readable metric name for verbose logging
 inline const char* metric_name(MassMatrixType t) {
-    switch (t) {
-        case MassMatrixType::DIAG: return "DIAG";
-        case MassMatrixType::DENSE: return "DENSE";
-        case MassMatrixType::BLOCK_DIAG: return "BLOCK_DIAG";
-        case MassMatrixType::AUTO: return "AUTO";
-    }
-    return "UNKNOWN";
+    return ratiod_enum::enum_name(METRIC_NAMES, t);
 }
 
 // Set global gradient mode (defined in hmc_sampler.cpp)

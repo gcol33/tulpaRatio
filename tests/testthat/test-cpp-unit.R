@@ -1060,15 +1060,9 @@ test_that("log1pexp is numerically stable", {
   # Large positive (should return x)
   expect_equal(tulpaRatio:::cpp_test_log1pexp(50), 50, tolerance = 1e-10)
 
-  # Large negative (should return exp(x))
-  expect_equal(tulpaRatio:::cpp_test_log1pexp(-20), exp(-20), tolerance = 1e-15)
-})
-
-test_that("zi_logistic matches plogis", {
-  test_vals <- c(-5, -1, 0, 1, 5)
-  for (x in test_vals) {
-    expect_equal(tulpaRatio:::cpp_test_zi_logistic(x), plogis(x), tolerance = 1e-10)
-  }
+  # Large negative: log1p(exp(x)), not exp(x)
+  expect_equal(tulpaRatio:::cpp_test_log1pexp(-20), log1p(exp(-20)), tolerance = 1e-15)
+  expect_equal(tulpaRatio:::cpp_test_log1pexp(-800), 0)
 })
 
 test_that("log_logistic is numerically stable", {
@@ -1200,38 +1194,36 @@ test_that("zi_log_likelihood dispatches correctly", {
   expect_equal(result_hp, expected_hp, tolerance = 1e-10)
 })
 
-test_that("zi_poisson_grad_logit_zi matches finite differences", {
-  mu <- 3.0
-  logit_zi <- 0.5
-  eps <- 1e-5
-
-  for (y in c(0L, 1L, 5L)) {
-    grad <- tulpaRatio:::cpp_test_zi_poisson_grad_logit_zi(y, mu, logit_zi)
-
-    # Finite difference
-    f_plus <- tulpaRatio:::cpp_test_zi_poisson_lpmf_logit(y, mu, logit_zi + eps)
-    f_minus <- tulpaRatio:::cpp_test_zi_poisson_lpmf_logit(y, mu, logit_zi - eps)
-    fd_grad <- (f_plus - f_minus) / (2 * eps)
-
-    expect_equal(grad, fd_grad, tolerance = 1e-4)
-  }
+test_that("zi_negbin_lpmf_logit reaches the Poisson limit", {
+  mu <- 2.0
+  logit_zi <- -0.3
+  # The zero mass phi log(phi / (phi + mu)) -> -mu, past where the ratio rounds to 1
+  expect_equal(tulpaRatio:::cpp_test_zi_negbin_lpmf_logit(0L, mu, 1e20, logit_zi),
+               tulpaRatio:::cpp_test_zi_poisson_lpmf_logit(0L, mu, logit_zi),
+               tolerance = 1e-12)
+  expect_equal(tulpaRatio:::cpp_test_zi_negbin_lpmf_logit(3L, mu, 1e8, logit_zi),
+               tulpaRatio:::cpp_test_zi_poisson_lpmf_logit(3L, mu, logit_zi),
+               tolerance = 1e-6)
 })
 
-test_that("hurdle_grad_logit_theta matches finite differences", {
-  logit_theta <- 0.5
-  eps <- 1e-5
-  mu <- 3.0
-
-  for (y in c(0L, 1L, 5L)) {
-    grad <- tulpaRatio:::cpp_test_hurdle_grad_logit_theta(y, logit_theta)
-
-    # Finite difference
-    f_plus <- tulpaRatio:::cpp_test_hurdle_poisson_lpmf_logit(y, mu, logit_theta + eps)
-    f_minus <- tulpaRatio:::cpp_test_hurdle_poisson_lpmf_logit(y, mu, logit_theta - eps)
-    fd_grad <- (f_plus - f_minus) / (2 * eps)
-
-    expect_equal(grad, fd_grad, tolerance = 1e-4)
+test_that("binomial-type densities stay finite at extreme logits", {
+  q <- 40
+  p_lo <- -40
+  lp <- plogis(q, log.p = TRUE)
+  l1mp <- plogis(q, lower.tail = FALSE, log.p = TRUE)
+  expect_equal(tulpaRatio:::cpp_test_binomial_lpmf(3L, 10L, q, 0, 0, "none"),
+               lchoose(10, 3) + 3 * lp + 7 * l1mp, tolerance = 1e-12)
+  expect_equal(tulpaRatio:::cpp_test_binomial_lpmf(3L, 10L, p_lo, 0, 0, "none"),
+               dbinom(3, 10, plogis(p_lo), log = TRUE), tolerance = 1e-12)
+  for (type in c("zi_binomial", "oi_binomial", "zoib", "hurdle_binomial")) {
+    for (y in c(0L, 3L, 10L)) {
+      expect_true(is.finite(tulpaRatio:::cpp_test_binomial_lpmf(y, 10L, q, 0.2, -0.4, type)),
+                  label = paste(type, y))
+      expect_true(is.finite(tulpaRatio:::cpp_test_binomial_lpmf(y, 10L, -q, 0.2, -0.4, type)),
+                  label = paste(type, y))
+    }
   }
+  expect_true(is.finite(tulpaRatio:::cpp_test_beta_binomial_lpmf(3L, 10L, q, 5)))
 })
 
 # ---------------------------------------------------------------------------

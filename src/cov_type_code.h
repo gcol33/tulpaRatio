@@ -7,19 +7,16 @@
 
 namespace ratiod_cov {
 
-// The integer R sends for a cov = choice, in the order R/spatial.R's
-// cov_type_code() maps the four documented names. One mapping, on both sides:
-// a code this does not know is refused rather than resolved to whichever kernel
-// a fallthrough happens to reach.
+// The integer R sends for a cov = choice: its position in COV_TYPE_NAMES, the
+// order R/spatial.R's cov_type_code() maps the documented names in. A code
+// outside the table is refused rather than resolved to whichever kernel a
+// fallthrough happens to reach.
 inline CovType cov_type_from_int(int cov_type) {
-  switch (cov_type) {
-    case 0: return CovType::EXPONENTIAL;
-    case 1: return CovType::MATERN;
-    case 2: return CovType::GAUSSIAN;
-    case 3: return CovType::SPHERICAL;
+  constexpr int n = static_cast<int>(sizeof(COV_TYPE_NAMES) / sizeof(COV_TYPE_NAMES[0]));
+  if (cov_type < 0 || cov_type >= n) {
+    Rcpp::stop("Unknown covariance code %d. Expected 0 to %d.", cov_type, n - 1);
   }
-  Rcpp::stop("Unknown covariance code %d. Expected 0 (exponential), "
-             "1 (matern), 2 (gaussian) or 3 (spherical).", cov_type);
+  return COV_TYPE_NAMES[cov_type].value;
 }
 
 }  // namespace ratiod_cov

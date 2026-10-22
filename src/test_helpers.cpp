@@ -863,19 +863,9 @@ double cpp_test_temporal_log_prior(
     double rho,
     bool cyclic
 ) {
-  ratiod_temporal::TemporalType type;
-  if (type_str == "rw1") {
-    type = ratiod_temporal::TemporalType::RW1;
-  } else if (type_str == "rw2") {
-    type = ratiod_temporal::TemporalType::RW2;
-  } else if (type_str == "ar1") {
-    type = ratiod_temporal::TemporalType::AR1;
-  } else {
-    type = ratiod_temporal::TemporalType::NONE;
-  }
-
   return ratiod_temporal::temporal_log_prior(
-    phi.begin(), phi.size(), type, tau, rho, cyclic
+    phi.begin(), phi.size(), ratiod_temporal::parse_temporal_type(type_str),
+    tau, rho, cyclic
   );
 }
 
@@ -896,32 +886,46 @@ double cpp_test_ms_rw_log_lik(NumericVector phi, double sigma2, int order,
 
 // [[Rcpp::export]]
 double cpp_test_log1pexp(double x) {
-  return ratiod_zi::log1pexp(x);
-}
-
-// [[Rcpp::export]]
-double cpp_test_zi_logistic(double x) {
-  return ratiod_zi::logistic(x);
+  return ratiod::math::log1p_exp(x);
 }
 
 // [[Rcpp::export]]
 double cpp_test_log_logistic(double x) {
-  return ratiod_zi::log_logistic(x);
+  return ratiod::math::log_inv_logit(x);
 }
 
 // [[Rcpp::export]]
 double cpp_test_log1m_logistic(double x) {
-  return ratiod_zi::log1m_logistic(x);
+  return ratiod::math::log1m_inv_logit(x);
 }
 
 // [[Rcpp::export]]
 double cpp_test_zi_poisson_lpmf(int y, double mu) {
-  return ratiod_zi::poisson_lpmf(y, mu);
+  return ratiod::math::log_lik_poisson(y, mu);
 }
 
 // [[Rcpp::export]]
 double cpp_test_zi_negbin_lpmf(int y, double mu, double phi) {
-  return ratiod_zi::negbin_lpmf(y, mu, phi);
+  return ratiod::math::log_lik_negbin(y, mu, phi);
+}
+
+// [[Rcpp::export]]
+double cpp_test_binomial_lpmf(int y, int n, double q, double logit_zi,
+                              double logit_oi, std::string zi_type_str) {
+  using namespace ratiod::math;
+  switch (ratiod_zi::parse_zi_type(zi_type_str)) {
+    case ratiod_zi::ZIType::ZI_BINOMIAL: return log_lik_zi_binomial(y, n, q, logit_zi);
+    case ratiod_zi::ZIType::OI_BINOMIAL: return log_lik_oi_binomial(y, n, q, logit_oi);
+    case ratiod_zi::ZIType::ZOIB: return log_lik_zoib(y, n, q, logit_zi, logit_oi);
+    case ratiod_zi::ZIType::HURDLE_BINOMIAL:
+      return log_lik_hurdle_binomial(y, n, q, logit_zi);
+    default: return log_lik_binomial(y, n, q);
+  }
+}
+
+// [[Rcpp::export]]
+double cpp_test_beta_binomial_lpmf(int y, int n, double q, double phi) {
+  return ratiod::math::log_lik_beta_binomial(y, n, q, phi);
 }
 
 // [[Rcpp::export]]
@@ -958,21 +962,6 @@ double cpp_test_hurdle_negbin_lpmf_logit(int y, double mu, double phi, double lo
 double cpp_test_zi_log_likelihood(int y, double mu, double phi, double logit_zi, std::string zi_type_str) {
   ratiod_zi::ZIType zi_type = ratiod_zi::parse_zi_type(zi_type_str);
   return ratiod_zi::zi_log_likelihood(y, mu, phi, logit_zi, zi_type);
-}
-
-// [[Rcpp::export]]
-double cpp_test_zi_poisson_grad_logit_zi(int y, double mu, double logit_zi) {
-  return ratiod_zi::zi_poisson_grad_logit_zi(y, mu, logit_zi);
-}
-
-// [[Rcpp::export]]
-double cpp_test_zi_negbin_grad_logit_zi(int y, double mu, double phi, double logit_zi) {
-  return ratiod_zi::zi_negbin_grad_logit_zi(y, mu, phi, logit_zi);
-}
-
-// [[Rcpp::export]]
-double cpp_test_hurdle_grad_logit_theta(int y, double logit_theta) {
-  return ratiod_zi::hurdle_grad_logit_theta(y, logit_theta);
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,16 +1088,8 @@ static ratiod_spatiotemporal::SpatiotemporalData test_st_gp_structure(
   } else {
     Rcpp::stop("unknown nonsep_type '%s'", nonsep_type.c_str());
   }
-  auto parse_cov = [](const std::string& s) {
-    if (s == "exponential") return ratiod_cov::CovType::EXPONENTIAL;
-    if (s == "matern")      return ratiod_cov::CovType::MATERN;
-    if (s == "gaussian")    return ratiod_cov::CovType::GAUSSIAN;
-    if (s == "spherical")   return ratiod_cov::CovType::SPHERICAL;
-    Rcpp::stop("unknown covariance '%s'", s.c_str());
-    return ratiod_cov::CovType::EXPONENTIAL;
-  };
-  st.cov_space = parse_cov(cov_space);
-  st.cov_time = parse_cov(cov_time);
+  st.cov_space = ratiod_cov::parse_cov_type(cov_space);
+  st.cov_time = ratiod_cov::parse_cov_type(cov_time);
   return st;
 }
 

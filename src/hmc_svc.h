@@ -124,15 +124,6 @@ inline double log_prior_sigma2(double sigma2, double scale) {
   return std::log(2.0 / (M_PI * scale)) - std::log(1.0 + sigma * sigma / (scale * scale));
 }
 
-// Parse covariance type from string
-inline CovType parse_cov_type(const std::string& cov_str) {
-  if (cov_str == "exponential") return CovType::EXPONENTIAL;
-  if (cov_str == "matern") return CovType::MATERN;
-  if (cov_str == "gaussian") return CovType::GAUSSIAN;
-  if (cov_str == "spherical") return CovType::SPHERICAL;
-  return CovType::EXPONENTIAL;  // Default
-}
-
 } // namespace ratiod_svc
 
 #endif // RATIOD_HMC_SVC_H
