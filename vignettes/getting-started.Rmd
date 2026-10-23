@@ -203,6 +203,9 @@ Both criteria print warnings here. Each site effect is estimated from ten observ
 ## See Also
 
 - `vignette("philosophy")` - Why ratios are not data
+
 - `vignette("workflows")` - Complete analysis examples
+
 - `vignette("spatial-temporal")` - Spatial and temporal models
+
 - `vignette("random-effects")` - Advanced random effects

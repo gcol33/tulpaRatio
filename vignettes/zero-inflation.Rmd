@@ -32,6 +32,7 @@ Ecological and survey data often exhibit excess zeros beyond what standard distr
 
 **Zero-inflated models** assume zeros come from two sources:
 1. Structural zeros (species truly absent, observer non-response)
+
 2. Sampling zeros (from the count/binomial process)
 
 **Hurdle models** assume all zeros come from a single "hurdle" process, with positive counts from a truncated distribution.
@@ -325,5 +326,7 @@ pp_check(fit_zi, type = "dens_overlay")
 ## See Also
 
 - `vignette("getting-started")` - Basic usage
+
 - `vignette("spatial-temporal")` - Spatial and temporal models
+
 - `?ratiod_zibinomial`, `?ratiod_zoibinomial` - Function documentation

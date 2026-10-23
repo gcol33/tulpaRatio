@@ -120,16 +120,23 @@ The key insight is the **shared random effect** $b_{\text{shared}}$. This term e
 Why does this matter? Consider what happens without shared structure:
 
 1. Site A has high catch AND high effort (good conditions)
+
 2. Site B has low catch AND low effort (poor conditions)
+
 3. An independent model sees: "A has high catch given its predictors" and "A has high effort given its predictors"
+
 4. These residuals are **positively correlated** but modeled as independent
+
 5. The ratio inherits **spurious variation** from this ignored correlation
 
 With shared structure:
 
 1. The shared effect $b_{\text{shared}}$ captures "site quality"
+
 2. High-quality sites have high $b_{\text{shared}}$, boosting BOTH catch and effort expectations
+
 3. The shared effect **cancels in the ratio** (it appears in both $\eta$ and $\xi$)
+
 4. What remains is the **true ratio signal**, not confounded by site quality
 
 This is why tulpaRatio makes shared structure the **default**. Independence is a special case that must be explicitly requested and triggers a warning.
@@ -177,8 +184,11 @@ $$
 Because ratios are computed from the full posterior, every draw reflects uncertainty in:
 
 - Fixed effect estimates
+
 - Random effect realizations
+
 - Overdispersion parameters
+
 - Spatial/temporal structure
 
 This is **exact** posterior inference on the ratio, not an approximation or delta-method estimate.
@@ -244,11 +254,16 @@ The warning reminds you that this is a strong assumption.
 tulpaRatio enforces the correct approach by design:
 
 - **No offsets allowed**
+
 - **Shared structure by default**
+
 - **Independence requires explicit request**
+
 - **Ratios computed post hoc with full uncertainty**
 
 ## Further Reading
 - Simpson, D. et al. (2017). Penalising model component complexity. *Statistical Science*.
+
 - Conn, P. B. et al. (2017). Hierarchical modeling of false-positive errors in acoustic surveys. *Ecology*.
+
 - Royle, J. A. & Dorazio, R. M. (2008). *Hierarchical Modeling and Inference in Ecology*. Academic Press.

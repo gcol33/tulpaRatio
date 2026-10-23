@@ -297,5 +297,7 @@ plot(temporal(fit_trend))
 ## See Also
 
 - `vignette("getting-started")` - Basic usage
+
 - `vignette("philosophy")` - Statistical motivation
+
 - `vignette("spatial-temporal")` - Spatial and temporal details

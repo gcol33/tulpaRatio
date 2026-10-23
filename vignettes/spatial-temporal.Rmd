@@ -118,7 +118,9 @@ summary(fit)
 ### Parameters
 
 - `adjacency`: Square binary adjacency matrix
+
 - `level`: `"group"` (one effect per group) or `"obs"` (one per observation)
+
 - `group_var`: Variable name matching the grouping factor (required if `level = "group"`)
 
 ## BYM2 Model: `spatial_bym2()`
@@ -132,7 +134,9 @@ $$
 where:
 
 - $\phi_i^*$ is the scaled ICAR component
+
 - $v_i \sim \text{Normal}(0, 1)$ is unstructured noise
+
 - $\rho \in [0, 1]$ is the proportion of variance that is spatial
 
 ```{r}
@@ -557,6 +561,9 @@ fit <- tratio(
 ## See Also
 
 - `vignette("getting-started")` - Basic usage
+
 - `vignette("workflows")` - Complete analysis examples
+
 - `?spatial_car`, `?spatial_bym2` - Function documentation
+
 - `?temporal_rw1`, `?temporal_rw2`, `?temporal_ar1` - Function documentation

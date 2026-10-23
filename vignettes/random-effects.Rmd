@@ -105,6 +105,7 @@ fit <- tratio(
 
 This estimates:
 - $b^{\text{site}}_j \sim \text{Normal}(0, \sigma_{\text{site}}^2)$
+
 - $b^{\text{year}}_k \sim \text{Normal}(0, \sigma_{\text{year}}^2)$
 
 The linear predictor becomes:
@@ -435,7 +436,9 @@ fit <- tratio(
 
 Use latent factors when:
 - You suspect unmeasured confounders but don't know the grouping structure
+
 - Residual variation after random effects is still correlated
+
 - You want to capture observation-level shared structure
 
 ## Prior Specification
@@ -457,5 +460,7 @@ fit <- tratio(
 ## See Also
 
 - `vignette("getting-started")` - Basic usage
+
 - `vignette("philosophy")` - Why shared structure matters
+
 - `vignette("spatial-temporal")` - Spatial and temporal extensions

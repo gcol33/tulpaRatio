@@ -1,29 +1,46 @@
 url: https://gillescolling.com/tulpaRatio
-
 template:
   bootstrap: 5
   bootswatch: sandstone
-  light-switch: true
-
+  light-switch: yes
+  includes:
+    in_header: |
+      <script>
+      (function () {
+        var D = String.fromCharCode(36);
+        window.MathJax = {
+          tex: {
+            inlineMath: [[D, D], ["\\(", "\\)"]],
+            displayMath: [[D + D, D + D], ["\\[", "\\]"]]
+          },
+          chtml: { linebreaks: { automatic: true, width: "90% container" } },
+          svg: { linebreaks: { automatic: true, width: "90% container" } },
+          options: { renderActions: { addMenu: [] } }
+        };
+      })();
+      </script>
 figures:
   dev: svg
   fig.ext: svg
-  bg: "#F5F6F8"
-
+  bg: '#F5F6F8'
 home:
-  title: "tulpaRatio: Bayesian Hierarchical Models for Ratios"
-  description: >
-    Joint modelling of numerator and denominator processes with shared latent
-    structure. Ratios computed post hoc with full uncertainty propagation.
-
+  title: 'tulpaRatio: Bayesian Hierarchical Models for Ratios'
+  description: |
+    Joint modelling of numerator and denominator processes with shared latent structure. Ratios computed post hoc with full uncertainty propagation.
 authors:
   Gilles Colling:
     href: https://github.com/gcol33
-
 navbar:
   structure:
-    left:  [intro, reference, articles, news]
-    right: [search, lightswitch, github]
+    left:
+    - intro
+    - reference
+    - articles
+    - news
+    right:
+    - search
+    - lightswitch
+    - github
   components:
     intro:
       text: Get Started
@@ -31,210 +48,189 @@ navbar:
     articles:
       text: Articles
       menu:
-        - text: "Quick Start"
-          href: articles/getting-started.html
-        - text: "Why Ratios Are Not Data"
-          href: articles/philosophy.html
-        - text: "---"
-        - text: "Complete Workflows"
-          href: articles/workflows.html
-        - text: "Spatial and Temporal Models"
-          href: articles/spatial-temporal.html
-        - text: "Random Effects"
-          href: articles/random-effects.html
+      - text: Quick Start
+        href: articles/getting-started.html
+      - text: Why Ratios Are Not Data
+        href: articles/philosophy.html
+      - text: '---'
+      - text: Complete Workflows
+        href: articles/workflows.html
+      - text: Spatial and Temporal Models
+        href: articles/spatial-temporal.html
+      - text: Random Effects
+        href: articles/random-effects.html
     github:
       icon: fab fa-github
       href: https://github.com/gcol33/tulpaRatio
       aria-label: GitHub
-
 reference:
-  - title: "Model Fitting"
-    desc: "Main function for fitting ratio models"
-    contents:
-      - tratio
-      - ratiod_average
-      - ratiod_compare
-
-  - title: "Model Families"
-    desc: "Distribution families for numerator/denominator processes"
-    contents:
-      - ratiod_negbin_negbin
-      - ratiod_binomial
-      - ratiod_poisson
-      - ratiod_poisson_gamma
-      - ratiod_negbin_gamma
-      - ratiod_beta_binomial
-      - ratiod_gamma_gamma
-      - ratiod_lognormal
-      - ratiod_hurdle_negbin
-      - ratiod_hurdle_pois
-      - ratiod_hurdle_binomial
-      - ratiod_zinegbin
-      - ratiod_zipois
-      - ratiod_zibinomial
-      - ratiod_oibinomial
-      - ratiod_zoibinomial
-      - hurdle_negbin
-      - hurdle_poisson
-      - hurdle_binomial
-      - zi_negbin
-      - zi_poisson
-      - zi_binomial
-      - oi_binomial
-      - zoib
-      - zi_specification
-
-  - title: "Ratio Inference"
-    desc: "Extract and compare ratio posteriors"
-    contents:
-      - ratio
-      - ratio_contrast
-
-  - title: "Spatial Structure"
-    desc: "Spatial random effect specifications"
-    contents:
-      - spatial_car
-      - spatial_bym2
-      - spatial_gp
-      - spatial_hsgp
-      - spatial_rsr
-      - spatial_svc
-      - spatial_multiscale
-      - svc
-
-  - title: "Spatiotemporal Structure"
-    desc: "Joint spatiotemporal specifications"
-    contents:
-      - spatiotemporal
-      - spatiotemporal_effects
-
-  - title: "Latent Factors"
-    desc: "Latent factor specifications"
-    contents:
-      - latent_factor
-      - latent_factors
-      - ratiod_latent
-
-  - title: "Inference Modes"
-    desc: "Inference tier system (Exact / Structured / Optimized)"
-    contents:
-      - inference_mode_info
-      - validate_mode
-
-  - title: "GPU Support"
-    desc: "GPU device discovery and configuration"
-    contents:
-      - gpu-support
-      - gpu_available
-      - gpu_info
-
-  - title: "Temporal Structure"
-    desc: "Temporal random effect specifications"
-    contents:
-      - temporal_rw1
-      - temporal_rw2
-      - temporal_ar1
-      - temporal_iid
-      - temporal_gp
-      - temporal_rtr
-      - temporal_tvc
-      - temporal_multiscale
-      - temporal
-      - tvc
-
-  - title: "Priors"
-    desc: "Prior specification helpers"
-    contents:
-      - ratiod_priors
-      - priors_default
-      - prior_normal
-      - prior_half_normal
-      - prior_half_cauchy
-      - prior_exponential
-      - prior_gamma
-      - prior_beta
-      - prior_pc
-      - prior_predict
-
-  - title: "Model Checking"
-    desc: "Posterior predictive checks and model comparison"
-    contents:
-      - pp_check.ratiod_fit
-      - posterior_predict.ratiod_fit
-      - as.matrix.ratiod_priorpred
-      - loo.ratiod_fit
-      - waic.ratiod_fit
-      - check_diagnostics
-      - diagnostic_summary
-      - diagnostics.ratiod_fit
-      - geweke_test
-      - n_divergent
-
-  - title: "Plotting"
-    desc: "Visualization functions"
-    contents:
-      - starts_with("plot_")
-      - starts_with("plot.")
-
-  - title: "Posterior Draws"
-    desc: "Extract and manipulate posterior samples"
-    contents:
-      - as_draws.ratiod_fit
-      - draws_long
-      - draws_wide
-      - draws_interval
-
-  - title: "Simulation"
-    desc: "Data simulation for testing"
-    contents:
-      - sim_ratiod
-      - sim_ratiod_sbc
-
-  - title: "Data"
-    desc: "Data shipped with the package"
-    contents:
-      - pennlc
-      - pennlc_adj
-
-  - title: "Benchmarking"
-    desc: "Performance comparison"
-    contents:
-      - ratiod_benchmark
-      - ratiod_benchmark_compare
-      - ratiod_threads
-
-  - title: "Methods"
-    desc: "S3 methods for ratiod objects"
-    contents:
-      - starts_with("summary.")
-      - starts_with("fitted.")
-      - starts_with("predict.")
-      - as.data.frame.ratiod_fit
-
-  - title: "Documentation"
-    desc: "Package documentation pages"
-    contents:
-      - ratiod_families
-      - ratiod_spatial
-      - ratiod_temporal
-      - ratiod_validate
-      - ratiod_zi_families
-
+- title: Model Fitting
+  desc: Main function for fitting ratio models
+  contents:
+  - tratio
+  - ratiod_average
+  - ratiod_compare
+- title: Model Families
+  desc: Distribution families for numerator/denominator processes
+  contents:
+  - ratiod_negbin_negbin
+  - ratiod_binomial
+  - ratiod_poisson
+  - ratiod_poisson_gamma
+  - ratiod_negbin_gamma
+  - ratiod_beta_binomial
+  - ratiod_gamma_gamma
+  - ratiod_lognormal
+  - ratiod_hurdle_negbin
+  - ratiod_hurdle_pois
+  - ratiod_hurdle_binomial
+  - ratiod_zinegbin
+  - ratiod_zipois
+  - ratiod_zibinomial
+  - ratiod_oibinomial
+  - ratiod_zoibinomial
+  - hurdle_negbin
+  - hurdle_poisson
+  - hurdle_binomial
+  - zi_negbin
+  - zi_poisson
+  - zi_binomial
+  - oi_binomial
+  - zoib
+  - zi_specification
+- title: Ratio Inference
+  desc: Extract and compare ratio posteriors
+  contents:
+  - ratio
+  - ratio_contrast
+- title: Spatial Structure
+  desc: Spatial random effect specifications
+  contents:
+  - spatial_car
+  - spatial_bym2
+  - spatial_gp
+  - spatial_hsgp
+  - spatial_rsr
+  - spatial_svc
+  - spatial_multiscale
+  - svc
+- title: Spatiotemporal Structure
+  desc: Joint spatiotemporal specifications
+  contents:
+  - spatiotemporal
+  - spatiotemporal_effects
+- title: Latent Factors
+  desc: Latent factor specifications
+  contents:
+  - latent_factor
+  - latent_factors
+  - ratiod_latent
+- title: Inference Modes
+  desc: Inference tier system (Exact / Structured / Optimized)
+  contents:
+  - inference_mode_info
+  - validate_mode
+- title: GPU Support
+  desc: GPU device discovery and configuration
+  contents:
+  - gpu-support
+  - gpu_available
+  - gpu_info
+- title: Temporal Structure
+  desc: Temporal random effect specifications
+  contents:
+  - temporal_rw1
+  - temporal_rw2
+  - temporal_ar1
+  - temporal_iid
+  - temporal_gp
+  - temporal_rtr
+  - temporal_tvc
+  - temporal_multiscale
+  - temporal
+  - tvc
+- title: Priors
+  desc: Prior specification helpers
+  contents:
+  - ratiod_priors
+  - priors_default
+  - prior_normal
+  - prior_half_normal
+  - prior_half_cauchy
+  - prior_exponential
+  - prior_gamma
+  - prior_beta
+  - prior_pc
+  - prior_predict
+- title: Model Checking
+  desc: Posterior predictive checks and model comparison
+  contents:
+  - pp_check.ratiod_fit
+  - posterior_predict.ratiod_fit
+  - as.matrix.ratiod_priorpred
+  - loo.ratiod_fit
+  - waic.ratiod_fit
+  - check_diagnostics
+  - diagnostic_summary
+  - diagnostics.ratiod_fit
+  - geweke_test
+  - n_divergent
+- title: Plotting
+  desc: Visualization functions
+  contents:
+  - starts_with("plot_")
+  - starts_with("plot.")
+- title: Posterior Draws
+  desc: Extract and manipulate posterior samples
+  contents:
+  - as_draws.ratiod_fit
+  - draws_long
+  - draws_wide
+  - draws_interval
+- title: Simulation
+  desc: Data simulation for testing
+  contents:
+  - sim_ratiod
+  - sim_ratiod_sbc
+- title: Data
+  desc: Data shipped with the package
+  contents:
+  - pennlc
+  - pennlc_adj
+- title: Benchmarking
+  desc: Performance comparison
+  contents:
+  - ratiod_benchmark
+  - ratiod_benchmark_compare
+  - ratiod_threads
+- title: Methods
+  desc: S3 methods for ratiod objects
+  contents:
+  - starts_with("summary.")
+  - starts_with("fitted.")
+  - starts_with("predict.")
+  - as.data.frame.ratiod_fit
+- title: Documentation
+  desc: Package documentation pages
+  contents:
+  - ratiod_families
+  - ratiod_spatial
+  - ratiod_temporal
+  - ratiod_validate
+  - ratiod_zi_families
 articles:
-  - title: "Getting Started"
-    navbar: ~
-    contents:
-      - getting-started
-      - philosophy
-
-  - title: "Tutorials"
-    navbar: ~
-    contents:
-      - workflows
-      - spatial-temporal
-      - random-effects
-      - zero-inflation
-
+- title: Getting Started
+  navbar: ~
+  contents:
+  - getting-started
+  - philosophy
+- title: Tutorials
+  navbar: ~
+  contents:
+  - workflows
+  - spatial-temporal
+  - random-effects
+  - zero-inflation
 footer:
   structure:
     left: developed_by
