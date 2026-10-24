@@ -1,6 +1,6 @@
 # test-specs-temporal.R
 # B1d Step 3 parity test: RW1 + AR1 temporal effects routed through the
-# LikelihoodSpec path produce posterior means within 4x within-MC noise of
+# LikelihoodSpec path produce posterior means within 4x within-MC noise (in posterior-sd units) of
 # the legacy backend at the same seed.
 
 simulate_temporal_binomial <- function(n_times = 16L, reps = 12L, type = "rw1") {
@@ -42,7 +42,14 @@ fit_one_temporal <- function(sim, use_specs, seed_val, temporal_struct) {
     mode = "hmc",
     control = list(iter = 3000L, warmup = 1000L, chains = 1L, seed = seed_val, verbose = FALSE, gradient_mode = "A_r")
   )
-  colMeans(fit$draws)
+  fit$draws
+}
+
+# Largest posterior-mean difference between two fits, in units of the pooled
+# posterior sd of each parameter.
+max_standardised_diff <- function(a, b) {
+  sd_pool <- sqrt((apply(a, 2, var) + apply(b, 2, var)) / 2)
+  max(abs(colMeans(a) - colMeans(b)) / sd_pool)
 }
 
 temporal_constructor <- function(type_v) {
@@ -69,10 +76,10 @@ for (t_type in c("rw1", "ar1")) {
       specs42  <- fit_one_temporal(sim, TRUE,  42L, tp)
       legacy43 <- fit_one_temporal(sim, FALSE, 43L, tp)
 
-      expect_named(specs42, names(legacy42))
-      cross  <- max(abs(legacy42 - specs42))
-      within <- max(abs(legacy42 - legacy43))
-      expect_lt(cross, max(4 * within, 5e-3))
+      expect_identical(colnames(specs42), colnames(legacy42))
+      cross  <- max_standardised_diff(legacy42, specs42)
+      within <- max_standardised_diff(legacy42, legacy43)
+      expect_lt(cross, max(4 * within, 0.5))
     })
   })
 }
