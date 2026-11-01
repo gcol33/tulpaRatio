@@ -16,13 +16,16 @@ tulpaRatio fits Bayesian hierarchical models for ratios, rates and
 proportions, such as catch per unit effort, the share of one species in
 a sample, or successes out of a known number of trials.
 
-The package models the numerator and the denominator as two processes
-with linked linear predictors, and derives the ratio from their joint
-posterior. The denominator is either a second response or a known
-exposure, and the two processes can share random effects. The ratio
-posterior carries the uncertainty of both components, so you can report
-the ratio, compare groups on it and decide which effects matter for your
-question. tulpaRatio supports:
+The package is built on the [tulpa](https://gillescolling.com/tulpa/)
+engine, which supplies the sampler and the shared C++ machinery;
+tulpaRatio adds the two-process ratio models, their families and the
+spatial and temporal terms. It models the numerator and the denominator
+as two processes with linked linear predictors, and derives the ratio
+from their joint posterior. The denominator is either a second response
+or a known exposure, and the two processes can share random effects. The
+ratio posterior carries the uncertainty of both components, so you can
+report the ratio, compare groups on it and decide which effects matter
+for your question. tulpaRatio supports:
 
 - **Ratios of two measured quantities.** Families pair a numerator and a
   denominator distribution: counts over counts, counts over continuous
@@ -45,13 +48,12 @@ question. tulpaRatio supports:
   pseudo-BMA weights.
 
 The default sampler is the No-U-Turn sampler with hand-coded gradients,
-written in C++ on the [tulpa](https://github.com/gcol33/tulpa) engine,
-so no Stan or JAGS installation is needed. Elliptical slice sampling,
-Pólya-Gamma Gibbs sampling and a nested Laplace approximation fit the
-subsets of models they apply to. Every fit reports the tier of guarantee
-its inference carries. `mode = "auto"` picks an exact or structured
-backend for the model, and the optimized tier runs only when you request
-it.
+written in C++, so no separate sampler software needs installing.
+Elliptical slice sampling, Pólya-Gamma Gibbs sampling and a nested
+Laplace approximation fit the subsets of models they apply to. Every fit
+reports the tier of guarantee its inference carries. `mode = "auto"`
+picks an exact or structured backend for the model, and the optimized
+tier runs only when you request it.
 
 ## Installation
 
@@ -241,11 +243,11 @@ latent factors.
 Each backend carries one of three tiers. Tier 1 covers the samplers that
 converge to the exact posterior: the No-U-Turn sampler (the default),
 elliptical slice sampling and Pólya-Gamma Gibbs sampling for binomial
-models. Tier 2 is the nested Laplace approximation for large datasets,
-which integrates the hyperparameters on an outer grid. Tier 3 covers
-variational inference and stochastic-gradient MCMC, used only when you
-request them through `mode`. `inference_mode_info()` lists the backends
-and the models each one fits.
+models. Tier 2 is the nested Laplace approximation, which integrates the
+hyperparameters on an outer grid. Tier 3 covers variational inference
+and stochastic-gradient MCMC, used only when you request them through
+`mode`. `inference_mode_info()` lists the backends and the models each
+one fits.
 
 ## Documentation
 
@@ -293,6 +295,12 @@ say thanks. It helps with my coffee addiction.
 
 [![Buy Me A
 Coffee](https://img.shields.io/badge/-Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/gcol33)
+
+## Acknowledgements
+
+The No-U-Turn sampler and the shared C++ sampling machinery come from
+[tulpa](https://gillescolling.com/tulpa/); the Eigen headers come from
+[RcppEigen](https://cran.r-project.org/package=RcppEigen).
 
 ## License
 
