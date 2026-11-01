@@ -89,7 +89,7 @@ This assumes the ratio is the quantity of interest and that effort affects catch
 
 ## The tulpaRatio Solution: Joint Modelling
 
-tulpaRatio takes a different approach. Instead of modelling the ratio, we jointly model the two processes that generate it:
+Instead of modelling the ratio, tulpaRatio jointly models the two processes that generate it:
 
 $$
 Y_i \sim \text{Distribution}_1(\mu_Y, \phi_Y) \quad \text{(numerator)}
@@ -115,7 +115,7 @@ $$
 
 ## Why Shared Structure Matters
 
-The key insight is the **shared random effect** $b_{\text{shared}}$. This term enters both the numerator and denominator linear predictors identically.
+Both processes carry the **shared random effect** $b_{\text{shared}}$, which enters both the numerator and denominator linear predictors identically.
 
 Why does this matter? Consider what happens without shared structure:
 
