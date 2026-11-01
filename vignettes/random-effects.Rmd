@@ -459,7 +459,7 @@ fit <- tratio(
 
 ## See Also
 
-- `vignette("getting-started")` - Basic usage
+- `vignette("tulpaRatio")` - Basic usage
 
 - `vignette("philosophy")` - Why shared structure matters
 

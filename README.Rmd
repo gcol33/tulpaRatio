@@ -132,7 +132,7 @@ head(cpue)
 ratio_contrast(fit, ~ season)
 ```
 
-[Quick Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html) continues with the formula syntax, random effects and model checking.
+[Quick Start](https://gillescolling.com/tulpaRatio/articles/tulpaRatio.html) continues with the formula syntax, random effects and model checking.
 
 ## Modelling the counts instead of the quotient
 
@@ -160,7 +160,7 @@ Each backend carries one of three tiers. Tier 1 covers the samplers that converg
 
 ## Documentation
 
-Start with [Quick Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html): one path from simulated trawl data to catch per unit effort, then formula syntax, random effects and model checking.
+Start with [Quick Start](https://gillescolling.com/tulpaRatio/articles/tulpaRatio.html): one path from simulated trawl data to catch per unit effort, then formula syntax, random effects and model checking.
 
 - [Why Ratios Are Not Data](https://gillescolling.com/tulpaRatio/articles/philosophy.html): the statistical case for modelling the numerator and denominator.
 - [Complete Workflows](https://gillescolling.com/tulpaRatio/articles/workflows.html): four analyses from data to reported ratios: catch per unit effort, relative abundance, detection probability and temporal trends.

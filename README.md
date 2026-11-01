@@ -202,7 +202,7 @@ ratio_contrast(fit, ~ season)
 ```
 
 [Quick
-Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html)
+Start](https://gillescolling.com/tulpaRatio/articles/tulpaRatio.html)
 continues with the formula syntax, random effects and model checking.
 
 ## Modelling the counts instead of the quotient
@@ -252,7 +252,7 @@ one fits.
 ## Documentation
 
 Start with [Quick
-Start](https://gillescolling.com/tulpaRatio/articles/getting-started.html):
+Start](https://gillescolling.com/tulpaRatio/articles/tulpaRatio.html):
 one path from simulated trawl data to catch per unit effort, then
 formula syntax, random effects and model checking.
 

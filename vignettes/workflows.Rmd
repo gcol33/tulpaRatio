@@ -29,7 +29,7 @@ pak::pak("gcol33/tulpaRatio")
 
 ## Overview
 
-This vignette demonstrates complete analysis workflows using tulpaRatio. Each example shows data preparation, model fitting, diagnostics, and inference. See `vignette("getting-started")` for basic usage and `vignette("philosophy")` for statistical motivation.
+This vignette demonstrates complete analysis workflows using tulpaRatio. Each example shows data preparation, model fitting, diagnostics, and inference. See `vignette("tulpaRatio")` for basic usage and `vignette("philosophy")` for statistical motivation.
 
 
 # Workflow 1: Fisheries CPUE
@@ -296,7 +296,7 @@ plot(temporal(fit_trend))
 
 ## See Also
 
-- `vignette("getting-started")` - Basic usage
+- `vignette("tulpaRatio")` - Basic usage
 
 - `vignette("philosophy")` - Statistical motivation
 

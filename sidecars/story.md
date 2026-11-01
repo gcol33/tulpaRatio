@@ -48,7 +48,7 @@ None stated in the docs.
 ## Documents
 - DESCRIPTION: claim, structures, samplers, tiers
 - README / landing: claim, supports list, install (compiled, OpenMP), first fit, ratio, contrast, routing
-- Get started (getting-started.Rmd, "Quick Start"): tutorial from simulated trawl data to CPUE, formula syntax, random effects, model checking
+- Get started (tulpaRatio.Rmd, "Quick Start"): tutorial from simulated trawl data to CPUE, formula syntax, random effects, model checking
 - articles: philosophy (explanation, A1), workflows (how-to), spatial-temporal (A2), random-effects (A2), zero-inflation (A3)
 
 ## Open

@@ -560,7 +560,7 @@ fit <- tratio(
 
 ## See Also
 
-- `vignette("getting-started")` - Basic usage
+- `vignette("tulpaRatio")` - Basic usage
 
 - `vignette("workflows")` - Complete analysis examples
 

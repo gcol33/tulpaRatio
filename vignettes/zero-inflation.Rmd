@@ -325,7 +325,7 @@ pp_check(fit_zi, type = "dens_overlay")
 
 ## See Also
 
-- `vignette("getting-started")` - Basic usage
+- `vignette("tulpaRatio")` - Basic usage
 
 - `vignette("spatial-temporal")` - Spatial and temporal models
 
