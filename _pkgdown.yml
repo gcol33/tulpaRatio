@@ -39,26 +39,12 @@ navbar:
     - news
     right:
     - search
-    - lightswitch
     - github
+    - lightswitch
   components:
     intro:
-      text: Get Started
+      text: Get started
       href: articles/getting-started.html
-    articles:
-      text: Articles
-      menu:
-      - text: Quick Start
-        href: articles/getting-started.html
-      - text: Why Ratios Are Not Data
-        href: articles/philosophy.html
-      - text: '---'
-      - text: Complete Workflows
-        href: articles/workflows.html
-      - text: Spatial and Temporal Models
-        href: articles/spatial-temporal.html
-      - text: Random Effects
-        href: articles/random-effects.html
     github:
       icon: fab fa-github
       href: https://github.com/gcol33/tulpaRatio
@@ -219,18 +205,20 @@ reference:
   - ratiod_validate
   - ratiod_zi_families
 articles:
-- title: Getting Started
-  navbar: ~
+- title: Get started
   contents:
   - getting-started
-  - philosophy
 - title: Tutorials
-  navbar: ~
+  navbar: Tutorials
   contents:
   - workflows
   - spatial-temporal
   - random-effects
   - zero-inflation
+- title: Background
+  navbar: Background
+  contents:
+  - philosophy
 footer:
   structure:
     left: developed_by
