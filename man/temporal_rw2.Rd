@@ -9,7 +9,7 @@ temporal_rw2(
   group_var = NULL,
   cyclic = FALSE,
   shared = TRUE,
-  parameterization = c("centered", "noncentered")
+  parameterization = c("auto", "centered", "noncentered")
 )
 }
 \arguments{
@@ -27,21 +27,16 @@ last time points are neighbors). Useful for seasonal data.}
 \item{shared}{Logical; if TRUE (default), temporal effect enters both
 numerator and denominator linear predictors identically.}
 
-\item{parameterization}{Coordinate the walk is sampled in. \code{"centered"}
-(default) samples the effects themselves; \code{"noncentered"} samples
-\code{z ~ N(0, I)} and reaches the effects through \verb{sigma * A^-1 z}, where \code{A}
-stacks the walk's difference operator on \verb{1'/sqrt(n)}, so the variance
-enters the linear predictor through the transform rather than through a
-quadratic form. The two describe the same model and differ in the geometry
-the sampler sees: non-centred helps where the variance is shrunk toward
-zero and leaves a funnel the centred coordinate cannot descend, and can be
-worse where the data pin the field. Measured on a 500-observation fixture
-with no temporal signal, an RW1's bulk ESS for \code{tau_temporal} goes 409 to
-805, while an RW2 picks up 23 divergences of 2000 for no gain, which is
-why this is an argument rather than a default. With \code{group_var} the prior
-still augments one global constant, so the transform carries the group
-contrasts as free directions beside the scaled ones and the group levels
-stay unshrunk, as they are in the centred coordinate.}
+\item{parameterization}{Coordinate the walk is sampled in. \code{"auto"}
+(default) uses the transform \code{f = z * sqrt((p + c) / (p * tau + c))}, where \code{p} and
+\code{c} are fixed prior curvature and likelihood information from curvature
+and squared scores at a zero field. The exact
+Jacobian preserves the posterior. This approaches scale standardization
+as the prior precision increases and a constant rescaling as likelihood
+information increases. \code{"centered"} samples the effects themselves.
+Free linear directions of second-order walks retain their own coordinates.
+\code{"noncentered"} samples \code{z ~ N(0, I)} and reconstructs the effects through
+the walk's inverse difference operator, retaining its free directions.}
 }
 \value{
 A \code{ratiod_temporal} object

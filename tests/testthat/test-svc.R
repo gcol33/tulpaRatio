@@ -202,7 +202,7 @@ test_that("the SVC range prior a spec declares is the one the sampler runs", {
 
 test_that("spatial_svc() validates the parameterization", {
   expect_identical(spatial_svc(~ lon + lat, terms = 1)$parameterization,
-                   "noncentered")
+                   "auto")
   expect_identical(spatial_svc(~ lon + lat, terms = 1,
                                parameterization = "centered")$parameterization,
                    "centered")

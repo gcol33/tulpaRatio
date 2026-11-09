@@ -12,7 +12,7 @@ spatial_gp(
   nn = 15,
   shared = TRUE,
   scale_coords = TRUE,
-  parameterization = c("centered", "noncentered", "collapsed")
+  parameterization = c("auto", "centered", "noncentered", "collapsed")
 )
 
 \method{print}{ratiod_gp}(x, ...)
@@ -45,9 +45,11 @@ deviations. Distances remain proportional in every direction. Range and
 lengthscale priors use these scaled distance units.}
 
 \item{parameterization}{Parameterization of the latent field. One of
-\code{"centered"} (default), \code{"noncentered"} (Matt trick, better for diffuse
-prior regimes), or \code{"collapsed"} (marginalize spatial variance for
-improved mixing). Centered is robust for informative priors.}
+\code{"auto"} (default) uses covariance-whitened innovations with partial
+amplitude centering based on fixed likelihood information.
+\code{"centered"} samples the effects directly,
+\code{"noncentered"} samples standardized Gaussian innovations, and
+\code{"collapsed"} marginalizes the field.}
 
 \item{x}{A ratiod_gp object}
 

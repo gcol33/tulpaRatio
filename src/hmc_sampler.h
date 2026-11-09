@@ -160,6 +160,13 @@ struct ModelData {
   }
   ModelData() : unique_id(next_id()) {}
 
+  bool auto_spatial_coordinates = false;
+  bool auto_temporal_coordinates = false;
+  bool auto_gp_coordinates = false;
+  bool auto_multiscale_coordinates = false;
+  bool auto_temporal_gp_coordinates = false;
+  bool auto_svc_coordinates = false;
+
   // Response data
   std::vector<int> y_num;
   std::vector<int> y_denom;

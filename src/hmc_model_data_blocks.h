@@ -342,11 +342,12 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
 
       const std::string svc_param_str =
           Rcpp::as<std::string>(svc_params["parameterization"]);
-      if (svc_param_str != "centered" && svc_param_str != "noncentered") {
-        Rcpp::stop("Unknown SVC parameterization '%s'. Expected centered or "
+      if (svc_param_str != "auto" && svc_param_str != "centered" && svc_param_str != "noncentered") {
+        Rcpp::stop("Unknown SVC parameterization '%s'. Expected auto, centered or "
                    "noncentered.", svc_param_str);
       }
-      data.svc_noncentered = (svc_param_str == "noncentered");
+      data.svc_noncentered = svc_param_str != "centered";
+      data.auto_svc_coordinates = svc_param_str == "auto";
       // Both coordinates read each term as the single-scale NNGP on this view.
       data.svc_gp_view = ratiod_svc::make_svc_gp_view(data.svc_data);
     }
@@ -462,11 +463,14 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
       ar1_param_str = Rcpp::as<std::string>(temporal_params["ar1_parameterization"]);
     }
     data.temporal_parameterization = (ar1_param_str == "noncentered") ? 1 : 0;
+    data.auto_temporal_coordinates = ar1_param_str == "auto";
   }
 
   if (temporal_type_str == "gp") {
     data.has_temporal_gp = true;
     data.temporal_gp_data = temporal_gp_data_from(temporal_params);
+    data.auto_temporal_gp_coordinates =
+        Rcpp::as<std::string>(temporal_params["gp_parameterization"]) == "auto";
   } else if (temporal_type_str == "multiscale") {
     data.has_multiscale_temporal = true;
 
@@ -494,6 +498,8 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
     // "parameterization" in this bundle belongs to whichever structure the
     // model actually carries, and the temporal block carries several.
     if (temporal_params.containsElementNamed("ms_parameterization")) {
+      data.auto_multiscale_coordinates =
+          Rcpp::as<std::string>(temporal_params["ms_parameterization"]) == "auto";
       data.multiscale_temporal_data.noncentered =
           (Rcpp::as<std::string>(temporal_params["ms_parameterization"]) == "noncentered");
     }

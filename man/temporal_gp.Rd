@@ -13,7 +13,7 @@ temporal_gp(
   group_var = NULL,
   shared = TRUE,
   scale_coords = TRUE,
-  parameterization = c("noncentered", "centered")
+  parameterization = c("auto", "noncentered", "centered")
 )
 
 \method{print}{ratiod_temporal_gp}(x, ...)
@@ -50,7 +50,9 @@ numerator and denominator.}
 unit variance before computing distances.}
 
 \item{parameterization}{Parameterization for GP effects:
-\code{"noncentered"} (default) stores z ~ N(0,1) and scales by covariance
+\code{"auto"} (default) uses covariance-whitened innovations with partial
+amplitude centering based on fixed likelihood information.
+\code{"noncentered"} stores z ~ N(0,1) and scales by covariance
 (better for weakly-informed effects);
 \code{"centered"} stores effects directly (better for strongly-informed effects).}
 

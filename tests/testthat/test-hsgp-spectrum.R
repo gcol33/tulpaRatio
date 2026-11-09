@@ -35,7 +35,7 @@ test_that("HSGP spectral gradients include the spatial dimension", {
 
 test_that("a sampled two-dimensional HSGP covers the simulated field SD", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("TULPA_SLOW_TESTS") == "true")
+  skip_unless_slow()
   set.seed(812)
   n <- 160L
   df <- data.frame(lon = runif(n, -1, 1), lat = runif(n, -1, 1))

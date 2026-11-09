@@ -207,11 +207,13 @@ fit_hmc <- function(formula,
   spatial_param_v <- spatial_info$parameterization %||% "standard"
   spatial_supported <- identical(spatial_type_v, "none") ||
     (spatial_type_v %in% c("icar", "bym2") &&
+     (identical(spatial_type_v, "bym2") || !identical(spatial_param_v, "auto")) &&
      !identical(spatial_param_v, "collapsed") &&
      is.null(spatial_info$rsr_basis))
   temporal_type_v <- temporal_info$type %||% "none"
   temporal_supported <- identical(temporal_type_v, "none") ||
     (temporal_type_v %in% TEMPORAL_TYPES_SINGLE &&
+     !identical(temporal_info$parameterization, "auto") &&
      !isTRUE(temporal_info$precision_structure$cyclic) &&
      identical(temporal_info$parameterization %||% "centered", "centered") &&
      is.null(temporal_info$rtr_basis))

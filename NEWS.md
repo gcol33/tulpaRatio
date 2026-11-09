@@ -1,5 +1,25 @@
 # tulpaRatio 1.7.3
 
+* Field-scale NUTS, fixed-trajectory HMC and WALNUTS sample RW1, RW2, AR1,
+  ICAR, proper CAR, GP/NNGP, temporal GP, multiscale, TVC and SVC fields in a
+  partial coordinate fixed before sampling from the prior and likelihood
+  information at a zero field, with its exact Jacobian; draws are returned on
+  the effect scale and explicit `parameterization =` requests are unchanged.
+  On weak-signal RW1 and ICAR fixtures the default centred coordinate had
+  missed the dense posterior by up to 0.39 posterior SD; the partial coordinate
+  is within 0.055 SD on signal and zero-signal fixtures, with ESS per second up
+  to 370 times higher where the signal is weak (#225).
+
+* HSGP fields use the dimension-correct SE and Matern spectral densities,
+  `(2 pi)^(d/2) ell^d` for SE, in the sampler, the field reconstruction and the
+  Laplace effect transform; a two-dimensional basis had used the
+  one-dimensional prefactor, giving it prior variance 1.6, 0.8 and 0.4 times
+  `sigma^2` at lengthscales 0.25, 0.5 and 1 (#226).
+
+* The slow multiscale GP benchmarks use warmup budgets below the iteration
+  count and read the fits' actual retained draws and divergence diagnostics
+  (#227).
+
 * Every slow test reads one tier predicate, `skip_unless_slow()`
   (`TULPA_SLOW_TESTS`); 23 sampler tests and the multiscale GP benchmarks
   gated on a second variable, `RUN_SLOW_TESTS`, and were skipped by a slow-tier

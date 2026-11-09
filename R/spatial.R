@@ -34,8 +34,10 @@ NULL
 #' @param shared Logical; if TRUE (default), spatial effect enters both
 #'   numerator and denominator linear predictors identically.
 #' @param parameterization Parameterization of the spatial random effect.
-#'   Either `"standard"` (default) or `"collapsed"` to marginalize the spatial
-#'   variance for improved mixing in sparse-graph regimes.
+#'   `"auto"` (default) scales each sampled field by its prior precision plus
+#'   fixed likelihood curvature. `"standard"` samples the field directly.
+#'   `"collapsed"` marginalizes the spatial field. BYM2 uses unit-scale
+#'   structured and independent fields with a separate total scale.
 #' @param center Logical; if TRUE (default), the field's mean is removed on its
 #'   way into the linear predictor, so the intercept carries the level and the
 #'   field carries deviations from it. The prior still reads the uncentred
@@ -141,7 +143,7 @@ NULL
 #' @export
 spatial_car <- function(adjacency, spatial_level = c("group", "obs"),
                         group_var = NULL, proper = FALSE, shared = TRUE,
-                        parameterization = c("standard", "collapsed"),
+                        parameterization = c("auto", "standard", "collapsed"),
                         center = TRUE) {
 
   spatial_level <- match.arg(spatial_level)
@@ -354,7 +356,7 @@ compute_car_rho_bounds <- function(adjacency) {
 spatial_bym2 <- function(adjacency, spatial_level = c("group", "obs"),
                          group_var = NULL, shared = TRUE,
                          scale_factor = NULL,
-                         parameterization = c("standard", "collapsed")) {
+                         parameterization = c("auto", "standard", "collapsed")) {
 
   spatial_level <- match.arg(spatial_level)
   parameterization <- match.arg(parameterization)
@@ -593,9 +595,11 @@ is_connected <- function(adjacency) {
 #'   deviations. Distances remain proportional in every direction. Range and
 #'   lengthscale priors use these scaled distance units.
 #' @param parameterization Parameterization of the latent field. One of
-#'   `"centered"` (default), `"noncentered"` (Matt trick, better for diffuse
-#'   prior regimes), or `"collapsed"` (marginalize spatial variance for
-#'   improved mixing). Centered is robust for informative priors.
+#'   `"auto"` (default) uses covariance-whitened innovations with partial
+#'   amplitude centering based on fixed likelihood information.
+#'   `"centered"` samples the effects directly,
+#'   `"noncentered"` samples standardized Gaussian innovations, and
+#'   `"collapsed"` marginalizes the field.
 #'
 #' @return A `ratiod_gp` object
 #'
@@ -684,7 +688,7 @@ spatial_gp <- function(coords,
                        nn = 15,
                        shared = TRUE,
                        scale_coords = TRUE,
-                       parameterization = c("centered", "noncentered", "collapsed")) {
+                       parameterization = c("auto", "centered", "noncentered", "collapsed")) {
 
   cov <- match.arg(cov)
   parameterization <- match.arg(parameterization)
@@ -1328,7 +1332,9 @@ svc_default_range <- function() c(0.3, 30)
 #'   `approx = "nngp"`; the HSGP arm carries a LogNormal(0, 1) prior on its
 #'   lengthscale instead and rejects a `range` set here.
 #' @param parameterization Coordinate each NNGP term is sampled in.
-#'   `"noncentered"` (default) samples \eqn{z_j \sim N(0, I)} and builds
+#'   `"auto"` (default) uses covariance-whitened innovations with partial
+#'   amplitude centering based on fixed likelihood information.
+#'   `"noncentered"` samples \eqn{z_j \sim N(0, I)} and builds
 #'   \eqn{w_j = L(\sigma^2_j, \phi_j) z_j} through the NNGP autoregression, so
 #'   the variance reaches the field through the transform rather than through
 #'   the prior's quadratic form. `"centered"` samples the field \eqn{w_j}
@@ -1420,7 +1426,7 @@ spatial_svc <- function(coords,
                         m = 6,
                         c_boundary = 1.5,
                         range = svc_default_range(),
-                        parameterization = c("noncentered", "centered")) {
+                        parameterization = c("auto", "noncentered", "centered")) {
 
   cov <- match.arg(cov)
   approx <- match.arg(approx)

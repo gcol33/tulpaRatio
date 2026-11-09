@@ -54,8 +54,8 @@ max_standardised_diff <- function(a, b) {
 
 temporal_constructor <- function(type_v) {
   switch(type_v,
-    rw1 = tulpaRatio::temporal_rw1(time_var = "t"),
-    ar1 = tulpaRatio::temporal_ar1(time_var = "t"),
+    rw1 = tulpaRatio::temporal_rw1(time_var = "t", parameterization = "centered"),
+    ar1 = tulpaRatio::temporal_ar1(time_var = "t", parameterization = "centered"),
     stop("unknown temporal type: ", type_v)
   )
 }

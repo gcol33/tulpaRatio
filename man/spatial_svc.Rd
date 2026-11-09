@@ -16,7 +16,7 @@ spatial_svc(
   m = 6,
   c_boundary = 1.5,
   range = svc_default_range(),
-  parameterization = c("noncentered", "centered")
+  parameterization = c("auto", "noncentered", "centered")
 )
 
 \method{print}{ratiod_svc}(x, ...)
@@ -67,7 +67,9 @@ want a range the interval excludes. Default \code{c(0.3, 30)}. Applies to
 lengthscale instead and rejects a \code{range} set here.}
 
 \item{parameterization}{Coordinate each NNGP term is sampled in.
-\code{"noncentered"} (default) samples \eqn{z_j \sim N(0, I)} and builds
+\code{"auto"} (default) uses covariance-whitened innovations with partial
+amplitude centering based on fixed likelihood information.
+\code{"noncentered"} samples \eqn{z_j \sim N(0, I)} and builds
 \eqn{w_j = L(\sigma^2_j, \phi_j) z_j} through the NNGP autoregression, so
 the variance reaches the field through the transform rather than through
 the prior's quadratic form. \code{"centered"} samples the field \eqn{w_j}

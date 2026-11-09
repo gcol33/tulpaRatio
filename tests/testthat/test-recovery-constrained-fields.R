@@ -190,6 +190,13 @@ test_that("RW1 recovers the intercept and slope with calibrated intervals", {
     expect_lt(r$log_tau_temporal$mcse, reference$sd / 30)
     expect_lt(abs(r$log_tau_temporal$mean - reference$mean), 0.1 * reference$sd)
 
+    default <- fit_one(df, temporal = temporal_rw1("time"),
+                       control = list(iter = 4000, warmup = 1000, seed = 7))
+    expect_lt(default$log_tau_temporal$rhat, 1.01)
+    expect_lt(default$log_tau_temporal$mcse, reference$sd / 30)
+    expect_lt(abs(default$log_tau_temporal$mean - reference$mean), 0.1 * reference$sd)
+    expect_gt(default$intercept$ess, 400)
+
     # The intercept is the quantity a missing sum-to-zero constraint destroys.
     expect_equal(r$intercept$mean, TRUE_INTERCEPT, tolerance = 0.08)
     expect_equal(r$slope$mean, TRUE_SLOPE, tolerance = 0.08)
@@ -527,14 +534,14 @@ test_that("sampled and collapsed ICAR recover the dense log-precision posterior"
   expect_lt(reference$grid_error / reference$sd, 0.001)
   expect_equal(reference$tail_slope, -0.5, tolerance = 1e-8)
 
-  fit_tau <- function(parameterization, seed, walnuts = FALSE) {
+  fit_tau <- function(parameterization, seed, walnuts = FALSE, automatic = FALSE) {
     f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
                 mode = "hmc",
                 spatial = spatial_car(A, spatial_level = "group", group_var = "site",
                                       parameterization = parameterization),
-                control = list(iter = if (walnuts) 50000 else 22000,
+                control = list(iter = if (automatic) 6000 else if (walnuts) 50000 else 22000,
                                warmup = 2000, chains = 4, seed = seed,
-                               adapt_delta = if (walnuts) 0.8 else 0.99,
+                               adapt_delta = if (automatic || walnuts) 0.8 else 0.99,
                                walnuts = walnuts, verbose = FALSE))
     expect_identical(f$backend, "hmc")
     if (walnuts) expect_identical(f$diagnostics$algorithm, "WALNUTS")
@@ -557,6 +564,13 @@ test_that("sampled and collapsed ICAR recover the dense log-precision posterior"
   sampled_fits <- lapply(c(7L, 17L), function(seed) fit_tau("standard", seed, TRUE))
   standard <- summarise_tau(sampled_fits)
   collapsed <- summarise_tau(list(fit_tau("collapsed", 7L)))
+  defaults <- lapply(c(7L, 17L), function(seed) fit_tau("auto", seed, automatic = TRUE))
+  for (fit in defaults) {
+    result <- summarise_tau(list(fit))
+    expect_lt(result$rhat, 1.01)
+    expect_lt(result$mcse, reference$sd / 30)
+    expect_lt(abs(result$mean - reference$mean), 0.1 * reference$sd)
+  }
 
   for (fit in sampled_fits) {
     result <- summarise_tau(list(fit))
@@ -590,8 +604,7 @@ test_that("sampled and collapsed ICAR recover the dense log-precision posterior"
 test_that("multiscale RW2 funnel diagnostics and posterior agree with dense integration", {
   skip_on_cran()
   skip_if_not_installed("posterior")
-  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true"))
-    skip("Set TULPA_SLOW_TESTS=true")
+  skip_unless_slow()
 
   df <- sim_data(22)
   fit <- function(parameterization, seed, iter = 1000L, warmup = 500L,

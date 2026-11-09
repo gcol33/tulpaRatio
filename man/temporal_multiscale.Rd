@@ -12,7 +12,7 @@ temporal_multiscale(
   short_term = c("ar1", "iid", "none"),
   group_var = NULL,
   shared = TRUE,
-  parameterization = c("centered", "noncentered")
+  parameterization = c("auto", "centered", "noncentered")
 )
 
 \method{print}{ratiod_temporal_multiscale}(x, ...)
@@ -36,7 +36,8 @@ correlated), \code{"iid"} (independent), or \code{"none"}.}
 numerator and denominator.}
 
 \item{parameterization}{Coordinate the intrinsic trend and seasonal arms are
-sampled in. \code{"centered"} (default) samples the effects themselves.
+sampled in. \code{"auto"} (default) uses prior precision plus fixed likelihood
+curvature. \code{"centered"} samples the effects themselves.
 \code{"noncentered"} samples \code{z ~ N(0, I)} and reaches the effects through
 \verb{sigma * A^-1 z}, where \code{A} stacks the arm's difference operator on
 \verb{1'/sqrt(n)}, so the variance enters the linear predictor through the

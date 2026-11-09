@@ -118,21 +118,16 @@ temporal_var_name <- function(x, arg) {
 #'   last time points are neighbors). Useful for seasonal data.
 #' @param shared Logical; if TRUE (default), temporal effect enters both
 #'   numerator and denominator linear predictors identically.
-#' @param parameterization Coordinate the walk is sampled in. `"centered"`
-#'   (default) samples the effects themselves; `"noncentered"` samples
-#'   `z ~ N(0, I)` and reaches the effects through `sigma * A^-1 z`, where `A`
-#'   stacks the walk's difference operator on `1'/sqrt(n)`, so the variance
-#'   enters the linear predictor through the transform rather than through a
-#'   quadratic form. The two describe the same model and differ in the geometry
-#'   the sampler sees: non-centred helps where the variance is shrunk toward
-#'   zero and leaves a funnel the centred coordinate cannot descend, and can be
-#'   worse where the data pin the field. Measured on a 500-observation fixture
-#'   with no temporal signal, an RW1's bulk ESS for `tau_temporal` goes 409 to
-#'   805, while an RW2 picks up 23 divergences of 2000 for no gain, which is
-#'   why this is an argument rather than a default. With `group_var` the prior
-#'   still augments one global constant, so the transform carries the group
-#'   contrasts as free directions beside the scaled ones and the group levels
-#'   stay unshrunk, as they are in the centred coordinate.
+#' @param parameterization Coordinate the walk is sampled in. `"auto"`
+#'   (default) uses the transform `f = z * sqrt((p + c) / (p * tau + c))`, where `p` and
+#'   `c` are fixed prior curvature and likelihood information from curvature
+#'   and squared scores at a zero field. The exact
+#'   Jacobian preserves the posterior. This approaches scale standardization
+#'   as the prior precision increases and a constant rescaling as likelihood
+#'   information increases. `"centered"` samples the effects themselves.
+#'   Free linear directions of second-order walks retain their own coordinates.
+#'   `"noncentered"` samples `z ~ N(0, I)` and reconstructs the effects through
+#'   the walk's inverse difference operator, retaining its free directions.
 #'
 #' @return A `ratiod_temporal` object
 #'
@@ -223,7 +218,7 @@ temporal_var_name <- function(x, arg) {
 #' @export
 temporal_rw1 <- function(time_var, group_var = NULL, cyclic = FALSE,
                          shared = TRUE,
-                         parameterization = c("centered", "noncentered")) {
+                         parameterization = c("auto", "centered", "noncentered")) {
   parameterization <- match.arg(parameterization)
   new_ratiod_temporal("rw1", time_var, group_var, cyclic = cyclic,
                       shared = shared,
@@ -276,7 +271,7 @@ temporal_rw1 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #' @export
 temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
                          shared = TRUE,
-                         parameterization = c("centered", "noncentered")) {
+                         parameterization = c("auto", "centered", "noncentered")) {
   parameterization <- match.arg(parameterization)
   new_ratiod_temporal("rw2", time_var, group_var, cyclic = cyclic,
                       shared = shared,
@@ -297,8 +292,9 @@ temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #' @inheritParams temporal_rw1
 #' @param group_var Optional name of grouping variable for panel data.
 #'   If provided, a separate AR1 process is estimated for each group.
-#' @param parameterization Coordinate the field is sampled in. `"centered"`
-#'   (default) samples the effects themselves; `"noncentered"` samples the
+#' @param parameterization Coordinate the field is sampled in. `"auto"`
+#'   (default) scales the field by prior precision plus fixed likelihood
+#'   curvature. `"centered"` samples the effects themselves; `"noncentered"` samples the
 #'   `N(0, I)` innovations the AR1 recursion builds the effects from, so both
 #'   the precision and rho reach the linear predictor through the transform.
 #'   AR1 is proper and stationary, so this is a different construction from the
@@ -368,7 +364,7 @@ temporal_rw2 <- function(time_var, group_var = NULL, cyclic = FALSE,
 #' @export
 temporal_ar1 <- function(time_var, group_var = NULL, shared = TRUE,
                          rho_prior = NULL,
-                         parameterization = c("centered", "noncentered")) {
+                         parameterization = c("auto", "centered", "noncentered")) {
 
   parameterization <- match.arg(parameterization)
 
@@ -656,7 +652,8 @@ build_temporal_precision_structure <- function(temporal) {
 #' @param shared Logical; if TRUE (default), temporal effects enter both
 #'   numerator and denominator.
 #' @param parameterization Coordinate the intrinsic trend and seasonal arms are
-#'   sampled in. `"centered"` (default) samples the effects themselves.
+#'   sampled in. `"auto"` (default) uses prior precision plus fixed likelihood
+#'   curvature. `"centered"` samples the effects themselves.
 #'   `"noncentered"` samples `z ~ N(0, I)` and reaches the effects through
 #'   `sigma * A^-1 z`, where `A` stacks the arm's difference operator on
 #'   `1'/sqrt(n)`, so the variance enters the linear predictor through the
@@ -737,7 +734,7 @@ temporal_multiscale <- function(time_var,
                                 short_term = c("ar1", "iid", "none"),
                                 group_var = NULL,
                                 shared = TRUE,
-                                parameterization = c("centered", "noncentered")) {
+                                parameterization = c("auto", "centered", "noncentered")) {
 
   trend <- match.arg(trend)
   short_term <- match.arg(short_term)
@@ -1002,7 +999,9 @@ validate_temporal_multiscale <- function(temporal, data) {
 #' @param scale_coords Logical; if TRUE (default), time values are scaled to
 #'   unit variance before computing distances.
 #' @param parameterization Parameterization for GP effects:
-#'   `"noncentered"` (default) stores z ~ N(0,1) and scales by covariance
+#'   `"auto"` (default) uses covariance-whitened innovations with partial
+#'   amplitude centering based on fixed likelihood information.
+#'   `"noncentered"` stores z ~ N(0,1) and scales by covariance
 #'   (better for weakly-informed effects);
 #'   `"centered"` stores effects directly (better for strongly-informed effects).
 #'
@@ -1067,7 +1066,7 @@ temporal_gp <- function(time_var,
                         group_var = NULL,
                         shared = TRUE,
                         scale_coords = TRUE,
-                        parameterization = c("noncentered", "centered")) {
+                        parameterization = c("auto", "noncentered", "centered")) {
 
   cov <- match.arg(cov)
   parameterization <- match.arg(parameterization)

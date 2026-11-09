@@ -10,7 +10,7 @@ spatial_bym2(
   group_var = NULL,
   shared = TRUE,
   scale_factor = NULL,
-  parameterization = c("standard", "collapsed")
+  parameterization = c("auto", "standard", "collapsed")
 )
 }
 \arguments{
@@ -34,8 +34,10 @@ numerator and denominator linear predictors identically.}
 (default), computed from the adjacency matrix following Riebler et al.}
 
 \item{parameterization}{Parameterization of the spatial random effect.
-Either \code{"standard"} (default) or \code{"collapsed"} to marginalize the spatial
-variance for improved mixing in sparse-graph regimes.}
+\code{"auto"} (default) scales each sampled field by its prior precision plus
+fixed likelihood curvature. \code{"standard"} samples the field directly.
+\code{"collapsed"} marginalizes the spatial field. BYM2 uses unit-scale
+structured and independent fields with a separate total scale.}
 }
 \value{
 A \code{ratiod_spatial} object

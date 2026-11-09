@@ -20,6 +20,7 @@
 #include "hmc_temporal.h"
 #include "log_post_impl.h"
 
+#include "hmc_field_coordinates.h"
 using namespace ratiod_hmc;
 
 namespace {
@@ -145,7 +146,7 @@ const char* const KNOWN_FIELDS[] = {
   "hsgp",
   "ms_temporal_nc", "ms_temporal_rw2", "ms_temporal_rw2_nc",
   "ms_temporal_seasonal", "ms_temporal_seasonal_nc",
-  "tvc", "tvc_iid", "tvc_ar1",
+  "tvc", "tvc_iid", "tvc_ar1", "tvc_rw2",
   "re", "re_crossed", "re_slopes", "re_slopes_corr",
   "gp", "gp_matern", "gp_gaussian", "gp_spherical",
   "gp_nc", "gp_collapsed", "gp_temporal",
@@ -457,7 +458,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // is the one branch with no differencing stencil and no sum-to-zero pin.
   const bool want_temporal_iid = (field == "temporal_iid");
   const bool want_hsgp = (field == "hsgp");
-  const bool want_tvc  = (field == "tvc" || field == "tvc_iid" ||
+  const bool want_tvc  = (field == "tvc" || field == "tvc_iid" || field == "tvc_rw2" ||
                           field == "tvc_ar1" || field == "tvc_st4");
   // The NNGP / spectral fields. Each reaches a gradient kernel of its own that
   // no areal field visits: see resolve_gradient_fn in hmc_sampler.cpp.
@@ -870,6 +871,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
     // temporal_tvc()'s match.arg in R does not offer it, so this harness is
     // where it is exercised.
     tvc.structure = (field == "tvc_iid") ? ratiod_temporal::TemporalType::IID
+                  : (field == "tvc_rw2") ? ratiod_temporal::TemporalType::RW2
                   : (field == "tvc_ar1") ? ratiod_temporal::TemporalType::AR1
                                           : ratiod_temporal::TemporalType::RW1;
     tvc.shared = true;
@@ -1302,8 +1304,19 @@ Rcpp::List cpp_gradient_check(std::string field,
                               std::string link_num = "",
                               std::string link_denom = "",
                               std::string link_inflation = "") {
+  const bool auto_coordinates = field.size() > 5 && field.substr(field.size() - 5) == "_auto";
+  if (auto_coordinates) field.resize(field.size() - 5);
   ModelData data = make_model(field, n_obs, n_units, n_times, seed,
                               family, temporal_shared, zi);
+  data.auto_spatial_coordinates = auto_coordinates;
+  data.auto_temporal_coordinates = auto_coordinates;
+  data.auto_gp_coordinates = auto_coordinates;
+  data.auto_multiscale_coordinates = auto_coordinates;
+  data.auto_temporal_gp_coordinates = auto_coordinates;
+  data.auto_svc_coordinates = auto_coordinates;
+  if (auto_coordinates && data.has_svc && !data.svc_is_hsgp) data.svc_noncentered = true;
+  if (auto_coordinates && data.has_temporal_gp) data.temporal_gp_data.noncentered = true;
+  if (auto_coordinates && data.has_gp) data.gp_parameterization = 1;
   // A non-canonical link replaces the canonical one of its predictor; the
   // inflation link serves the zero- and one-inflation probabilities alike.
   auto set_link = [](const std::string& name, LinkType& out) {
@@ -1367,6 +1380,10 @@ Rcpp::List cpp_gradient_check(std::string field,
     for (int i = layout.spatial_start; i < layout.spatial_end; i++) params[i] -= m;
   }
 
+  FieldCoordinates coordinates;
+  if (auto_coordinates) coordinates = make_field_coordinates(params, data, layout);
+  coordinates.inverse(params);
+  FieldCoordinateScope coordinate_scope(auto_coordinates ? &coordinates : nullptr);
   std::vector<double> grad_analytic(n_params, 0.0);
   double lp_from_mode = 0.0;
   compute_gradient(params, data, layout, grad_analytic, &lp_from_mode);

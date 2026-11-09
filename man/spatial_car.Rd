@@ -10,7 +10,7 @@ spatial_car(
   group_var = NULL,
   proper = FALSE,
   shared = TRUE,
-  parameterization = c("standard", "collapsed"),
+  parameterization = c("auto", "standard", "collapsed"),
   center = TRUE
 )
 }
@@ -35,8 +35,10 @@ rho = 1 fixed. If TRUE, uses proper CAR with rho estimated. See Details.}
 numerator and denominator linear predictors identically.}
 
 \item{parameterization}{Parameterization of the spatial random effect.
-Either \code{"standard"} (default) or \code{"collapsed"} to marginalize the spatial
-variance for improved mixing in sparse-graph regimes.}
+\code{"auto"} (default) scales each sampled field by its prior precision plus
+fixed likelihood curvature. \code{"standard"} samples the field directly.
+\code{"collapsed"} marginalizes the spatial field. BYM2 uses unit-scale
+structured and independent fields with a separate total scale.}
 
 \item{center}{Logical; if TRUE (default), the field's mean is removed on its
 way into the linear predictor, so the intercept carries the level and the

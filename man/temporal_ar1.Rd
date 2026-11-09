@@ -9,7 +9,7 @@ temporal_ar1(
   group_var = NULL,
   shared = TRUE,
   rho_prior = NULL,
-  parameterization = c("centered", "noncentered")
+  parameterization = c("auto", "centered", "noncentered")
 )
 }
 \arguments{
@@ -26,8 +26,9 @@ numerator and denominator linear predictors identically.}
 \code{(rho + 1) / 2}. \code{NULL} takes the model-wide
 \code{ratiod_priors(rho_temporal = )}, which defaults to \code{Beta(2, 2)}.}
 
-\item{parameterization}{Coordinate the field is sampled in. \code{"centered"}
-(default) samples the effects themselves; \code{"noncentered"} samples the
+\item{parameterization}{Coordinate the field is sampled in. \code{"auto"}
+(default) scales the field by prior precision plus fixed likelihood
+curvature. \code{"centered"} samples the effects themselves; \code{"noncentered"} samples the
 \code{N(0, I)} innovations the AR1 recursion builds the effects from, so both
 the precision and rho reach the linear predictor through the transform.
 AR1 is proper and stationary, so this is a different construction from the

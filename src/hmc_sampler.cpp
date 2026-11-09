@@ -31,6 +31,7 @@
 
 // Include log_post_impl.h AFTER hmc_sampler.h so types are defined
 #include "log_post_impl.h"
+#include "hmc_field_coordinates.h"
 #include <cmath>
 #include <algorithm>
 #include <limits>
@@ -1036,6 +1037,12 @@ double compute_log_post(
     bool skip_obs_loop,
     const double* precomputed_tgp_log_prior
 ) {
+  if (field_coordinates && !field_coordinates->entries.empty()) {
+    std::vector<double> x;
+    const double jacobian = field_coordinates->forward(params, x);
+    FieldCoordinateScope raw(nullptr);
+    return compute_log_post(x, data, layout, skip_obs_loop, precomputed_tgp_log_prior) + jacobian;
+  }
   ratiod::LogPostOptions opts;
   opts.skip_obs_loop = skip_obs_loop;
   opts.precomputed_tgp_log_prior = precomputed_tgp_log_prior;
@@ -6939,6 +6946,19 @@ void set_gradient_mode(GradientMode mode) {
     g_gradient_mode = mode;
 }
 
+void compute_gradient_field_coordinates(
+    const std::vector<double>& z, const ModelData& data, const ParamLayout& layout,
+    std::vector<double>& grad, double* log_post_out
+) {
+    const FieldCoordinates& coordinates = *field_coordinates;
+    RATIOD_TLS_WORKSPACE(std::vector<double>, x);
+    const double jacobian = coordinates.forward(z, x);
+    FieldCoordinateScope raw(nullptr);
+    coordinates.gradient(x, data, layout, grad, log_post_out);
+    coordinates.pullback(z, x, grad);
+    if (log_post_out) *log_post_out += jacobian;
+}
+
 void compute_gradient(
     const std::vector<double>& params,
     const ModelData& data,
@@ -7030,6 +7050,8 @@ inline unsigned model_grad_features(const ModelData& data, const ParamLayout& la
 // =====================================================================
 
 GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const ParamLayout& layout) {
+    if (field_coordinates && !field_coordinates->entries.empty())
+        return &compute_gradient_field_coordinates;
     // Explicit mode overrides
     if (mode == GradientMode::NUMERICAL)
         return &compute_gradient_numerical;
@@ -7138,6 +7160,7 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
 // selects is assertable from R rather than inferred from whether its gradient
 // happens to come out right.
 const char* gradient_fn_name(GradientFn fn) {
+  if (fn == &compute_gradient_field_coordinates) return "field_coordinates";
   if (fn == &compute_gradient_numerical) return "numerical";
   if (fn == &compute_gradient_arena) return "autodiff_arena";
   if (fn == &compute_gradient_forward) return "autodiff_forward";
@@ -7844,6 +7867,103 @@ struct RatioWalnutsModel {
 // Run single HMC chain
 // =====================================================================
 
+FieldCoordinates make_field_coordinates(const std::vector<double>& initial,
+                                         const ModelData& data,
+                                         const ParamLayout& layout) {
+  FieldCoordinates out;
+  out.gradient = resolve_gradient_fn(g_gradient_mode, data, layout);
+  struct Block { int begin, end, scale; double sign; int width; bool constant, linear, standardized; };
+  std::vector<Block> blocks;
+  auto add = [&](int begin, int end, int scale, double sign, int width = 0,
+                 bool constant = false, bool linear = false, bool standardized = false) {
+    if (begin >= 0 && end > begin && scale >= 0)
+      blocks.push_back({begin, end, scale, sign, width, constant, linear, standardized});
+  };
+  if (data.auto_spatial_coordinates && layout.has_spatial && !layout.is_bym2)
+    add(layout.spatial_start, layout.spatial_end, layout.log_tau_spatial_idx, 1);
+  if (data.auto_temporal_coordinates && layout.has_temporal && !layout.is_temporal_gp)
+    add(layout.temporal_start, layout.temporal_end, layout.log_tau_temporal_idx, 1,
+        data.n_times, false, data.temporal_type == TemporalType::RW2 && !data.temporal_cyclic);
+  if (data.auto_gp_coordinates && layout.is_gp && !layout.is_gp_collapsed)
+    add(layout.gp_w_start, layout.gp_w_end, layout.log_sigma2_gp_idx,
+        1, 0, false, false, true);
+  if (data.auto_temporal_gp_coordinates && layout.is_temporal_gp)
+    add(layout.temporal_start, layout.temporal_end, layout.log_sigma2_temporal_gp_idx,
+        1, 0, false, false, true);
+  if (data.auto_svc_coordinates && layout.has_svc && !data.svc_is_hsgp) {
+    const int width = (layout.svc_w_end - layout.svc_w_start) / data.svc_data.n_svc;
+    for (int j = 0; j < data.svc_data.n_svc; ++j)
+      add(layout.svc_w_start + j * width, layout.svc_w_start + (j + 1) * width,
+          layout.log_sigma2_svc_start + j, 1, 0, false, false, true);
+  }
+  if (data.auto_multiscale_coordinates && layout.has_multiscale_temporal) {
+    add(layout.trend_start, layout.trend_end, layout.log_sigma2_trend_idx, -1,
+        data.multiscale_temporal_data.n_times, false,
+        data.multiscale_temporal_data.trend_type == TemporalType::RW2);
+    add(layout.seasonal_start, layout.seasonal_end, layout.log_sigma2_seasonal_idx, -1);
+    add(layout.short_term_start, layout.short_term_end, layout.log_sigma2_short_idx, -1);
+  }
+  if (layout.has_tvc) {
+    const auto& tvc = data.tvc_data;
+    for (int g = 0; g < tvc.n_groups; ++g) for (int j = 0; j < tvc.n_tvc; ++j) {
+      const int begin = layout.tvc_w_start + (g * tvc.n_tvc + j) * tvc.n_times;
+      const bool intrinsic = tvc.structure == TemporalType::RW1 || tvc.structure == TemporalType::RW2;
+      add(begin, begin + tvc.n_times, layout.log_tau_tvc_start + j, 1, tvc.n_times,
+          intrinsic, tvc.structure == TemporalType::RW2 && !tvc.cyclic);
+    }
+  }
+  if (blocks.empty()) return out;
+  std::vector<double> origin = initial;
+  for (const auto& block : blocks)
+    std::fill(origin.begin() + block.begin, origin.begin() + block.end, 0.0);
+  std::vector<double> score;
+  out.gradient(origin, data, layout, score, nullptr);
+  const double full = compute_log_post(origin, data, layout);
+  const double prior = compute_log_post(origin, data, layout, true);
+  // A balanced direction measures one Rayleigh quotient per block. Its fixed
+  // curvature sets a coordinate only; the density keeps every prior and
+  // likelihood term. Setup takes a constant number of density evaluations
+  // per block, independent of its number of coefficients.
+  for (const auto& block : blocks) {
+    std::vector<double> plus = origin, minus = origin;
+    const double h = std::pow(std::numeric_limits<double>::epsilon(), 0.25) *
+        std::sqrt(1 + std::abs(full));
+    const FieldCoordinate geometry{block.begin, block.end, block.scale, block.sign,
+        1, 0, block.width, block.constant, block.linear};
+    if (geometry.rank() == 0) continue;
+    std::vector<double> direction(origin.size(), 0.0);
+    for (int i = block.begin; i < block.end; ++i) direction[i] = i % 2 ? 1 : -1;
+    double denominator = 0;
+    for (int start = block.begin; start < block.end; start += geometry.width()) {
+      const auto null = geometry.null_component(direction, start);
+      for (int t = 0; t < geometry.width(); ++t) {
+        const int i = start + t;
+        const double shift = h * (direction[i] - null.at(t));
+        plus[i] += shift;
+        minus[i] -= shift;
+        denominator += shift * shift;
+      }
+    }
+    if (!(denominator > 0)) continue;
+    const double prior_curve = -(compute_log_post(plus, data, layout, true) -
+        2 * prior + compute_log_post(minus, data, layout, true)) / denominator;
+    const double full_curve = -(compute_log_post(plus, data, layout) -
+        2 * full + compute_log_post(minus, data, layout)) / denominator;
+    if (!(prior_curve > 0) || !std::isfinite(prior_curve) || !std::isfinite(full_curve))
+      continue;
+    double score_power = 0.0;
+    for (int i = block.begin; i < block.end; ++i) score_power += score[i] * score[i];
+    const double likelihood_information = std::max(0.0, full_curve - prior_curve) +
+        score_power / (block.end - block.begin);
+    const double scaled = (block.standardized ? likelihood_information : prior_curve) *
+        std::exp(-block.sign * initial[block.scale]);
+    const double fixed = block.standardized ? prior_curve : likelihood_information;
+    out.entries.push_back({block.begin, block.end, block.scale, block.sign, scaled, fixed,
+        block.width, block.constant, block.linear});
+  }
+  return out;
+}
+
 // Pure C++ version - safe for OpenMP parallel regions
 HMCResultCpp run_hmc_chain_cpp(
     const std::vector<double>& q_init,
@@ -7910,6 +8030,9 @@ HMCResultCpp run_hmc_chain_cpp(
   vec_grad_ws().cached_data_id = 0;
 
   std::vector<double> q = q_init;
+  const FieldCoordinates coordinates = make_field_coordinates(q_init, data, layout);
+  coordinates.inverse(q);
+  FieldCoordinateScope coordinate_scope(&coordinates);
 
   // For NUTS: fuse initial log_post + gradient into single O(N) pass
   std::vector<double> current_grad(n_params);
@@ -7917,13 +8040,7 @@ HMCResultCpp run_hmc_chain_cpp(
   if (use_nuts) {
     compute_gradient(q, data, layout, current_grad, &log_prob_current);
   } else {
-    // Use same log-post function as the active gradient mode
-    if (g_gradient_mode == GradientMode::AUTODIFF_ARENA ||
-        g_gradient_mode == GradientMode::AUTODIFF_FORWARD) {
-      log_prob_current = ratiod::compute_log_post_impl(q, data, layout);
-    } else {
-      log_prob_current = compute_log_post(q, data, layout);
-    }
+    log_prob_current = compute_log_post(q, data, layout);
   }
 
   double epsilon = find_reasonable_epsilon(q, data, layout, rng);
@@ -8354,6 +8471,11 @@ HMCResultCpp run_hmc_chain_cpp(
       any_informed = true;
     }
 
+    for (const auto& entry : coordinates.entries) {
+      const double a2 = std::exp(2 * entry.log_scale(q_init));
+      for (int i = entry.begin; i < entry.end; ++i) inv_m[i] /= a2;
+      any_informed = true;
+    }
     if (any_informed) {
       // Compute sqrt_mass from inv_mass
       for (int i = 0; i < n_params; i++) {
@@ -9209,13 +9331,7 @@ HMCResultCpp run_hmc_chain_cpp(
       }
 
       // Compute proposed Hamiltonian (use same log-post as gradient mode)
-      double log_prob_prop;
-      if (g_gradient_mode == GradientMode::AUTODIFF_ARENA ||
-          g_gradient_mode == GradientMode::AUTODIFF_FORWARD) {
-        log_prob_prop = ratiod::compute_log_post_impl(q_prop, data, layout);
-      } else {
-        log_prob_prop = compute_log_post(q_prop, data, layout);
-      }
+      const double log_prob_prop = compute_log_post(q_prop, data, layout);
       double kinetic_prop = 0.0;
 
       if (use_lbfgs && lbfgs_initialized && !lbfgs_warmup_done && lbfgs_state.d == n_params) {
@@ -9284,7 +9400,10 @@ HMCResultCpp run_hmc_chain_cpp(
 
     // Store sample (flat row-major storage, single memcpy)
     if (!is_warmup) {
-      std::memcpy(result.sample_row(sample_idx), q.data(),
+      std::vector<double> canonical;
+      const double stored_jacobian = coordinates.entries.empty() ? 0.0 : coordinates.forward(q, canonical);
+      const auto& stored = coordinates.entries.empty() ? q : canonical;
+      std::memcpy(result.sample_row(sample_idx), stored.data(),
                   n_params * sizeof(double));
       // A non-centred block is sampled in a coordinate that is not the effect
       // it stands for, so the stored row carries the effect. q keeps the
@@ -9295,7 +9414,7 @@ HMCResultCpp run_hmc_chain_cpp(
               double sigma2_store = std::exp(q[layout.log_sigma2_gp_idx]);
               double phi_store = std::exp(q[layout.log_phi_gp_idx]);
               RATIOD_TLS_WORKSPACE(ratiod_gp::NNGPNCWorkspace, nc_ws_store);
-              ratiod_gp::nngp_nc_forward(&q[layout.gp_w_start], sigma2_store, phi_store,
+              ratiod_gp::nngp_nc_forward(&stored[layout.gp_w_start], sigma2_store, phi_store,
                                          data.gp_data, nc_ws_store);
               int N_gp = data.gp_data.n_obs;
               for (int i = 0; i < N_gp; i++) {
@@ -9318,7 +9437,7 @@ HMCResultCpp run_hmc_chain_cpp(
                   row[layout.range_svc_start + j] = std::log(svc_phi_store[j]);
               }
               ratiod_svc::svc_field<ratiod_svc::SVC_DENSITY_SLOT>(
-                  &q[layout.svc_w_start], svc_s2_store.data(), svc_phi_store.data(),
+                  &stored[layout.svc_w_start], svc_s2_store.data(), svc_phi_store.data(),
                   data.svc_data, data.svc_gp_view, data.svc_noncentered,
                   &row[layout.svc_w_start]);
               ratiod_svc::svc_center_terms(&row[layout.svc_w_start], data.svc_data);
@@ -9337,7 +9456,7 @@ HMCResultCpp run_hmc_chain_cpp(
           }
           if (temporal_effects_transformed(data, layout)) {
               std::vector<double> phi_store_buf;
-              const double* phi_store = temporal_effects(q, data, layout, phi_store_buf);
+              const double* phi_store = temporal_effects(stored, data, layout, phi_store_buf);
               const int T_store = layout.temporal_end - layout.temporal_start;
               for (int i = 0; i < T_store; i++) {
                   row[layout.temporal_start + i] = phi_store[i];
@@ -9389,7 +9508,7 @@ HMCResultCpp run_hmc_chain_cpp(
               }
           }
       }
-      result.log_prob[sample_idx] = log_prob_current;
+      result.log_prob[sample_idx] = log_prob_current - stored_jacobian;
       result.energy[sample_idx] = iter_energy;
       result.accept_prob[sample_idx] = alpha;
       result.n_leapfrog[sample_idx] = iter_n_leapfrog;
@@ -9626,6 +9745,8 @@ namespace ratiod_hmc {
 // The areal spatial field (ICAR, BYM2, proper CAR) and the restriction any
 // spatial field may carry. A GP-type field arrives in the GP bundle instead.
 static void apply_spatial_params(ModelData& data, const Rcpp::List& spatial_params) {
+  data.auto_spatial_coordinates = spatial_params.containsElementNamed("parameterization") &&
+      Rcpp::as<std::string>(spatial_params["parameterization"]) == "auto";
   const std::string type = Rcpp::as<std::string>(spatial_params["type"]);
   if (type == "icar") {
     data.spatial_type = SpatialType::ICAR;
@@ -9735,7 +9856,8 @@ static void apply_gp_params(ModelData& data, const Rcpp::List& gp) {
     // centred (0), non-centred (1) or collapsed
     const std::string param = Rcpp::as<std::string>(gp["parameterization"]);
     data.gp_collapsed = (param == "collapsed");
-    data.gp_parameterization = (param == "noncentered") ? 1 : 0;
+    data.gp_parameterization = (param == "noncentered" || param == "auto") ? 1 : 0;
+    data.auto_gp_coordinates = param == "auto";
 
   } else if (gp_type == "multiscale_gp") {
     data.spatial_type = SpatialType::MULTISCALE_GP;
