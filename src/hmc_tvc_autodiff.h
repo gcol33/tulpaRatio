@@ -23,8 +23,6 @@ using namespace ratiod::math;
 // hmc_tvc.h on the cyclic wrap-around edge.
 using ratiod_temporal::rw1_quadratic_form_t;
 using ratiod_temporal::rw2_quadratic_form_t;
-using ratiod_temporal::ar1_log_density_t;
-using ratiod_tvc::tvc_term_log_prior;
 using ratiod_tvc::tvc_log_prior;
 using ratiod_tvc::compute_tvc_eta;
 

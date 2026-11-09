@@ -1252,8 +1252,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_test_temporal_log_prior
-double cpp_test_temporal_log_prior(NumericVector phi, std::string type_str, double tau, double rho, bool cyclic);
-RcppExport SEXP _tulpaRatio_cpp_test_temporal_log_prior(SEXP phiSEXP, SEXP type_strSEXP, SEXP tauSEXP, SEXP rhoSEXP, SEXP cyclicSEXP) {
+double cpp_test_temporal_log_prior(NumericVector phi, std::string type_str, double tau, double rho, bool cyclic, int n_groups, bool augment, bool tvc);
+RcppExport SEXP _tulpaRatio_cpp_test_temporal_log_prior(SEXP phiSEXP, SEXP type_strSEXP, SEXP tauSEXP, SEXP rhoSEXP, SEXP cyclicSEXP, SEXP n_groupsSEXP, SEXP augmentSEXP, SEXP tvcSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1262,7 +1262,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
     Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
     Rcpp::traits::input_parameter< bool >::type cyclic(cyclicSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_temporal_log_prior(phi, type_str, tau, rho, cyclic));
+    Rcpp::traits::input_parameter< int >::type n_groups(n_groupsSEXP);
+    Rcpp::traits::input_parameter< bool >::type augment(augmentSEXP);
+    Rcpp::traits::input_parameter< bool >::type tvc(tvcSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_temporal_log_prior(phi, type_str, tau, rho, cyclic, n_groups, augment, tvc));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1939,7 +1942,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_rw1_quadratic_form", (DL_FUNC) &_tulpaRatio_cpp_test_rw1_quadratic_form, 2},
     {"_tulpaRatio_cpp_test_rw2_quadratic_form", (DL_FUNC) &_tulpaRatio_cpp_test_rw2_quadratic_form, 2},
     {"_tulpaRatio_cpp_test_ar1_log_density", (DL_FUNC) &_tulpaRatio_cpp_test_ar1_log_density, 3},
-    {"_tulpaRatio_cpp_test_temporal_log_prior", (DL_FUNC) &_tulpaRatio_cpp_test_temporal_log_prior, 5},
+    {"_tulpaRatio_cpp_test_temporal_log_prior", (DL_FUNC) &_tulpaRatio_cpp_test_temporal_log_prior, 8},
     {"_tulpaRatio_cpp_test_ms_rw_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_ms_rw_log_lik, 5},
     {"_tulpaRatio_cpp_test_log1pexp", (DL_FUNC) &_tulpaRatio_cpp_test_log1pexp, 1},
     {"_tulpaRatio_cpp_test_log_logistic", (DL_FUNC) &_tulpaRatio_cpp_test_log_logistic, 1},

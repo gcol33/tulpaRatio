@@ -102,7 +102,7 @@ TEST_CASE("ar1_log_density computes AR(1) likelihood", "[temporal]") {
     double tau = 2.0;
     double rho = 0.0;
 
-    double log_dens = ar1_log_density(phi, 3, rho, tau);
+    double log_dens = ratiod_ar1::ar1_log_density(phi, 3, rho, tau);
 
     // IID N(0, 1/tau): sum of -0.5*tau*phi^2 - 0.5*log(2*pi/tau)
     double expected = 0.0;
@@ -120,15 +120,15 @@ TEST_CASE("ar1_log_density computes AR(1) likelihood", "[temporal]") {
     double phi[] = {1.0, 0.9, 0.8, 0.7};
     double tau = 1.0;
 
-    double dens_low_rho = ar1_log_density(phi, 4, 0.1, tau);
-    double dens_high_rho = ar1_log_density(phi, 4, 0.9, tau);
+    double dens_low_rho = ratiod_ar1::ar1_log_density(phi, 4, 0.1, tau);
+    double dens_high_rho = ratiod_ar1::ar1_log_density(phi, 4, 0.9, tau);
 
     REQUIRE(dens_high_rho > dens_low_rho);
   }
 
   SECTION("short series") {
     double phi[] = {1.0};
-    REQUIRE(ar1_log_density(phi, 1, 0.5, 1.0) == Approx(0.0));
+    REQUIRE(ratiod_ar1::ar1_log_density(phi, 1, 0.5, 1.0) == Approx(0.0));
   }
 
   SECTION("two points") {
@@ -136,7 +136,7 @@ TEST_CASE("ar1_log_density computes AR(1) likelihood", "[temporal]") {
     double rho = 0.8;
     double tau = 2.0;
 
-    double log_dens = ar1_log_density(phi, 2, rho, tau);
+    double log_dens = ratiod_ar1::ar1_log_density(phi, 2, rho, tau);
 
     // Manual calculation
     double marginal_var = 1.0 / (tau * (1.0 - rho * rho));
@@ -161,11 +161,11 @@ TEST_CASE("temporal_log_prior dispatches to correct model", "[temporal]") {
   double rho = 0.7;
 
   SECTION("NONE returns zero") {
-    REQUIRE(temporal_log_prior(phi, 5, TemporalType::NONE, tau, rho, false) == Approx(0.0));
+    REQUIRE(temporal_log_prior(phi, 5, TemporalType::NONE, std::log(tau), tau, rho, false) == Approx(0.0));
   }
 
   SECTION("RW1 uses rw1_quadratic_form") {
-    double log_prior = temporal_log_prior(phi, 5, TemporalType::RW1, tau, rho, false);
+    double log_prior = temporal_log_prior(phi, 5, TemporalType::RW1, std::log(tau), tau, rho, false);
 
     // Expected: 0.5 * (T-1) * log(tau) - 0.5 * tau * quadform
     double quad = rw1_quadratic_form(phi, 5, false);
@@ -176,7 +176,7 @@ TEST_CASE("temporal_log_prior dispatches to correct model", "[temporal]") {
   }
 
   SECTION("RW2 uses rw2_quadratic_form") {
-    double log_prior = temporal_log_prior(phi, 5, TemporalType::RW2, tau, rho, false);
+    double log_prior = temporal_log_prior(phi, 5, TemporalType::RW2, std::log(tau), tau, rho, false);
 
     double quad = rw2_quadratic_form(phi, 5, false);
     int rank = 3;  // T - 2
@@ -186,13 +186,13 @@ TEST_CASE("temporal_log_prior dispatches to correct model", "[temporal]") {
   }
 
   SECTION("AR1 uses ar1_log_density") {
-    double log_prior = temporal_log_prior(phi, 5, TemporalType::AR1, tau, rho, false);
-    double expected = ar1_log_density(phi, 5, rho, tau);
+    double log_prior = temporal_log_prior(phi, 5, TemporalType::AR1, std::log(tau), tau, rho, false);
+    double expected = ratiod_ar1::ar1_log_density(phi, 5, rho, tau);
     REQUIRE(log_prior == Approx(expected));
   }
 
   SECTION("IID is sum of normal log-densities") {
-    double log_prior = temporal_log_prior(phi, 5, TemporalType::IID, tau, rho, false);
+    double log_prior = temporal_log_prior(phi, 5, TemporalType::IID, std::log(tau), tau, rho, false);
 
     double expected = 0.0;
     double sigma2 = 1.0 / tau;
@@ -209,23 +209,21 @@ TEST_CASE("temporal_log_prior dispatches to correct model", "[temporal]") {
 // Cyclic RW properties
 // ============================================================================
 
-TEST_CASE("cyclic RW1 rank equals T", "[temporal]") {
-  // For cyclic RW1, the precision matrix is full rank (T)
-  // compared to T-1 for non-cyclic
+TEST_CASE("RW1 rank excludes the constant direction", "[temporal]") {
   double phi[] = {0.0, 1.0, 2.0, 1.0};  // 4 points
 
   SECTION("non-cyclic has rank T-1") {
-    double log_prior = temporal_log_prior(phi, 4, TemporalType::RW1, 1.0, 0.0, false);
+    double log_prior = temporal_log_prior(phi, 4, TemporalType::RW1, std::log(2.0), 2.0, 0.0, false);
     // Check the log(tau) coefficient is (T-1)/2 = 1.5
     double quad = rw1_quadratic_form(phi, 4, false);
-    double expected = 0.5 * 3 * std::log(1.0) - 0.5 * 1.0 * quad;
+    double expected = 0.5 * 3 * std::log(2.0) - quad;
     REQUIRE(log_prior == Approx(expected));
   }
 
-  SECTION("cyclic has rank T") {
-    double log_prior = temporal_log_prior(phi, 4, TemporalType::RW1, 1.0, 0.0, true);
+  SECTION("cyclic has rank T-1") {
+    double log_prior = temporal_log_prior(phi, 4, TemporalType::RW1, std::log(2.0), 2.0, 0.0, true);
     double quad = rw1_quadratic_form(phi, 4, true);
-    double expected = 0.5 * 4 * std::log(1.0) - 0.5 * 1.0 * quad;
+    double expected = 0.5 * 3 * std::log(2.0) - quad;
     REQUIRE(log_prior == Approx(expected));
   }
 }

@@ -649,20 +649,6 @@ T compute_log_post_impl(
             T log_tau = params[layout.log_tau_temporal_idx];
             log_post = log_post + ratiod::math::pc_log_density(log_tau, -0.5, data.temporal_sigma_prior_U, data.temporal_sigma_prior_alpha);
 
-            // The augmented constant directions' contribution to the quadratic
-            // form, one per group; see temporal_is_intrinsic().
-            const auto group_aug_quad = [&]() -> T {
-                T q = T(0.0);
-                if (!center_temporal) return q;
-                for (int g = 0; g < data.n_temporal_groups; g++) {
-                    const T s = tulpa::s2z_component_sum(
-                        phi_temporal.data(), g * T_times, T_times);
-                    q = q + tulpa::s2z_aug_coef(T(1.0), T_times) * s * s;
-                }
-                return q;
-            };
-            const int n_aug_pins = center_temporal ? data.n_temporal_groups : 0;
-
             if (rw_nc_temporal) {
                 // The walk's quadratic form and the transform's Jacobian have
                 // already cancelled, so what is left is N(0, I) on the
@@ -675,66 +661,10 @@ T compute_log_post_impl(
                     z_temporal.data(), data.n_times, data.n_temporal_groups,
                     order_rw, data.temporal_cyclic);
 
-            } else if (data.temporal_type == TemporalType::RW1) {
-                // RW1: sum of (phi[t] - phi[t-1])^2
-                T quad_form = T(0.0);
-                for (int g = 0; g < data.n_temporal_groups; g++) {
-                    for (int t = 1; t < T_times; t++) {
-                        T diff = phi_temporal[g * T_times + t] - phi_temporal[g * T_times + t - 1];
-                        quad_form = quad_form + diff * diff;
-                    }
-                    // Cyclic: add wrap-around edge (phi[0] - phi[T-1])
-                    if (data.temporal_cyclic) {
-                        T diff_cyclic = phi_temporal[g * T_times] - phi_temporal[g * T_times + T_times - 1];
-                        quad_form = quad_form + diff_cyclic * diff_cyclic;
-                    }
-                }
-                // Rank: T for cyclic, T-1 for non-cyclic, per group, plus each
-                // group's constant the augmentation fills.
-                quad_form = quad_form + group_aug_quad();
-                int rank_rw1 = tulpa::s2z_aug_rank(
-                    tulpa::rw1_rank(T_times, data.temporal_cyclic)
-                        * data.n_temporal_groups, n_aug_pins);
-                log_post = log_post + T(0.5 * rank_rw1) * log_tau;
-                log_post = log_post - T(0.5) * tau_temporal * quad_form;
-
-            } else if (data.temporal_type == TemporalType::RW2) {
-                // RW2: sum of (phi[t] - 2*phi[t-1] + phi[t-2])^2
-                T quad_form = T(0.0);
-                for (int g = 0; g < data.n_temporal_groups; g++) {
-                    for (int t = 2; t < T_times; t++) {
-                        T diff = phi_temporal[g * T_times + t]
-                               - T(2.0) * phi_temporal[g * T_times + t - 1]
-                               + phi_temporal[g * T_times + t - 2];
-                        quad_form = quad_form + diff * diff;
-                    }
-                    // Cyclic: add wrap-around second-order differences
-                    if (data.temporal_cyclic && T_times >= 3) {
-                        T d2_a = phi_temporal[g * T_times + T_times - 2]
-                               - T(2.0) * phi_temporal[g * T_times + T_times - 1]
-                               + phi_temporal[g * T_times];
-                        T d2_b = phi_temporal[g * T_times + T_times - 1]
-                               - T(2.0) * phi_temporal[g * T_times]
-                               + phi_temporal[g * T_times + 1];
-                        quad_form = quad_form + d2_a * d2_a + d2_b * d2_b;
-                    }
-                }
-                // Rank: T for cyclic, T-2 for non-cyclic, per group, plus each
-                // group's constant. A non-cyclic RW2 also keeps its per-group
-                // LINEAR null direction, which this does not touch.
-                quad_form = quad_form + group_aug_quad();
-                int rank_rw2 = tulpa::s2z_aug_rank(
-                    tulpa::rw2_rank(T_times, data.temporal_cyclic)
-                        * data.n_temporal_groups, n_aug_pins);
-                log_post = log_post + T(0.5 * rank_rw2) * log_tau;
-                log_post = log_post - T(0.5) * tau_temporal * quad_form;
-
-            } else if (data.temporal_type == TemporalType::AR1) {
-                // Beta(a, b) on u = (rho + 1) / 2, logit Jacobian folded in
+            } else if (data.temporal_type == TemporalType::AR1 &&
+                       data.temporal_parameterization == 1) {
                 log_post = log_post + ratiod_ar1::log_prior_rho(
                     rho_ar1, data.temporal_rho_prior_a, data.temporal_rho_prior_b);
-
-                if (data.temporal_parameterization == 1) {
                     // Non-centred: the block holds the N(0, I) innovations the
                     // effects were reconstructed from, and the transform's
                     // Jacobian is what carries tau and rho.
@@ -743,32 +673,14 @@ T compute_log_post_impl(
                         log_post = log_post - T(0.5) * z_temporal[i] * z_temporal[i];
                     }
                     log_post = log_post - T(0.5 * n_z * std::log(2.0 * M_PI));
-                } else {
-                    // The normalized density, both the stationary first
-                    // observation and the conditional residuals, since the
-                    // gaussian normalizers carry the +0.5*T*log(tau) a
-                    // gradient-based sampler needs.
-                    for (int g = 0; g < data.n_temporal_groups; g++) {
-                        log_post = log_post + ratiod_ar1::ar1_log_density(
-                            &phi_temporal[g * T_times], T_times, rho_ar1,
-                            tau_temporal);
-                    }
-                }
-
-            } else if (data.temporal_type == TemporalType::IID) {
-                // IID N(0, 1/tau). Full rank and proper, so no sum-to-zero
-                // pin -- the same terms the analytic log posterior writes.
-                T quad_form = T(0.0);
-                for (int g = 0; g < data.n_temporal_groups; g++) {
-                    for (int t = 0; t < T_times; t++) {
-                        T phi_t = phi_temporal[g * T_times + t];
-                        quad_form = quad_form + phi_t * phi_t;
-                    }
-                }
-                const int n_iid = T_times * data.n_temporal_groups;
-                log_post = log_post + T(0.5 * n_iid) * log_tau
-                         - T(0.5 * n_iid * std::log(2.0 * M_PI));
-                log_post = log_post - T(0.5) * tau_temporal * quad_form;
+            } else {
+                if (data.temporal_type == TemporalType::AR1)
+                    log_post = log_post + ratiod_ar1::log_prior_rho(
+                        rho_ar1, data.temporal_rho_prior_a, data.temporal_rho_prior_b);
+                log_post = ratiod_temporal::temporal_log_prior(
+                    phi_temporal.data(), T_times, data.temporal_type, log_tau,
+                    tau_temporal, rho_ar1, data.temporal_cyclic,
+                    data.n_temporal_groups, center_temporal, log_post);
             }
         }
     }

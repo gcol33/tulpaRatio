@@ -65,11 +65,6 @@ for (t_type in c("rw1", "ar1")) {
     type_v <- t_type
     test_that(sprintf("B1d spec path matches legacy for %s temporal", type_v), {
       skip_on_cran()
-      # RW1/RW2 carry a sum-to-zero penalty whose constant the legacy path now
-      # scales as a standard deviation; the spec path delegates to the tulpa
-      # engine, which still reads 0.001 as a precision. AR1 is proper and
-      # carries no such penalty, so it stays comparable.
-      if (identical(type_v, "rw1")) skip("blocked on gcol33/tulpa#241")
       sim <- simulate_temporal_binomial(type = type_v)
       tp  <- temporal_constructor(type_v)
       legacy42 <- fit_one_temporal(sim, FALSE, 42L, tp)

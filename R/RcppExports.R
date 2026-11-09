@@ -301,8 +301,8 @@ cpp_test_ar1_log_density <- function(phi, rho, tau) {
     .Call(`_tulpaRatio_cpp_test_ar1_log_density`, phi, rho, tau)
 }
 
-cpp_test_temporal_log_prior <- function(phi, type_str, tau, rho, cyclic) {
-    .Call(`_tulpaRatio_cpp_test_temporal_log_prior`, phi, type_str, tau, rho, cyclic)
+cpp_test_temporal_log_prior <- function(phi, type_str, tau, rho, cyclic, n_groups = 1L, augment = FALSE, tvc = FALSE) {
+    .Call(`_tulpaRatio_cpp_test_temporal_log_prior`, phi, type_str, tau, rho, cyclic, n_groups, augment, tvc)
 }
 
 cpp_test_ms_rw_log_lik <- function(phi, sigma2, order, cyclic, augment) {

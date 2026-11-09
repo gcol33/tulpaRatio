@@ -349,7 +349,7 @@ double cpp_test_rw2_quadratic_form(NumericVector phi, bool cyclic) {
 
 // [[Rcpp::export]]
 double cpp_test_ar1_log_density(NumericVector phi, double rho, double tau) {
-  return ratiod_temporal::ar1_log_density(phi.begin(), phi.size(), rho, tau);
+  return ratiod_ar1::ar1_log_density(phi.begin(), phi.size(), rho, tau);
 }
 
 // [[Rcpp::export]]
@@ -358,11 +358,23 @@ double cpp_test_temporal_log_prior(
     std::string type_str,
     double tau,
     double rho,
-    bool cyclic
+    bool cyclic,
+    int n_groups = 1,
+    bool augment = false,
+    bool tvc = false
 ) {
+  if (tvc) {
+    ratiod_tvc::TVCData data;
+    data.n_times = phi.size() / n_groups;
+    data.n_tvc = 1; data.n_groups = n_groups;
+    data.structure = ratiod_temporal::parse_temporal_type(type_str);
+    data.cyclic = cyclic;
+    return ratiod_tvc::tvc_log_prior(std::vector<double>(phi.begin(),phi.end()),
+                                     data,std::vector<double>{tau},std::vector<double>{rho});
+  }
   return ratiod_temporal::temporal_log_prior(
-    phi.begin(), phi.size(), ratiod_temporal::parse_temporal_type(type_str),
-    tau, rho, cyclic
+    phi.begin(), phi.size() / n_groups, ratiod_temporal::parse_temporal_type(type_str),
+    std::log(tau), tau, rho, cyclic, n_groups, augment
   );
 }
 

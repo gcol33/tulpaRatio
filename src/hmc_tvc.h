@@ -15,10 +15,8 @@ namespace ratiod_tvc {
 using ratiod_temporal::TemporalType;
 using ratiod_temporal::rw1_quadratic_form;
 using ratiod_temporal::rw2_quadratic_form;
-using ratiod_temporal::ar1_log_density;
 using ratiod_temporal::rw1_quadratic_form_t;
 using ratiod_temporal::rw2_quadratic_form_t;
-using ratiod_temporal::ar1_log_density_t;
 
 // TVC data structure
 struct TVCData {
@@ -72,46 +70,6 @@ struct TVCGradWorkspace {
 // TVC log-prior
 // -----------------------------------------------------------------------------
 
-// Compute log-prior for a single TVC term's temporal trajectory
-// w: temporal trajectory (length n_times)
-// tau: precision parameter
-// rho: AR1 correlation (only used if structure == AR1)
-template <typename T>
-inline T tvc_term_log_prior(
-    const T* w,
-    int n_times,
-    TemporalType structure,
-    const T& tau,
-    const T& rho,
-    bool cyclic = false
-) {
-  using ratiod::math::safe_log;
-  T log_prior = T(0.0);
-
-  if (structure == TemporalType::RW1) {
-    T quad = rw1_quadratic_form_t(w, n_times, cyclic);
-    log_prior = log_prior + T(0.5 * tulpa::rw1_rank(n_times, cyclic)) * safe_log(tau)
-                          - T(0.5) * tau * quad;
-
-  } else if (structure == TemporalType::RW2) {
-    T quad = rw2_quadratic_form_t(w, n_times, cyclic);
-    log_prior = log_prior + T(0.5 * tulpa::rw2_rank(n_times, cyclic)) * safe_log(tau)
-                          - T(0.5) * tau * quad;
-
-  } else if (structure == TemporalType::AR1) {
-    log_prior = log_prior + ar1_log_density_t(w, n_times, rho, tau);
-
-  } else if (structure == TemporalType::IID) {
-    // IID: independent N(0, 1/tau) for each time point
-    T quad = T(0.0);
-    for (int t = 0; t < n_times; t++) quad = quad + w[t] * w[t];
-    log_prior = log_prior + T(0.5 * n_times) * safe_log(tau)
-                          - T(0.5) * tau * quad;
-  }
-
-  return log_prior;
-}
-
 // Compute log-prior for all TVC terms
 // w_flat: all TVC values (n_times * n_tvc * n_groups, flattened)
 // tau: vector of precisions (length n_tvc)
@@ -134,8 +92,9 @@ inline T tvc_log_prior(
     for (int j = 0; j < n_tvc; j++) {
       const T* w_jg = &w_flat[(g * n_tvc + j) * n_times];
       T rho_j = (tvc_data.structure == TemporalType::AR1) ? rho[j] : T(0.0);
-      log_prior = log_prior + tvc_term_log_prior(w_jg, n_times, tvc_data.structure,
-                                                 tau[j], rho_j, tvc_data.cyclic);
+      log_prior = ratiod_temporal::temporal_log_prior(w_jg, n_times, tvc_data.structure,
+          ratiod::math::safe_log(tau[j]), tau[j], rho_j, tvc_data.cyclic,
+          1, false, log_prior);
     }
   }
 

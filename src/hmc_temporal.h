@@ -115,25 +115,6 @@ inline double rw2_quadratic_form(
 }
 
 // =====================================================================
-// AR1 log-density
-// =====================================================================
-
-// Compute log-density for AR1 process
-// phi[t] | phi[t-1] ~ N(rho * phi[t-1], sigma^2)
-// Marginal variance: sigma^2 / (1 - rho^2)
-//
-// The exponent and the normalizer are ratiod_ar1's precision R(rho), the same
-// matrix the spatiotemporal interaction reads as a Kronecker margin.
-inline double ar1_log_density(
-    const double* phi,
-    int T,
-    double rho,
-    double tau  // precision = 1/sigma^2
-) {
-  return ratiod_ar1::ar1_log_density(phi, T, rho, tau);
-}
-
-// =====================================================================
 // Non-centered AR1 parameterization helpers
 // =====================================================================
 
@@ -236,44 +217,59 @@ inline std::pair<double, double> ar1_nc_gradient(
 // Temporal log-prior contribution
 // =====================================================================
 
-// Compute log-prior for temporal effects (single group)
-inline double temporal_log_prior(
-    const double* phi,
-    int T,
-    TemporalType type,
-    double tau,           // precision for RW1/RW2, or conditional precision for AR1
-    double rho,           // AR1 autocorrelation (ignored for RW)
-    bool cyclic
-) {
-  double log_prior = 0.0;
-
-  if (type == TemporalType::RW1) {
-    // RW1: p(phi|tau) propto tau^{(T-1)/2} exp(-0.5 * tau * phi' Q phi)
-    double quad = rw1_quadratic_form(phi, T, cyclic);
-    int rank = tulpa::rw1_rank(T, cyclic);
-    log_prior += 0.5 * rank * std::log(tau);
-    log_prior -= 0.5 * tau * quad;
-
-  } else if (type == TemporalType::RW2) {
-    // RW2: p(phi|tau) propto tau^{(T-2)/2} exp(-0.5 * tau * phi' Q phi)
-    double quad = rw2_quadratic_form(phi, T, cyclic);
-    int rank = tulpa::rw2_rank(T, cyclic);
-    log_prior += 0.5 * rank * std::log(tau);
-    log_prior -= 0.5 * tau * quad;
-
-  } else if (type == TemporalType::AR1) {
-    // AR1: proper prior
-    log_prior += ar1_log_density(phi, T, rho, tau);
-
-  } else if (type == TemporalType::IID) {
-    // IID N(0, 1/tau): sum of independent normal log-densities
-    double sigma2 = 1.0 / tau;
-    double log_norm = -0.5 * std::log(2.0 * M_PI * sigma2);
-    for (int t = 0; t < T; t++) {
-      log_prior += log_norm - 0.5 * phi[t] * phi[t] / sigma2;
+// The joint density of grouped temporal trajectories. Intrinsic walks can
+// carry one precision-scaled constant per group for sum-to-zero augmentation.
+template<class T>
+inline T temporal_log_prior(const T* phi, int n_times, TemporalType type,
+                             const T& log_tau, const T& tau, const T& rho,
+                             bool cyclic, int n_groups = 1, bool augment = false,
+                             T log_prior = T(0.0)) {
+  if (type == TemporalType::RW1 || type == TemporalType::RW2) {
+    T quad = T(0.0);
+    for (int g = 0; g < n_groups; ++g) {
+      const T* w = phi + g*n_times;
+      if (type == TemporalType::RW1) {
+        for (int t = 1; t < n_times; ++t) {
+          const T diff = w[t] - w[t-1];
+          quad = quad + diff*diff;
+        }
+        if (cyclic && n_times > 0) {
+          const T diff = w[0] - w[n_times-1];
+          quad = quad + diff*diff;
+        }
+      } else {
+        for (int t = 2; t < n_times; ++t) {
+          const T diff = w[t] - T(2.0)*w[t-1] + w[t-2];
+          quad = quad + diff*diff;
+        }
+        if (cyclic && n_times >= 3) {
+          const T a = w[n_times-2] - T(2.0)*w[n_times-1] + w[0];
+          const T b = w[n_times-1] - T(2.0)*w[0] + w[1];
+          quad = quad + a*a + b*b;
+        }
+      }
     }
+    T aug_quad = T(0.0);
+    if (augment) for (int g = 0; g < n_groups; ++g) {
+      const T sum = tulpa::s2z_component_sum(phi,g*n_times,n_times);
+      aug_quad = aug_quad + tulpa::s2z_aug_coef(T(1.0),n_times)*sum*sum;
+    }
+    quad = quad + aug_quad;
+    const int rank = (type == TemporalType::RW1 ? tulpa::rw1_rank(n_times,cyclic)
+                                                : tulpa::rw2_rank(n_times,cyclic))*n_groups
+                     + (augment ? n_groups : 0);
+    log_prior = log_prior + T(0.5*rank)*log_tau;
+    log_prior = log_prior - T(0.5)*tau*quad;
+  } else if (type == TemporalType::AR1) {
+    for (int g = 0; g < n_groups; ++g)
+      log_prior = log_prior + ratiod_ar1::ar1_log_density(phi+g*n_times,n_times,rho,tau);
+  } else if (type == TemporalType::IID) {
+    T quad = T(0.0);
+    for (int i = 0; i < n_times*n_groups; ++i) quad = quad + phi[i]*phi[i];
+    const int n = n_times*n_groups;
+    log_prior = log_prior + T(0.5*n)*log_tau - T(0.5*n*std::log(2.0*M_PI));
+    log_prior = log_prior - T(0.5)*tau*quad;
   }
-
   return log_prior;
 }
 
