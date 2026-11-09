@@ -26,7 +26,7 @@ pg_assemble_fit <- function(chain_results, formula, data, family, iter, warmup,
                             internal_extra = list(), ...) {
   n_chains <- length(chain_results)
   first <- chain_results[[1L]][[unname(blocks[1L])]]
-  n_save <- nrow(first)
+  n_save <- NROW(first)
   draws <- array(NA_real_, c(n_save, n_chains, length(blocks)),
     dimnames = list(iteration = seq_len(n_save), chain = seq_len(n_chains),
                     variable = names(blocks)))
@@ -74,7 +74,7 @@ pg_assemble_fit <- function(chain_results, formula, data, family, iter, warmup,
 #' **When to use this backend:**
 #' - Binomial family models with moderate to large data
 
-#' - When you need fast approximate inference
+#' - When you need posterior draws from a Gibbs sampler
 #'
 #' @references
 #' Polson, N.G., Scott, J.G., and Windle, J. (2013).
@@ -434,9 +434,9 @@ prepare_spatial_for_pg <- function(spatial, data, formula) {
 #' @return Logical indicating if PG backend can be used
 #' @keywords internal
 can_use_pg_backend <- function(family) {
-  # tratio() dispatches the PG tier to fit_pg_binomial() only, which reads the
-  # denominator as binomial trials.
-  isTRUE(family$numerator$distribution == "binomial")
+  model_type <- get_hmc_model_type(family)
+  !is.null(PG_MODELS[[model_type]]) && family_canonical_links(family, model_type) &&
+    !isTRUE(family$zero_inflated) && !isTRUE(family$one_inflated)
 }
 
 
@@ -800,275 +800,97 @@ fit_pg_binomial_rsr <- function(formula,
 
 
 
-# =============================================================================
-# Negative Binomial PG+CRT Backend
-# =============================================================================
+PG_MODELS <- list(
+  binomial = list(fit = "fit_pg_binomial", fields = c(spatial = TRUE, temporal = TRUE),
+    priors = c(
+    prior_beta_sd = "sigma_beta", prior_sigma_scale = "sigma_re_scale",
+    prior_sigma_spatial_U = "spatial_sigma_prior_U",
+    prior_sigma_spatial_alpha = "spatial_sigma_prior_alpha",
+    prior_sigma_temporal_U = "temporal_sigma_prior_U",
+    prior_sigma_temporal_alpha = "temporal_sigma_prior_alpha")),
+  negbin_negbin = list(fit = "fit_pg_negbin_negbin",
+    fields = c(spatial = FALSE, temporal = FALSE), priors = c(
+    prior_beta_sd = "sigma_beta", prior_sigma_scale = "sigma_re_scale",
+    prior_r_shape = "phi_shape", prior_r_rate = "phi_rate"))
+)
 
-#' Fit negative binomial model using Polya-Gamma + CRT Gibbs sampling
-#'
-#' @description
-#' Fast Gibbs sampling for negative binomial models using Polya-Gamma data
-#' augmentation for the logit component and Chinese Restaurant Table (CRT)
-#' augmentation for the dispersion parameter.
-#'
-#' @details
-#' The PG+CRT method (Zhou et al., 2012) enables efficient conjugate Gibbs
-#' sampling for negative binomial regression. This extends the standard PG
-#' augmentation to count data with overdispersion.
-#'
-#' **Model (NB2 parameterization):**
-#' - \eqn{Y_i \sim NB(r, p_i)}
-#' - \eqn{E[Y_i] = r \cdot p_i / (1 - p_i)}
-#' - \eqn{logit(p_i) = X_i \beta + Z_i b}
-#'
-#' **Augmentation scheme:**
-#' - omega_i ~ PG(y_i + r, eta_i) for the logit component
-#' - L_i ~ CRT(y_i, r) for the dispersion update
-#'
-#' @references
-#' Zhou, M., Li, L., Dunson, D., and Carin, L. (2012).
-#' "Lognormal and Gamma Mixed Negative Binomial Regression." ICML.
-#'
-#' @name pg_negbin_backend
-#' @keywords internal
-NULL
-
-
-#' Fit negative binomial model using PG+CRT Gibbs sampling
-#'
-#' @param formula A ratiod_formula object
-#' @param data Data frame
-#' @param family Must be ratiod_negbin_negbin() or similar NB family
-#' @param spatial Optional spatial structure
-#' @param iter Total iterations per chain
-#' @param warmup Warmup iterations per chain
-#' @param chains Number of chains
-#' @param thin Thinning interval
-#' @param cores Number of cores
-#' @param seed Random seed
-#' @param prior_beta_sd Prior SD for fixed effects
-#' @param prior_sigma_scale Half-Cauchy scale for RE SD
-#' @param prior_r_shape Gamma shape for dispersion prior
-#' @param prior_r_rate Gamma rate for dispersion prior
-#' @param r_init Initial dispersion value
-#' @param verbose Print progress
-#'
-#' @return A ratiod_fit object
-#' @keywords internal
-fit_pg_negbin <- function(formula,
-                          data,
-                          family,
-                          spatial = NULL,
-                          iter = 2000,
-                          warmup = floor(iter / 2),
-                          chains = 4,
-                          thin = 1,
-                          cores = NULL,
-                          seed = NULL,
-                          prior_beta_sd = 10,
-                          prior_sigma_scale = 2.5,
-                          prior_r_shape = 1,
-                          prior_r_rate = 0.1,
-                          r_init = 1.0,
-                          verbose = TRUE) {
-
-  assert_backend_fits_structures("pg", list(spatial = spatial))
-
-  # Set cores
-  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
-                             check = is.null(cores))
-
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-
-  # Extract response (numerator counts)
-  y <- formula$numerator$response
-
-  # Design matrix
-  X <- formula$numerator$X
-
-  # Random effects
-  re_info <- extract_re_from_data(formula, data)
-
-  # Check for spatial
-  has_spatial <- !is.null(spatial)
-
-
-
-  n_iter <- as.integer(iter)
-  n_warmup <- as.integer(warmup)
-
-  # Run chains
-  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
-    if (has_spatial) {
-      spatial_info <- prepare_spatial_for_pg(spatial, data, formula)
-
-      cpp_pg_negbin_gibbs_spatial(
-        y = as.integer(y),
-        X = X,
-        re_group = re_info$group_idx,
-        n_re_groups = re_info$n_groups,
-        spatial_group = spatial_info$group_idx,
-        n_spatial_units = spatial_info$n_units,
-        adj_list = spatial_info$adj_list,
-        n_neighbors = spatial_info$n_neighbors,
-        n_iter = n_iter,
-        n_warmup = n_warmup,
-        thin = as.integer(thin),
-        prior_beta_sd = prior_beta_sd,
-        prior_sigma_re_scale = prior_sigma_scale,
-        prior_sigma_spatial_U = 3,
-        prior_sigma_spatial_alpha = 0.01,
-        prior_r_shape = prior_r_shape,
-        prior_r_rate = prior_r_rate,
-        r_init = r_init,
-        store_eta = TRUE,
-        verbose = verbose,
-        n_threads = as.integer(cores)
-      )
-    } else {
-      cpp_pg_negbin_gibbs(
-        y = as.integer(y),
-        X = X,
-        group = re_info$group_idx,
-        n_groups = re_info$n_groups,
-        n_iter = n_iter,
-        n_warmup = n_warmup,
-        thin = as.integer(thin),
-        prior_beta_sd = prior_beta_sd,
-        prior_sigma_scale = prior_sigma_scale,
-        prior_r_shape = prior_r_shape,
-        prior_r_rate = prior_r_rate,
-        r_init = r_init,
-        store_eta = TRUE,
-        verbose = verbose,
-        n_threads = as.integer(cores)
-      )
-    }
-
-  })
-
-  # Convert to ratiod_fit
-  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
-    blocks = c(pg_beta_block(X), c(r = "r"), pg_re_block(re_info),
-               if (has_spatial) c(tau_spatial = "tau")),
-    combined_fields = c("eta", "beta", "re", "spatial"),
-    internal_extra = list(X = X, re_info = re_info), spatial = spatial)
-
-  return(fit)
+pg_family_field_support <- function(field, structures) {
+  if (is.null(structures$family)) return(TRUE)
+  model <- PG_MODELS[[get_hmc_model_type(structures$family)]]
+  if (isTRUE(model$fields[[field]])) return(TRUE)
+  "this PG likelihood fits fixed effects and a shared random intercept"
 }
 
+fit_pg <- function(formula, data, family, spatial = NULL, temporal = NULL,
+                   priors = NULL, iter = 2000, warmup = floor(iter / 2),
+                   chains = 4, thin = 1, cores = NULL, seed = NULL,
+                   verbose = TRUE) {
+  model_type <- get_hmc_model_type(family)
+  model <- PG_MODELS[[model_type]]
+  if (is.null(model) || !can_use_pg_backend(family))
+    stop("The PG backend fits logit binomial and log-link NB-NB models.", call. = FALSE)
+  assert_backend_fits_structures("pg", list(family = family,
+    spatial = spatial, temporal = temporal))
+  p <- sampler_priors(priors, model_type)
+  args <- list(formula = formula, data = data, family = family,
+    iter = iter, warmup = warmup, chains = chains, thin = thin,
+    cores = cores, seed = seed, verbose = verbose)
+  if (model_type == "binomial") {
+    args$spatial <- spatial
+    args$temporal <- temporal
+  }
+  args <- c(args, stats::setNames(p[unname(model$priors)], names(model$priors)))
+  do.call(get(model$fit, mode = "function"), args)
+}
 
-#' Fit two-process NB ratio model using PG+CRT Gibbs sampling
+#' Fit an NB-NB ratio with Polya-Gamma augmentation
 #'
-#' @description
-#' Fits the ratiod_negbin_negbin() family using pure Gibbs sampling.
-#' Both numerator and denominator are NB distributed with shared random effects.
+#' Both coefficients and saved predictors use log means. Dispersion has a
+#' Gamma(shape, rate) prior on the positive real line. A common random
+#' intercept enters both processes, with a Half-Cauchy prior on its SD.
 #'
-#' @param formula A ratiod_formula object
-#' @param data Data frame
-#' @param family Must be ratiod_negbin_negbin()
-#' @param iter Total iterations
-#' @param warmup Warmup iterations
-#' @param chains Number of chains
-#' @param thin Thinning interval
-#' @param cores Number of cores
-#' @param seed Random seed
-#' @param prior_beta_sd Prior SD for fixed effects
-#' @param prior_sigma_scale Half-Cauchy scale for RE SD
-#' @param prior_r_shape Gamma shape for dispersion priors
-#' @param prior_r_rate Gamma rate for dispersion priors
-#' @param r_num_init Initial dispersion for numerator
-#' @param r_denom_init Initial dispersion for denominator
-#' @param verbose Print progress
-#'
-#' @return A ratiod_fit object
+#' @inheritParams fit_pg_binomial
+#' @param family An `ratiod_negbin_negbin()` family.
+#' @param prior_r_shape,prior_r_rate Gamma shape and rate for each dispersion.
+#' @param r_num_init,r_denom_init Initial dispersions.
 #' @keywords internal
-fit_pg_negbin_negbin <- function(formula,
-                                  data,
-                                  family,
-                                  iter = 2000,
-                                  warmup = floor(iter / 2),
-                                  chains = 4,
-                                  thin = 1,
-                                  cores = NULL,
-                                  seed = NULL,
-                                  prior_beta_sd = 10,
-                                  prior_sigma_scale = 2.5,
-                                  prior_r_shape = 1,
-                                  prior_r_rate = 0.1,
-                                  r_num_init = 1.0,
-                                  r_denom_init = 1.0,
-                                  verbose = TRUE) {
-
-  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
-                             check = is.null(cores))
-
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-
-  # Extract responses
-  y_num <- formula$numerator$response
-  y_denom <- formula$denominator$response
-
-  if (is.null(y_denom)) {
-    stop("NegBin-NegBin models require both numerator and denominator counts.")
-  }
-
-  # Design matrices
+fit_pg_negbin_negbin <- function(formula, data, family,
+    iter = 2000, warmup = floor(iter / 2), chains = 4, thin = 1,
+    cores = NULL, seed = NULL, prior_beta_sd = 10, prior_sigma_scale = 2.5,
+    prior_r_shape = 2, prior_r_rate = 0.1, r_num_init = 1, r_denom_init = 1,
+    verbose = TRUE) {
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(), check = is.null(cores))
+  shared_terms <- formula$shared$random_effects
+  terms <- c(formula$numerator$random_effects, formula$denominator$random_effects)
+  shared_names <- vapply(shared_terms, `[[`, "", "group_var")
+  if (any(!vapply(terms, function(term) term$group_var %in% shared_names, FALSE)))
+    stop("The NB-NB PG sampler fits a shared random intercept. Use mode = 'hmc' for process-specific random effects.", call. = FALSE)
+  if (length(shared_terms) > 1L || any(vapply(shared_terms, function(term)
+      length(term$slope_vars) > 0L || !isTRUE(term$has_intercept), FALSE)))
+    stop("The NB-NB PG sampler fits one shared random intercept. Use mode = 'hmc' for random slopes or multiple grouping factors.", call. = FALSE)
+  re_formula <- formula
+  re_formula$numerator$random_effects <- shared_terms
+  re_info <- extract_re_from_data(re_formula, data)
   X_num <- formula$numerator$X
   X_denom <- formula$denominator$X
-
-  # If denominator has no predictors, use intercept only
-  if (is.null(X_denom)) {
-    X_denom <- matrix(1, nrow = nrow(data), ncol = 1)
-    colnames(X_denom) <- "(Intercept)"
-  }
-
-  # Random effects
-  re_info <- extract_re_from_data(formula, data)
-
-  # Check for shared structure (default in tulpaRatio)
-  shared <- is.null(formula$shared) || !isFALSE(formula$shared)
-
-  n_iter <- as.integer(iter)
-  n_warmup <- as.integer(warmup)
-
-  # Run chains
   chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
     cpp_pg_negbin_negbin_gibbs(
-      y_num = as.integer(y_num),
-      y_denom = as.integer(y_denom),
-      X_num = X_num,
-      X_denom = X_denom,
-      group = re_info$group_idx,
-      n_groups = re_info$n_groups,
-      n_iter = n_iter,
-      n_warmup = n_warmup,
-      thin = as.integer(thin),
-      prior_beta_sd = prior_beta_sd,
-      prior_sigma_scale = prior_sigma_scale,
-      prior_r_shape = prior_r_shape,
-      prior_r_rate = prior_r_rate,
-      r_num_init = r_num_init,
-      r_denom_init = r_denom_init,
-      shared = shared,
-      store_eta = TRUE,
-      verbose = verbose,
-      n_threads = as.integer(cores)
-    )
-
+      y_num = as.integer(formula$numerator$response),
+      y_denom = as.integer(formula$denominator$response),
+      X_num = X_num, X_denom = X_denom, group = re_info$group_idx,
+      n_groups = re_info$n_groups, n_iter = as.integer(iter),
+      n_warmup = as.integer(warmup), thin = as.integer(thin),
+      prior_beta_sd = prior_beta_sd, prior_sigma_scale = prior_sigma_scale,
+      prior_r_shape = prior_r_shape, prior_r_rate = prior_r_rate,
+      r_num_init = r_num_init, r_denom_init = r_denom_init,
+      shared = re_info$n_groups > 0L, store_eta = TRUE,
+      verbose = verbose, n_threads = as.integer(cores))
   })
-
-  # Convert to ratiod_fit
-  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+  pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
     blocks = c(pg_beta_block(X_num, "beta_num", "num"),
                pg_beta_block(X_denom, "beta_denom", "denom"),
-               c(r_num = "r_num", r_denom = "r_denom"), pg_re_block(re_info)),
+               c(phi_num = "r_num", phi_denom = "r_denom"), pg_re_block(re_info)),
     combined_fields = c("eta_num", "eta_denom", "beta_num", "beta_denom", "re"),
-    internal_extra = list(X_num = X_num, X_denom = X_denom, re_info = re_info))
-
-  return(fit)
+    internal_extra = list(X_num = X_num, X_denom = X_denom,
+                          X = X_num, re_info = re_info))
 }

@@ -55,7 +55,8 @@
 #'   **Backend names** (specific implementation):
 #'   - `"hmc"` (Tier 1): Native HMC/NUTS sampler
 #'   - `"ess"` (Tier 1): Elliptical Slice Sampling
-#'   - `"pg"` (Tier 1): Pólya-Gamma Gibbs (binomial only)
+#'   - `"pg"` (Tier 1): Polya-Gamma Gibbs for logit binomial or log-link NB-NB
+#'     models. NB-NB fits fixed effects and one shared random intercept.
 #'   - `"sghmc"` (Tier 3): Stochastic Gradient HMC (large datasets)
 #'   - `"sgld"` (Tier 3): Stochastic Gradient Langevin Dynamics (large datasets)
 #'   - `"laplace"` (Tier 2): Laplace approximation
@@ -306,7 +307,8 @@ tratio <- function(formula,
     temporal = temporal,
     spatiotemporal = spatiotemporal,
     zi = zi,
-    latent = latent
+    latent = latent,
+    family = family
   )
 
   # Select inference mode and backend
@@ -337,11 +339,10 @@ tratio <- function(formula,
   assert_backend_fits_likelihood(selected_backend, family, structures)
   assert_backend_fits_structures(selected_backend, structures)
 
-  # PG backend only works for binomial family (currently experimental)
   if (selected_backend == "pg") {
     if (!can_use_pg_backend(family)) {
       stop(
-        "The PG backend fits ratiod_binomial() only; use mode = \"hmc\" ",
+        "The PG backend fits logit binomial and log-link NB-NB models; use mode = \"hmc\" ",
         "for other families.",
         call. = FALSE
       )
@@ -437,16 +438,8 @@ TRATIO_BACKENDS <- list(
   gibbs = list(fit = "fit_gibbs", args = function(x) {
     tratio_backend_args(x, c("iter", "warmup", "thin", "chains", "cores"))
   }),
-  pg = list(fit = "fit_pg_binomial", args = function(x) {
-    args <- tratio_backend_args(x, c("iter", "warmup", "chains", "thin", "cores"))
-    args$priors <- NULL
-    priors <- sampler_priors(x$inputs$priors, get_hmc_model_type(x$inputs$family))
-    c(args, list(prior_beta_sd = priors$sigma_beta, prior_sigma_scale = priors$sigma_re_scale,
-                 prior_sigma_spatial_U = priors$spatial_sigma_prior_U,
-                 prior_sigma_spatial_alpha = priors$spatial_sigma_prior_alpha,
-                 prior_sigma_temporal_U = priors$temporal_sigma_prior_U,
-                 prior_sigma_temporal_alpha = priors$temporal_sigma_prior_alpha))
-  }),
+  pg = list(fit = "fit_pg", args = function(x)
+    tratio_backend_args(x, c("iter", "warmup", "chains", "thin", "cores"))),
   laplace = list(fit = "fit_laplace", args = function(x) {
     args <- tratio_backend_args(x, "cores")
     args$seed <- NULL
@@ -571,50 +564,6 @@ cli_rule <- function(title = NULL) {
       paste(rep("-", ceiling(side_len)), collapse = "")
     )
   }
-}
-
-#' Select optimal backend based on model characteristics
-#'
-#' @description
-#' Automatically chooses the best backend for a given model based on
-#' the family, data size, and presence of spatial/temporal effects.
-#'
-#' @param family tulpaRatio family object
-#' @param n_obs Number of observations
-#' @param has_spatial Whether spatial effects are specified
-#' @param has_temporal Whether temporal effects are specified
-#'
-#' @return Character string: "pg", "hmc", or "laplace"
-#'
-#' @details
-#' Selection logic:
-#' - **Binomial family**: Use PG (Polya-Gamma) - fastest for binomial
-#' - **Spatial/temporal models**: Use HMC (only HMC supports all structure types)
-#' - **Very large data (N > 50,000)**: Use Laplace (approximate but fast)
-#' - **Default**: Use HMC (full MCMC, works for all families)
-#'
-#' @keywords internal
-select_backend <- function(family, n_obs, has_spatial = FALSE, has_temporal = FALSE) {
-
-  # Thresholds
-  VERY_LARGE <- 50000
-  LARGE <- 10000
-
-  family_name <- family$name
-
-  # Spatial/temporal models: HMC is most complete
-  if (has_spatial || has_temporal) {
-    return("hmc")
-  }
-
-  # Very large data: Laplace for speed (approximate but fast)
-  if (n_obs > VERY_LARGE) {
-    return("laplace")
-  }
-
-  # Default: HMC (full MCMC, works for everything)
-  # Note: PG backend exists for binomial but is experimental
-  return("hmc")
 }
 
 

@@ -1666,15 +1666,6 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
 }
 
 
-#' Check if HMC backend can be used
-#' @keywords internal
-can_use_hmc_backend <- function(family) {
-  # HMC works for all families
-
-  TRUE
-}
-
-
 #' Prepare zero-inflation structure for HMC
 #'
 #' Turns the inflation specification implied by a ZI/hurdle/OI/ZOIB family

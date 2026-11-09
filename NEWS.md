@@ -1,5 +1,28 @@
 # tulpaRatio 1.7.3
 
+* Polya-Gamma samplers share one set of Gaussian conditionals, scale updates
+  and iteration control; the six samplers outside the negative-binomial
+  kernels give byte-identical draws. The single-response and spatial
+  negative-binomial kernels call tulpa's PG API, so their coefficient prior
+  sits on the declared NB2 log-mean coefficients and matches dense quadrature
+  of that model under tight and loose priors (#191).
+
+* The PG temporal sampler updates an RW2 trend and its PC scale prior, which
+  it had allocated and left at zero. Integer PG draws use the exact
+  alternating-series rejection sampler of Windle, Polson and Scott (2014); the
+  truncated gamma sum underestimated the mean by 0.4% to 8.1% (#219).
+
+* The paired negative-binomial PG sampler draws PG variables at the real
+  shape y + r instead of a rounded one, evaluates the dispersion at the NB2 log
+  mean instead of reading probabilities as eta, and stores the predictors of
+  the completed sweep (#220).
+
+* `tratio(..., family = ratiod_negbin_negbin(), mode = "pg")` fits fixed
+  effects and a shared random intercept with the paired PG sampler; fitted
+  values, predictions and posterior predictive draws read both processes.
+  The standalone one-response PG negative-binomial R fitter, which ignored the
+  denominator, and other unused internal R helpers are removed (#184).
+
 * The constrained-field recovery tests check log precision against a dense
   integration of each fixture's posterior under the PC prior and bound Monte
   Carlo error across independent seeds; their sampler settings are stated

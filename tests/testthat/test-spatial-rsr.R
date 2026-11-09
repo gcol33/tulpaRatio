@@ -53,49 +53,6 @@ test_that("spatial_rsr print method works", {
   expect_true(any(grepl("temp", output)))
 })
 
-# Tests for compute_rsr_projection
-
-test_that("compute_rsr_projection creates valid projection matrix", {
-  # Simple design matrix
-  set.seed(123)
-  X <- cbind(1, rnorm(20), rnorm(20))
-
-  P_perp <- compute_rsr_projection(X)
-
-  expect_equal(dim(P_perp), c(20, 20))
-
-  # P_perp should be idempotent: P_perp %*% P_perp = P_perp
-  expect_equal(P_perp %*% P_perp, P_perp, tolerance = 1e-10)
-
-  # P_perp should be symmetric
-  expect_equal(P_perp, t(P_perp), tolerance = 1e-10)
-})
-
-test_that("compute_rsr_projection orthogonalizes correctly", {
-  set.seed(123)
-  n <- 30
-  X <- cbind(1, rnorm(n), rnorm(n))
-
-  P_perp <- compute_rsr_projection(X)
-
-  # Random vector
-  w <- rnorm(n)
-
-  # Projected vector should be orthogonal to X
-  w_projected <- P_perp %*% w
-
-  # X' %*% w_projected should be (approximately) zero
-  orthogonality <- t(X) %*% w_projected
-  expect_equal(as.vector(orthogonality), rep(0, 3), tolerance = 1e-10)
-})
-
-test_that("compute_rsr_projection warns for high-dimensional case", {
-  # More columns than rows
-  X <- matrix(rnorm(50), nrow = 5, ncol = 10)
-
-  expect_warning(compute_rsr_projection(X), "More covariates than observations")
-})
-
 # Tests for validate_rsr
 
 test_that("validate_rsr computes projection matrix", {
@@ -134,40 +91,6 @@ test_that("validate_rsr returns non-RSR spatial unchanged", {
   expect_identical(result, gp)
 })
 
-# Tests for apply_rsr_projection
-
-test_that("apply_rsr_projection applies projection correctly", {
-  set.seed(123)
-  n <- 20
-  X <- cbind(1, rnorm(n))
-  P_perp <- compute_rsr_projection(X)
-
-  w <- rnorm(n)
-  w_rsr <- apply_rsr_projection(w, P_perp)
-
-  expect_length(w_rsr, n)
-
-  # Result should be orthogonal to X
-  expect_equal(as.vector(t(X) %*% w_rsr), c(0, 0), tolerance = 1e-10)
-})
-
-test_that("apply_rsr_projection is idempotent", {
-  set.seed(456)
-  n <- 15
-  X <- cbind(1, rnorm(n), rnorm(n))
-  P_perp <- compute_rsr_projection(X)
-
-  w <- rnorm(n)
-
-  # First projection
-  w1 <- apply_rsr_projection(w, P_perp)
-
-  # Second projection should give same result
-  w2 <- apply_rsr_projection(w1, P_perp)
-
-  expect_equal(w1, w2, tolerance = 1e-10)
-})
-
 test_that("rsr_basis_of spans the covariates at their rank", {
   set.seed(7)
   x <- rnorm(30)
@@ -175,7 +98,7 @@ test_that("rsr_basis_of spans the covariates at their rank", {
   Q <- rsr_basis_of(X)
   expect_equal(ncol(Q), 2L)
   expect_equal(crossprod(Q), diag(2), tolerance = 1e-12)
-  expect_equal(compute_rsr_projection(X) %*% X, 0 * X, tolerance = 1e-10)
+  expect_equal(X - Q %*% crossprod(Q, X), 0 * X, tolerance = 1e-10)
 })
 
 # ---------------------------------------------------------------------------

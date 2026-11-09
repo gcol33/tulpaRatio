@@ -150,13 +150,6 @@ test_that("is_zi_family correctly identifies ZI families", {
 })
 
 
-test_that("is_hurdle_family correctly identifies hurdle families", {
-  expect_true(tulpaRatio:::is_hurdle_family(ratiod_hurdle_negbin()))
-  expect_true(tulpaRatio:::is_hurdle_family(ratiod_hurdle_poisson()))
-  expect_false(tulpaRatio:::is_hurdle_family(ratiod_zi_negbin()))
-})
-
-
 # ============================================================================
 # Tests for new ZI variants (v1.2.0)
 # ============================================================================
@@ -205,21 +198,6 @@ test_that("ratiod_hurdle_binomial creates correct structure", {
   expect_true(fam$zero_inflated)
   expect_equal(fam$zi_type, "hurdle")
   expect_equal(fam$numerator$base_distribution, "binomial")
-})
-
-
-test_that("is_oi_family identifies one-inflated families", {
-  expect_true(tulpaRatio:::is_oi_family(ratiod_oi_binomial()))
-  expect_true(tulpaRatio:::is_oi_family(ratiod_zoi_binomial()))
-  expect_false(tulpaRatio:::is_oi_family(ratiod_zi_negbin()))
-  expect_false(tulpaRatio:::is_oi_family(ratiod_zi_binomial()))
-})
-
-
-test_that("is_zoib_family identifies ZOIB families", {
-  expect_true(tulpaRatio:::is_zoib_family(ratiod_zoi_binomial()))
-  expect_false(tulpaRatio:::is_zoib_family(ratiod_oi_binomial()))
-  expect_false(tulpaRatio:::is_zoib_family(ratiod_zi_binomial()))
 })
 
 

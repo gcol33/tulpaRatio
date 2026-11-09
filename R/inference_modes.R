@@ -113,29 +113,6 @@ get_backend_tier <- function(backend) {
 }
 
 
-#' Map mode to valid backends
-#' @param mode Character: "auto", "exact", "structured", or "optimized"
-#' @return Character vector of valid backends for this mode
-#' @keywords internal
-get_mode_backends <- function(mode) {
-  mode <- tolower(mode)
-
-  if (mode == "auto") {
-    # Auto can choose Tier 1 or Tier 2, never Tier 3
-    return(c(INFERENCE_TIERS$exact$backends, INFERENCE_TIERS$structured$backends))
-  }
-
-  if (mode %in% names(INFERENCE_TIERS)) {
-    return(INFERENCE_TIERS[[mode]]$backends)
-  }
-
-  stop(sprintf(
-    "Unknown mode: '%s'. Use one of: auto, exact, structured, optimized",
-    mode
-  ), call. = FALSE)
-}
-
-
 # ==============================================================================
 # Backend Capabilities
 # ==============================================================================
@@ -182,6 +159,8 @@ tvc_temporal_support <- function(temporal, structures) {
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 multiscale_temporal_support <- function(temporal, structures) {
+  family_support <- pg_family_field_support("temporal", structures)
+  if (!isTRUE(family_support)) return(family_support)
   if (inherits(temporal, "ratiod_rtr")) return(rtr_restriction)
   if (!inherits(temporal, "ratiod_temporal_multiscale")) {
     return("only temporal_multiscale() terms are implemented")
@@ -354,6 +333,8 @@ disconnected_graph_restriction <- paste0(
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 pg_spatial_support <- function(spatial, structures) {
+  family_support <- pg_family_field_support("spatial", structures)
+  if (!isTRUE(family_support)) return(family_support)
   if (identical(spatial$type, "car_proper")) {
     return(proper_car_restriction)
   }
@@ -832,39 +813,4 @@ inference_mode_info <- function() {
   cat("  tratio(..., mode = 'vi')         # Variational Inference (Tier 3)\n")
 
   invisible(NULL)
-}
-
-
-#' Format tier information for display
-#'
-#' @param tier_info List from get_backend_tier()
-#' @param verbose Include full description
-#' @return Character string
-#' @keywords internal
-format_tier_info <- function(tier_info, verbose = FALSE) {
-  if (verbose) {
-    sprintf(
-      "Tier %d (%s): %s",
-      tier_info$tier,
-      tier_info$name,
-      tier_info$description
-    )
-  } else {
-    sprintf("Tier %d (%s)", tier_info$tier, tier_info$name)
-  }
-}
-
-
-#' Format mode selection message
-#'
-#' @param selection List from select_inference_mode()
-#' @return Character string for display
-#' @keywords internal
-format_mode_selection <- function(selection) {
-  lines <- c(
-    sprintf("Mode: %s", selection$tier_name),
-    sprintf("Backend: %s", selection$backend),
-    sprintf("Reason: %s", selection$reason)
-  )
-  paste(lines, collapse = "\n")
 }

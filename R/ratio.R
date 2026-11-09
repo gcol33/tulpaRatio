@@ -1229,47 +1229,29 @@ build_prediction_data_pg <- function(object, newdata, re_formula, allow_new_leve
     }
   }
 
-  list(X = X, re_group = re_group, N = nrow(newdata), include_re = include_re)
+  X_denom <- if (!is.null(object$.internal$beta_denom))
+    design_matrix_newdata(formula$denominator$design, newdata) else NULL
+  list(X = X, X_denom = X_denom, re_group = re_group,
+       N = nrow(newdata), include_re = include_re)
 }
 
 
 #' Compute predictions for PG backend
 #' @keywords internal
 compute_predictions_pg <- function(object, pred_data, type) {
-  beta <- object$.internal$beta
-  re <- object$.internal$re
-  n_samples <- nrow(beta)
-  N <- pred_data$N
-
-  # Compute linear predictor
-  eta <- matrix(NA_real_, n_samples, N)
-  for (s in seq_len(n_samples)) {
-    eta[s, ] <- as.numeric(pred_data$X %*% beta[s, ])
-    if (pred_data$include_re && !is.null(re)) {
-      for (i in seq_len(N)) {
-        g <- pred_data$re_group[i]
-        if (g > 0 && g <= ncol(re)) {
-          eta[s, i] <- eta[s, i] + re[s, g]
-        }
-      }
-    }
+  internal <- object$.internal
+  beta_num <- internal$beta_num %||% internal$beta
+  beta_denom <- internal$beta_denom
+  eta_num <- beta_num %*% t(pred_data$X)
+  eta_denom <- if (is.null(beta_denom)) matrix(0, nrow(beta_num), pred_data$N)
+    else beta_denom %*% t(pred_data$X_denom)
+  if (pred_data$include_re && !is.null(internal$re)) {
+    effect <- spread_effect(internal$re, pred_data$re_group, pred_data$N)
+    eta_num <- eta_num + effect
+    if (!is.null(beta_denom)) eta_denom <- eta_denom + effect
   }
-
-  if (type == "link") {
-    return(list(
-      numerator = eta,
-      denominator = matrix(0, n_samples, N),
-      ratio = eta
-    ))
-  }
-
-  # Response scale (binomial -> probability)
-  prob <- inv_logit(eta)
-  list(
-    numerator = prob,
-    denominator = matrix(1, n_samples, N),
-    ratio = prob
-  )
+  hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
+                     fit_links(object), type)
 }
 
 
@@ -1537,20 +1519,6 @@ predict_laplace <- function(object, newdata, type, re_formula, allow_new_levels,
   pred_draws <- hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
                                    fit_links(object), type)
   list(draws = pred_draws, w_samples = NULL)
-}
-
-
-#' Simple MVN sampler (avoid mvtnorm dependency)
-#' @keywords internal
-mvtnorm_rmvnorm <- function(n, mean, sigma) {
-  p <- length(mean)
-  # Cholesky decomposition
-  L <- tryCatch(chol(sigma), error = function(e) {
-    # Add jitter if not positive definite
-    chol(sigma + diag(1e-6, p))
-  })
-  Z <- matrix(rnorm(n * p), n, p)
-  sweep(Z %*% L, 2, mean, "+")
 }
 
 

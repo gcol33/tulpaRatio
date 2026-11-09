@@ -15,7 +15,8 @@ test_that("PG assembly preserves each ordered draw block and chain", {
     c(beta, tau_spatial = "tau"),
     c(beta, r = "r", sigma_re = "sigma_re"),
     c(num_a = "beta_num", num_b = "beta_num", denom_a = "beta_denom",
-      r_num = "r_num", r_denom = "r_denom"))
+      r_num = "r_num", r_denom = "r_denom"),
+    c(phi_num = "r_num", phi_denom = "r_denom"))
   for (blocks in layouts) {
     f <- tulpaRatio:::pg_assemble_fit(list(chain, chain), list(), data.frame(),
       list(), 8, 2, 2, blocks, internal_extra = list(X = X))

@@ -79,7 +79,8 @@ Point estimates usually good, uncertainty often underestimated.
 \itemize{
 \item \code{"hmc"} (Tier 1): Native HMC/NUTS sampler
 \item \code{"ess"} (Tier 1): Elliptical Slice Sampling
-\item \code{"pg"} (Tier 1): Pólya-Gamma Gibbs (binomial only)
+\item \code{"pg"} (Tier 1): Polya-Gamma Gibbs for logit binomial or log-link NB-NB
+models. NB-NB fits fixed effects and one shared random intercept.
 \item \code{"sghmc"} (Tier 3): Stochastic Gradient HMC (large datasets)
 \item \code{"sgld"} (Tier 3): Stochastic Gradient Langevin Dynamics (large datasets)
 \item \code{"laplace"} (Tier 2): Laplace approximation

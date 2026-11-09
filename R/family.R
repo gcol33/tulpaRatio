@@ -309,7 +309,7 @@ MODEL_TYPES <- list(
   beta_binomial = model_type_spec("beta_binomial", "fixed", c(num = "count", denom = "trials"),
     c(num = "phi"), name = "beta_binomial_fixed", spec_inflation = "none", handcoded = TRUE),
   negbin_negbin = model_type_spec("neg_binomial_2", "neg_binomial_2", c(num = "count", denom = "count"),
-    c(num = "phi_num", denom = "phi_denom"), c("laplace", "gibbs"), handcoded = TRUE,
+    c(num = "phi_num", denom = "phi_denom"), c("laplace", "gibbs", "pg"), handcoded = TRUE,
     spec_inflation = c("none", "zi_negbin", "hurdle_negbin")),
   poisson_negbin = model_type_spec("poisson", "neg_binomial_2", c(num = "count", denom = "count"),
     c(denom = "phi_denom")),

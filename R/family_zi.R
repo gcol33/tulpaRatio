@@ -245,16 +245,6 @@ is_zi_family <- function(family) {
 }
 
 
-#' Check if family is hurdle model
-#'
-#' @param family A ratiod_family object
-#' @return Logical
-#' @keywords internal
-is_hurdle_family <- function(family) {
-  isTRUE(family$zi_type == "hurdle")
-}
-
-
 #' @rdname ratiod_zi_families
 #' @param x A ratiod_family_zi object
 #' @param ... Ignored
@@ -410,23 +400,4 @@ ratiod_zoi_binomial <- function(link_num = "logit", link_zi = "logit",
 ratiod_hurdle_binomial <- function(link_num = "logit", link_hurdle = "logit", zi_formula = NULL) {
   new_ratiod_family("binomial", list(num = link_num, hurdle = link_hurdle),
                     list(type = "hurdle", zi_formula = zi_formula))
-}
-
-#' Check if family is one-inflated
-#'
-#' @param family A ratiod_family object
-#' @return Logical
-#' @keywords internal
-is_oi_family <- function(family) {
-  isTRUE(family$one_inflated)
-}
-
-
-#' Check if family is ZOIB (zero-and-one inflated)
-#'
-#' @param family A ratiod_family object
-#' @return Logical
-#' @keywords internal
-is_zoib_family <- function(family) {
-  isTRUE(family$zero_inflated) && isTRUE(family$one_inflated)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/backend_pg.R
 \name{fit_pg_negbin_negbin}
 \alias{fit_pg_negbin_negbin}
-\title{Fit two-process NB ratio model using PG+CRT Gibbs sampling}
+\title{Fit an NB-NB ratio with Polya-Gamma augmentation}
 \usage{
 fit_pg_negbin_negbin(
   formula,
@@ -16,7 +16,7 @@ fit_pg_negbin_negbin(
   seed = NULL,
   prior_beta_sd = 10,
   prior_sigma_scale = 2.5,
-  prior_r_shape = 1,
+  prior_r_shape = 2,
   prior_r_rate = 0.1,
   r_num_init = 1,
   r_denom_init = 1,
@@ -28,39 +28,33 @@ fit_pg_negbin_negbin(
 
 \item{data}{Data frame}
 
-\item{family}{Must be ratiod_negbin_negbin()}
+\item{family}{An \code{ratiod_negbin_negbin()} family.}
 
-\item{iter}{Total iterations}
+\item{iter}{Total iterations per chain}
 
-\item{warmup}{Warmup iterations}
+\item{warmup}{Warmup iterations per chain}
 
-\item{chains}{Number of chains}
+\item{chains}{Number of chains to run}
 
 \item{thin}{Thinning interval}
 
-\item{cores}{Number of cores}
+\item{cores}{Number of cores for within-chain parallelism}
 
-\item{seed}{Random seed}
+\item{seed}{Random seed for reproducibility}
 
-\item{prior_beta_sd}{Prior SD for fixed effects}
+\item{prior_beta_sd}{Prior SD for fixed effects (default 10)}
 
-\item{prior_sigma_scale}{Half-Cauchy scale for RE SD}
+\item{prior_sigma_scale}{Half-Cauchy scale for RE SD (default 2.5)}
 
-\item{prior_r_shape}{Gamma shape for dispersion priors}
+\item{prior_r_shape, prior_r_rate}{Gamma shape and rate for each dispersion.}
 
-\item{prior_r_rate}{Gamma rate for dispersion priors}
-
-\item{r_num_init}{Initial dispersion for numerator}
-
-\item{r_denom_init}{Initial dispersion for denominator}
+\item{r_num_init, r_denom_init}{Initial dispersions.}
 
 \item{verbose}{Print progress}
 }
-\value{
-A ratiod_fit object
-}
 \description{
-Fits the ratiod_negbin_negbin() family using pure Gibbs sampling.
-Both numerator and denominator are NB distributed with shared random effects.
+Both coefficients and saved predictors use log means. Dispersion has a
+Gamma(shape, rate) prior on the positive real line. A common random
+intercept enters both processes, with a Half-Cauchy prior on its SD.
 }
 \keyword{internal}

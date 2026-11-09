@@ -2403,22 +2403,6 @@ print.ratiod_rsr <- function(x, ...) {
 }
 
 
-#' Compute RSR projection matrix
-#'
-#' @description
-#' Compute the orthogonal projection matrix P_perp = I - P_X that projects
-#' the spatial effect into the space orthogonal to the covariates.
-#'
-#' @param X Design matrix of covariates to orthogonalize against
-#'
-#' @return Projection matrix (n x n)
-#' @keywords internal
-compute_rsr_projection <- function(X) {
-  Q <- rsr_basis_of(X)
-  diag(nrow(X)) - Q %*% t(Q)
-}
-
-
 #' Orthonormal basis of the restricted covariate space
 #'
 #' @description
@@ -2469,20 +2453,4 @@ validate_rsr <- function(spatial, data, formula) {
   spatial$rsr_vars <- all.vars(spatial$rsr_formula)
 
   spatial
-}
-
-
-#' Apply RSR projection to spatial effect
-#'
-#' @description
-#' Project spatial effect into the space orthogonal to covariates.
-#' Called during posterior computation.
-#'
-#' @param w Spatial effect vector (length n)
-#' @param P_perp Projection matrix from compute_rsr_projection
-#'
-#' @return Projected spatial effect (length n)
-#' @keywords internal
-apply_rsr_projection <- function(w, P_perp) {
-  as.vector(P_perp %*% w)
 }

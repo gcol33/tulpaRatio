@@ -80,7 +80,7 @@ test_that("PG Gibbs sampler recovers parameters", {
 
 test_that("can_use_pg_backend correctly identifies supported families", {
   expect_true(tulpaRatio:::can_use_pg_backend(ratiod_binomial()))
-  expect_false(tulpaRatio:::can_use_pg_backend(ratiod_negbin_negbin()))
+  expect_true(tulpaRatio:::can_use_pg_backend(ratiod_negbin_negbin()))
   expect_false(tulpaRatio:::can_use_pg_backend(ratiod_poisson_gamma()))
 })
 
@@ -357,8 +357,10 @@ test_that("the stochastic-gradient samplers are Tier 3, beside VI", {
   expect_identical(get_backend_tier("sgld")$tier, 3L)
   expect_identical(get_backend_tier("vi")$tier, 3L)
   expect_identical(get_backend_tier("hmc")$tier, 1L)
-  expect_false(any(c("sghmc", "sgld") %in% get_mode_backends("auto")))
-  expect_false(any(c("sghmc", "sgld") %in% get_mode_backends("exact")))
+  exact <- tulpaRatio:::INFERENCE_TIERS$exact$backends
+  auto <- c(exact, tulpaRatio:::INFERENCE_TIERS$structured$backends)
+  expect_false(any(c("sghmc", "sgld") %in% auto))
+  expect_false(any(c("sghmc", "sgld") %in% exact))
 })
 
 test_that("extract_re_from_data handles no RE", {

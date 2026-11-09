@@ -139,13 +139,6 @@ test_that("ratiod validates inputs", {
     "data"
   )
 
-  # Non-dataframe data - needs to use a backend that doesn't call nrow before validation
-  # We can't easily test this without fixing the function's validation order
-  # Skip this test as it requires refactoring tratio()
-
-  # Invalid family - validation happens after select_backend in current implementation
-  # The test below would fail with a different error since select_backend() is called first
-  # Skipping this test as it requires refactoring tratio() validation order
 })
 
 test_that("ratiod handles formula_num and formula_denom", {
@@ -388,35 +381,6 @@ test_that("n_divergent errors on non-fit", {
   expect_error(
     n_divergent("not a fit"),
     "ratiod_fit"
-  )
-})
-
-test_that("select_backend returns appropriate backends", {
-  family_pg <- ratiod_poisson_gamma()
-  family_binom <- ratiod_binomial()
-
-  # Default: HMC
-  expect_equal(
-    tulpaRatio:::select_backend(family_pg, n_obs = 100),
-    "hmc"
-  )
-
-  # Large data: Laplace
-  expect_equal(
-    tulpaRatio:::select_backend(family_pg, n_obs = 60000),
-    "laplace"
-  )
-
-  # Spatial: HMC
-  expect_equal(
-    tulpaRatio:::select_backend(family_pg, n_obs = 100, has_spatial = TRUE),
-    "hmc"
-  )
-
-  # Temporal: HMC
-  expect_equal(
-    tulpaRatio:::select_backend(family_pg, n_obs = 100, has_temporal = TRUE),
-    "hmc"
   )
 })
 

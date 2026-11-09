@@ -1,50 +1,13 @@
-pg_nb_dense <- function(y, X, prior_sd, points = 181L) {
-  bound <- if (prior_sd < 0.5) 6 * prior_sd else 3
-  axis <- seq(-bound, bound, length.out = points)
-  beta <- expand.grid(intercept = axis, slope = axis)
-  eta <- as.matrix(beta) %*% t(X)
-  log_prior <- rowSums(vapply(beta, dnorm, numeric(nrow(beta)),
-                            mean = 0, sd = prior_sd, log = TRUE))
-  log_r <- seq(log(0.5), log(4), length.out = 121L)
-  mass <- numeric(nrow(beta))
-  for (lr in log_r) {
-    r <- exp(lr)
-    ll <- rowSums(matrix(dnbinom(rep(y, each = nrow(beta)),
-      size = r, mu = exp(eta), log = TRUE), nrow(beta)))
-    mass <- mass + exp(ll + log_prior + dgamma(r, 100, 50, log = TRUE) + lr)
+test_that("the dense NB grid likelihood retains the normalized R density", {
+  y <- c(0L, 1L, 7L, 2L)
+  eta <- matrix(seq(-3, 3, length.out = 20), nrow = 5)
+  loglik <- pg_nb_grid_loglik(y, eta)
+  for (r in c(0.3, 2, 100)) {
+    reference <- apply(eta, 1, function(value)
+      sum(dnbinom(y, size = r, mu = exp(value), log = TRUE)))
+    expect_equal(loglik(r), reference, tolerance = 1e-11)
   }
-  mass <- mass / sum(mass)
-  summarize <- function(value) {
-    w <- as.numeric(rowsum(mass, value, reorder = TRUE))
-    at <- sort(unique(value))
-    m <- sum(at * w)
-    list(mean = m, sd = sqrt(sum(w * (at - m)^2)),
-      quantile = approx(cumsum(w) - w / 2, at, c(0.025, 0.5, 0.975))$y)
-  }
-  lapply(beta, summarize)
-}
-
-pg_nb_engine_fixture <- function(prior_sd, spatial, iterations = 24000L) {
-  y <- c(0L, 1L, 2L, 1L, 1L, 0L, 1L, 2L)
-  X <- cbind(1, rep(c(-1, 1), each = 4))
-  args <- list(y = y, X = X, n_iter = iterations, n_warmup = 4000L,
-    thin = 1L, prior_beta_sd = prior_sd, prior_r_shape = 100,
-    prior_r_rate = 50, r_init = 2, store_eta = TRUE,
-    verbose = FALSE, n_threads = 1L)
-  if (spatial) {
-    args <- c(args, list(re_group = rep(1L, length(y)), n_re_groups = 0L,
-      spatial_group = rep(1L, length(y)), n_spatial_units = 1L,
-      adj_list = list(integer()), n_neighbors = 0L,
-      prior_sigma_re_scale = 1, prior_sigma_spatial_U = 1,
-      prior_sigma_spatial_alpha = 0.01))
-    entry <- tulpaRatio:::cpp_pg_negbin_gibbs_spatial
-  } else {
-    args <- c(args, list(group = rep(1L, length(y)), n_groups = 0L,
-                        prior_sigma_scale = 1))
-    entry <- tulpaRatio:::cpp_pg_negbin_gibbs
-  }
-  list(args = args, entry = entry, y = y, X = X)
-}
+})
 
 test_that("NB engine hooks match dense NB2 coefficient priors", {
   skip_on_cran()
@@ -77,4 +40,42 @@ test_that("NB engine hooks match dense NB2 coefficient priors", {
   }
   target <- getOption("tulpa.pg.engine.record")
   if (!is.null(target)) write.csv(do.call(rbind, records), target, row.names = FALSE)
+})
+
+test_that("the spatial NB engine hook matches a dense two-unit ICAR posterior", {
+  skip_on_cran()
+  skip_if(Sys.getenv("TULPA_SLOW_TESTS") != "true")
+  records <- list()
+  for (prior_sd in c(0.1, 2)) {
+    fixture <- pg_nb_engine_fixture(prior_sd, TRUE)
+    group <- rep(1:2, 4)
+    fixture$args$spatial_group <- group
+    fixture$args$n_spatial_units <- 2L
+    fixture$args$adj_list <- list(2L, 1L)
+    fixture$args$n_neighbors <- c(1L, 1L)
+    fixture$args$prior_sigma_spatial_U <- 0.5
+    fixture$args$prior_sigma_spatial_alpha <- 0.1
+    reference <- pg_nb_spatial_dense(fixture$y, fixture$X, group, prior_sd)
+    refined <- pg_nb_spatial_dense(fixture$y, fixture$X, group, prior_sd,
+                                   points = 101L, cells = 80L, r_points = 61L)
+    for (j in 1:3) expect_lt(
+      max(abs(reference[[j]]$quantile - refined[[j]]$quantile)) / refined[[j]]$sd,
+      0.04)
+    set.seed(191)
+    timing <- system.time(fit <- do.call(fixture$entry, fixture$args))
+    draws <- cbind(fit$beta, fit$spatial[, 1])
+    error <- vapply(1:3, function(j)
+      max(abs(quantile(draws[, j], c(0.025, 0.5, 0.975)) -
+        refined[[j]]$quantile)) / refined[[j]]$sd, 0)
+    expect_true(max(error) < 0.15, info = paste("prior SD", prior_sd))
+    expect_equal(rowSums(fit$spatial), rep(0, nrow(draws)), tolerance = 1e-12)
+    expect_equal(fit$eta, fit$beta %*% t(fixture$X) + fit$spatial[, group],
+                 tolerance = 1e-12)
+    records[[length(records) + 1L]] <- data.frame(prior_sd,
+      intercept_error_sd = error[1], slope_error_sd = error[2],
+      field_error_sd = error[3], seconds = timing[["elapsed"]])
+  }
+  target <- getOption("tulpa.pg.engine.record")
+  if (!is.null(target)) write.csv(do.call(rbind, records),
+    sub("[.]csv$", "-spatial.csv", target), row.names = FALSE)
 })

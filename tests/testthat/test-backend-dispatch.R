@@ -34,11 +34,7 @@ test_that("backend argument builders forward each control to its fitter", {
   expect_identical(vi$variant, control$vi_variant)
   expect_identical(vi$max_iter, control$iter)
   pg <- registry$pg$args(list(inputs = inputs, control = control))
-  prior <- tulpaRatio:::sampler_priors(inputs$priors, "binomial")
-  expect_identical(pg$prior_beta_sd, prior$sigma_beta)
-  expect_identical(pg$prior_sigma_scale, prior$sigma_re_scale)
-  expect_identical(pg$prior_sigma_spatial_U, prior$spatial_sigma_prior_U)
-  expect_identical(pg$prior_sigma_spatial_alpha, prior$spatial_sigma_prior_alpha)
+  expect_identical(pg$priors, inputs$priors)
 })
 
 test_that("stochastic gradient builders share the data-sized batch default", {

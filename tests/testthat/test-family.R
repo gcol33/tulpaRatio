@@ -179,20 +179,22 @@ test_that("can_use_pg_backend returns TRUE for binomial family", {
   expect_true(tulpaRatio:::can_use_pg_backend(fam))
 })
 
-test_that("can_use_pg_backend returns FALSE for negbin family", {
+test_that("can_use_pg_backend returns TRUE for the NB-NB family", {
   fam <- ratiod_negbin_negbin()
-  expect_false(tulpaRatio:::can_use_pg_backend(fam))
+  expect_true(tulpaRatio:::can_use_pg_backend(fam))
 })
 
-test_that("mode = 'pg' refuses a negative binomial family", {
+test_that("mode = 'pg' fits the NB-NB family", {
+  skip_on_cran()
   set.seed(1)
   d <- data.frame(y_num = rpois(20, 5), y_denom = rpois(20, 3) + 1,
                   x1 = rnorm(20))
-  expect_error(
-    tratio(y_num | y_denom ~ x1, data = d, family = ratiod_negbin_negbin(),
-           mode = "pg", control = list(iter = 20, chains = 1, verbose = FALSE)),
-    "PG backend fits ratiod_binomial\\(\\) only"
-  )
+  fit <- tratio(y_num | y_denom ~ x1, data = d, family = ratiod_negbin_negbin(),
+    mode = "pg", control = list(iter = 20, chains = 1, cores = 1,
+                                seed = 1, verbose = FALSE))
+  expect_s3_class(fit, "ratiod_fit")
+  expect_identical(fit$backend, "pg")
+  expect_true(all(c("phi_num", "phi_denom") %in% dimnames(fit$draws)$variable))
 })
 
 test_that("can_use_pg_backend returns FALSE for poisson_gamma family", {

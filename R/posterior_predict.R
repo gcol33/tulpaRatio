@@ -207,13 +207,13 @@ observed_response <- function(object) {
 dispersion_draws <- function(object, arm = c("num", "denom")) {
   arm <- match.arg(arm)
   model_type <- fit_model_type(object)
-  n_draws <- object$n_save %||% nrow(object$draws)
+  draws <- draw_matrix(object$draws)
+  n_draws <- nrow(draws)
 
   names_for_type <- MODEL_TYPES[[model_type]]$dispersion
   name <- if (!is.null(names_for_type)) unname(names_for_type[arm]) else NULL
   if (is.null(name) || is.na(name)) return(rep(NA_real_, n_draws))
 
-  draws <- object$draws
   if (is.null(draws) || !(name %in% colnames(draws))) {
     stop("The ", model_type, " family needs its `", name, "` draws to ",
          "replicate a response, and this ", object$backend,
