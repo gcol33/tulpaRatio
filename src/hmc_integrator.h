@@ -9,7 +9,14 @@
 #include "linalg_fast.h"
 #include "hmc_sampler.h"
 
+
+
 namespace ratiod_hmc {
+
+static inline double metropolis_accept_prob(double delta_H) {
+  if (!std::isfinite(delta_H)) return 0.0;
+  return delta_H <= 0.0 ? 1.0 : std::exp(-delta_H);
+}
 
 // Gradient implementations may replace their output vector. Only scratch
 // storage is passed to them; the integrator's score buffer keeps its address.

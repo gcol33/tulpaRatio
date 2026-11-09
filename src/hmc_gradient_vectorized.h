@@ -12,9 +12,6 @@
 // Template dispatch eliminates dead branches at compile time, reducing
 // instruction cache pressure from ~30-50KB to ~5KB per instantiation.
 //
-// IMPORTANT: This header must be included from hmc_sampler.cpp AFTER
-// hmc_sampler.h.
-
 #ifndef RATIOD_HMC_GRADIENT_VECTORIZED_H
 #define RATIOD_HMC_GRADIENT_VECTORIZED_H
 
@@ -22,10 +19,10 @@
 #include <cmath>
 #include <cstring>
 
-// Assumes hmc_sampler.h and RcppEigen.h are already included by the .cpp file.
-// IMPORTANT: This file is included from within namespace ratiod_hmc {} in hmc_sampler.cpp.
-// Do NOT wrap contents in namespace ratiod_hmc — it would be doubly nested.
+#include <RcppEigen.h>
+#include "hmc_sampler.h"
 
+namespace ratiod_hmc {
 namespace vectorized {
 
 // ============================================================================
@@ -1085,11 +1082,6 @@ inline bool dispatch_vectorized_gradient(
 //   2. Calls compute_residuals_and_beta_grads() for residuals + beta grads
 //   3. Scatters residuals to custom effect gradient buffers
 //
-// This eliminates:
-//   - Scalar dot products for eta (replaced by Eigen matvec in caller)
-//   - Runtime if/else on model_type (replaced by template dispatch)
-//   - Scalar scatter for X^T * resid (replaced by Eigen matvec here)
-
 template<ModelType MT>
 void compute_residuals_and_beta_grads(
     const ModelData& data,
@@ -1228,5 +1220,7 @@ inline bool dispatch_residuals_and_beta_grads(
 
 }  // namespace vectorized
 // Note: namespace ratiod_hmc is NOT closed here — the .cpp file handles it
+
+}  // namespace ratiod_hmc
 
 #endif  // RATIOD_HMC_GRADIENT_VECTORIZED_H

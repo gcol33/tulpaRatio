@@ -1,6 +1,5 @@
 # Enable OpenMP for parallel chain execution
-# -Wa,-mbig-obj: Required for PE/COFF on Windows — hmc_sampler.o exceeds 2^16 sections
-#   due to templated gradient instantiations + Eigen + large monolithic source
+# Eigen template instantiations use the PE/COFF bigobj format.
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) -Wa,-mbig-obj -DEIGEN_NO_DEBUG
 PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS)
 CXX_STD = CXX17
