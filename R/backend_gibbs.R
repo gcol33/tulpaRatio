@@ -63,10 +63,8 @@ fit_gibbs <- function(formula,
 
   # Bound the OpenMP team by both the chain count and the machine, so the team
   # size is stable across successive fits in one session.
-  if (is.null(cores)) cores <- chains
-  cores <- as.integer(cores)
-  if (is.na(cores) || cores < 1L) cores <- 1L
-  cores <- min(cores, chains, cpp_get_max_threads())
+  cores <- min(clamp_check_cores(cores %||% chains, check = is.null(cores)),
+               chains, cpp_get_max_threads())
 
   if (is.null(spatial)) {
     stop("Gibbs backend requires spatial structure. Use spatial_car().",

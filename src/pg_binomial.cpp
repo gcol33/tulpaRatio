@@ -437,15 +437,6 @@ Rcpp::List cpp_pg_binomial_gibbs(
   return result;
 }
 
-// [[Rcpp::export]]
-int cpp_pg_get_max_threads() {
-  #ifdef _OPENMP
-  return omp_get_max_threads();
-  #else
-  return 1;
-  #endif
-}
-
 // Binomial Gibbs sampler with random effects AND spatial effects (ICAR)
 // [[Rcpp::export]]
 Rcpp::List cpp_pg_binomial_gibbs_spatial(

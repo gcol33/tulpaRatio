@@ -1231,7 +1231,7 @@ test_that("binomial-type densities stay finite at extreme logits", {
 # ---------------------------------------------------------------------------
 
 test_that("OpenMP max threads is at least 1", {
-  max_threads <- tulpaRatio:::cpp_test_get_max_threads()
+  max_threads <- tulpaRatio:::cpp_get_max_threads()
   expect_true(max_threads >= 1)
 })
 

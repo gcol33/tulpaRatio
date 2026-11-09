@@ -53,10 +53,6 @@ cpp_pg_binomial_gibbs <- function(y, n, X, group, n_groups, n_iter = 2000L, n_wa
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs`, y, n, X, group, n_groups, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_scale, store_eta, verbose, n_threads)
 }
 
-cpp_pg_get_max_threads <- function() {
-    .Call(`_tulpaRatio_cpp_pg_get_max_threads`)
-}
-
 cpp_pg_binomial_gibbs_spatial <- function(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_tau_shape = 1.0, prior_tau_rate = 0.01, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_spatial`, y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads)
 }
@@ -439,10 +435,6 @@ cpp_test_hurdle_negbin_lpmf_logit <- function(y, mu, phi, logit_theta) {
 
 cpp_test_zi_log_likelihood <- function(y, mu, phi, logit_zi, zi_type_str) {
     .Call(`_tulpaRatio_cpp_test_zi_log_likelihood`, y, mu, phi, logit_zi, zi_type_str)
-}
-
-cpp_test_get_max_threads <- function() {
-    .Call(`_tulpaRatio_cpp_test_get_max_threads`)
 }
 
 cpp_test_parallel_dot_products <- function(X, y, n_threads) {

@@ -136,7 +136,8 @@ laplace_engine <- function(model, priors, cores) {
                                       model$parts),
     control = list(store_Q = TRUE, progress = FALSE,
                    integration = laplace_integration(model$parts),
-                   n_threads = as.integer(cores %||% 1L))
+                   n_threads = clamp_check_cores(cores %||% 1L,
+                                                 check = is.null(cores)))
   )
 
   unconverged <- engine$nonconverged_mass %||% 0

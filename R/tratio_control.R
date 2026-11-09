@@ -106,7 +106,7 @@
 
   if (is.null(ctrl$warmup)) ctrl$warmup <- as.integer(floor(ctrl$iter / 2))
   if (is.null(ctrl$cores))  ctrl$cores  <- .tratio_count(
-    default_cores(ctrl$chains), "cores")
+    clamp_check_cores(getOption("mc.cores", ctrl$chains)), "cores")
 
   if (ctrl$warmup >= ctrl$iter) {
     stop(sprintf(
@@ -133,16 +133,17 @@
 }
 
 
-#' The default core budget of a fit
+#' Normalize a core budget and limit defaults under R CMD check
 #'
-#' `getOption("mc.cores", chains)`, at most two under `R CMD check`, which
-#' sets `_R_CHECK_LIMIT_CORES_` and allows two cores.
+#' Explicit budgets use `check = FALSE`.
 #'
-#' @param chains Number of chains.
+#' @param n Core budget.
+#' @param check Apply the check-environment limit.
 #' @return An integer.
 #' @keywords internal
-default_cores <- function(chains) {
-  cores <- getOption("mc.cores", chains)
-  if (nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_"))) cores <- min(cores, 2L)
-  as.integer(cores)
+clamp_check_cores <- function(n, check = TRUE) {
+  n <- as.integer(n)
+  if (is.na(n) || n < 1L) n <- 1L
+  if (check && nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_"))) n <- min(n, 2L)
+  n
 }

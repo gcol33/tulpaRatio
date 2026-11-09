@@ -74,9 +74,8 @@ fit_pg_binomial <- function(formula,
   )
 
   # Set cores for within-chain parallelism
-  if (is.null(cores)) {
-    cores <- pg_default_cores()
-  }
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   # Set base seed for reproducibility
   if (!is.null(seed)) {
@@ -627,9 +626,8 @@ fit_pg_binomial_gp <- function(formula,
                                 verbose = TRUE) {
 
   # Set cores for within-chain parallelism
-  if (is.null(cores)) {
-    cores <- pg_default_cores()
-  }
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   # Set base seed for reproducibility
   if (!is.null(seed)) {
@@ -873,9 +871,8 @@ fit_pg_binomial_temporal <- function(formula,
                                       verbose = TRUE) {
 
   # Set cores for within-chain parallelism
-  if (is.null(cores)) {
-    cores <- pg_default_cores()
-  }
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   # Set base seed for reproducibility
   if (!is.null(seed)) {
@@ -1143,9 +1140,8 @@ fit_pg_binomial_rsr <- function(formula,
   }
 
   # Set cores
-  if (is.null(cores)) {
-    cores <- pg_default_cores()
-  }
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   # Extract response and design matrix
   y <- formula$numerator$response
@@ -1394,9 +1390,8 @@ fit_pg_negbin <- function(formula,
                           verbose = TRUE) {
 
   # Set cores
-  if (is.null(cores)) {
-    cores <- pg_default_cores()
-  }
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   if (!is.null(seed)) {
     set.seed(seed)
@@ -1542,9 +1537,8 @@ fit_pg_negbin_negbin <- function(formula,
                                   r_denom_init = 1.0,
                                   verbose = TRUE) {
 
-  if (is.null(cores)) {
-    cores <- pg_default_cores()
-  }
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   if (!is.null(seed)) {
     set.seed(seed)
@@ -1849,18 +1843,4 @@ convert_pg_negbin_negbin_to_ratiod_fit <- function(fit_raw, formula, data, famil
 
   class(fit) <- "ratiod_fit"
   return(fit)
-}
-
-
-#' The Polya-Gamma samplers' default thread count
-#'
-#' Every thread OpenMP offers, at most two under `R CMD check`
-#' (`_R_CHECK_LIMIT_CORES_`), as [default_cores()] does for the chains.
-#'
-#' @return An integer.
-#' @keywords internal
-pg_default_cores <- function() {
-  cores <- cpp_pg_get_max_threads()
-  if (nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_"))) cores <- min(cores, 2L)
-  as.integer(cores)
 }

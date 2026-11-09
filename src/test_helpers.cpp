@@ -1041,15 +1041,6 @@ double cpp_test_zi_log_likelihood(int y, double mu, double phi, double logit_zi,
 #endif
 
 // [[Rcpp::export]]
-int cpp_test_get_max_threads() {
-#ifdef _OPENMP
-  return omp_get_max_threads();
-#else
-  return 1;
-#endif
-}
-
-// [[Rcpp::export]]
 List cpp_test_parallel_dot_products(NumericMatrix X, NumericVector y, int n_threads) {
   // Test OpenMP parallel reduction with multiple dot products
   int N = X.nrow();

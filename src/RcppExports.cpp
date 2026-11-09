@@ -226,16 +226,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_pg_get_max_threads
-int cpp_pg_get_max_threads();
-RcppExport SEXP _tulpaRatio_cpp_pg_get_max_threads() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_get_max_threads());
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_pg_binomial_gibbs_spatial
 Rcpp::List cpp_pg_binomial_gibbs_spatial(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, bool store_eta, bool verbose, int n_threads);
 RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_spatial(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
@@ -1672,16 +1662,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_get_max_threads
-int cpp_test_get_max_threads();
-RcppExport SEXP _tulpaRatio_cpp_test_get_max_threads() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_test_get_max_threads());
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_parallel_dot_products
 List cpp_test_parallel_dot_products(NumericMatrix X, NumericVector y, int n_threads);
 RcppExport SEXP _tulpaRatio_cpp_test_parallel_dot_products(SEXP XSEXP, SEXP ySEXP, SEXP n_threadsSEXP) {
@@ -1950,7 +1930,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_get_max_threads, 0},
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
     {"_tulpaRatio_cpp_pg_binomial_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs, 13},
-    {"_tulpaRatio_cpp_pg_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_pg_get_max_threads, 0},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_spatial, 19},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_bym2", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_bym2, 18},
     {"_tulpaRatio_cpp_pg_nngp_conditional_probe", (DL_FUNC) &_tulpaRatio_cpp_pg_nngp_conditional_probe, 10},
@@ -2047,7 +2026,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_hurdle_poisson_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_hurdle_poisson_lpmf_logit, 3},
     {"_tulpaRatio_cpp_test_hurdle_negbin_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_hurdle_negbin_lpmf_logit, 4},
     {"_tulpaRatio_cpp_test_zi_log_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_zi_log_likelihood, 5},
-    {"_tulpaRatio_cpp_test_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_test_get_max_threads, 0},
     {"_tulpaRatio_cpp_test_parallel_dot_products", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_dot_products, 3},
     {"_tulpaRatio_cpp_test_parallel_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_likelihood, 3},
     {"_tulpaRatio_cpp_test_parallel_independent", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_independent, 2},

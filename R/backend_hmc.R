@@ -87,14 +87,8 @@ fit_hmc <- function(formula,
                     metric = "auto",
                     walnuts = FALSE) {
 
-  # Set cores. Defaults to the machine's OpenMP cap, matching how the PG and
-  # Laplace backends default their own (purely within-chain) `cores` budget:
-  # see fit_pg_binomial()'s `cpp_pg_get_max_threads()` default in backend_pg.R.
-  if (is.null(cores)) {
-    cores <- cpp_get_max_threads()
-  }
-  cores <- as.integer(cores)
-  if (is.na(cores) || cores < 1L) cores <- 1L
+  cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
+                             check = is.null(cores))
 
   # Set seed
   if (is.null(seed)) {
@@ -1756,13 +1750,6 @@ can_use_hmc_backend <- function(family) {
   # HMC works for all families
 
   TRUE
-}
-
-
-#' Get maximum number of threads available
-#' @keywords internal
-get_max_threads <- function() {
-  cpp_get_max_threads()
 }
 
 
