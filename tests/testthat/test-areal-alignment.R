@@ -28,7 +28,7 @@ test_that("a named adjacency fits the same model whatever its row order", {
   perm <- c(7, 3, 12, 1, 9, 5, 11, 2, 8, 4, 10, 6)
   fit_with <- function(adj) {
     tratio(count | total ~ x, data = a$data, family = ratiod_binomial(),
-           spatial = spatial_car(adj, level = "group", group_var = "region"),
+           spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
            control = list(iter = 600, chains = 1, seed = 3))
   }
   sorted <- fit_with(a$adj)
@@ -57,14 +57,14 @@ test_that("a group the adjacency does not name is refused", {
   rownames(adj)[1] <- colnames(adj)[1] <- "z"
   expect_error(
     tratio(count | total ~ x, data = a$data, family = ratiod_binomial(),
-           spatial = spatial_car(adj, level = "group", group_var = "region"),
+           spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
            control = list(iter = 50, chains = 1, seed = 1)),
     "not among the adjacency's row names")
   adj <- a$adj
   colnames(adj) <- rev(colnames(adj))
   expect_error(
     tratio(count | total ~ x, data = a$data, family = ratiod_binomial(),
-           spatial = spatial_car(adj, level = "group", group_var = "region"),
+           spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
            control = list(iter = 50, chains = 1, seed = 1)),
     "same units in the same order")
 })

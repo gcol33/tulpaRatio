@@ -5,7 +5,7 @@ fixed_contract_data <- function() {
   d$y <- rbinom(nrow(d), d$trials, plogis(-0.3 + 0.4 * d$x))
   adj <- outer(1:6, 1:6, function(a, b) as.integer(abs(a - b) == 1L))
   dimnames(adj) <- list(levels(d$site), levels(d$site))
-  list(data = d, spatial = spatial_car(adj, level = "group", group_var = "site"))
+  list(data = d, spatial = spatial_car(adj, spatial_level = "group", group_var = "site"))
 }
 
 check_fixed_contract <- function(fit) {
@@ -64,7 +64,7 @@ test_that("PG variable names and accessors cover spatial and temporal dispatch",
   d$lon <- as.integer(d$site)
   d$lat <- 0
   car <- fx$spatial
-  bym2 <- spatial_bym2(car$adjacency, level = "group", group_var = "site")
+  bym2 <- spatial_bym2(car$adjacency, spatial_level = "group", group_var = "site")
   configs <- list(list(), list(spatial = car), list(spatial = bym2),
     list(spatial = spatial_gp(~lon + lat, nn = 3, scale_coords = FALSE)),
     list(spatial = spatial_rsr(car, ~x)),

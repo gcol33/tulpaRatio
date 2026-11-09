@@ -1,5 +1,5 @@
 // Joint NegBin-NegBin model with SHARED RE + ICAR spatial + Zero-Inflation
-// Matches numdenom ratiod_negbin_negbin() with (1|site) + spatial_car() + zi=zi_negbin()
+// Matches numdenom ratiod_zi_negbin() with (1|site) + spatial_car()
 // Row 54 in gradient_methods.md
 //
 // ZI-NegBin for numerator:

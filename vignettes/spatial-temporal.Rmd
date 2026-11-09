@@ -104,7 +104,7 @@ fit <- tratio(
   count | effort ~ x,
   spatial = spatial_car(
     adjacency = adj,
-    level = "group",
+    spatial_level = "group",
     group_var = "region"
   ),
   data = df,
@@ -121,7 +121,7 @@ summary(fit)
 
 - `level`: `"group"` (one effect per group) or `"obs"` (one per observation)
 
-- `group_var`: Variable name matching the grouping factor (required if `level = "group"`)
+- `group_var`: Variable name matching the grouping factor (required if `spatial_level = "group"`)
 
 ## BYM2 Model: `spatial_bym2()`
 
@@ -148,7 +148,7 @@ fit_bym2 <- tratio(
   SID74 | BIR74 ~ nonwhite,
   spatial = spatial_bym2(
     adjacency = adj_nc,
-    level = "group",
+    spatial_level = "group",
     group_var = "county"
   ),
   data = nc_df,
@@ -327,7 +327,7 @@ df_st$count <- rpois(nrow(df_st), exp(3 + 0.3 * df_st$x + eta_st))
 
 fit <- tratio(
   count | effort ~ x,
-  spatial = spatial_bym2(adj, level = "group", group_var = "region"),
+  spatial = spatial_bym2(adj, spatial_level = "group", group_var = "region"),
   temporal = temporal_rw1(time_var = "year"),
   data = df_st,
   family = ratiod_poisson_gamma(),
@@ -367,7 +367,7 @@ fit_type1 <- tratio(
   data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "I"
   ),
@@ -391,7 +391,7 @@ fit_type2 <- tratio(
   data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "II"
   ),
@@ -415,7 +415,7 @@ fit_type3 <- tratio(
   data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "III"
   ),
@@ -439,7 +439,7 @@ fit_type4 <- tratio(
   data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "IV"
   ),
@@ -460,7 +460,7 @@ fit <- tratio(
   data = df_st,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "nonsep_gp",
     nonsep_type = "gneiting",
@@ -536,7 +536,7 @@ fit <- tratio(
   count | effort ~ x,
   data = df,
   family = ratiod_poisson_gamma(),
-  spatial = spatial_bym2(adj, level = "group", group_var = "region"),
+  spatial = spatial_bym2(adj, spatial_level = "group", group_var = "region"),
   priors = ratiod_priors(sigma = prior_half_cauchy(0.5)),
   control = list(seed = 1)
 )

@@ -31,7 +31,7 @@ print_scaffolding_cases <- function() {
     tvc_posterior = structure(posterior, class = "ratiod_tvc_posterior"),
     latent = latent_factor(2),
     priors = ratiod_priors(),
-    zi = zi_poisson(),
+    zi = tulpaRatio:::family_inflation_spec(ratiod_zi_poisson(denom_family = "negbin")),
     gpu = structure(list(available = FALSE), class = "tulpaRatio_gpu_info"),
     ratio = structure(list(type = "log", n_obs = 6, n_draws = 10), class = "ratiod_ratio"),
     ratio_summary = structure(data.frame(mean = 1:2), type = "response",

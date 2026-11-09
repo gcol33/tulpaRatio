@@ -2,11 +2,11 @@
 # Tests for benchmark utilities
 
 test_that("ratiod_threads returns positive integer", {
-  n_threads <- ratiod_threads()
+  cores <- ratiod_threads()
 
-  expect_true(is.numeric(n_threads))
-  expect_true(n_threads >= 1)
-  expect_true(n_threads == as.integer(n_threads))
+  expect_true(is.numeric(cores))
+  expect_true(cores >= 1)
+  expect_true(cores == as.integer(cores))
 })
 
 test_that("print.ratiod_benchmark works", {
@@ -16,10 +16,10 @@ test_that("print.ratiod_benchmark works", {
       p = 3,
       n_groups = 5,
       n_params = 10,
-      n_iter = 500,
-      n_warmup = 250,
-      n_chains = 1,
-      n_threads = 1
+      iter = 500,
+      warmup = 250,
+      chains = 1,
+      cores = 1
     ),
     timing = list(
       elapsed_seconds = 10.5,
@@ -47,10 +47,10 @@ test_that("print.ratiod_benchmark handles NA diagnostics", {
       p = 2,
       n_groups = 0,
       n_params = 5,
-      n_iter = 200,
-      n_warmup = 100,
-      n_chains = 1,
-      n_threads = 1
+      iter = 200,
+      warmup = 100,
+      chains = 1,
+      cores = 1
     ),
     timing = list(
       elapsed_seconds = 5.2,
@@ -80,10 +80,10 @@ test_that("print.ratiod_benchmark returns invisibly", {
       p = 2,
       n_groups = 0,
       n_params = 4,
-      n_iter = 100,
-      n_warmup = 50,
-      n_chains = 1,
-      n_threads = 1
+      iter = 100,
+      warmup = 50,
+      chains = 1,
+      cores = 1
     ),
     timing = list(
       elapsed_seconds = 2.0,
@@ -108,10 +108,10 @@ test_that("print.ratiod_benchmark shows all configuration fields", {
       p = 5,
       n_groups = 10,
       n_params = 20,
-      n_iter = 1000,
-      n_warmup = 500,
-      n_chains = 4,
-      n_threads = 2
+      iter = 1000,
+      warmup = 500,
+      chains = 4,
+      cores = 2
     ),
     timing = list(
       elapsed_seconds = 30.0,
@@ -133,7 +133,7 @@ test_that("print.ratiod_benchmark shows all configuration fields", {
   expect_true(any(grepl("Parameters:", output)))
   expect_true(any(grepl("Iterations:", output)))
   expect_true(any(grepl("Chains:", output)))
-  expect_true(any(grepl("Threads:", output)))
+  expect_true(any(grepl("Cores:", output)))
   expect_true(any(grepl("Total time:", output)))
   expect_true(any(grepl("Samples/sec:", output)))
   expect_true(any(grepl("Iter/sec:", output)))
@@ -147,9 +147,9 @@ test_that("ratiod_benchmark runs with minimal settings", {
     N = 20,
     p = 2,
     n_groups = 0,
-    n_iter = 50,
-    n_warmup = 25,
-    n_chains = 1,
+    iter = 50,
+    warmup = 25,
+    chains = 1,
     verbose = FALSE
   )
 
@@ -166,9 +166,9 @@ test_that("ratiod_benchmark works with random effects", {
     N = 30,
     p = 2,
     n_groups = 3,
-    n_iter = 50,
-    n_warmup = 25,
-    n_chains = 1,
+    iter = 50,
+    warmup = 25,
+    chains = 1,
     verbose = FALSE
   )
 
@@ -194,7 +194,7 @@ test_that("print.ratiod_benchmark formats output correctly", {
     list(
       config = list(
         N = 100L, p = 3L, n_groups = 0L, n_params = 5L,
-        n_iter = 100L, n_warmup = 50L, n_chains = 1L, n_threads = 1L
+        iter = 100L, warmup = 50L, chains = 1L, cores = 1L
       ),
       timing = list(
         elapsed_seconds = 1.5,
@@ -220,7 +220,7 @@ test_that("print.ratiod_benchmark handles NA diagnostics", {
     list(
       config = list(
         N = 100L, p = 3L, n_groups = 0L, n_params = 5L,
-        n_iter = 100L, n_warmup = 50L, n_chains = 1L, n_threads = 1L
+        iter = 100L, warmup = 50L, chains = 1L, cores = 1L
       ),
       timing = list(
         elapsed_seconds = 1.5,
@@ -249,9 +249,9 @@ test_that("ratiod_benchmark_compare runs with configs", {
 
   result <- ratiod_benchmark_compare(
     configs,
-    n_iter = 50,
-    n_warmup = 25,
-    n_threads = 1
+    iter = 50,
+    warmup = 25,
+    cores = 1
   )
 
   expect_true(is.data.frame(result))
@@ -270,8 +270,8 @@ test_that("ratiod_benchmark_compare handles n_groups default", {
 
   result <- ratiod_benchmark_compare(
     configs,
-    n_iter = 50,
-    n_warmup = 25
+    iter = 50,
+    warmup = 25
   )
 
   expect_equal(result$n_groups, 0)

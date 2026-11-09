@@ -4,10 +4,10 @@
 \alias{validate_mode}
 \title{Validate That a Fit Used the Expected Mode}
 \usage{
-validate_mode(fit, expected_mode, error = TRUE)
+validate_mode(object, expected_mode, error = TRUE)
 }
 \arguments{
-\item{fit}{A ratiod_fit object}
+\item{object}{A ratiod_fit object}
 
 \item{expected_mode}{Mode that should have been used: a tier (\code{"exact"},
 \code{"structured"}, \code{"optimized"}) or a backend (\code{"hmc"}, \code{"laplace"}, ...),

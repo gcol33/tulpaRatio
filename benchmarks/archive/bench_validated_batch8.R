@@ -181,7 +181,7 @@ results[["64"]] <- run_bench(64, "bin_crossed",
 results[["66"]] <- run_bench(66, "bin_bym2",
   nd_call = quote(tratio(y | trials ~ x + (1|site), data = df_bin,
                          family = ratiod_binomial(),
-                         spatial = spatial_bym2(adj_mat, level = "group", group_var = "spatial_site"))),
+                         spatial = spatial_bym2(adj_mat, spatial_level = "group", group_var = "spatial_site"))),
   brms_call = quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site), data = df_bin,
                         family = binomial(), iter = 1000, warmup = 500, chains = 2,
                         backend = "cmdstanr", silent = 2, refresh = 0))
@@ -192,7 +192,7 @@ results[["70"]] <- run_bench(70, "bin_pcar",
   nd_call = quote(tratio(y | trials ~ x + (1|site), data = df_bin,
                          family = ratiod_binomial(),
                          spatial = spatial_car(adj_mat, proper = TRUE,
-                                               level = "group", group_var = "spatial_site"))),
+                                               spatial_level = "group", group_var = "spatial_site"))),
   brms_call = quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site), data = df_bin,
                         family = binomial(), iter = 1000, warmup = 500, chains = 2,
                         backend = "cmdstanr", silent = 2, refresh = 0))
@@ -202,7 +202,7 @@ results[["70"]] <- run_bench(70, "bin_pcar",
 # OI doesn't have brms equivalent - skip Stan validation
 results[["78"]] <- run_bench(78, "bin_oi",
   nd_call = quote(tratio(y | trials ~ x + (1|site), data = df_bin,
-                         family = ratiod_oibinomial())),
+                         family = ratiod_oi_binomial())),
   skip_stan = TRUE
 )
 
@@ -210,7 +210,7 @@ results[["78"]] <- run_bench(78, "bin_oi",
 # ZOIB doesn't have brms equivalent - skip Stan validation
 results[["79"]] <- run_bench(79, "bin_zoib",
   nd_call = quote(tratio(y | trials ~ x + (1|site), data = df_bin,
-                         family = ratiod_zoibinomial())),
+                         family = ratiod_zoi_binomial())),
   skip_stan = TRUE
 )
 

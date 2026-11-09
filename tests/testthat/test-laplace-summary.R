@@ -70,7 +70,7 @@ test_that("a binomial Laplace fit reports its fixed effects to coef() and vcov()
   df <- data.frame(region = factor(rep(1:9, each = 10)), x = rnorm(90), trials = 15L)
   df$y <- rbinom(90, 15, stats::plogis(0.2 + 0.4 * df$x))
   fit <- suppressWarnings(tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
-                                 spatial = spatial_car(A, level = "group", group_var = "region"),
+                                 spatial = spatial_car(A, spatial_level = "group", group_var = "region"),
                                  mode = "laplace"))
   expect_named(coef(fit), c("num:(Intercept)", "num:x"))
   expect_equal(dim(vcov(fit)), c(2L, 2L))

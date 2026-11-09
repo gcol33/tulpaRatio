@@ -14,7 +14,6 @@ tratio(
   spatial = NULL,
   temporal = NULL,
   spatiotemporal = NULL,
-  zi = NULL,
   latent = NULL,
   priors = NULL,
   mode = c("auto", "exact", "structured", "optimized", "hmc", "ess", "pg", "gibbs",
@@ -33,7 +32,8 @@ where both processes share the same predictors and random effects;
 \item{family}{A tulpaRatio family object specifying the distributions:
 \code{\link[=ratiod_negbin_negbin]{ratiod_negbin_negbin()}} for both count processes (default),
 \code{\link[=ratiod_binomial]{ratiod_binomial()}} for successes/trials,
-\code{\link[=ratiod_poisson_gamma]{ratiod_poisson_gamma()}} for count/continuous effort (CPUE).}
+\code{\link[=ratiod_poisson_gamma]{ratiod_poisson_gamma()}} for count/continuous effort (CPUE).
+Inflated families carry optional \code{zi_formula} and \code{oi_formula} predictors.}
 
 \item{formula_num}{Optional one-sided formula for additional numerator
 predictors: \code{~ extra_terms}. Added to the main formula.}
@@ -54,9 +54,6 @@ See \code{\link[=temporal_rw1]{temporal_rw1()}}, \code{\link[=temporal_rw2]{temp
 
 \item{spatiotemporal}{Optional spatiotemporal interaction specification.
 See \code{\link[=spatiotemporal]{spatiotemporal()}}.}
-
-\item{zi}{Optional zero-inflation specification.
-See \code{\link[=zi_poisson]{zi_poisson()}}, \code{\link[=zi_negbin]{zi_negbin()}}, \code{\link[=hurdle_poisson]{hurdle_poisson()}}, \code{\link[=hurdle_negbin]{hurdle_negbin()}}.}
 
 \item{latent}{Optional latent factor specification for unmeasured confounders.
 See \code{\link[=latent_factor]{latent_factor()}}.}
@@ -93,7 +90,7 @@ Point estimates usually good, uncertainty often underestimated.
 carry a subset, and a model naming a structure its backend cannot fit is
 refused with that structure named:
 \itemize{
-\item \code{"ess"}, \code{"sghmc"}, \code{"sgld"}, \code{"vi"}: \code{spatial}, \code{temporal}, \code{zi}
+\item \code{"ess"}, \code{"sghmc"}, \code{"sgld"}, \code{"vi"}: \code{spatial}, \code{temporal}, inflated families
 \item \code{"gibbs"}: \code{spatial}, and \code{temporal} as \code{\link[=temporal_tvc]{temporal_tvc()}}
 \item \code{"pg"}, \code{"laplace"}: \code{spatial}, or \code{temporal} as
 \code{\link[=temporal_multiscale]{temporal_multiscale()}}, one of the two per model

@@ -29,8 +29,8 @@ a known exposure (\code{"fixed"}), a count (\code{"negbin"}) or a continuous eff
 (\code{"gamma"}). A known exposure is data: it scales the count mean, which is
 then the rate times the exposure, and the ratio is the rate. This is the
 disease-mapping model of observed cases over a population or an expected
-count. The zero-inflated and hurdle counterparts are \code{\link[=ratiod_zipois]{ratiod_zipois()}},
-\code{\link[=ratiod_zinegbin]{ratiod_zinegbin()}}, \code{\link[=ratiod_hurdle_pois]{ratiod_hurdle_pois()}} and \code{\link[=ratiod_hurdle_negbin]{ratiod_hurdle_negbin()}}.
+count. The zero-inflated and hurdle counterparts are \code{\link[=ratiod_zi_poisson]{ratiod_zi_poisson()}},
+\code{\link[=ratiod_zi_negbin]{ratiod_zi_negbin()}}, \code{\link[=ratiod_hurdle_poisson]{ratiod_hurdle_poisson()}} and \code{\link[=ratiod_hurdle_negbin]{ratiod_hurdle_negbin()}}.
 
 \code{ratiod_poisson(denom_family = "gamma")} is \code{\link[=ratiod_poisson_gamma]{ratiod_poisson_gamma()}},
 \code{ratiod_negbin(denom_family = "negbin")} is \code{\link[=ratiod_negbin_negbin]{ratiod_negbin_negbin()}} and

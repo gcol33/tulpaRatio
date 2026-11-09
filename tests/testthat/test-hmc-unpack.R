@@ -199,7 +199,7 @@ test_that("a spatiotemporal fit reports its interaction", {
   fit <- quiet_fit(
     count | total ~ x, data = df, family = ratiod_poisson_gamma(),
     spatiotemporal = spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "region"),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
       temporal = temporal_rw1("year"), type = "IV"
     ),
     control = list(iter = 60, warmup = 30, chains = 1)

@@ -10,7 +10,7 @@
 #' - **Hurdle**: Separate processes for zero vs positive counts
 #'
 #' @examples
-#' ratiod_zipois()
+#' ratiod_zi_poisson()
 #' ratiod_hurdle_negbin()
 #' @name ratiod_zi_families
 NULL
@@ -40,8 +40,8 @@ NULL
 #' @return A `ratiod_family` object with zero-inflation
 #'
 #' @details
-#' The zero-inflation probability can have its own linear predictor via the
-#' `zi` argument in `tratio()`. If not specified, a single intercept is estimated.
+#' The `zi_formula` argument specifies the linear predictor for the
+#' zero-inflation probability. Its default estimates a single intercept.
 #'
 #' For ecological data, zero-inflation often represents:
 #' - Structural zeros (species truly absent vs not detected)
@@ -50,7 +50,7 @@ NULL
 #'
 #' @examples
 #' # Create family object
-#' fam <- ratiod_zinegbin()
+#' fam <- ratiod_zi_negbin()
 #' print(fam)
 #'
 #' # Simulate zero-inflated count data
@@ -73,7 +73,7 @@ NULL
 #' fit <- tratio(
 #'   count | total ~ habitat + (1 | site),
 #'   data = df,
-#'   family = ratiod_zinegbin(),
+#'   family = ratiod_zi_negbin(),
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
@@ -81,11 +81,12 @@ NULL
 #'
 #' @seealso [ratiod_hurdle_negbin()] for hurdle model alternative
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
-ratiod_zinegbin <- function(link_num = "log", link_denom = "log",
-                           link_zi = "logit", denom_family = "negbin") {
+ratiod_zi_negbin <- function(link_num = "log", link_denom = "log",
+                           link_zi = "logit", denom_family = "negbin", zi_formula = NULL) {
   zi_count_family("neg_binomial_2", "mixture", denom_family,
-                  link_num, link_denom, link_zi)
+                  link_num, link_denom, link_zi, zi_formula)
 }
 
 
@@ -95,23 +96,23 @@ ratiod_zinegbin <- function(link_num = "log", link_denom = "log",
 #' Zero-inflated Poisson for the numerator process.
 #' Useful when overdispersion is primarily due to excess zeros.
 #'
-#' @inheritParams ratiod_zinegbin
+#' @inheritParams ratiod_zi_negbin
 #' @param denom_family Denominator distribution: "gamma" (default),
 #'   "negbin" for a count denominator, or "fixed" for a known exposure.
 #'
 #' @return A `ratiod_family` object with zero-inflation
 #'
 #' @details
-#' Use `ratiod_zipois()` when:
+#' Use `ratiod_zi_poisson()` when:
 #' - Excess zeros are the main source of overdispersion
 #' - The non-zero counts follow Poisson (no additional overdispersion)
 #'
-#' Use `ratiod_zinegbin()` when:
+#' Use `ratiod_zi_negbin()` when:
 #' - Both excess zeros AND overdispersion in positive counts
 #'
 #' @examples
 #' # Create family object
-#' fam <- ratiod_zipois()
+#' fam <- ratiod_zi_poisson()
 #' print(fam)
 #'
 #' # Simulate zero-inflated CPUE data
@@ -130,17 +131,18 @@ ratiod_zinegbin <- function(link_num = "log", link_denom = "log",
 #' fit <- tratio(
 #'   catch | effort ~ depth + (1 | vessel),
 #'   data = df,
-#'   family = ratiod_zipois(denom_family = "gamma"),
+#'   family = ratiod_zi_poisson(denom_family = "gamma"),
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
 #' summary(fit)
 #' }
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
-ratiod_zipois <- function(link_num = "log", link_denom = "log",
-                         link_zi = "logit", denom_family = "gamma") {
+ratiod_zi_poisson <- function(link_num = "log", link_denom = "log",
+                         link_zi = "logit", denom_family = "gamma", zi_formula = NULL) {
   zi_count_family("poisson", "mixture", denom_family,
-                  link_num, link_denom, link_zi)
+                  link_num, link_denom, link_zi, zi_formula)
 }
 
 
@@ -155,7 +157,7 @@ ratiod_zipois <- function(link_num = "log", link_denom = "log",
 #' where \eqn{\theta} is the probability of a positive count and
 #' \eqn{P_{NB}^+} is the truncated-at-zero negative binomial.
 #'
-#' @inheritParams ratiod_zinegbin
+#' @inheritParams ratiod_zi_negbin
 #' @param link_hurdle Link function for the hurdle probability: "logit" (default), "probit" or "cloglog".
 #'
 #' @return A `ratiod_family` object with hurdle structure
@@ -201,11 +203,12 @@ ratiod_zipois <- function(link_num = "log", link_denom = "log",
 #' summary(fit)
 #' }
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
 ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
-                                link_hurdle = "logit", denom_family = "negbin") {
+                                link_hurdle = "logit", denom_family = "negbin", zi_formula = NULL) {
   zi_count_family("neg_binomial_2", "hurdle", denom_family,
-                  link_num, link_denom, link_hurdle)
+                  link_num, link_denom, link_hurdle, zi_formula)
 }
 
 
@@ -221,13 +224,14 @@ ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
 #' @return A `ratiod_family` object with hurdle structure
 #'
 #' @examples
-#' ratiod_hurdle_pois()
+#' ratiod_hurdle_poisson()
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
-ratiod_hurdle_pois <- function(link_num = "log", link_denom = "log",
-                              link_hurdle = "logit", denom_family = "gamma") {
+ratiod_hurdle_poisson <- function(link_num = "log", link_denom = "log",
+                              link_hurdle = "logit", denom_family = "gamma", zi_formula = NULL) {
   zi_count_family("poisson", "hurdle", denom_family,
-                  link_num, link_denom, link_hurdle)
+                  link_num, link_denom, link_hurdle, zi_formula)
 }
 
 
@@ -248,12 +252,12 @@ count_denominators <- list(
 #' @return A `ratiod_family_zi` object
 #' @keywords internal
 zi_count_family <- function(base, type, denom_family, link_num, link_denom,
-                            link_inflation) {
+                            link_inflation, zi_formula) {
   validate_link(link_num, "log")
   validate_link(link_inflation, LINKS_PROBABILITY)
   denominator <- count_denominator(base, denom_family, link_denom)
   hurdle <- identical(type, "hurdle")
-  short <- c(poisson = "pois", neg_binomial_2 = "negbin")[[base]]
+  short <- c(poisson = "poisson", neg_binomial_2 = "negbin")[[base]]
   label <- c(poisson = "Poisson", neg_binomial_2 = "negative binomial")[[base]]
   denom_label <- c(gamma = "Gamma", negbin = "negative binomial",
                    fixed = "known exposure")[[denom_family]]
@@ -268,7 +272,8 @@ zi_count_family <- function(base, type, denom_family, link_num, link_denom,
 
   structure(
     list(
-      name = paste0(if (hurdle) "hurdle_" else "zi", short, "_", denom_family),
+      name = paste(if (hurdle) "hurdle" else "zi", short, denom_family, sep = "_"),
+      zi_formula = zi_formula,
       numerator = numerator,
       denominator = denominator,
       zero_inflated = TRUE,
@@ -332,7 +337,8 @@ is_hurdle_family <- function(family) {
 #'
 #' @export
 print.ratiod_family_zi <- function(x, ...) {
-  zi_type <- if (x$zi_type == "hurdle") "Hurdle" else "Zero-inflated"
+  zi_type <- switch(x$zi_type, hurdle = "Hurdle", mixture = "Zero-inflated",
+                     one_inflated = "One-inflated", zoib = "Zero-and-one-inflated")
   cat("tulpaRatio family:", x$name, "\n")
   cat(sprintf("[%s model]\n", zi_type))
   cat(x$description, "\n\n")
@@ -343,9 +349,13 @@ print.ratiod_family_zi <- function(x, ...) {
   if (x$zi_type == "hurdle") {
     cat("Hurdle:     ", "bernoulli",
         "(", x$numerator$link_hurdle, ")\n", sep = "")
-  } else {
+  } else if (isTRUE(x$zero_inflated)) {
     cat("ZI prob:    ", "bernoulli",
         "(", x$numerator$link_zi, ")\n", sep = "")
+  }
+  if (isTRUE(x$one_inflated)) {
+    cat("OI prob:    ", "bernoulli",
+        "(", x$numerator$link_oi, ")\n", sep = "")
   }
 
   cat("Denominator:", x$denominator$distribution,
@@ -379,20 +389,22 @@ print.ratiod_family_zi <- function(x, ...) {
 #'
 #' @examples
 #' # Create family object
-#' fam <- ratiod_zibinomial()
+#' fam <- ratiod_zi_binomial()
 #' print(fam)
 #'
-#' @seealso [ratiod_binomial()], [ratiod_zinegbin()]
+#' @seealso [ratiod_binomial()], [ratiod_zi_negbin()]
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
-ratiod_zibinomial <- function(link_num = "logit", link_zi = "logit") {
+ratiod_zi_binomial <- function(link_num = "logit", link_zi = "logit", zi_formula = NULL) {
 
   validate_link(link_num, LINKS_PROBABILITY)
   validate_link(link_zi, LINKS_PROBABILITY)
 
   structure(
     list(
-      name = "zibinomial",
+      name = "zi_binomial",
+      zi_formula = zi_formula,
       numerator = list(
         distribution = "zero_inflated_binomial",
         base_distribution = "binomial",
@@ -434,18 +446,20 @@ ratiod_zibinomial <- function(link_num = "logit", link_zi = "logit") {
 #'
 #' @examples
 #' # Create family object
-#' fam <- ratiod_oibinomial()
+#' fam <- ratiod_oi_binomial()
 #' print(fam)
 #'
+#' @param oi_formula Optional one-sided formula for the one-inflation probability; NULL uses an intercept.
 #' @export
-ratiod_oibinomial <- function(link_num = "logit", link_oi = "logit") {
+ratiod_oi_binomial <- function(link_num = "logit", link_oi = "logit", oi_formula = NULL) {
 
   validate_link(link_num, LINKS_PROBABILITY)
   validate_link(link_oi, LINKS_PROBABILITY)
 
   structure(
     list(
-      name = "oibinomial",
+      name = "oi_binomial",
+      oi_formula = oi_formula,
       numerator = list(
         distribution = "one_inflated_binomial",
         base_distribution = "binomial",
@@ -489,12 +503,14 @@ ratiod_oibinomial <- function(link_num = "logit", link_oi = "logit") {
 #'
 #' @examples
 #' # Create family object
-#' fam <- ratiod_zoibinomial()
+#' fam <- ratiod_zoi_binomial()
 #' print(fam)
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
+#' @param oi_formula Optional one-sided formula for the one-inflation probability; NULL uses an intercept.
 #' @export
-ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
-                               link_oi = "logit") {
+ratiod_zoi_binomial <- function(link_num = "logit", link_zi = "logit",
+                               link_oi = "logit", zi_formula = NULL, oi_formula = NULL) {
 
   validate_link(link_num, LINKS_PROBABILITY)
   validate_link(link_zi, LINKS_PROBABILITY)
@@ -502,7 +518,9 @@ ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
 
   structure(
     list(
-      name = "zoibinomial",
+      name = "zoi_binomial",
+      zi_formula = zi_formula,
+      oi_formula = oi_formula,
       numerator = list(
         distribution = "zero_one_inflated_binomial",
         base_distribution = "binomial",
@@ -539,8 +557,9 @@ ratiod_zoibinomial <- function(link_num = "logit", link_zi = "logit",
 #' fam <- ratiod_hurdle_binomial()
 #' print(fam)
 #'
+#' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
-ratiod_hurdle_binomial <- function(link_num = "logit", link_hurdle = "logit") {
+ratiod_hurdle_binomial <- function(link_num = "logit", link_hurdle = "logit", zi_formula = NULL) {
 
   validate_link(link_num, LINKS_PROBABILITY)
   validate_link(link_hurdle, LINKS_PROBABILITY)
@@ -548,6 +567,7 @@ ratiod_hurdle_binomial <- function(link_num = "logit", link_hurdle = "logit") {
   structure(
     list(
       name = "hurdle_binomial",
+      zi_formula = zi_formula,
       numerator = list(
         distribution = "hurdle_binomial",
         base_distribution = "binomial",

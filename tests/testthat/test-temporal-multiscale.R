@@ -229,7 +229,7 @@ test_that("an areal spatial field carries a multi-scale temporal block, and its 
     data = fx$data,
     family = ratiod_poisson_gamma(),
     mode = "hmc",
-    spatial = spatial_car(fx$adj, level = "group", group_var = "unit"),
+    spatial = spatial_car(fx$adj, spatial_level = "group", group_var = "unit"),
     temporal = temporal_multiscale("year", trend = "rw1", short_term = "ar1"),
     control = list(iter = 100, warmup = 50, chains = 1, seed = 3, verbose = FALSE)
   )

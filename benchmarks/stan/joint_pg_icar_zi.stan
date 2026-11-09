@@ -1,5 +1,5 @@
 // Joint Poisson-Gamma model with SHARED RE + ICAR spatial + Zero-Inflation
-// Matches numdenom ratiod_poisson_gamma() with (1|site) + spatial_car() + zi=zi_poisson()
+// Matches numdenom ratiod_zi_poisson() with (1|site) + spatial_car()
 // Row 24 in gradient_methods.md
 //
 // KEY: ZI applies to numerator (count) only, denom (effort) is Gamma

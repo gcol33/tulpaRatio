@@ -1,5 +1,5 @@
 // Joint NegBin-NegBin model with SHARED random effects + Zero-Inflation
-// Matches numdenom ratiod_negbin_negbin() with (1|site) + zi=zi_negbin()
+// Matches numdenom ratiod_zi_negbin() with (1|site)
 // Row 46 in gradient_methods.md
 //
 // ZI-NegBin for numerator:

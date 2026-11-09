@@ -4,10 +4,10 @@
 \alias{plot_acf}
 \title{Plot Autocorrelation Functions}
 \usage{
-plot_acf(fit, pars = NULL, lags = 25, n_pars = 6)
+plot_acf(object, pars = NULL, lags = 25, n_pars = 6)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{pars}{Character vector of parameter names. If NULL, selects worst-mixing
 parameters based on ESS.}

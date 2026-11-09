@@ -104,7 +104,7 @@ results[[63]] <- validate(63, "bin_slopes",
 # Row 65: ICAR
 results[[65]] <- validate(65, "bin_icar",
   quote(tratio(y | trials ~ x + (1|site), data = df, family = ratiod_binomial(),
-               spatial = spatial_car(adj_mat, level = "group", group_var = "spatial_site"),
+               spatial = spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site"),
                control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))),
   quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site), data = df, family = binomial(),
             iter = 500, warmup = 250, chains = 1, backend = "cmdstanr", silent = 2, refresh = 0))
@@ -113,7 +113,7 @@ results[[65]] <- validate(65, "bin_icar",
 # Row 66: BYM2
 results[[66]] <- validate(66, "bin_bym2",
   quote(tratio(y | trials ~ x + (1|site), data = df, family = ratiod_binomial(),
-               spatial = spatial_bym2(adj_mat, level = "group", group_var = "spatial_site"),
+               spatial = spatial_bym2(adj_mat, spatial_level = "group", group_var = "spatial_site"),
                control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))),
   quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site), data = df, family = binomial(),
             iter = 500, warmup = 250, chains = 1, backend = "cmdstanr", silent = 2, refresh = 0))
@@ -148,7 +148,7 @@ results[[73]] <- validate(73, "bin_ar1",
 
 # Row 76: ZI
 results[[76]] <- validate(76, "bin_zi",
-  quote(tratio(y | trials ~ x + (1|site), data = df_zi, family = ratiod_zibinomial(),
+  quote(tratio(y | trials ~ x + (1|site), data = df_zi, family = ratiod_zi_binomial(),
                control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))),
   quote(brm(y | trials(trials) ~ x + (1|site), data = df_zi, family = zero_inflated_binomial(),
             iter = 500, warmup = 250, chains = 1, backend = "cmdstanr", silent = 2, refresh = 0))
@@ -165,7 +165,7 @@ results[[77]] <- validate(77, "bin_hurdle",
 # Row 80: ICAR + RW1
 results[[80]] <- validate(80, "bin_icar_rw1",
   quote(tratio(y | trials ~ x + (1|site), data = df, family = ratiod_binomial(),
-               spatial = spatial_car(adj_mat, level = "group", group_var = "spatial_site"),
+               spatial = spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site"),
                temporal = temporal_rw1("time"),
                control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))),
   quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site) + (1|time), data = df, family = binomial(),
@@ -175,7 +175,7 @@ results[[80]] <- validate(80, "bin_icar_rw1",
 # Row 81: BYM2 + RW1
 results[[81]] <- validate(81, "bin_bym2_rw1",
   quote(tratio(y | trials ~ x + (1|site), data = df, family = ratiod_binomial(),
-               spatial = spatial_bym2(adj_mat, level = "group", group_var = "spatial_site"),
+               spatial = spatial_bym2(adj_mat, spatial_level = "group", group_var = "spatial_site"),
                temporal = temporal_rw1("time"),
                control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))),
   quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site) + (1|time), data = df, family = binomial(),
@@ -185,7 +185,7 @@ results[[81]] <- validate(81, "bin_bym2_rw1",
 # Row 82: ICAR + AR1
 results[[82]] <- validate(82, "bin_icar_ar1",
   quote(tratio(y | trials ~ x + (1|site), data = df, family = ratiod_binomial(),
-               spatial = spatial_car(adj_mat, level = "group", group_var = "spatial_site"),
+               spatial = spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site"),
                temporal = temporal_ar1("time"),
                control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))),
   quote(brm(y | trials(trials) ~ x + (1|site) + (1|spatial_site) + (1|time), data = df, family = binomial(),

@@ -21,6 +21,7 @@
 #'   [ratiod_negbin_negbin()] for both count processes (default),
 #'   [ratiod_binomial()] for successes/trials,
 #'   [ratiod_poisson_gamma()] for count/continuous effort (CPUE).
+#'   Inflated families carry optional `zi_formula` and `oi_formula` predictors.
 #' @param formula_num Optional one-sided formula for additional numerator
 #'   predictors: `~ extra_terms`. Added to the main formula.
 #' @param formula_denom Optional formula for denominator. Required if main
@@ -35,8 +36,6 @@
 #'   See [temporal_rw1()], [temporal_rw2()], [temporal_ar1()].
 #' @param spatiotemporal Optional spatiotemporal interaction specification.
 #'   See [spatiotemporal()].
-#' @param zi Optional zero-inflation specification.
-#'   See [zi_poisson()], [zi_negbin()], [hurdle_poisson()], [hurdle_negbin()].
 #' @param latent Optional latent factor specification for unmeasured confounders.
 #'   See [latent_factor()].
 #' @param priors Prior specification. See [ratiod_priors()].
@@ -65,7 +64,7 @@
 #'   **Structures each backend fits.** `"hmc"` fits every structure. The rest
 #'   carry a subset, and a model naming a structure its backend cannot fit is
 #'   refused with that structure named:
-#'   - `"ess"`, `"sghmc"`, `"sgld"`, `"vi"`: `spatial`, `temporal`, `zi`
+#'   - `"ess"`, `"sghmc"`, `"sgld"`, `"vi"`: `spatial`, `temporal`, inflated families
 #'   - `"gibbs"`: `spatial`, and `temporal` as [temporal_tvc()]
 #'   - `"pg"`, `"laplace"`: `spatial`, or `temporal` as
 #'     [temporal_multiscale()], one of the two per model
@@ -204,7 +203,6 @@ tratio <- function(formula,
                    spatial = NULL,
                    temporal = NULL,
                    spatiotemporal = NULL,
-                   zi = NULL,
                    latent = NULL,
                    priors = NULL,
                    mode = c("auto", "exact", "structured", "optimized",
@@ -267,9 +265,7 @@ tratio <- function(formula,
   }
 
   # Validate zero-inflation specification
-  if (!is.null(zi)) {
-    zi <- validate_zi(zi, data)
-  }
+  zi <- validate_zi(family_inflation_spec(family), data)
 
   # Validate latent factor specification
   if (!is.null(latent)) {
@@ -352,8 +348,8 @@ tratio <- function(formula,
 
   # Refuse a model the selected backend would fit without part of its
   # structure. `auto` never reaches this, having filtered on the same table.
-  assert_backend_fits_structures(selected_backend, structures)
   assert_backend_fits_likelihood(selected_backend, family, structures)
+  assert_backend_fits_structures(selected_backend, structures)
 
   # PG backend only works for binomial family (currently experimental)
   if (selected_backend == "pg") {
@@ -913,18 +909,18 @@ print.ratiod_fit <- function(x, ...) {
 #'   backend subclasses `ratiod_vi`, `ratiod_sghmc` and `ratiod_sgld`, or the
 #'   summary of one.
 #' @param digits Number of significant digits to print (default 3).
-#' @param prob Probability mass for credible intervals (default 0.95)
+#' @param probs Probability mass for credible intervals (default 0.95)
 #' @param ... Ignored
 #' @return `summary()`: a `summary.ratiod_fit` object. `coef()`: a named
 #'   vector, numerator coefficients prefixed `num:` and denominator ones
 #'   `denom:`. `vcov()`: the matching covariance matrix.
 #' @export
-summary.ratiod_fit <- function(object, prob = 0.95, ...) {
+summary.ratiod_fit <- function(object, probs = 0.95, ...) {
   backend <- object$backend %||% "unknown"
 
   # Calculate quantile probabilities
-  alpha <- (1 - prob) / 2
-  probs <- c(alpha, 0.5, 1 - alpha)
+  alpha <- (1 - probs) / 2
+  quantile_probs <- c(alpha, 0.5, 1 - alpha)
   ci_names <- paste0(c(alpha * 100, 50, (1 - alpha) * 100), "%")
 
   out <- list(
@@ -932,7 +928,7 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
     tier = object$inference_tier %||% NA,
     tier_name = object$inference_tier_name %||% "Unknown",
     family = object$family$name,
-    prob = prob,
+    probs = probs,
     ci_names = ci_names,
     fixed = object$fixed_columns,
     coefficients = NULL,
@@ -955,9 +951,9 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
   if (is.null(draws)) return(out)
 
   # Compute summary statistics
-  summ <- compute_param_summary(draws, probs)
+  summ <- compute_param_summary(draws, quantile_probs)
   if (identical(backend, "laplace")) {
-    summ <- apply_laplace_engine_summary(summ, object, level = prob)
+    summ <- apply_laplace_engine_summary(summ, object, level = probs)
   }
 
   # Add diagnostics for MCMC backends
@@ -1393,15 +1389,15 @@ plot.ratiod_fit <- function(x, pars = NULL, type = c("trace", "dens", "both"),
 #'
 #' Converts draws to a 3D array with dimensions iterations x chains x parameters.
 #'
-#' @param fit A ratiod_fit object
+#' @param object A ratiod_fit object
 #' @return A list with draws array and number of chains
 #' @keywords internal
-get_draws_array <- function(fit) {
-  draws <- fit$draws
+get_draws_array <- function(object) {
+  draws <- object$draws
   if (length(dim(draws)) == 3L) {
     return(list(draws = draws, n_chains = dim(draws)[2L]))
   }
-  chains <- fit$chains %||% 1L
+  chains <- object$chains %||% 1L
   m <- draw_matrix(draws)
   out <- array(m, c(nrow(m) / chains, chains, ncol(m)),
     dimnames = list(iteration = seq_len(nrow(m) / chains),
@@ -1621,8 +1617,8 @@ print.ratiod_diagnostics <- function(x, ...) {
 #' Checks MCMC diagnostics (Rhat, ESS, divergences) and prints actionable
 #' warnings with suggestions for fixing issues.
 #'
-#' @param fit A ratiod_fit object
-#' @param quiet Logical; if TRUE, suppress output and just return status.
+#' @param object A ratiod_fit object
+#' @param verbose Logical; if TRUE, print the diagnostic status.
 #'
 #' @return Invisibly returns a list with diagnostic status:
 #' \describe{
@@ -1642,18 +1638,18 @@ print.ratiod_diagnostics <- function(x, ...) {
 #' }
 #'
 #' @export
-check_diagnostics <- function(fit, quiet = FALSE) {
-  if (!inherits(fit, "ratiod_fit")) {
+check_diagnostics <- function(object, verbose = TRUE) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  backend <- fit$backend %||% "unknown"
+  backend <- object$backend %||% "unknown"
   issues <- list()
 
   # Check divergences (HMC only)
   n_divergent <- 0
   if (backend == "hmc") {
-    diag <- fit$diagnostics
+    diag <- object$diagnostics
     if (!is.null(diag)) {
       n_divergent <- diag$n_divergent %||% 0
     }
@@ -1665,7 +1661,7 @@ check_diagnostics <- function(fit, quiet = FALSE) {
 
   if (backend %in% c("hmc", "pg", "sghmc", "sgld", "ess")) {
     mcmc_diag <- tryCatch(
-      diagnostics(fit, pars = NULL),
+      diagnostics(object, pars = NULL),
       error = function(e) NULL
     )
 
@@ -1686,8 +1682,8 @@ check_diagnostics <- function(fit, quiet = FALSE) {
   # Determine overall status
   ok <- (n_divergent == 0) && (n_bad_rhat == 0) && (n_low_ess == 0)
 
-  # Print warnings if not quiet
-  if (!quiet) {
+  # Print diagnostic status
+  if (verbose) {
     cat_title("Diagnostic Check")
 
     if (ok) {
@@ -1741,7 +1737,7 @@ check_diagnostics <- function(fit, quiet = FALSE) {
 
 #' Number of Divergent Transitions
 #'
-#' @param fit A ratiod_fit object
+#' @param object A ratiod_fit object
 #' @return Integer count of divergent transitions
 #' @examples
 #' \donttest{
@@ -1753,13 +1749,13 @@ check_diagnostics <- function(fit, quiet = FALSE) {
 #' }
 #'
 #' @export
-n_divergent <- function(fit) {
-  if (!inherits(fit, "ratiod_fit")) {
+n_divergent <- function(object) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  if (fit$backend == "hmc") {
-    diag <- fit$diagnostics
+  if (object$backend == "hmc") {
+    diag <- object$diagnostics
     if (!is.null(diag)) {
       return(diag$n_divergent %||% 0)
     }

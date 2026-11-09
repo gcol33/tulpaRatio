@@ -33,10 +33,10 @@ This backend implements:
 
 \strong{Zero-inflation types:}
 \itemize{
-\item \code{zi_poisson()} - Zero-inflated Poisson
-\item \code{zi_negbin()} - Zero-inflated negative binomial
-\item \code{hurdle_poisson()} - Hurdle Poisson
-\item \code{hurdle_negbin()} - Hurdle negative binomial
+\item \code{ratiod_zi_poisson()} - Zero-inflated Poisson
+\item \code{ratiod_zi_negbin()} - Zero-inflated negative binomial
+\item \code{ratiod_hurdle_poisson()} - Hurdle Poisson
+\item \code{ratiod_hurdle_negbin()} - Hurdle negative binomial
 }
 
 \strong{When to use:}

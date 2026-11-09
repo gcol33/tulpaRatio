@@ -4,15 +4,15 @@
 \alias{plot_divergences}
 \title{Plot Divergent Transitions}
 \usage{
-plot_divergences(fit, pars = NULL, type = c("parcoord", "scatter"))
+plot_divergences(object, pars = NULL, type = c("parcoord", "scatter"))
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object (HMC backend).}
-
 \item{pars}{Character vector of parameter names. If NULL, uses variance
 parameters.}
 
 \item{type}{Plot type: "parcoord" (parallel coordinates) or "scatter".}
+
+\item{fit}{A \code{ratiod_fit} object (HMC backend).}
 }
 \value{
 A ggplot object or base R plot (invisible).

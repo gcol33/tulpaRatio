@@ -1951,7 +1951,7 @@ draws_long.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #'
 #' @param object A `ratiod_fit` object
 #' @param ... Parameter names to summarize (unquoted).
-#' @param .width Width(s) of credible intervals. Default 0.95.
+#' @param probs Width(s) of credible intervals. Default 0.95.
 #' @param .point Point estimate function: "median" (default) or "mean".
 #' @param .interval Interval type: "qi" for quantile interval (default),
 #'   "hdi" for highest density interval.
@@ -1987,11 +1987,11 @@ draws_long.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 #' draws_interval(fit, beta_num, beta_denom)
 #'
 #' # Multiple interval widths
-#' draws_interval(fit, beta_num, .width = c(0.5, 0.9, 0.95))
+#' draws_interval(fit, beta_num, probs = c(0.5, 0.9, 0.95))
 #' }
 #'
 #' @export
-draws_interval <- function(object, ..., .width = 0.95,
+draws_interval <- function(object, ..., probs = 0.95,
                            .point = c("median", "mean"),
                            .interval = c("qi", "hdi")) {
   UseMethod("draws_interval")
@@ -2000,7 +2000,7 @@ draws_interval <- function(object, ..., .width = 0.95,
 
 #' @rdname draws_interval
 #' @export
-draws_interval.ratiod_fit <- function(object, ..., .width = 0.95,
+draws_interval.ratiod_fit <- function(object, ..., probs = 0.95,
                                       .point = c("median", "mean"),
                                       .interval = c("qi", "hdi")) {
 
@@ -2022,7 +2022,7 @@ draws_interval.ratiod_fit <- function(object, ..., .width = 0.95,
   for (par in par_cols) {
     x <- draws_wide[[par]]
 
-    for (w in .width) {
+    for (w in probs) {
       point_val <- if (.point == "median") median(x) else mean(x)
 
       if (.interval == "qi") {
@@ -2046,7 +2046,7 @@ draws_interval.ratiod_fit <- function(object, ..., .width = 0.95,
         .value = point_val,
         .lower = lower,
         .upper = upper,
-        .width = w,
+        probs = w,
         .point = .point,
         .interval = .interval,
         stringsAsFactors = FALSE

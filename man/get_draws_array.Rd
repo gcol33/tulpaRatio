@@ -4,10 +4,10 @@
 \alias{get_draws_array}
 \title{Get draws in array format}
 \usage{
-get_draws_array(fit)
+get_draws_array(object)
 }
 \arguments{
-\item{fit}{A ratiod_fit object}
+\item{object}{A ratiod_fit object}
 }
 \value{
 A list with draws array and number of chains

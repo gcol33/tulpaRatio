@@ -153,8 +153,8 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 # Resolve a fit's model type regardless of which backend produced it (hmc /
 # laplace store it in `.internal`, others at the top level; fall back to the
 # family map).
-.ratiod_model_type <- function(fit) {
-  fit$model_type %||% fit$.internal$model_type %||% get_hmc_model_type(fit$family)
+.ratiod_model_type <- function(object) {
+  object$model_type %||% object$.internal$model_type %||% get_hmc_model_type(object$family)
 }
 
 # Fixed-effect linear-predictor draws for both processes.
@@ -202,9 +202,9 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 # store a draw matrix carry fixed effects only, so a model with any other
 # term is refused rather than scored on a likelihood missing it.
 #' @keywords internal
-.ratiod_pointwise_eta <- function(fit, draws, hmc_data) {
-  if (has_hmc_layout(fit)) {
-    eta <- hmc_eta_draws(hmc_fit_unpack(fit), hmc_fit_design(fit))
+.ratiod_pointwise_eta <- function(object, draws, hmc_data) {
+  if (has_hmc_layout(object)) {
+    eta <- hmc_eta_draws(hmc_fit_unpack(object), hmc_fit_design(object))
     if (length(eta$dropped)) {
       stop("Pointwise log-likelihood needs every term of the linear ",
            "predictor; ", paste(eta$dropped, collapse = ", "),
@@ -212,19 +212,19 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
     }
     return(eta[c("eta_num", "eta_denom")])
   }
-  if (identical(fit$backend, "gibbs")) {
+  if (identical(object$backend, "gibbs")) {
     # The sweep records the full linear predictor, spatial field included
-    eta_num <- fit$.internal$eta_num
+    eta_num <- object$.internal$eta_num
     return(list(eta_num = eta_num,
-                eta_denom = fit$.internal$eta_denom %||%
+                eta_denom = object$.internal$eta_denom %||%
                   matrix(0, nrow(eta_num), ncol(eta_num))))
   }
   structured <- (hmc_data$n_re_groups %||% 0L) > 0L ||
-    !identical(fit$spatial$type %||% "none", "none") ||
-    !is.null(fit$temporal) || !is.null(fit$latent) ||
-    !is.null(fit$spatiotemporal) || !is.null(fit$svc) || !is.null(fit$tvc)
+    !identical(object$spatial$type %||% "none", "none") ||
+    !is.null(object$temporal) || !is.null(object$latent) ||
+    !is.null(object$spatiotemporal) || !is.null(object$svc) || !is.null(object$tvc)
   if (structured) {
-    stop("Pointwise log-likelihood on a '", fit$backend, "' fit is available ",
+    stop("Pointwise log-likelihood on a '", object$backend, "' fit is available ",
          "for fixed-effect models only; refit with mode = \"hmc\" for WAIC / ",
          "LOO with random or structured effects.", call. = FALSE)
   }
@@ -289,31 +289,31 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 
 # Pointwise log-likelihood matrix [n_draws x n_obs] for a fitted ratio model.
 #' @keywords internal
-.ratiod_pointwise_loglik <- function(fit) {
-  draws <- fit$draws
+.ratiod_pointwise_loglik <- function(object) {
+  draws <- object$draws
   if (!is.matrix(draws)) {
     stop("Pointwise log-likelihood needs a posterior draw matrix; the '",
-         fit$backend %||% "unknown", "' backend does not store one. WAIC / LOO ",
+         object$backend %||% "unknown", "' backend does not store one. WAIC / LOO ",
          "are supported on the hmc, ess, sghmc, and vi backends.",
          call. = FALSE)
   }
 
-  model_type <- .ratiod_model_type(fit)
+  model_type <- .ratiod_model_type(object)
   if (!model_type %in% .ratiod_supported_model_types) {
     stop("Pointwise log-likelihood is not implemented for model type '",
          model_type, "'.", call. = FALSE)
   }
 
-  hmc_data <- fit$.internal$hmc_data
+  hmc_data <- object$.internal$hmc_data
   if (is.null(hmc_data)) {
     hmc_data <- suppressWarnings(
-      prepare_hmc_data(fit$formula, fit$data, fit$family, model_type)
+      prepare_hmc_data(object$formula, object$data, object$family, model_type)
     )
   }
 
-  lp  <- .ratiod_pointwise_eta(fit, draws, hmc_data)
+  lp  <- .ratiod_pointwise_eta(object, draws, hmc_data)
   disp <- .ratiod_dispersion(draws, model_type)
-  links <- family_links(fit$family, model_type)
+  links <- family_links(object$family, model_type)
   mu_num <- pp_linkinv(links$num)(lp$eta_num)
   mu_denom <- if (!links$probability && !links$exposure) {
     pp_linkinv(links$denom)(lp$eta_denom)
@@ -349,9 +349,9 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
                                     meanlog = lp$eta_num + log(exposure),
                                     sdlog = disp$sigma_num, log = TRUE)
   )
-  zi_type <- fit$zi$type %||% "none"
+  zi_type <- object$zi$type %||% "none"
   if (!identical(zi_type, "none")) {
-    ll_num <- .ratiod_inflated_num_loglik(fit, draws, mu_num, disp,
+    ll_num <- .ratiod_inflated_num_loglik(object, draws, mu_num, disp,
                                           hmc_data, zi_type, links)
   }
 
@@ -399,7 +399,7 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 # otherwise the binomial, which can itself give 0 or n. `mu_num` is the count
 # mean or success probability, `links` the family's links.
 #' @keywords internal
-.ratiod_inflated_num_loglik <- function(fit, draws, mu_num, disp, hmc_data,
+.ratiod_inflated_num_loglik <- function(object, draws, mu_num, disp, hmc_data,
                                         zi_type, links) {
   S <- nrow(mu_num)
   N <- ncol(mu_num)
@@ -410,8 +410,9 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
   y <- ymat(hmc_data$y_num)
   zero <- y == 0
   n <- ymat(hmc_data$y_denom)
-  eta_zi <- if (!is.null(fit$zi$X_zi) && ncol(fit$zi$X_zi) > 0L) {
-    linpred("beta_zi", fit$zi$X_zi)
+  eta_zi <- if (zi_type != "oi_binomial" &&
+                !is.null(object$zi$X_zi) && ncol(object$zi$X_zi) > 0L) {
+    linpred("beta_zi", object$zi$X_zi)
   }
   log_pos <- function(x, link = links$zi) pp_log_prob(x, link, lower = TRUE)
   log_neg <- function(x, link = links$zi) pp_log_prob(x, link, lower = FALSE)
@@ -445,12 +446,12 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
     hurdle_binomial = ifelse(zero, log_neg(eta_zi),
                              log_pos(eta_zi) + lp_y - log(-expm1(lp_0))),
     oi_binomial = {
-      eta_oi <- linpred("beta_oi", fit$zi$X_oi)
+      eta_oi <- linpred("beta_oi", object$zi$X_oi)
       ifelse(y == n, log_add(log_pos(eta_oi, links$oi), log_neg(eta_oi, links$oi) + lp_n),
              log_neg(eta_oi, links$oi) + lp_y)
     },
     zoib = {
-      eta_oi <- linpred("beta_oi", fit$zi$X_oi)
+      eta_oi <- linpred("beta_oi", object$zi$X_oi)
       both <- log_neg(eta_zi) + log_neg(eta_oi, links$oi)
       ifelse(zero, log_add(log_pos(eta_zi), both + lp_0),
              ifelse(y == n,
@@ -759,16 +760,16 @@ compute_model_weights <- function(models, method) {
 # log-likelihood, so the two stay consistent). `type` is one of "ratio",
 # "numerator", "denominator".
 #' @keywords internal
-.ratiod_component_draws <- function(fit, type) {
-  model_type <- .ratiod_model_type(fit)
-  hmc_data <- fit$.internal$hmc_data
+.ratiod_component_draws <- function(object, type) {
+  model_type <- .ratiod_model_type(object)
+  hmc_data <- object$.internal$hmc_data
   if (is.null(hmc_data)) {
     hmc_data <- suppressWarnings(
-      prepare_hmc_data(fit$formula, fit$data, fit$family, model_type)
+      prepare_hmc_data(object$formula, object$data, object$family, model_type)
     )
   }
-  lp <- .ratiod_linpred_fixed(fit$draws, hmc_data)
-  draws <- hmc_response_draws(lp, family_links(fit$family, model_type),
+  lp <- .ratiod_linpred_fixed(object$draws, hmc_data)
+  draws <- hmc_response_draws(lp, family_links(object$family, model_type),
                               exposure = hmc_exposure(hmc_data, model_type))
 
   switch(type, ratio = draws$ratio, numerator = draws$numerator,

@@ -4,10 +4,10 @@
 \alias{plot_energy}
 \title{Plot the Energy Diagnostic (E-BFMI)}
 \usage{
-plot_energy(fit)
+plot_energy(object)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object (HMC backend).}
+\item{object}{A \code{ratiod_fit} object (HMC backend).}
 }
 \value{
 A ggplot object (if ggplot2 available) or base R plot.

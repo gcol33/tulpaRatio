@@ -4,12 +4,18 @@
 \alias{ratiod_hurdle_binomial}
 \title{Hurdle Binomial Family}
 \usage{
-ratiod_hurdle_binomial(link_num = "logit", link_hurdle = "logit")
+ratiod_hurdle_binomial(
+  link_num = "logit",
+  link_hurdle = "logit",
+  zi_formula = NULL
+)
 }
 \arguments{
 \item{link_num}{Link function for the success probability: "logit" (default), "probit" or "cloglog".}
 
 \item{link_hurdle}{Link function for the hurdle probability P(Y > 0): "logit" (default), "probit" or "cloglog".}
+
+\item{zi_formula}{Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.}
 }
 \value{
 A \code{ratiod_family} object with hurdle structure

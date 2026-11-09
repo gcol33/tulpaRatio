@@ -32,24 +32,24 @@ test_that("components and islands are found", {
   expect_equal(comp, c(rep(0L, 9), rep(1L, 9), -1L))
   expect_null(tulpaRatio:::areal_components(A[1:9, 1:9]))
 
-  car <- spatial_car(A, level = "group", group_var = "region")
+  car <- spatial_car(A, spatial_level = "group", group_var = "region")
   expect_equal(car$component, comp)
   expect_equal(car$node_prec, rep(1, 19))
-  bym <- spatial_bym2(A, level = "group", group_var = "region")
+  bym <- spatial_bym2(A, spatial_level = "group", group_var = "region")
   expect_equal(bym$component, comp)
   # Two identical components share the reference scale; the island's
   # multiplier brings it to unit variance
   expect_equal(bym$node_prec[1:18], rep(1, 18))
   expect_equal(bym$node_prec[19], bym$scale_factor^2)
-  expect_error(spatial_car(A, level = "group", group_var = "region",
+  expect_error(spatial_car(A, spatial_level = "group", group_var = "region",
                            parameterization = "collapsed"), "connected")
 })
 
 test_that("an ICAR and a BYM2 field on a disconnected map fit and recover", {
   skip_on_cran()
   d <- disconnected_data()
-  for (spatial in list(spatial_car(d$adj, level = "group", group_var = "region"),
-                       spatial_bym2(d$adj, level = "group", group_var = "region"))) {
+  for (spatial in list(spatial_car(d$adj, spatial_level = "group", group_var = "region"),
+                       spatial_bym2(d$adj, spatial_level = "group", group_var = "region"))) {
     fit <- suppressWarnings(tratio(
       y | trials ~ x, data = d$df, family = ratiod_binomial(), spatial = spatial,
       control = list(iter = 1000, chains = 2, seed = 1)))
@@ -62,7 +62,7 @@ test_that("an ICAR and a BYM2 field on a disconnected map fit and recover", {
 
 test_that("samplers that centre over the whole graph refuse a disconnected map", {
   d <- disconnected_data()
-  car <- spatial_car(d$adj, level = "group", group_var = "region")
+  car <- spatial_car(d$adj, spatial_level = "group", group_var = "region")
   expect_error(
     tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
            spatial = car, mode = "gibbs",
@@ -82,10 +82,10 @@ test_that("ESS, SGHMC, SGLD and VI fit ICAR, proper CAR and BYM2 fields (#145)",
   df$region <- factor(as.integer(df$region), levels = 1:9)
   A <- d$adj[1:9, 1:9]
   fields <- list(
-    icar = spatial_car(A, level = "group", group_var = "region"),
-    car = spatial_car(A, level = "group", group_var = "region", proper = TRUE),
-    bym2 = spatial_bym2(A, level = "group", group_var = "region"),
-    bym2_disconnected = spatial_bym2(d$adj, level = "group", group_var = "region"))
+    icar = spatial_car(A, spatial_level = "group", group_var = "region"),
+    car = spatial_car(A, spatial_level = "group", group_var = "region", proper = TRUE),
+    bym2 = spatial_bym2(A, spatial_level = "group", group_var = "region"),
+    bym2_disconnected = spatial_bym2(d$adj, spatial_level = "group", group_var = "region"))
   for (nm in names(fields)) {
     data <- if (nm == "bym2_disconnected") d$df else df
     for (m in c("ess", "sghmc", "sgld", "vi")) {
@@ -111,7 +111,7 @@ test_that("ESS moves the unstructured BYM2 component (#145)", {
   d <- disconnected_data()
   fit <- suppressWarnings(tratio(
     y | trials ~ x, data = d$df, family = ratiod_binomial(),
-    spatial = spatial_bym2(d$adj, level = "group", group_var = "region"),
+    spatial = spatial_bym2(d$adj, spatial_level = "group", group_var = "region"),
     mode = "ess", control = list(iter = 300, chains = 1, seed = 1)))
   dr <- as.matrix(fit$draws)
   theta <- dr[, startsWith(colnames(dr), "theta["), drop = FALSE]

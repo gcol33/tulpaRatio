@@ -361,11 +361,11 @@ nd_family <- switch(fam,
 
 nd_spatial <- NULL
 if (sp == "icar") {
-  nd_spatial <- spatial_car(adj_mat, level = "group", group_var = "spatial_site")
+  nd_spatial <- spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site")
 } else if (sp == "bym2") {
-  nd_spatial <- spatial_bym2(adj_mat, level = "group", group_var = "spatial_site")
+  nd_spatial <- spatial_bym2(adj_mat, spatial_level = "group", group_var = "spatial_site")
 } else if (sp == "pcar") {
-  nd_spatial <- spatial_car(adj_mat, level = "group", group_var = "spatial_site", proper = TRUE)
+  nd_spatial <- spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site", proper = TRUE)
 } else if (sp == "gp") {
   nd_spatial <- spatial_gp(coords = ~ lon_obs + lat_obs)
 } else if (sp == "hsgp") {
@@ -375,10 +375,10 @@ if (sp == "icar") {
 } else if (sp == "svc") {
   nd_spatial <- spatial_svc(coords = ~ lon_obs + lat_obs, terms = 1, approx = "hsgp")
 } else if (sp == "cicar") {
-  nd_spatial <- spatial_car(adj_mat, level = "group", group_var = "spatial_site",
+  nd_spatial <- spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site",
                             parameterization = "collapsed")
 } else if (sp == "cbym2") {
-  nd_spatial <- spatial_bym2(adj_mat, level = "group", group_var = "spatial_site",
+  nd_spatial <- spatial_bym2(adj_mat, spatial_level = "group", group_var = "spatial_site",
                              parameterization = "collapsed")
 }
 
@@ -397,19 +397,20 @@ if (temp == "rw1") {
   nd_temporal <- temporal_tvc(time_var = "time", terms = 1)
 }
 
-nd_zi <- NULL
+denom_family <- switch(nd_family$denominator$distribution,
+    gamma = "gamma", neg_binomial_2 = "negbin", fixed = "fixed")
 if (zi == "zi" && fam %in% c("pg", "nb", "nbg")) {
-  nd_zi <- if (fam == "pg") zi_poisson() else zi_negbin()
+  nd_family <- if (fam == "pg") ratiod_zi_poisson(denom_family = denom_family) else ratiod_zi_negbin(denom_family = denom_family)
 } else if (zi == "zi" && fam == "bin") {
-  nd_family <- ratiod_zibinomial()
+  nd_family <- ratiod_zi_binomial()
 } else if (zi == "hurdle" && fam %in% c("pg", "nb", "nbg")) {
-  nd_zi <- if (fam == "pg") hurdle_poisson() else hurdle_negbin()
+  nd_family <- if (fam == "pg") ratiod_hurdle_poisson(denom_family = denom_family) else ratiod_hurdle_negbin(denom_family = denom_family)
 } else if (zi == "hurdle" && fam == "bin") {
   nd_family <- ratiod_hurdle_binomial()
 } else if (zi == "oi") {
-  nd_family <- ratiod_oibinomial()
+  nd_family <- ratiod_oi_binomial()
 } else if (zi == "zoib") {
-  nd_family <- ratiod_zoibinomial()
+  nd_family <- ratiod_zoi_binomial()
 }
 
 nd_spatiotemporal <- NULL
@@ -436,7 +437,6 @@ ratiod_args <- list(
   family           = nd_family,
   spatial          = nd_spatial,
   temporal         = nd_temporal,
-  zi               = nd_zi,
   spatiotemporal   = nd_spatiotemporal,
   latent           = nd_latent,
   control          = list(iter = N_ITER,

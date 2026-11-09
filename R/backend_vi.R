@@ -235,6 +235,6 @@ print.ratiod_vi <- function(x, digits = 3, ...) {
 #' @rdname summary.ratiod_fit
 #' @return An object of class `summary.ratiod_fit`.
 #' @export
-summary.ratiod_vi <- function(object, prob = 0.95, ...) {
-  summary.ratiod_fit(object, prob = prob, ...)
+summary.ratiod_vi <- function(object, probs = 0.95, ...) {
+  summary.ratiod_fit(object, probs = probs, ...)
 }

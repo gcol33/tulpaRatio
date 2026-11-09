@@ -126,21 +126,19 @@ inside `compute_log_post_generic`. No per-family wiring needed.
 
 ## Per-observation `eta_zi` regression
 
-The legacy public API supports per-observation `pi_zi`/`pi_oi` via the `zi`
-argument:
+Family formulas specify per-observation `pi_zi`/`pi_oi`:
 
 ```r
-ratiod(y | n_total ~ x1, ..., zi = zi_negbin(~ effort + season))
+tratio(y | n_total ~ x1, ..., family = ratiod_zi_negbin(zi_formula = ~ effort + season))
 ```
 
-`R/zi.R::prepare_zi_for_hmc` builds `X_zi <- model.matrix(zi$formula, data)`.
+`R/backend_hmc.R::prepare_zi_for_hmc` builds `X_zi <- model.matrix(zi$formula, data)`.
 The spec bridge (`src/tulpa_bridge.cpp`) passes that matrix through `cfg$X_zi`
 so the same `eta_zi[i] = X_zi[i,] * beta_zi` evaluation happens engine-side
 in `tulpa::generic_zi_oi_logits`.
 
-For the family-built-in ZI families (`ratiod_zibinomial`, `ratiod_zoibinomial`,
-etc.) the formula is intercept-only and `X_zi` is `1_N`. ZOIB / one-inflated
-families set `X_oi = 1_N` similarly.
+Each inflated family carries optional `zi_formula` and `oi_formula` predictors.
+Their default is intercept-only, with `X_zi = 1_N` and `X_oi = 1_N`.
 
 ## Spec dispatch summary
 

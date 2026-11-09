@@ -688,8 +688,8 @@ The root cause is that each specialized H-mode gradient function (e.g., `compute
 |:----:|-----------|----------------|
 | ZI | Zero-inflated | ratiod_zi*() or zi=zi_*() |
 | Hurdle | Hurdle model | ratiod_hurdle_*() or zi=hurdle_*() |
-| OI | One-inflated | ratiod_oibinomial() |
-| ZOIB | Zero-and-one inflated | ratiod_zoibinomial() |
+| OI | One-inflated | ratiod_oi_binomial() |
+| ZOIB | Zero-and-one inflated | ratiod_zoi_binomial() |
 
 ## Spatiotemporal Types Reference
 

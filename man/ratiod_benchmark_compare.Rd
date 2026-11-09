@@ -4,16 +4,27 @@
 \alias{ratiod_benchmark_compare}
 \title{Compare Benchmarks Across Configurations}
 \usage{
-ratiod_benchmark_compare(configs, n_iter = 500, n_warmup = 250, n_threads = 1)
+ratiod_benchmark_compare(
+  configs,
+  iter = 500,
+  warmup = 250,
+  cores = 1,
+  chains = 1,
+  seed = 42
+)
 }
 \arguments{
 \item{configs}{A list of configuration lists, each with N, p, n_groups}
 
-\item{n_iter}{Iterations per benchmark}
+\item{iter}{Iterations per benchmark}
 
-\item{n_warmup}{Warmup iterations}
+\item{warmup}{Warmup iterations}
 
-\item{n_threads}{Number of threads}
+\item{cores}{Number of cores for parallel chains}
+
+\item{chains}{Number of chains}
+
+\item{seed}{Seed used for each configuration. The caller's RNG state is restored.}
 }
 \value{
 A data frame with benchmark results
@@ -28,7 +39,7 @@ configs <- list(
   list(N = 50, p = 2, n_groups = 0),
   list(N = 100, p = 2, n_groups = 0)
 )
-comparison <- ratiod_benchmark_compare(configs, n_iter = 200, n_warmup = 100)
+comparison <- ratiod_benchmark_compare(configs, iter = 200, warmup = 100)
 print(comparison)
 }
 

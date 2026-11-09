@@ -29,7 +29,7 @@ Extend the Pólya-Gamma (PG) Gibbs sampler from binomial-only to all applicable 
 
 1. **Only `ratiod_binomial()`** - Other families use HMC
 2. **No random slopes** - Warning issued, slopes ignored
-3. **No ZI binomial variants** - `ratiod_zibinomial()` etc. use HMC
+3. **No ZI binomial variants** - `ratiod_zi_binomial()` etc. use HMC
 4. **No crossed RE with slopes** - Only crossed intercepts supported
 
 ---
@@ -41,9 +41,9 @@ Extend the Pólya-Gamma (PG) Gibbs sampler from binomial-only to all applicable 
 | Family | PG Applicable | Reason |
 |--------|:-------------:|--------|
 | `ratiod_binomial()` | **Yes** | Core PG use case |
-| `ratiod_zibinomial()` | **Yes** | Two logit links: P(zero) + P(success\|non-zero) |
-| `ratiod_oibinomial()` | **Yes** | Two logit links: P(one) + P(success\|non-one) |
-| `ratiod_zoibinomial()` | **Yes** | Three logit links |
+| `ratiod_zi_binomial()` | **Yes** | Two logit links: P(zero) + P(success\|non-zero) |
+| `ratiod_oi_binomial()` | **Yes** | Two logit links: P(one) + P(success\|non-one) |
+| `ratiod_zoi_binomial()` | **Yes** | Three logit links |
 | `ratiod_hurdle_binomial()` | **Yes** | Two logit links |
 
 ### Indirect PG Applicability (via augmentation)
@@ -78,7 +78,7 @@ The `p` parameter can be modeled with logit link and PG augmentation (Zhou et al
 
 These are direct extensions — same PG machinery, just two linked binomial regressions.
 
-#### 1.1 Zero-Inflated Binomial (`ratiod_zibinomial()`)
+#### 1.1 Zero-Inflated Binomial (`ratiod_zi_binomial()`)
 
 **Model**:
 ```
@@ -107,11 +107,11 @@ logit(p) = X * β + Z * b                   # Success probability (if not struct
 5. Sample `β, b | y, z, ω, ...` (Gaussian)
 6. Sample variance components (half-Cauchy MH or slice)
 
-#### 1.2 One-Inflated Binomial (`ratiod_oibinomial()`)
+#### 1.2 One-Inflated Binomial (`ratiod_oi_binomial()`)
 
 Analogous to ZI but `z_i = 1` means `y_i = n_i` (all successes).
 
-#### 1.3 Zero-One Inflated Binomial (`ratiod_zoibinomial()`)
+#### 1.3 Zero-One Inflated Binomial (`ratiod_zoi_binomial()`)
 
 Three-component model:
 ```
@@ -325,7 +325,7 @@ src/
 fit <- ratiod(
   successes | trials ~ x + (1 | site),
   data = df,
-  family = ratiod_zibinomial(),  # NEW: Now uses PG backend
+  family = ratiod_zi_binomial(),  # NEW: Now uses PG backend
   mode = "pg"                     # Or auto-selected
 )
 ```
@@ -388,11 +388,11 @@ test_that("PG ZI binomial recovers parameters", {
                               pi_true = 0.3, p_true = 0.6)
 
   fit_pg <- ratiod(y | n ~ x + (1 | site), data = sim$data,
-                   family = ratiod_zibinomial(), mode = "pg",
+                   family = ratiod_zi_binomial(), mode = "pg",
                    iter = 2000, warmup = 1000, chains = 2)
 
   fit_hmc <- ratiod(y | n ~ x + (1 | site), data = sim$data,
-                    family = ratiod_zibinomial(), mode = "hmc",
+                    family = ratiod_zi_binomial(), mode = "hmc",
                     iter = 2000, warmup = 1000, chains = 2)
 
   # Compare posteriors
@@ -414,9 +414,9 @@ test_that("PG ZI binomial recovers parameters", {
 
 ```
 Phase 1: ZI Binomial Variants [HIGH]
-├── 1.1 ratiod_zibinomial() PG
-├── 1.2 ratiod_oibinomial() PG
-├── 1.3 ratiod_zoibinomial() PG
+├── 1.1 ratiod_zi_binomial() PG
+├── 1.2 ratiod_oi_binomial() PG
+├── 1.3 ratiod_zoi_binomial() PG
 └── 1.4 ratiod_hurdle_binomial() PG
 
 Phase 2: Random Slopes [MEDIUM]
@@ -428,7 +428,7 @@ Phase 3: Negative Binomial + CRT [HIGH]
 ├── 3.1 CRT sampler implementation
 ├── 3.2 NB-PG sampler (single NB process)
 ├── 3.3 ratiod_negbin_negbin() with dual PG+CRT
-├── 3.4 ZI-NegBin variants (ratiod_zinegbin, ratiod_hurdle_negbin)
+├── 3.4 ZI-NegBin variants (ratiod_zi_negbin, ratiod_hurdle_negbin)
 └── 3.5 Benchmarking vs HMC
 
 Phase 4: Spatial Extensions [MEDIUM]

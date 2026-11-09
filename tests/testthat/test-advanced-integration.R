@@ -151,7 +151,7 @@ test_that("spatiotemporal Type I model fits", {
     data = df,
     family = ratiod_poisson_gamma(),
     spatiotemporal = spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "region"),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
       temporal = temporal_rw1("time"),
       type = "I"
     ),
@@ -189,7 +189,7 @@ test_that("spatiotemporal Type IV model fits", {
     data = df,
     family = ratiod_poisson_gamma(),
     spatiotemporal = spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "region"),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
       temporal = temporal_rw1("time"),
       type = "IV"
     ),
@@ -365,7 +365,7 @@ test_that("Laplace backend fits model with spatial CAR", {
     successes | trials ~ x,
     data = df,
     family = ratiod_binomial(),
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     mode = "laplace",
     control = list(verbose = FALSE)
   )
@@ -462,7 +462,7 @@ test_that("PG backend fits binomial model with spatial CAR", {
     successes | trials ~ x,
     data = df,
     family = ratiod_binomial(),
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     mode = "pg",
     control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
   )

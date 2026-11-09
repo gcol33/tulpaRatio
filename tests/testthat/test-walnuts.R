@@ -6,7 +6,7 @@
 
 walnuts_bym2_fit <- function(walnuts, adapt_delta, iter, seed) {
   sim <- simulate_spatial_binomial(n_units = 12L, reps = 1L)
-  sp <- spatial_bym2(adjacency = sim$adj, level = "group", group_var = "unit",
+  sp <- spatial_bym2(adjacency = sim$adj, spatial_level = "group", group_var = "unit",
                      parameterization = "standard")
   tratio(sim$formula, sim$data, sim$family, spatial = sp, mode = "hmc",
          control = list(iter = iter, warmup = iter %/% 3, chains = 1L,

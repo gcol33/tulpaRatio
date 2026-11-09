@@ -75,35 +75,35 @@ test_that("a family accepts only the links its likelihood implements", {
   expect_equal(ratiod_binomial(link = "probit")$numerator$link, "probit")
   expect_equal(ratiod_beta_binomial(link = "cloglog")$numerator$link, "cloglog")
   expect_equal(ratiod_gamma_gamma(link_num = "identity")$numerator$link, "identity")
-  expect_equal(ratiod_zibinomial(link_zi = "probit")$numerator$link_zi, "probit")
-  expect_equal(ratiod_hurdle_pois(link_hurdle = "cloglog")$numerator$link_hurdle,
+  expect_equal(ratiod_zi_binomial(link_zi = "probit")$numerator$link_zi, "probit")
+  expect_equal(ratiod_hurdle_poisson(link_hurdle = "cloglog")$numerator$link_hurdle,
                "cloglog")
   expect_error(ratiod_binomial(link = "log"), "not supported")
   expect_error(ratiod_lognormal(link_num = "identity"), "not supported")
   expect_error(ratiod_negbin_negbin(link_num = "identity"), "not supported")
   expect_error(ratiod_poisson_gamma(link_num = "inverse"), "not supported")
-  expect_error(ratiod_zibinomial(link_zi = "inverse"), "not supported")
+  expect_error(ratiod_zi_binomial(link_zi = "inverse"), "not supported")
 })
 
 test_that("inflated count families fit the denominators they name", {
-  expect_equal(get_hmc_model_type(ratiod_zipois()), "poisson_gamma")
-  expect_equal(get_hmc_model_type(ratiod_zinegbin()), "negbin_negbin")
-  expect_equal(get_hmc_model_type(ratiod_zinegbin(denom_family = "gamma")),
+  expect_equal(get_hmc_model_type(ratiod_zi_poisson()), "poisson_gamma")
+  expect_equal(get_hmc_model_type(ratiod_zi_negbin()), "negbin_negbin")
+  expect_equal(get_hmc_model_type(ratiod_zi_negbin(denom_family = "gamma")),
                "negbin_gamma")
   expect_equal(get_hmc_model_type(ratiod_hurdle_negbin(denom_family = "gamma")),
                "negbin_gamma")
-  expect_equal(get_hmc_model_type(ratiod_hurdle_pois()), "poisson_gamma")
-  expect_equal(get_hmc_model_type(ratiod_zipois(denom_family = "negbin")),
+  expect_equal(get_hmc_model_type(ratiod_hurdle_poisson()), "poisson_gamma")
+  expect_equal(get_hmc_model_type(ratiod_zi_poisson(denom_family = "negbin")),
                "poisson_negbin")
-  expect_equal(get_hmc_model_type(ratiod_zipois(denom_family = "fixed")),
+  expect_equal(get_hmc_model_type(ratiod_zi_poisson(denom_family = "fixed")),
                "poisson_fixed")
-  expect_equal(get_hmc_model_type(ratiod_zinegbin(denom_family = "fixed")),
+  expect_equal(get_hmc_model_type(ratiod_zi_negbin(denom_family = "fixed")),
                "negbin_fixed")
   expect_equal(get_hmc_model_type(ratiod_hurdle_negbin(denom_family = "fixed")),
                "negbin_fixed")
   expect_equal(get_hmc_model_type(ratiod_lognormal(denom_fixed = TRUE)),
                "lognormal_fixed")
-  expect_error(ratiod_zipois(denom_family = "binomial"), "must be one of")
+  expect_error(ratiod_zi_poisson(denom_family = "binomial"), "must be one of")
 })
 
 test_that("ratiod_lognormal creates valid family", {
@@ -139,21 +139,21 @@ test_that("print.ratiod_family works", {
 })
 
 test_that("zero inflation families are created correctly", {
-  zi <- ratiod_zipois()
+  zi <- ratiod_zi_poisson()
   expect_s3_class(zi, "ratiod_family")
   expect_true(zi$zero_inflated)
 
-  zi <- ratiod_zinegbin()
+  zi <- ratiod_zi_negbin()
   expect_s3_class(zi, "ratiod_family")
   expect_true(zi$zero_inflated)
 
-  hurdle <- ratiod_hurdle_pois()
+  hurdle <- ratiod_hurdle_poisson()
   expect_s3_class(hurdle, "ratiod_family")
   expect_equal(hurdle$zi_type, "hurdle")
 })
 
 test_that("print.ratiod_family shows ZI info", {
-  zi <- ratiod_zipois()
+  zi <- ratiod_zi_poisson()
   output <- capture.output(print(zi))
   expect_true(any(grepl("zero", output, ignore.case = TRUE)) ||
               any(grepl("Zero", output)))
@@ -161,7 +161,7 @@ test_that("print.ratiod_family shows ZI info", {
 
 test_that("additional ZI families work correctly", {
   # Test binomial variants
-  zi_bin <- ratiod_zibinomial()
+  zi_bin <- ratiod_zi_binomial()
   expect_s3_class(zi_bin, "ratiod_family")
   expect_true(zi_bin$zero_inflated)
 

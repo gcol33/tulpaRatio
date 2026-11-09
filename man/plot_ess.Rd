@@ -4,10 +4,10 @@
 \alias{plot_ess}
 \title{Plot the Effective Sample Size Diagnostic}
 \usage{
-plot_ess(fit, type = c("bulk", "tail"), threshold = 400, pars = NULL)
+plot_ess(object, type = c("bulk", "tail"), threshold = 400, pars = NULL)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{type}{Type of ESS: "bulk" (default) or "tail".}
 

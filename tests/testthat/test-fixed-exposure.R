@@ -41,7 +41,7 @@ test_that("a zero-inflated Poisson over a known exposure recovers its rate", {
   skip_on_cran()
   d <- exposure_data()
   fit <- tratio(count | exposure ~ x, data = d,
-                family = ratiod_zipois(denom_family = "fixed"),
+                family = ratiod_zi_poisson(denom_family = "fixed"),
                 control = list(iter = 1000, chains = 2, seed = 1))
   b <- coef(fit)
   expect_false(any(grepl("^denom:", names(b))))
@@ -75,7 +75,7 @@ test_that("a Poisson numerator with a negative binomial denominator is recovered
   skip_on_cran()
   d <- exposure_data()
   fit <- tratio(count | trapped ~ x, data = d,
-                family = ratiod_zipois(denom_family = "negbin"),
+                family = ratiod_zi_poisson(denom_family = "negbin"),
                 control = list(iter = 1000, chains = 2, seed = 1))
   b <- coef(fit)
   expect_equal(unname(b[c("denom:(Intercept)", "denom:x")]), c(2, 0.3),
@@ -88,7 +88,7 @@ test_that("a known exposure must be positive", {
   d$exposure[3] <- 0
   expect_error(
     tratio(count | exposure ~ x, data = d,
-           family = ratiod_zipois(denom_family = "fixed"),
+           family = ratiod_zi_poisson(denom_family = "fixed"),
            control = list(iter = 50, chains = 1, seed = 1)),
     "must be positive")
 })
@@ -97,7 +97,7 @@ test_that("samplers with likelihoods of their own refuse the new pairs", {
   d <- exposure_data(40)
   expect_error(
     tratio(count | exposure ~ x, data = d,
-           family = ratiod_zipois(denom_family = "fixed"), mode = "laplace"),
+           family = ratiod_zi_poisson(denom_family = "fixed"), mode = "laplace"),
     "likelihood")
 })
 
@@ -116,7 +116,7 @@ test_that("a count over a known exposure has a constructor of its own", {
 test_that("the Gibbs sampler refuses a count it has no likelihood for", {
   expect_true(is.na(gibbs_model_type(ratiod_poisson())))
   expect_true(is.na(gibbs_model_type(ratiod_negbin())))
-  expect_true(is.na(gibbs_model_type(ratiod_zipois())))
+  expect_true(is.na(gibbs_model_type(ratiod_zi_poisson())))
   expect_identical(gibbs_model_type(ratiod_poisson_gamma()), "poisson_gamma")
   expect_identical(gibbs_model_type(ratiod_negbin_negbin()), "negbin_negbin")
   expect_error(get_gibbs_family_string(ratiod_poisson()), "Gibbs backend")

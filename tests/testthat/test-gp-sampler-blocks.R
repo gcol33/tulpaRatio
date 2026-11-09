@@ -92,7 +92,7 @@ test_that("a GP main effect carries a Knorr-Held interaction", {
     mode = "hmc",
     spatial = spatial_gp(~ lon + lat, nn = 4),
     spatiotemporal = spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "unit"),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "unit"),
       temporal = temporal_rw1("year"),
       type = "IV"
     ),
@@ -223,7 +223,7 @@ test_that("the AR1 rho prior reaches both sampler entry points", {
 
   arms <- list(
     gp = spatial_gp(~ lon + lat, nn = 4),
-    areal = spatial_car(adj, level = "group", group_var = "unit")
+    areal = spatial_car(adj, spatial_level = "group", group_var = "unit")
   )
   for (nm in names(arms)) {
     flat <- rho_draws(fit_rho(arms[[nm]], prior_beta(2, 2)))
@@ -244,7 +244,7 @@ test_that("a GP main effect carries one inflation", {
   fit <- tratio(
     num | denom ~ x,
     data = d,
-    family = ratiod_oibinomial(),
+    family = ratiod_oi_binomial(),
     mode = "hmc",
     spatial = spatial_gp(~ lon + lat, nn = 4),
     control = list(iter = 200, warmup = 100, chains = 1, seed = 1,

@@ -4,10 +4,10 @@
 \alias{plot_rhat}
 \title{Plot the Rhat Convergence Diagnostic}
 \usage{
-plot_rhat(fit, threshold = 1.01, pars = NULL)
+plot_rhat(object, threshold = 1.01, pars = NULL)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{threshold}{Rhat threshold for warnings (default: 1.01).}
 

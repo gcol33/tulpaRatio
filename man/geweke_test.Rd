@@ -5,12 +5,12 @@
 \alias{print.ratiod_geweke}
 \title{Geweke Convergence Test}
 \usage{
-geweke_test(fit, frac1 = 0.1, frac2 = 0.5, pars = NULL)
+geweke_test(object, frac1 = 0.1, frac2 = 0.5, pars = NULL)
 
 \method{print}{ratiod_geweke}(x, ...)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{frac1}{Fraction of chain for first window (default: 0.1).}
 

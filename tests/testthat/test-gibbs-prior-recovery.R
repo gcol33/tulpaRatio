@@ -32,7 +32,7 @@ gibbs_recovery_fit <- function(setup, spatial, priors, iter = 4000, warmup = 200
 test_that("ICAR SD recovers its PC prior with zero-trials data", {
   skip_on_cran()
   s <- gibbs_recovery_setup()
-  car <- spatial_car(s$adj, level = "group", group_var = "site")
+  car <- spatial_car(s$adj, spatial_level = "group", group_var = "site")
   dr <- gibbs_recovery_fit(s, car, list())
 
   qs <- quantile(1 / sqrt(dr[, "tau_spatial"]), c(0.25, 0.5, 0.75))
@@ -48,7 +48,7 @@ test_that("the intercept's posterior sd matches its own prior under ICAR", {
   # intercept, not sampling noise.
   skip_on_cran()
   s <- gibbs_recovery_setup()
-  car <- spatial_car(s$adj, level = "group", group_var = "site")
+  car <- spatial_car(s$adj, spatial_level = "group", group_var = "site")
   dr <- gibbs_recovery_fit(s, car, ratiod_priors(beta = prior_normal(0, 0.5)))
   expect_equal(sd(dr[, "beta_num[1]"]), 0.5, tolerance = 0.3)
 })
@@ -60,7 +60,7 @@ test_that("BYM2 sigma, rho and the intercept recover their priors with zero-tria
   # priors.
   skip_on_cran()
   s <- gibbs_recovery_setup()
-  bym <- spatial_bym2(s$adj, level = "group", group_var = "site")
+  bym <- spatial_bym2(s$adj, spatial_level = "group", group_var = "site")
   priors <- ratiod_priors(beta = prior_normal(0, 0.5))
   dr <- gibbs_recovery_fit(s, bym, priors)
   rate <- -log(0.01) / 3

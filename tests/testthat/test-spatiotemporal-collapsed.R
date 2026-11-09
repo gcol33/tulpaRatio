@@ -20,7 +20,7 @@ collapsed_fixture <- function(seed = 7) {
 
 collapsed_spec <- function(adj, parameterization) {
   spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "separable", coords = ~ lon + lat, nn = 5,
     parameterization = parameterization
@@ -40,7 +40,7 @@ test_that("the collapsed parameterization is refused where it does not apply", {
   f <- collapsed_fixture()
   expect_error(
     spatiotemporal(
-      spatial = spatial_car(f$adj, level = "group", group_var = "region"),
+      spatial = spatial_car(f$adj, spatial_level = "group", group_var = "region"),
       temporal = temporal_rw1("year"), type = "IV",
       parameterization = "collapsed"),
     "integrates out a GP interaction")

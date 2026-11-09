@@ -121,12 +121,12 @@ test_that("summary.ratiod_fit works", {
   expect_equal(nobs(fit), nrow(fit$data))
 })
 
-# Test summary with prob argument
-test_that("summary.ratiod_fit respects prob argument", {
+# Test summary with probs argument
+test_that("summary.ratiod_fit respects probs argument", {
   fit <- quick_fit()
 
-  # summary.ratiod_fit takes prob (CI width) not probs (quantiles)
-  result <- summary(fit, prob = 0.90)
+  # probs is the credible interval probability
+  result <- summary(fit, probs = 0.90)
   expect_s3_class(result, "summary.ratiod_fit")
   expect_identical(result$ci_names, c("5%", "50%", "95%"))
 })
@@ -498,7 +498,7 @@ test_that("PG backend works with spatial CAR", {
     successes | trials ~ x + (1 | site),
     data = df,
     family = ratiod_binomial(),
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     mode = "pg",
     control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
   )
@@ -530,7 +530,7 @@ test_that("HMC backend works with spatial CAR", {
     count | effort ~ x + (1 | site),
     data = df,
     family = ratiod_poisson_gamma(),
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     mode = "hmc",
     control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
   )

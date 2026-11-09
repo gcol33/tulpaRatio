@@ -8,11 +8,10 @@ prepare_zi_for_hmc(zi, data, N, family = NULL)
 }
 \arguments{
 \item{family}{Optional \code{ratiod_family} object, used for auto-detection
-when \code{zi} is NULL (see \code{\link[=family_zi_info]{family_zi_info()}})}
+when \code{zi} is NULL}
 }
 \description{
-Single source of truth for turning either an explicit \verb{zi = } argument
-or a ZI/hurdle/OI/ZOIB \emph{family} (e.g. \code{ratiod_zinegbin()}, with no
-explicit \verb{zi = }) into the \code{zi_info} list every backend consumes.
+Turns the inflation specification implied by a ZI/hurdle/OI/ZOIB family
+into the \code{zi_info} list every backend consumes.
 }
 \keyword{internal}

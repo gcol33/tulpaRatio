@@ -247,13 +247,13 @@ rows <- list(
        brmf(quote(y | trials(trials) ~ x + (1|site)), quote(binomial()))),
   list("Bin_ICAR",
        ndf(list(formula = quote(y | trials ~ x + (1|site)), family = quote(ratiod_binomial()),
-                spatial = quote(spatial_car(adj_mat, level="group", group_var="spatial_site")),
+                spatial = quote(spatial_car(adj_mat, spatial_level="group", group_var="spatial_site")),
                 temporal = NULL)),
        brmf(quote(y | trials(trials) ~ x + (1|site) +
                     car(adj_mat, gr = spatial_site, type = "icar")), quote(binomial()))),
   list("Bin_BYM2",
        ndf(list(formula = quote(y | trials ~ x + (1|site)), family = quote(ratiod_binomial()),
-                spatial = quote(spatial_bym2(adj_mat, level="group", group_var="spatial_site")),
+                spatial = quote(spatial_bym2(adj_mat, spatial_level="group", group_var="spatial_site")),
                 temporal = NULL)),
        brmf(quote(y | trials(trials) ~ x + (1|site) +
                     car(adj_mat, gr = spatial_site, type = "bym2")), quote(binomial()))),
@@ -263,13 +263,13 @@ rows <- list(
                 spatial = NULL, temporal = NULL)),
        brmf(quote(y | trials(trials) ~ x + (1|site) + (1|time)), quote(binomial()))),
   list("Bin_ZI",
-       ndf(list(formula = quote(y | trials ~ x + (1|site)), family = quote(ratiod_zibinomial()),
+       ndf(list(formula = quote(y | trials ~ x + (1|site)), family = quote(ratiod_zi_binomial()),
                 spatial = NULL, temporal = NULL, data = quote(df_zi))),
        brmf(quote(y | trials(trials) ~ x + (1|site)), quote(zero_inflated_binomial()), quote(df_zi))),
   list("Bin_ICAR_TIME",
        ndf(list(formula = quote(y | trials ~ x + (1|site) + (1|time)),
                 family = quote(ratiod_binomial()),
-                spatial = quote(spatial_car(adj_mat, level="group", group_var="spatial_site")),
+                spatial = quote(spatial_car(adj_mat, spatial_level="group", group_var="spatial_site")),
                 temporal = NULL)),
        brmf(quote(y | trials(trials) ~ x + (1|site) +
                     car(adj_mat, gr = spatial_site, type = "icar") + (1|time)), quote(binomial())))

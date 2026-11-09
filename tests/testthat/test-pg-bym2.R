@@ -27,7 +27,7 @@ test_that("PG and HMC agree on a BYM2 binomial model", {
   y <- rbinom(length(unit), nt, plogis(-0.3 + 0.5 * x1 + field[unit]))
   d <- data.frame(y = y, n_trials = nt, x1 = x1,
                   unit = factor(unit, levels = seq_len(J)))
-  sp <- spatial_bym2(grid_adjacency(k), level = "group", group_var = "unit")
+  sp <- spatial_bym2(grid_adjacency(k), spatial_level = "group", group_var = "unit")
   ctrl <- list(iter = 3000, warmup = 1000, chains = 2, verbose = FALSE, seed = 7)
 
   f_pg <- tratio(y | n_trials ~ x1, data = d, family = ratiod_binomial(),

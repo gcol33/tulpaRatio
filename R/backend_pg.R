@@ -393,10 +393,10 @@ extract_re_from_data <- function(formula, data) {
 #' @keywords internal
 prepare_spatial_for_pg <- function(spatial, data, formula) {
   # Get spatial group variable
-  if (spatial$level == "group") {
+  if (spatial$spatial_level == "group") {
     spatial_var <- spatial$group_var
     if (is.null(spatial_var)) {
-      stop("spatial_car() with level='group' requires group_var")
+      stop("spatial_car() with spatial_level = 'group' requires group_var")
     }
   } else {
     # Observation level - use row indices

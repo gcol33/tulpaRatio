@@ -35,12 +35,12 @@ test_that("gamma mean links have the gradient of their log posterior", {
 test_that("families accept the links their likelihoods implement", {
   expect_equal(ratiod_binomial("probit")$numerator$link, "probit")
   expect_equal(ratiod_gamma_gamma("identity", "inverse")$denominator$link, "inverse")
-  expect_equal(ratiod_zipois(link_zi = "cloglog")$numerator$link_zi, "cloglog")
-  expect_equal(ratiod_zinegbin(denom_family = "gamma",
+  expect_equal(ratiod_zi_poisson(link_zi = "cloglog")$numerator$link_zi, "cloglog")
+  expect_equal(ratiod_zi_negbin(denom_family = "gamma",
                                link_denom = "identity")$denominator$link, "identity")
   expect_error(ratiod_poisson_gamma(link_num = "identity"), "not supported")
   expect_error(ratiod_negbin_negbin(link_denom = "identity"), "not supported")
-  expect_error(ratiod_zinegbin(link_denom = "identity"), "not supported")
+  expect_error(ratiod_zi_negbin(link_denom = "identity"), "not supported")
   expect_error(ratiod_binomial("log"), "not supported")
 })
 

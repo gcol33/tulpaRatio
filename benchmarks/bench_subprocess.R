@@ -38,7 +38,7 @@ make_bin_df <- function(...) {
   trials <- sample(10:50, N, replace = TRUE)
   data.frame(y = rbinom(N, trials, plogis(0.5 + 0.3*x)), trials = trials, x = x, ...)
 }
-sp_car <- function() spatial_car(adj_mat, level = "group", group_var = "spatial_site")
+sp_car <- function() spatial_car(adj_mat, spatial_level = "group", group_var = "spatial_site")
 
 COMMON <- list(control = list(iter = 500, warmup = 250, chains = 1, verbose = FALSE))
 

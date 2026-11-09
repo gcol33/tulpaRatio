@@ -756,7 +756,7 @@ test_that("proper CAR refuses an autodiff gradient mode at the front door", {
   )
   fit_with <- function(mode) {
     tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
-           spatial = spatial_car(A, level = "group", group_var = "site", proper = TRUE),
+           spatial = spatial_car(A, spatial_level = "group", group_var = "site", proper = TRUE),
            control = list(iter = 30, warmup = 15, chains = 1, verbose = FALSE,
                           gradient_mode = mode))
   }
@@ -799,7 +799,7 @@ test_that("a collapsed field refuses an autodiff gradient mode at the front door
   )
   fit_with <- function(mode) {
     tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
-           spatial = spatial_car(A, level = "group", group_var = "site",
+           spatial = spatial_car(A, spatial_level = "group", group_var = "site",
                                  parameterization = "collapsed"),
            temporal = temporal_rw1("time"),
            control = list(iter = 30, warmup = 15, chains = 1, verbose = FALSE,

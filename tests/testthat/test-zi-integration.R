@@ -21,17 +21,11 @@ test_that("zi_poisson fits with poisson_gamma family", {
 
   # Fit model with zero-inflation
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_zi_poisson(denom_family = "gamma"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
-  expect_equal(fit$family$name, "poisson_gamma")
+  expect_equal(fit$family$name, "zi_poisson_gamma")
 
   # Should have ZI parameters in the output (named beta_zi[...])
   param_names <- colnames(fit$draws)
@@ -55,14 +49,8 @@ test_that("zi_poisson with formula fits covariates for ZI probability", {
   df$effort <- rgamma(n, shape = 4, rate = 1)
 
   # Fit with ZI covariate
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(~ habitat),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_zi_poisson(denom_family = "gamma", zi_formula = ~habitat),
+    mode = "hmc", control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
 
@@ -91,17 +79,11 @@ test_that("zi_negbin fits with negbin_negbin family", {
     x = rnorm(n)
   )
 
-  fit <- tratio(
-    count | total ~ x,
-    data = df,
-    family = ratiod_negbin_negbin(),
-    zi = zi_negbin(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | total ~ x, data = df, family = ratiod_zi_negbin(denom_family = "negbin"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
-  expect_equal(fit$family$name, "negbin_negbin")
+  expect_equal(fit$family$name, "zi_negbin_negbin")
 })
 
 
@@ -125,14 +107,8 @@ test_that("hurdle_poisson fits correctly", {
   # Ensure no zeros from the truncated Poisson (could still have zeros from hurdle)
   df$count[df$count > 0 & runif(n) < 0.1] <- 0  # Add some more zeros
 
-  fit <- tratio(
-    count | effort ~ depth,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = hurdle_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ depth, data = df, family = ratiod_hurdle_poisson(denom_family = "gamma"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
 })
@@ -153,14 +129,8 @@ test_that("hurdle_poisson with formula for hurdle probability", {
   df$count <- ifelse(runif(n) < df$pres_prob, rpois(n, lambda = 5) + 1, 0)
   df$effort <- rgamma(n, shape = 4, rate = 1)
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = hurdle_poisson(~ habitat),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_hurdle_poisson(denom_family = "gamma", zi_formula = ~habitat),
+    mode = "hmc", control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
 })
@@ -184,17 +154,11 @@ test_that("hurdle_negbin fits correctly", {
     x = rnorm(n)
   )
 
-  fit <- tratio(
-    count | total ~ x,
-    data = df,
-    family = ratiod_negbin_negbin(),
-    zi = hurdle_negbin(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | total ~ x, data = df, family = ratiod_hurdle_negbin(denom_family = "negbin"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
-  expect_equal(fit$family$name, "negbin_negbin")
+  expect_equal(fit$family$name, "hurdle_negbin_negbin")
 })
 
 
@@ -221,14 +185,8 @@ test_that("zi_poisson works with random effects", {
   df$count <- ifelse(runif(n) < df$zi_prob, 0, rpois(n, lambda = 6))
   df$effort <- rgamma(n, shape = 4, rate = 1)
 
-  fit <- tratio(
-    count | effort ~ x + (1 | site),
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x + (1 | site), data = df, family = ratiod_zi_poisson(denom_family = "gamma"),
+    mode = "hmc", control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
 
@@ -258,14 +216,8 @@ test_that("ZI model handles data with many zeros", {
   # Should handle ~60% zeros
   expect_true(mean(df$count == 0) > 0.5)
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_zi_poisson(denom_family = "gamma"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
 })
@@ -287,14 +239,8 @@ test_that("ZI model handles data with few zeros", {
   # Very few structural zeros
   expect_lt(mean(df$count == 0), 0.2)
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_zi_poisson(denom_family = "gamma"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   expect_s3_class(fit, "ratiod_fit")
 })
@@ -313,14 +259,8 @@ test_that("ratio() extraction works with ZI models", {
     x = rnorm(n)
   )
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_zi_poisson(denom_family = "gamma"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   # Extract ratios - should work same as non-ZI models
   ratios <- ratio(fit)
@@ -345,14 +285,8 @@ test_that("summary works for ZI models", {
     x = rnorm(n)
   )
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    zi = zi_poisson(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE)
-  )
+  fit <- tratio(count | effort ~ x, data = df, family = ratiod_zi_poisson(denom_family = "gamma"), mode = "hmc",
+    control = list(iter = 100, warmup = 50, chains = 1, verbose = FALSE))
 
   # Summary should work
   summ <- summary(fit)

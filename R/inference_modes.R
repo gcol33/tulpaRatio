@@ -453,6 +453,7 @@ assert_backend_fits_structures <- function(backend, structures) {
   if (length(reasons) == 0L) return(invisible(TRUE))
 
   named <- sprintf("`%s`", names(reasons))
+  named[names(reasons) == "zi"] <- "zero/one inflation"
 
   stop(sprintf(
     "The %s backend cannot fit this model:\n%s\nUse `mode = \"hmc\"`, which fits every structure, or drop %s.",
@@ -713,7 +714,7 @@ select_backend_for_mode <- function(mode) {
 #' Ensures the fit object was created with the expected inference mode.
 #' Useful for enforcing mode requirements in downstream analysis.
 #'
-#' @param fit A ratiod_fit object
+#' @param object A ratiod_fit object
 #' @param expected_mode Mode that should have been used: a tier (`"exact"`,
 #'   `"structured"`, `"optimized"`) or a backend (`"hmc"`, `"laplace"`, ...),
 #'   as passed to `tratio(mode = )`.
@@ -732,19 +733,19 @@ select_backend_for_mode <- function(mode) {
 #' }
 #'
 #' @export
-validate_mode <- function(fit, expected_mode, error = TRUE) {
-  if (!inherits(fit, "ratiod_fit")) {
+validate_mode <- function(object, expected_mode, error = TRUE) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  actual_mode <- fit$inference_mode %||% "unknown"
-  actual_tier <- fit$inference_tier %||% NA
+  actual_mode <- object$inference_mode %||% "unknown"
+  actual_tier <- object$inference_tier %||% NA
 
   expected_mode <- tolower(expected_mode)
 
   # A tier name ("exact") or the backend it ran on ("hmc") both match
   match <- actual_mode == expected_mode ||
-    identical(fit$backend, expected_mode)
+    identical(object$backend, expected_mode)
 
   # Also accept tier-based matching
  if (!match && expected_mode %in% names(INFERENCE_TIERS)) {

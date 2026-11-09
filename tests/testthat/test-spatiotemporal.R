@@ -6,7 +6,7 @@ test_that("spatiotemporal creates Type I specification", {
   for (i in 1:4) adj[i, i+1] <- adj[i+1, i] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "I"
   )
@@ -21,7 +21,7 @@ test_that("spatiotemporal creates Type IV specification", {
   for (i in 1:4) adj[i, i+1] <- adj[i+1, i] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "IV"
   )
@@ -36,7 +36,7 @@ test_that("spatiotemporal 'iid' normalizes to 'I'", {
   adj[2, 3] <- adj[3, 2] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     temporal = temporal_ar1("time"),
     type = "iid"
   )
@@ -61,7 +61,7 @@ test_that("spatiotemporal validates temporal specification", {
 
   expect_error(
     spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "site"),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
       temporal = list(type = "invalid"),
       type = "I"
     ),
@@ -75,7 +75,7 @@ test_that("spatiotemporal warns for non-shared effects", {
 
   expect_warning(
     spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "site"),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
       temporal = temporal_rw1("year"),
       type = "I",
       shared = FALSE
@@ -91,7 +91,7 @@ test_that("spatiotemporal warns for proper CAR with Type IV", {
 
   expect_warning(
     spatiotemporal(
-      spatial = spatial_car(adj, level = "group", group_var = "site", proper = TRUE),
+      spatial = spatial_car(adj, spatial_level = "group", group_var = "site", proper = TRUE),
       temporal = temporal_rw1("year"),
       type = "IV"
     ),
@@ -104,7 +104,7 @@ test_that("print.ratiod_spatiotemporal works", {
   for (i in 1:3) adj[i, i+1] <- adj[i+1, i] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw2("year"),
     type = "III"
   )
@@ -119,7 +119,7 @@ test_that("validate_spatiotemporal computes correct dimensions", {
   for (i in 1:3) adj[i, i+1] <- adj[i+1, i] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "I"
   )
@@ -143,7 +143,7 @@ test_that("build_st_index creates correct mappings", {
   adj[2, 3] <- adj[3, 2] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     temporal = temporal_rw1("time"),
     type = "I"
   )
@@ -170,7 +170,7 @@ test_that("prepare_spatiotemporal_for_hmc returns correct structure", {
   adj[2, 3] <- adj[3, 2] <- 1
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     temporal = temporal_rw1("time"),
     type = "II"
   )
@@ -213,7 +213,7 @@ st_gp_df <- function(S = 5L, T = 4L, seed = 123) {
 
 st_gp_spec <- function(S = 5L, coords = ~ lon + lat, ...) {
   spatiotemporal(
-    spatial = spatial_car(st_gp_adj(S), level = "group", group_var = "s"),
+    spatial = spatial_car(st_gp_adj(S), spatial_level = "group", group_var = "s"),
     temporal = temporal_rw1("year"),
     coords = coords,
     ...
@@ -237,7 +237,7 @@ test_that("the GP types need coordinates of their own", {
   for (type in c("separable", "nonsep_gp")) {
     expect_error(
       spatiotemporal(
-        spatial = spatial_car(st_gp_adj(3), level = "group", group_var = "s"),
+        spatial = spatial_car(st_gp_adj(3), spatial_level = "group", group_var = "s"),
         temporal = temporal_rw1("t"),
         type = type
       ),
@@ -370,7 +370,7 @@ test_that("all interaction types are supported", {
   adj <- matrix(0, 4, 4)
   for (i in 1:3) adj[i, i+1] <- adj[i+1, i] <- 1
 
-  spatial <- spatial_car(adj, level = "group", group_var = "s")
+  spatial <- spatial_car(adj, spatial_level = "group", group_var = "s")
   temporal <- temporal_rw1("t")
 
   for (type in c("I", "II", "III", "IV")) {

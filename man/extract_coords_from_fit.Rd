@@ -4,7 +4,7 @@
 \alias{extract_coords_from_fit}
 \title{Extract coordinates from ratiod_fit object}
 \usage{
-extract_coords_from_fit(fit)
+extract_coords_from_fit(object)
 }
 \description{
 Extract coordinates from ratiod_fit object

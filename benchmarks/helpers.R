@@ -107,10 +107,10 @@ benchmark_config <- function(row, family, re, spatial, temporal, zi, grad,
   nd_spatial <- NULL
   if (spatial == "ICAR") {
     adj <- create_adjacency(n_groups)
-    nd_spatial <- spatial_car(adj, level = "group", group_var = "group")
+    nd_spatial <- spatial_car(adj, spatial_level = "group", group_var = "group")
   } else if (spatial == "BYM2") {
     adj <- create_adjacency(n_groups)
-    nd_spatial <- spatial_bym2(adj, level = "group", group_var = "group")
+    nd_spatial <- spatial_bym2(adj, spatial_level = "group", group_var = "group")
   }
 
  # Temporal
@@ -123,22 +123,17 @@ benchmark_config <- function(row, family, re, spatial, temporal, zi, grad,
     nd_temporal <- temporal_ar1("time")
   }
 
-  # ZI
-  nd_zi <- NULL
-  if (zi == "ZI") {
-    # Add zeros to data
+  inflation_families <- list(
+    ZI = c(poisson_gamma = "ratiod_zi_poisson", negbin_negbin = "ratiod_zi_negbin"),
+    Hurdle = c(poisson_gamma = "ratiod_hurdle_poisson", negbin_negbin = "ratiod_hurdle_negbin")
+  )
+  if (zi %in% names(inflation_families)) {
     data$y_num <- ifelse(runif(nrow(data)) < 0.3, 0, data$y_num)
-    if (family == "poisson_gamma") {
-      nd_zi <- zi_poisson()
+    constructor <- inflation_families[[zi]][[family]]
+    nd_family <- if (family == "poisson_gamma") {
+      get(constructor)(denom_family = "gamma")
     } else {
-      nd_zi <- zi_negbin()
-    }
-  } else if (zi == "Hurdle") {
-    data$y_num <- ifelse(runif(nrow(data)) < 0.3, 0, data$y_num)
-    if (family == "poisson_gamma") {
-      nd_zi <- tulpaRatio::hurdle_poisson()
-    } else {
-      nd_zi <- tulpaRatio::hurdle_negbin()
+      get(constructor)()
     }
   }
 
@@ -149,7 +144,6 @@ benchmark_config <- function(row, family, re, spatial, temporal, zi, grad,
                     family = nd_family,
                     spatial = nd_spatial,
                     temporal = nd_temporal,
-                    zi = nd_zi,
                     control = list(iter = n_iter, warmup = n_warmup, chains = 1))
     })
     t["elapsed"]

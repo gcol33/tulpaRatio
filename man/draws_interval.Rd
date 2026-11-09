@@ -8,7 +8,7 @@
 draws_interval(
   object,
   ...,
-  .width = 0.95,
+  probs = 0.95,
   .point = c("median", "mean"),
   .interval = c("qi", "hdi")
 )
@@ -16,7 +16,7 @@ draws_interval(
 \method{draws_interval}{ratiod_fit}(
   object,
   ...,
-  .width = 0.95,
+  probs = 0.95,
   .point = c("median", "mean"),
   .interval = c("qi", "hdi")
 )
@@ -26,7 +26,7 @@ draws_interval(
 
 \item{...}{Parameter names to summarize (unquoted).}
 
-\item{.width}{Width(s) of credible intervals. Default 0.95.}
+\item{probs}{Width(s) of credible intervals. Default 0.95.}
 
 \item{.point}{Point estimate function: "median" (default) or "mean".}
 
@@ -70,7 +70,7 @@ fit <- tratio(
 draws_interval(fit, beta_num, beta_denom)
 
 # Multiple interval widths
-draws_interval(fit, beta_num, .width = c(0.5, 0.9, 0.95))
+draws_interval(fit, beta_num, probs = c(0.5, 0.9, 0.95))
 }
 
 }

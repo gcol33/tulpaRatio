@@ -56,7 +56,7 @@ test_that("spatiotemporal Type I fits with HMC backend", {
   )
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     temporal = temporal_rw1("time"),
     type = "I"
   )
@@ -93,7 +93,7 @@ test_that("spatiotemporal Type IV fits with HMC backend", {
   )
 
   st <- spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "site"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
     temporal = temporal_rw1("time"),
     type = "IV"
   )
@@ -224,7 +224,7 @@ test_that("proper CAR fits with HMC backend", {
     count | effort ~ 1 + (1 | site),
     data = df,
     family = ratiod_poisson_gamma(),
-    spatial = spatial_car(adj, level = "group", group_var = "site", proper = TRUE),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "site", proper = TRUE),
     mode = "hmc",
     control = list(iter = 50, warmup = 25, chains = 1, verbose = FALSE)
   )
@@ -257,7 +257,7 @@ test_that("BYM2 spatial fits with HMC backend", {
     count | effort ~ 1 + (1 | site),
     data = df,
     family = ratiod_poisson_gamma(),
-    spatial = spatial_bym2(adj, level = "group", group_var = "site"),
+    spatial = spatial_bym2(adj, spatial_level = "group", group_var = "site"),
     mode = "hmc",
     control = list(iter = 50, warmup = 25, chains = 1, verbose = FALSE)
   )

@@ -1,5 +1,5 @@
 // Joint NegBin-NegBin model with SHARED random effects + Hurdle
-// Matches numdenom ratiod_negbin_negbin() with (1|site) + zi=hurdle_negbin()
+// Matches numdenom ratiod_hurdle_negbin() with (1|site)
 // Row 47 in gradient_methods.md
 //
 // Hurdle NegBin for numerator:

@@ -8,7 +8,8 @@ ratiod_hurdle_negbin(
   link_num = "log",
   link_denom = "log",
   link_hurdle = "logit",
-  denom_family = "negbin"
+  denom_family = "negbin",
+  zi_formula = NULL
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ a gamma denominator also takes "identity" or "inverse".}
 "gamma" for continuous effort, or "fixed" for a known exposure. A known
 exposure is data: it scales the count mean, which is then the rate times
 the exposure, and the ratio is the rate.}
+
+\item{zi_formula}{Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.}
 }
 \value{
 A \code{ratiod_family} object with hurdle structure

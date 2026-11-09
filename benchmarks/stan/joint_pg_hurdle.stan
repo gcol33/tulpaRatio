@@ -1,5 +1,5 @@
 // Joint Poisson-Gamma model with SHARED random effects + Hurdle
-// Matches numdenom ratiod_poisson_gamma() with (1|site) + zi=hurdle_poisson()
+// Matches numdenom ratiod_hurdle_poisson() with (1|site)
 // Row 17 in gradient_methods.md
 //
 // KEY INSIGHT: Hurdle applies to numerator (count) only, denom (effort) is Gamma

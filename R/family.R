@@ -282,8 +282,8 @@ ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
 #' (`"gamma"`). A known exposure is data: it scales the count mean, which is
 #' then the rate times the exposure, and the ratio is the rate. This is the
 #' disease-mapping model of observed cases over a population or an expected
-#' count. The zero-inflated and hurdle counterparts are [ratiod_zipois()],
-#' [ratiod_zinegbin()], [ratiod_hurdle_pois()] and [ratiod_hurdle_negbin()].
+#' count. The zero-inflated and hurdle counterparts are [ratiod_zi_poisson()],
+#' [ratiod_zi_negbin()], [ratiod_hurdle_poisson()] and [ratiod_hurdle_negbin()].
 #'
 #' `ratiod_poisson(denom_family = "gamma")` is [ratiod_poisson_gamma()],
 #' `ratiod_negbin(denom_family = "negbin")` is [ratiod_negbin_negbin()] and

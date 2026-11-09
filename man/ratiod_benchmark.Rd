@@ -10,11 +10,12 @@ ratiod_benchmark(
   p = 3,
   n_groups = 0,
   family = ratiod_negbin_negbin(),
-  n_iter = 1000,
-  n_warmup = 500,
-  n_chains = 1,
-  n_threads = 1,
-  verbose = FALSE
+  iter = 1000,
+  warmup = 500,
+  chains = 1,
+  cores = 1,
+  verbose = FALSE,
+  seed = 42
 )
 
 \method{print}{ratiod_benchmark}(x, ...)
@@ -28,15 +29,17 @@ ratiod_benchmark(
 
 \item{family}{Model family (default: ratiod_negbin_negbin())}
 
-\item{n_iter}{Total iterations}
+\item{iter}{Total iterations}
 
-\item{n_warmup}{Warmup iterations}
+\item{warmup}{Warmup iterations}
 
-\item{n_chains}{Number of chains}
+\item{chains}{Number of chains}
 
-\item{n_threads}{Number of threads per chain}
+\item{cores}{Number of cores for parallel chains}
 
 \item{verbose}{Print progress (default: FALSE)}
+
+\item{seed}{Seed used for simulation and fitting. Default 42. The caller's RNG state is restored.}
 
 \item{x}{A ratiod_benchmark object}
 
@@ -54,7 +57,7 @@ Fits a model on simulated data and reports timing and performance metrics.
 \examples{
 \donttest{
 # Quick benchmark
-bench <- ratiod_benchmark(N = 100, p = 3, n_iter = 200, n_warmup = 100)
+bench <- ratiod_benchmark(N = 100, p = 3, iter = 200, warmup = 100)
 print(bench)
 }
 

@@ -6,7 +6,7 @@
 \usage{
 spatial_bym2(
   adjacency,
-  level = c("group", "obs"),
+  spatial_level = c("group", "obs"),
   group_var = NULL,
   shared = TRUE,
   scale_factor = NULL,
@@ -17,7 +17,7 @@ spatial_bym2(
 \item{adjacency}{Adjacency matrix (sparse or dense). A symmetric matrix
 where entry (i,j) is 1 if areas i and j are neighbors, 0 otherwise.}
 
-\item{level}{Level at which spatial structure applies:
+\item{spatial_level}{Level at which spatial structure applies:
 \itemize{
 \item \code{"group"}: Spatial effect at the grouping variable level (e.g., sites).
 Requires \code{group_var} to be specified.
@@ -25,7 +25,7 @@ Requires \code{group_var} to be specified.
 }}
 
 \item{group_var}{Name of the grouping variable in data (required if
-\code{level = "group"}).}
+\code{spatial_level = "group"}).}
 
 \item{shared}{Logical; if TRUE (default), spatial effect enters both
 numerator and denominator linear predictors identically.}
@@ -61,7 +61,7 @@ for (i in 1:9) {
 }
 
 # Create BYM2 spatial structure
-bym2 <- spatial_bym2(adj, level = "group", group_var = "region")
+bym2 <- spatial_bym2(adj, spatial_level = "group", group_var = "region")
 print(bym2)
 
 \donttest{
@@ -78,7 +78,7 @@ epi_data <- data.frame(
 # Disease mapping with BYM2 spatial smoothing
 fit <- tratio(
   cases | population ~ age,
-  spatial = spatial_bym2(adj, level = "group", group_var = "region"),
+  spatial = spatial_bym2(adj, spatial_level = "group", group_var = "region"),
   data = epi_data,
   family = ratiod_binomial(),
   mode = "laplace"

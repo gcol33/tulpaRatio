@@ -167,7 +167,7 @@ for (i in 1:9) adj[i, i+1] <- adj[i+1, i] <- 1
 
 # Type I: Unstructured interaction
 st1 <- spatiotemporal(
-  spatial = spatial_car(adj, level = "group", group_var = "region"),
+  spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
   temporal = temporal_rw1("year"),
   type = "I"
 )
@@ -175,7 +175,7 @@ print(st1)
 
 # Type IV: Fully structured interaction
 st4 <- spatiotemporal(
-  spatial = spatial_car(adj, level = "group", group_var = "region"),
+  spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
   temporal = temporal_rw1("year"),
   type = "IV"
 )
@@ -200,7 +200,7 @@ fit <- tratio(
   data = df,
   family = ratiod_poisson_gamma(),
   spatiotemporal = spatiotemporal(
-    spatial = spatial_car(adj, level = "group", group_var = "region"),
+    spatial = spatial_car(adj, spatial_level = "group", group_var = "region"),
     temporal = temporal_rw1("year"),
     type = "IV"
   ),

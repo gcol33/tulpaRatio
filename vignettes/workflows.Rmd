@@ -211,7 +211,7 @@ camera_data$detections <- rbinom(
 ```{r}
 fit_detection <- tratio(
   detections | nights_active ~ vegetation,
-  spatial = spatial_car(adj, level = "group", group_var = "camera"),
+  spatial = spatial_car(adj, spatial_level = "group", group_var = "camera"),
   data = camera_data,
   family = ratiod_binomial(),
   mode = "hmc",

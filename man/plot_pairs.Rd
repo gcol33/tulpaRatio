@@ -5,7 +5,7 @@
 \title{Plot Bivariate Parameter Posteriors (Pairs Plot)}
 \usage{
 plot_pairs(
-  fit,
+  object,
   pars = NULL,
   highlight_divergent = TRUE,
   n_pars = 5,
@@ -13,7 +13,7 @@ plot_pairs(
 )
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{pars}{Character vector of parameter names. If NULL, selects main
 variance parameters.}

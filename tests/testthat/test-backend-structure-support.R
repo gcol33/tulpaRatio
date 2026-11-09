@@ -237,10 +237,8 @@ test_that("mode = 'structured' refuses a structure Laplace cannot carry", {
   df <- structure_test_data()
 
   expect_error(
-    tratio(successes | trials ~ x, data = df, family = ratiod_binomial(),
-           zi = zi_binomial(), mode = "structured",
-           control = list(verbose = FALSE)),
-    "`zi`"
+    tratio(successes | trials ~ x, data = df, family = ratiod_zi_binomial(), mode = "structured", control = list(verbose = FALSE)),
+    "zero/one inflation"
   )
 })
 
@@ -283,7 +281,7 @@ test_that("PG fits a multi-scale temporal model", {
 
   expect_s3_class(fit, "ratiod_fit")
   expect_equal(fit$backend, "pg")
-  expect_true("sigma2_trend" %in% dimnames(fit$draws)$variable)
+  expect_true("sigma_trend" %in% dimnames(fit$draws)$variable)
   expect_equal(ncol(fit$.internal$temporal_draws$trend), 6L)
   expect_true(all(is.finite(fit$.internal$temporal_draws$trend)))
 })

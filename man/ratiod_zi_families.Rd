@@ -24,6 +24,6 @@ Two model types are available:
 }
 }
 \examples{
-ratiod_zipois()
+ratiod_zi_poisson()
 ratiod_hurdle_negbin()
 }

@@ -89,9 +89,8 @@ test_that("coef(), vcov() and summary() cover a zero-inflated binomial fit", {
   detect <- data.frame(detected = ifelse(runif(n) < 0.3, 0, rbinom(n, 10, 0.4)),
                        trials = 10,
                        habitat = factor(rep(c("forest", "grassland"), each = n / 2)))
-  fit <- tratio(detected | trials ~ habitat, zi = zi_binomial(~ habitat),
-                data = detect, family = ratiod_zibinomial(),
-                control = list(iter = 200, chains = 1, seed = 1))
+  fit <- tratio(detected | trials ~ habitat, data = detect, family = ratiod_zi_binomial(zi_formula = ~habitat),
+    control = list(iter = 200, chains = 1, seed = 1))
   expect_named(coef(fit), c("num:(Intercept)", "num:habitatgrassland"))
   expect_equal(dim(vcov(fit)), c(2L, 2L))
   expect_output(print(summary(fit)), "Zero/one inflation")

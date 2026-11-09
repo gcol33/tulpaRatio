@@ -4,10 +4,10 @@
 \alias{plot_diagnostics}
 \title{Diagnostic Plotting Functions for ratio Models}
 \usage{
-plot_diagnostics(fit, pars = NULL)
+plot_diagnostics(object, pars = NULL)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{pars}{Character vector of parameter names for trace plot. If NULL,
 uses the parameter with worst Rhat.}

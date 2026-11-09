@@ -78,7 +78,7 @@ test_that("RW1 recovers the intercept and slope with calibrated intervals", {
 test_that("ICAR combined with RW1 recovers the intercept", {
   skip_on_cran()
   skip_if_not_installed("posterior")
-  r <- fit_one(sim_data(11), spatial = spatial_car(grid_adj(50), level = "group",
+  r <- fit_one(sim_data(11), spatial = spatial_car(grid_adj(50), spatial_level = "group",
                                                    group_var = "spatial_site"),
                temporal = temporal_rw1("time"))
   expect_lt(r$intercept$rhat, 1.05)
@@ -234,7 +234,7 @@ test_that("a spatiotemporal interaction recovers the intercept", {
   df <- sim_data(11, S = 9, TT = 5)
   r <- fit_one(df,
                spatiotemporal = spatiotemporal(
-                 spatial = spatial_car(grid_adj(9), level = "group",
+                 spatial = spatial_car(grid_adj(9), spatial_level = "group",
                                        group_var = "spatial_site"),
                  temporal = temporal_rw1("time"),
                  type = "IV",
@@ -283,7 +283,7 @@ test_that("proper CAR recovers rho and the intercept (gcol33/tulpaRatio#31)", {
   # so NUTS adapts a generic one from scratch; a longer warmup (rather than a
   # seed pick) is what buys reliable convergence on rho/tau's slower geometry.
   f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
-             spatial = spatial_car(A, level = "group", group_var = "site", proper = TRUE),
+             spatial = spatial_car(A, spatial_level = "group", group_var = "site", proper = TRUE),
              mode = "hmc",
              control = list(iter = 2000, warmup = 1500, chains = 4, seed = 5,
                             verbose = FALSE))
@@ -339,7 +339,7 @@ test_that("a spatial-only model reaches a sampler that reports its chains", {
   # them too.
   df <- sim_data(11)
   f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
-              spatial = spatial_car(grid_adj(50), level = "group",
+              spatial = spatial_car(grid_adj(50), spatial_level = "group",
                                     group_var = "spatial_site"),
               control = list(iter = 1000, warmup = 500, chains = 4, verbose = FALSE))
   expect_identical(as.integer(f$chains), 4L)
@@ -412,7 +412,7 @@ test_that("the collapsed ICAR marginal agrees with the sampled one on tau", {
     set.seed(7)
     f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
                 mode = "hmc",
-                spatial = spatial_car(A, level = "group", group_var = "site",
+                spatial = spatial_car(A, spatial_level = "group", group_var = "site",
                                       parameterization = parameterization),
                 control = list(iter = 2000, warmup = 1000, chains = 4,
                                verbose = FALSE))
@@ -532,7 +532,7 @@ test_that("centring a proper CAR field moves the level onto the intercept", {
 
   fit <- function(center) {
     f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(), mode = "hmc",
-                spatial = spatial_car(A, level = "group", group_var = "site",
+                spatial = spatial_car(A, spatial_level = "group", group_var = "site",
                                       proper = TRUE, center = center),
                 control = list(iter = 2000, warmup = 1500, chains = 4, seed = 5,
                                verbose = FALSE))
@@ -566,7 +566,7 @@ test_that("centring a proper CAR field moves the level onto the intercept", {
 
   # An intrinsic field has no such choice: its mean is unidentified until it is
   # removed, so there is no model on the other side of the switch.
-  expect_error(spatial_car(A, level = "group", group_var = "site", center = FALSE),
+  expect_error(spatial_car(A, spatial_level = "group", group_var = "site", center = FALSE),
                "proper = TRUE")
 })
 

@@ -110,7 +110,7 @@ test_that("prepare_spatial_for_laplace extracts adjacency structure", {
     site = factor(rep(1:n_sites, each = n_per_site))
   )
 
-  spatial <- spatial_car(adj, level = "group", group_var = "site")
+  spatial <- spatial_car(adj, spatial_level = "group", group_var = "site")
 
   # Need a formula for prepare_spatial_for_laplace
   formula <- ratiod_formula(count | effort ~ 1, data = df)

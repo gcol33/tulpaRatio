@@ -27,7 +27,7 @@ test_that("centred and non-centred interactions give the same tau", {
       fit <- suppressWarnings(tratio(
         count | effort ~ x, data = d$df, family = ratiod_poisson_gamma(),
         spatiotemporal = spatiotemporal(
-          spatial = spatial_car(d$adj, level = "group", group_var = "region"),
+          spatial = spatial_car(d$adj, spatial_level = "group", group_var = "region"),
           temporal = temporal_rw1("year"), type = ty, parameterization = par),
         control = list(iter = 1000, chains = 2, seed = 1)))
       as.matrix(fit$draws)[, "tau_st"]

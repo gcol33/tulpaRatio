@@ -252,7 +252,7 @@ test_that("summary.ratiod_fit respects prob argument", {
   )
 
   # This should not error with different prob values
-  output90 <- capture.output(summary(fit, prob = 0.90))
+  output90 <- capture.output(summary(fit, probs = 0.90))
   expect_true(any(grepl("5%", output90)) || any(grepl("95%", output90)))
 })
 
@@ -328,7 +328,7 @@ test_that("check_diagnostics works", {
     control = list(iter = 100, warmup = 50, chains = 1)
   )
 
-  result <- check_diagnostics(fit, quiet = TRUE)
+  result <- check_diagnostics(fit, verbose = FALSE)
 
   expect_true(is.list(result))
   expect_true("ok" %in% names(result))
@@ -356,7 +356,7 @@ test_that("check_diagnostics prints output", {
     control = list(iter = 100, warmup = 50, chains = 1)
   )
 
-  output <- capture.output(check_diagnostics(fit, quiet = FALSE))
+  output <- capture.output(check_diagnostics(fit, verbose = TRUE))
   expect_true(any(grepl("Diagnostic Check", output)))
 })
 

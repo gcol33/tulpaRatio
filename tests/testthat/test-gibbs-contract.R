@@ -24,7 +24,7 @@ gibbs_test_data <- function(n = 300, n_sites = 25) {
 
 gibbs_fit <- function(d, chains = 4, seed = 99, spatial = NULL) {
   if (is.null(spatial)) {
-    spatial <- spatial_car(d$adj, level = "group", group_var = "spatial_site")
+    spatial <- spatial_car(d$adj, spatial_level = "group", group_var = "spatial_site")
   }
   tratio(y | trials ~ x + (1 | site), data = d$df,
          family = ratiod_binomial(), spatial = spatial,
@@ -139,7 +139,7 @@ test_that("the intercept mixes under a spatial field", {
 
   # Measured on this fit: 76 before the field was identified against the
   # intercept, 212 after (#13).
-  expect_gt(intercept_ess(spatial_car(d$adj, level = "group", group_var = "site"), 1000, 500), 120)
+  expect_gt(intercept_ess(spatial_car(d$adj, spatial_level = "group", group_var = "site"), 1000, 500), 120)
 })
 
 test_that("a single-chain fit keeps the contract", {
@@ -155,7 +155,7 @@ test_that("Gibbs agrees with HMC on an ICAR model", {
   skip_on_cran()
   skip_if_not_installed("posterior")
   d <- gibbs_field_data()
-  car <- spatial_car(d$adj, level = "group", group_var = "site")
+  car <- spatial_car(d$adj, spatial_level = "group", group_var = "site")
   fit_mode <- function(mode) {
     tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
            spatial = car, mode = mode,
@@ -175,7 +175,7 @@ test_that("Gibbs agrees with HMC on a BYM2 model, and auto mode picks it", {
   # iterations (#133).
   skip_on_cran()
   d <- gibbs_field_data()
-  bym <- spatial_bym2(d$adj, level = "group", group_var = "site")
+  bym <- spatial_bym2(d$adj, spatial_level = "group", group_var = "site")
   fit_mode <- function(mode) {
     tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
            spatial = bym, mode = mode,

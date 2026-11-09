@@ -6,7 +6,7 @@
 \usage{
 spatial_car(
   adjacency,
-  level = c("group", "obs"),
+  spatial_level = c("group", "obs"),
   group_var = NULL,
   proper = FALSE,
   shared = TRUE,
@@ -18,7 +18,7 @@ spatial_car(
 \item{adjacency}{Adjacency matrix (sparse or dense). A symmetric matrix
 where entry (i,j) is 1 if areas i and j are neighbors, 0 otherwise.}
 
-\item{level}{Level at which spatial structure applies:
+\item{spatial_level}{Level at which spatial structure applies:
 \itemize{
 \item \code{"group"}: Spatial effect at the grouping variable level (e.g., sites).
 Requires \code{group_var} to be specified.
@@ -26,7 +26,7 @@ Requires \code{group_var} to be specified.
 }}
 
 \item{group_var}{Name of the grouping variable in data (required if
-\code{level = "group"}).}
+\code{spatial_level = "group"}).}
 
 \item{proper}{Logical; if FALSE (default), uses Intrinsic CAR (ICAR) with
 rho = 1 fixed. If TRUE, uses proper CAR with rho estimated. See Details.}
@@ -99,11 +99,11 @@ for (i in 1:9) {
 }
 
 # ICAR (default, rho = 1 fixed)
-icar <- spatial_car(adj, level = "group", group_var = "site")
+icar <- spatial_car(adj, spatial_level = "group", group_var = "site")
 print(icar)
 
 # Proper CAR (rho estimated)
-proper_car <- spatial_car(adj, level = "group", group_var = "site",
+proper_car <- spatial_car(adj, spatial_level = "group", group_var = "site",
                           proper = TRUE)
 print(proper_car)
 
@@ -124,7 +124,7 @@ fit_icar <- tratio(
   count | effort ~ x,
   data = df,
   family = ratiod_poisson_gamma(),
-  spatial = spatial_car(adj, level = "group", group_var = "site"),
+  spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
   mode = "hmc",
   control = list(iter = 400, chains = 1, seed = 1)
 )
@@ -134,7 +134,7 @@ fit_car <- tratio(
   count | effort ~ x,
   data = df,
   family = ratiod_poisson_gamma(),
-  spatial = spatial_car(adj, level = "group", group_var = "site",
+  spatial = spatial_car(adj, spatial_level = "group", group_var = "site",
                         proper = TRUE),
   mode = "hmc",
   control = list(iter = 400, chains = 1, seed = 1)

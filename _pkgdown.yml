@@ -65,22 +65,13 @@ reference:
   - ratiod_gamma_gamma
   - ratiod_lognormal
   - ratiod_hurdle_negbin
-  - ratiod_hurdle_pois
+  - ratiod_hurdle_poisson
   - ratiod_hurdle_binomial
-  - ratiod_zinegbin
-  - ratiod_zipois
-  - ratiod_zibinomial
-  - ratiod_oibinomial
-  - ratiod_zoibinomial
-  - hurdle_negbin
-  - hurdle_poisson
-  - hurdle_binomial
-  - zi_negbin
-  - zi_poisson
-  - zi_binomial
-  - oi_binomial
-  - zoib
-  - zi_specification
+  - ratiod_zi_negbin
+  - ratiod_zi_poisson
+  - ratiod_zi_binomial
+  - ratiod_oi_binomial
+  - ratiod_zoi_binomial
 - title: Ratio Inference
   desc: Extract and compare ratio posteriors
   contents:

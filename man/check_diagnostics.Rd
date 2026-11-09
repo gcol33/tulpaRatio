@@ -4,12 +4,12 @@
 \alias{check_diagnostics}
 \title{Check MCMC Diagnostics and Report Problems}
 \usage{
-check_diagnostics(fit, quiet = FALSE)
+check_diagnostics(object, verbose = TRUE)
 }
 \arguments{
-\item{fit}{A ratiod_fit object}
+\item{object}{A ratiod_fit object}
 
-\item{quiet}{Logical; if TRUE, suppress output and just return status.}
+\item{verbose}{Logical; if TRUE, print the diagnostic status.}
 }
 \value{
 Invisibly returns a list with diagnostic status:

@@ -1,5 +1,5 @@
 // Joint Poisson-Gamma model with SHARED random effects + Zero-Inflation
-// Matches numdenom ratiod_poisson_gamma() with (1|site) + zi=zi_poisson()
+// Matches numdenom ratiod_zi_poisson() with (1|site)
 // Row 16 in gradient_methods.md
 //
 // KEY INSIGHT: ZI applies to numerator (count) only, denom (effort) is Gamma

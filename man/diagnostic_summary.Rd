@@ -5,12 +5,12 @@
 \alias{print.ratiod_diagnostic_summary}
 \title{Diagnostic Summary of a Fitted Ratio Model}
 \usage{
-diagnostic_summary(fit)
+diagnostic_summary(object)
 
 \method{print}{ratiod_diagnostic_summary}(x, ...)
 }
 \arguments{
-\item{fit}{A \code{ratiod_fit} object.}
+\item{object}{A \code{ratiod_fit} object.}
 
 \item{x}{A ratiod_diagnostic_summary object.}
 

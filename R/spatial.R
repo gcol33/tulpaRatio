@@ -23,12 +23,12 @@ NULL
 #'
 #' @param adjacency Adjacency matrix (sparse or dense). A symmetric matrix
 #'   where entry (i,j) is 1 if areas i and j are neighbors, 0 otherwise.
-#' @param level Level at which spatial structure applies:
+#' @param spatial_level Level at which spatial structure applies:
 #'   - `"group"`: Spatial effect at the grouping variable level (e.g., sites).
 #'     Requires `group_var` to be specified.
 #'   - `"obs"`: Spatial effect at the observation level.
 #' @param group_var Name of the grouping variable in data (required if
-#'   `level = "group"`).
+#'   `spatial_level = "group"`).
 #' @param proper Logical; if FALSE (default), uses Intrinsic CAR (ICAR) with
 #'   rho = 1 fixed. If TRUE, uses proper CAR with rho estimated. See Details.
 #' @param shared Logical; if TRUE (default), spatial effect enters both
@@ -90,11 +90,11 @@ NULL
 #' }
 #'
 #' # ICAR (default, rho = 1 fixed)
-#' icar <- spatial_car(adj, level = "group", group_var = "site")
+#' icar <- spatial_car(adj, spatial_level = "group", group_var = "site")
 #' print(icar)
 #'
 #' # Proper CAR (rho estimated)
-#' proper_car <- spatial_car(adj, level = "group", group_var = "site",
+#' proper_car <- spatial_car(adj, spatial_level = "group", group_var = "site",
 #'                           proper = TRUE)
 #' print(proper_car)
 #'
@@ -115,7 +115,7 @@ NULL
 #'   count | effort ~ x,
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   spatial = spatial_car(adj, level = "group", group_var = "site"),
+#'   spatial = spatial_car(adj, spatial_level = "group", group_var = "site"),
 #'   mode = "hmc",
 #'   control = list(iter = 400, chains = 1, seed = 1)
 #' )
@@ -125,7 +125,7 @@ NULL
 #'   count | effort ~ x,
 #'   data = df,
 #'   family = ratiod_poisson_gamma(),
-#'   spatial = spatial_car(adj, level = "group", group_var = "site",
+#'   spatial = spatial_car(adj, spatial_level = "group", group_var = "site",
 #'                         proper = TRUE),
 #'   mode = "hmc",
 #'   control = list(iter = 400, chains = 1, seed = 1)
@@ -139,12 +139,12 @@ NULL
 #'   [spatial_gp()] for continuous spatial effects
 #'
 #' @export
-spatial_car <- function(adjacency, level = c("group", "obs"),
+spatial_car <- function(adjacency, spatial_level = c("group", "obs"),
                         group_var = NULL, proper = FALSE, shared = TRUE,
                         parameterization = c("standard", "collapsed"),
                         center = TRUE) {
 
-  level <- match.arg(level)
+  spatial_level <- match.arg(spatial_level)
   parameterization <- match.arg(parameterization)
 
   if (!is.logical(center) || length(center) != 1 || is.na(center)) {
@@ -176,9 +176,9 @@ spatial_car <- function(adjacency, level = c("group", "obs"),
     stop("`adjacency` must be symmetric", call. = FALSE)
   }
 
-  # Check for group_var if level = "group"
-  if (level == "group" && is.null(group_var)) {
-    stop("`group_var` is required when level = 'group'", call. = FALSE)
+  # Check for group_var if spatial_level = "group"
+  if (spatial_level == "group" && is.null(group_var)) {
+    stop("`group_var` is required when spatial_level = 'group'", call. = FALSE)
   }
 
   # Collapsed not supported with proper CAR
@@ -213,7 +213,7 @@ spatial_car <- function(adjacency, level = c("group", "obs"),
     list(
       type = if (proper) "car_proper" else "car",
       adjacency = adjacency,
-      level = level,
+      spatial_level = spatial_level,
       group_var = group_var,
       proper = proper,
       rho_bounds = rho_bounds,
@@ -325,7 +325,7 @@ compute_car_rho_bounds <- function(adjacency) {
 #' }
 #'
 #' # Create BYM2 spatial structure
-#' bym2 <- spatial_bym2(adj, level = "group", group_var = "region")
+#' bym2 <- spatial_bym2(adj, spatial_level = "group", group_var = "region")
 #' print(bym2)
 #'
 #' \donttest{
@@ -342,7 +342,7 @@ compute_car_rho_bounds <- function(adjacency) {
 #' # Disease mapping with BYM2 spatial smoothing
 #' fit <- tratio(
 #'   cases | population ~ age,
-#'   spatial = spatial_bym2(adj, level = "group", group_var = "region"),
+#'   spatial = spatial_bym2(adj, spatial_level = "group", group_var = "region"),
 #'   data = epi_data,
 #'   family = ratiod_binomial(),
 #'   mode = "laplace"
@@ -351,12 +351,12 @@ compute_car_rho_bounds <- function(adjacency) {
 #' }
 #'
 #' @export
-spatial_bym2 <- function(adjacency, level = c("group", "obs"),
+spatial_bym2 <- function(adjacency, spatial_level = c("group", "obs"),
                          group_var = NULL, shared = TRUE,
                          scale_factor = NULL,
                          parameterization = c("standard", "collapsed")) {
 
-  level <- match.arg(level)
+  spatial_level <- match.arg(spatial_level)
   parameterization <- match.arg(parameterization)
 
   # Validate adjacency matrix
@@ -372,8 +372,8 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
     stop("`adjacency` must be symmetric", call. = FALSE)
   }
 
-  if (level == "group" && is.null(group_var)) {
-    stop("`group_var` is required when level = 'group'", call. = FALSE)
+  if (spatial_level == "group" && is.null(group_var)) {
+    stop("`group_var` is required when spatial_level = 'group'", call. = FALSE)
   }
 
   # Scale factor per connected component (tulpa's Riebler scaling): the
@@ -407,7 +407,7 @@ spatial_bym2 <- function(adjacency, level = c("group", "obs"),
     list(
       type = "bym2",
       adjacency = adjacency,
-      level = level,
+      spatial_level = spatial_level,
       group_var = group_var,
       shared = shared,
       parameterization = parameterization,
@@ -503,7 +503,7 @@ print.ratiod_spatial <- function(x, ...) {
     toupper(x$type)
   )
   cat("Type:", type_name, "\n")
-  cat("Level:", x$level, "\n")
+  cat("Level:", x$spatial_level, "\n")
   cat("Spatial units:", x$n_spatial, "\n")
   cat_shared(x$shared)
 
@@ -2175,7 +2175,7 @@ validate_areal_groups <- function(spatial, data) {
         n_groups, spatial$n_spatial
       ), call. = FALSE)
     }
-  } else if (identical(spatial$level, "obs")) {
+  } else if (identical(spatial$spatial_level, "obs")) {
     # Observation-level spatial
     if (nrow(data) != spatial$n_spatial) {
       stop(sprintf(

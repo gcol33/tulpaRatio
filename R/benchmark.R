@@ -17,18 +17,19 @@ NULL
 #' @param p Number of predictors
 #' @param n_groups Number of random effect groups (0 for none)
 #' @param family Model family (default: ratiod_negbin_negbin())
-#' @param n_iter Total iterations
-#' @param n_warmup Warmup iterations
-#' @param n_chains Number of chains
-#' @param n_threads Number of threads per chain
+#' @param iter Total iterations
+#' @param warmup Warmup iterations
+#' @param chains Number of chains
+#' @param cores Number of cores for parallel chains
 #' @param verbose Print progress (default: FALSE)
+#' @param seed Seed used for simulation and fitting. Default 42. The caller's RNG state is restored.
 #'
 #' @return A list with timing and diagnostic information
 #'
 #' @examples
 #' \donttest{
 #' # Quick benchmark
-#' bench <- ratiod_benchmark(N = 100, p = 3, n_iter = 200, n_warmup = 100)
+#' bench <- ratiod_benchmark(N = 100, p = 3, iter = 200, warmup = 100)
 #' print(bench)
 #' }
 #'
@@ -38,15 +39,26 @@ ratiod_benchmark <- function(
     p = 3,
     n_groups = 0,
     family = ratiod_negbin_negbin(),
-    n_iter = 1000,
-    n_warmup = 500,
-    n_chains = 1,
-    n_threads = 1,
-    verbose = FALSE
+    iter = 1000,
+    warmup = 500,
+    chains = 1,
+    cores = 1,
+    verbose = FALSE,
+    seed = 42
 ) {
 
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  on.exit({
+    if (had_seed) {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+      rm(".Random.seed", envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+  if (!is.null(seed)) set.seed(seed)
+
   # Generate simulated data
-  set.seed(42)
   X <- cbind(1, matrix(rnorm(N * (p - 1)), nrow = N))
 
   # True parameters
@@ -106,14 +118,15 @@ ratiod_benchmark <- function(
     formula,
     data = df,
     family = family,
-    control = list(iter = n_iter, warmup = n_warmup, chains = n_chains)
+    control = list(iter = iter, warmup = warmup, chains = chains,
+                   cores = cores, verbose = verbose)
   )
 
   end_time <- Sys.time()
   elapsed <- as.numeric(difftime(end_time, start_time, units = "secs"))
 
   # Compute metrics
-  n_samples <- (n_iter - n_warmup) * n_chains
+  n_samples <- (iter - warmup) * chains
   samples_per_sec <- n_samples / elapsed
   n_params <- ncol(fit$draws)
 
@@ -130,10 +143,11 @@ ratiod_benchmark <- function(
       N = N,
       p = p,
       n_groups = n_groups,
-      n_iter = n_iter,
-      n_warmup = n_warmup,
-      n_chains = n_chains,
-      n_threads = n_threads,
+      iter = iter,
+      warmup = warmup,
+      chains = chains,
+      cores = cores,
+      seed = seed,
       n_params = n_params
     ),
 
@@ -141,7 +155,7 @@ ratiod_benchmark <- function(
     timing = list(
       elapsed_seconds = elapsed,
       samples_per_second = samples_per_sec,
-      iterations_per_second = n_iter * n_chains / elapsed
+      iterations_per_second = iter * chains / elapsed
     ),
 
     # Diagnostics
@@ -169,9 +183,9 @@ print.ratiod_benchmark <- function(x, ...) {
   cat(sprintf("  Predictors:     %d\n", x$config$p))
   cat(sprintf("  RE groups:      %d\n", x$config$n_groups))
   cat(sprintf("  Parameters:     %d\n", x$config$n_params))
-  cat(sprintf("  Iterations:     %d (%d warmup)\n", x$config$n_iter, x$config$n_warmup))
-  cat(sprintf("  Chains:         %d\n", x$config$n_chains))
-  cat(sprintf("  Threads:        %d\n", x$config$n_threads))
+  cat(sprintf("  Iterations:     %d (%d warmup)\n", x$config$iter, x$config$warmup))
+  cat(sprintf("  Chains:         %d\n", x$config$chains))
+  cat(sprintf("  Cores:          %d\n", x$config$cores))
 
   cat("\nTiming:\n")
   cat(sprintf("  Total time:     %.1f seconds\n", x$timing$elapsed_seconds))
@@ -194,9 +208,11 @@ print.ratiod_benchmark <- function(x, ...) {
 #' Run benchmarks across multiple configurations to compare performance.
 #'
 #' @param configs A list of configuration lists, each with N, p, n_groups
-#' @param n_iter Iterations per benchmark
-#' @param n_warmup Warmup iterations
-#' @param n_threads Number of threads
+#' @param iter Iterations per benchmark
+#' @param warmup Warmup iterations
+#' @param cores Number of cores for parallel chains
+#' @param chains Number of chains
+#' @param seed Seed used for each configuration. The caller's RNG state is restored.
 #'
 #' @return A data frame with benchmark results
 #'
@@ -207,16 +223,18 @@ print.ratiod_benchmark <- function(x, ...) {
 #'   list(N = 50, p = 2, n_groups = 0),
 #'   list(N = 100, p = 2, n_groups = 0)
 #' )
-#' comparison <- ratiod_benchmark_compare(configs, n_iter = 200, n_warmup = 100)
+#' comparison <- ratiod_benchmark_compare(configs, iter = 200, warmup = 100)
 #' print(comparison)
 #' }
 #'
 #' @export
 ratiod_benchmark_compare <- function(
     configs,
-    n_iter = 500,
-    n_warmup = 250,
-    n_threads = 1
+    iter = 500,
+    warmup = 250,
+    cores = 1,
+    chains = 1,
+    seed = 42
 ) {
 
   results <- lapply(configs, function(cfg) {
@@ -224,9 +242,11 @@ ratiod_benchmark_compare <- function(
       N = cfg$N,
       p = cfg$p,
       n_groups = cfg$n_groups %||% 0,
-      n_iter = n_iter,
-      n_warmup = n_warmup,
-      n_threads = n_threads,
+      iter = iter,
+      warmup = warmup,
+      cores = cores,
+      chains = chains,
+      seed = seed,
       verbose = FALSE
     )
 

@@ -4,7 +4,15 @@
 \alias{zi_count_family}
 \title{Build a zero-inflated or hurdle count family}
 \usage{
-zi_count_family(base, type, denom_family, link_num, link_denom, link_inflation)
+zi_count_family(
+  base,
+  type,
+  denom_family,
+  link_num,
+  link_denom,
+  link_inflation,
+  zi_formula
+)
 }
 \arguments{
 \item{base}{Count distribution: "poisson" or "neg_binomial_2".}

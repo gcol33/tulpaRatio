@@ -40,9 +40,9 @@ test_that("loo() and posterior_predict() run on zero-inflated fits", {
   d$k[1:8] <- 0L
   d$k[9:14] <- 8L
   fits <- list(
-    zipois = tratio(y | e ~ x, data = d, family = ratiod_zipois(),
+    zipois = tratio(y | e ~ x, data = d, family = ratiod_zi_poisson(),
                     control = list(iter = 300, chains = 1, seed = 1)),
-    zoib = tratio(k | trials ~ x, data = d, family = ratiod_zoibinomial(),
+    zoib = tratio(k | trials ~ x, data = d, family = ratiod_zoi_binomial(),
                   control = list(iter = 300, chains = 1, seed = 1))
   )
   for (nm in names(fits)) {
@@ -65,11 +65,8 @@ test_that("a hurdle fit has no region where the truncation adds mass", {
   d <- data.frame(site = factor(rep(1:12, each = 10)),
                   habitat = factor(rep(c("a", "b"), 60)), trials = 10L)
   d$detected <- ifelse(runif(n) < 0.7, pmax(1L, rbinom(n, 10, 0.4)), 0L)
-  fit <- tratio(detected | trials ~ habitat + (1 | site),
-                zi = hurdle_binomial(~ habitat), data = d,
-                family = ratiod_hurdle_binomial(),
-                control = list(iter = 300, chains = 2, cores = 1, seed = 1,
-                               gradient_mode = "A"))
+  fit <- tratio(detected | trials ~ habitat + (1 | site), data = d, family = ratiod_hurdle_binomial(zi_formula = ~habitat),
+    control = list(iter = 300, chains = 2, cores = 1, seed = 1, gradient_mode = "A"))
   expect_true(all(fit$log_prob < 0))
   expect_equal(fit$diagnostics$n_divergent, 0)
 })
@@ -82,7 +79,7 @@ test_that("a zero-inflated negative binomial fits a Gamma denominator", {
   d$y <- ifelse(runif(n) < 0.3, 0L,
                 rnbinom(n, size = 3, mu = d$e * exp(0.5 + 0.4 * d$x)))
   fit <- tratio(y | e ~ x, data = d,
-                family = ratiod_zinegbin(denom_family = "gamma"),
+                family = ratiod_zi_negbin(denom_family = "gamma"),
                 control = list(iter = 300, chains = 1, seed = 1))
   l <- suppressWarnings(loo(fit))
   expect_true(is.finite(l$estimates["elpd_loo", "Estimate"]))

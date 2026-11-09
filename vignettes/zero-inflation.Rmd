@@ -43,24 +43,24 @@ Ecological and survey data often exhibit excess zeros beyond what standard distr
 
 | Family | Base | ZI Type | Use Case |
 |--------|------|---------|----------|
-| `ratiod_zinegbin()` | Negative binomial | Mixture | Overdispersed counts with excess zeros |
-| `ratiod_zipois()` | Poisson | Mixture | Counts where overdispersion is from zeros only |
+| `ratiod_zi_negbin()` | Negative binomial | Mixture | Overdispersed counts with excess zeros |
+| `ratiod_zi_poisson()` | Poisson | Mixture | Counts where overdispersion is from zeros only |
 | `ratiod_hurdle_negbin()` | Negative binomial | Hurdle | Presence/absence + abundance |
-| `ratiod_hurdle_pois()` | Poisson | Hurdle | Presence/absence + Poisson counts |
+| `ratiod_hurdle_poisson()` | Poisson | Hurdle | Presence/absence + Poisson counts |
 
 ### Proportion Data (Binomial Numerator)
 
 | Family | Base | ZI Type | Use Case |
 |--------|------|---------|----------|
-| `ratiod_zibinomial()` | Binomial | Zero-inflated | Excess zero success rates |
-| `ratiod_oibinomial()` | Binomial | One-inflated | Excess 100% success rates |
-| `ratiod_zoibinomial()` | Binomial | Zero-and-one | Excess at both boundaries |
+| `ratiod_zi_binomial()` | Binomial | Zero-inflated | Excess zero success rates |
+| `ratiod_oi_binomial()` | Binomial | One-inflated | Excess 100% success rates |
+| `ratiod_zoi_binomial()` | Binomial | Zero-and-one | Excess at both boundaries |
 | `ratiod_hurdle_binomial()` | Binomial | Hurdle | Zero vs positive successes |
 
 
 ## Zero-Inflated Binomial
 
-Use `ratiod_zibinomial()` when modeling proportions with excess zeros beyond what binomial predicts.
+Use `ratiod_zi_binomial()` when modeling proportions with excess zeros beyond what binomial predicts.
 
 ### Example: Species Detection
 
@@ -92,23 +92,18 @@ detection <- data.frame(
 )
 
 # Fit zero-inflated binomial
-fit_zi <- tratio(
-  detected | trials ~ habitat + (1 | site),
-  zi = zi_binomial(~ habitat),  # Predictors for zero-inflation
-  data = detection,
-  family = ratiod_zibinomial(),
-  control = ctl
-)
+fit_zi <- tratio(detected | trials ~ habitat + (1 | site), data = detection, family = ratiod_zi_binomial(zi_formula = ~habitat),
+    control = ctl)
 
 print(coef(summary(fit_zi)), digits = 3)
 ```
 
-The `zi` argument takes a specification such as `zi_binomial()`, whose formula is the linear predictor for the zero-inflation probability (`beta_zi` above, on the logit scale). Use `zi_binomial(~ 1)` for intercept-only or include covariates that predict structural zeros.
+The `zi_formula` argument of `ratiod_zi_binomial()` supplies the linear predictor for the zero-inflation probability (`beta_zi` above, on the logit scale). Use `zi_formula = ~ 1` for an intercept or include covariates that predict structural zeros.
 
 
 ## One-Inflated Binomial
 
-Use `ratiod_oibinomial()` when data has excess ones (100% success rates).
+Use `ratiod_oi_binomial()` when data has excess ones (100% success rates).
 
 ### Example: Survey Completion
 
@@ -133,7 +128,7 @@ survey <- data.frame(
 fit_oi <- tratio(
   completed | total_items ~ age_group + education,
   data = survey,
-  family = ratiod_oibinomial(),
+  family = ratiod_oi_binomial(),
   control = ctl
 )
 
@@ -143,7 +138,7 @@ print(coef(summary(fit_oi)), digits = 3)
 
 ## Zero-and-One Inflated Binomial (ZOIB)
 
-Use `ratiod_zoibinomial()` when data has excess at both boundaries.
+Use `ratiod_zoi_binomial()` when data has excess at both boundaries.
 
 ### Example: Vegetation Cover
 
@@ -171,16 +166,8 @@ cover <- data.frame(
 )
 
 # Fit ZOIB model
-fit_zoib <- tratio(
-  cover_points | total_points ~ elevation + aspect,
-  zi = zoib(
-    zi_formula = ~ elevation,  # Zero-inflation predictors
-    oi_formula = ~ elevation   # One-inflation predictors
-  ),
-  data = cover,
-  family = ratiod_zoibinomial(),
-  control = ctl
-)
+fit_zoib <- tratio(cover_points | total_points ~ elevation + aspect, data = cover, family = ratiod_zoi_binomial(zi_formula = ~elevation,
+    oi_formula = ~elevation), control = ctl)
 
 print(coef(summary(fit_zoib)), digits = 3)
 ```
@@ -215,13 +202,8 @@ detect_positive <- function(p) {
 occupancy$detections <- ifelse(present, vapply(p_detect, detect_positive, numeric(1)), 0)
 
 # Fit hurdle binomial
-fit_hurdle <- tratio(
-  detections | visits ~ habitat_quality + (1 | site),
-  zi = hurdle_binomial(~ habitat_quality),  # Predictors for hurdle (presence)
-  data = occupancy,
-  family = ratiod_hurdle_binomial(),
-  control = ctl
-)
+fit_hurdle <- tratio(detections | visits ~ habitat_quality + (1 | site), data = occupancy, family = ratiod_hurdle_binomial(zi_formula = ~habitat_quality),
+    control = ctl)
 
 print(coef(summary(fit_hurdle)), digits = 3)
 ```
@@ -256,13 +238,8 @@ cpue <- data.frame(
 )
 
 # Zero-inflated Poisson with gamma denominator
-fit_zi_cpue <- tratio(
-  catch | effort ~ depth + season + (1 | vessel),
-  zi = zi_poisson(~ season),
-  data = cpue,
-  family = ratiod_zipois(denom_family = "gamma"),
-  control = ctl
-)
+fit_zi_cpue <- tratio(catch | effort ~ depth + season + (1 | vessel), data = cpue, family = ratiod_zi_poisson(denom_family = "gamma",
+    zi_formula = ~season), control = ctl)
 
 print(coef(summary(fit_zi_cpue)), digits = 3)
 ```
@@ -274,11 +251,11 @@ print(coef(summary(fit_zi_cpue)), digits = 3)
 |----------|-------------------|
 | Zeros from mixed sources (structural + sampling) | `ratiod_zi*()` |
 | All zeros from single process (presence/absence) | `ratiod_hurdle_*()` |
-| Excess at 0 only | `ratiod_zibinomial()` |
-| Excess at 1 (100%) only | `ratiod_oibinomial()` |
-| Excess at both 0 and 1 | `ratiod_zoibinomial()` |
-| Overdispersion primarily from zeros | `ratiod_zipois()` |
-| Overdispersion in zeros AND positive counts | `ratiod_zinegbin()` |
+| Excess at 0 only | `ratiod_zi_binomial()` |
+| Excess at 1 (100%) only | `ratiod_oi_binomial()` |
+| Excess at both 0 and 1 | `ratiod_zoi_binomial()` |
+| Overdispersion primarily from zeros | `ratiod_zi_poisson()` |
+| Overdispersion in zeros AND positive counts | `ratiod_zi_negbin()` |
 
 
 ## Model Comparison
@@ -295,13 +272,8 @@ fit_standard <- tratio(
 )
 
 # Fit zero-inflated model
-fit_zi <- tratio(
-  detected | trials ~ habitat + (1 | site),
-  zi = zi_binomial(~ 1),
-  data = detection,
-  family = ratiod_zibinomial(),
-  control = ctl
-)
+fit_zi <- tratio(detected | trials ~ habitat + (1 | site), data = detection, family = ratiod_zi_binomial(zi_formula = ~1),
+    control = ctl)
 
 # Compare
 ratiod_compare(fit_standard, fit_zi)
@@ -329,4 +301,4 @@ pp_check(fit_zi, type = "dens_overlay")
 
 - `vignette("spatial-temporal")` - Spatial and temporal models
 
-- `?ratiod_zibinomial`, `?ratiod_zoibinomial` - Function documentation
+- `?ratiod_zi_binomial`, `?ratiod_zoi_binomial` - Function documentation

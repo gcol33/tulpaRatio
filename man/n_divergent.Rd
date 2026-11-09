@@ -4,10 +4,10 @@
 \alias{n_divergent}
 \title{Number of Divergent Transitions}
 \usage{
-n_divergent(fit)
+n_divergent(object)
 }
 \arguments{
-\item{fit}{A ratiod_fit object}
+\item{object}{A ratiod_fit object}
 }
 \value{
 Integer count of divergent transitions

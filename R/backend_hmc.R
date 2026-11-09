@@ -23,10 +23,10 @@
 #' - `spatial_bym2()` - BYM2 prior (structured + unstructured)
 #'
 #' **Zero-inflation types:**
-#' - `zi_poisson()` - Zero-inflated Poisson
-#' - `zi_negbin()` - Zero-inflated negative binomial
-#' - `hurdle_poisson()` - Hurdle Poisson
-#' - `hurdle_negbin()` - Hurdle negative binomial
+#' - `ratiod_zi_poisson()` - Zero-inflated Poisson
+#' - `ratiod_zi_negbin()` - Zero-inflated negative binomial
+#' - `ratiod_hurdle_poisson()` - Hurdle Poisson
+#' - `ratiod_hurdle_negbin()` - Hurdle negative binomial
 #'
 #' **When to use:**
 #' - When you need full MCMC (not just approximations)
@@ -626,9 +626,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
          call. = FALSE)
   }
 
-  # Prepare zero-inflation structure. Handles both an explicit `zi = `
-  # argument and auto-detection from a ZI/hurdle/OI/ZOIB family (e.g.
-  # ratiod_zinegbin()) when `zi` is not given.
+  # Prepare the inflation design implied by the family specification.
   zi_info <- prepare_zi_for_hmc(zi, data, hmc_data$N, family)
 
   # Prepare latent factor structure. A binomial family has no denominator
@@ -1743,17 +1741,13 @@ can_use_hmc_backend <- function(family) {
 
 #' Prepare zero-inflation structure for HMC
 #'
-#' Single source of truth for turning either an explicit `zi = ` argument
-#' or a ZI/hurdle/OI/ZOIB *family* (e.g. `ratiod_zinegbin()`, with no
-#' explicit `zi = `) into the `zi_info` list every backend consumes.
+#' Turns the inflation specification implied by a ZI/hurdle/OI/ZOIB family
+#' into the `zi_info` list every backend consumes.
 #' @param family Optional `ratiod_family` object, used for auto-detection
-#'   when `zi` is NULL (see [family_zi_info()])
+#'   when `zi` is NULL
 #' @keywords internal
 prepare_zi_for_hmc <- function(zi, data, N, family = NULL) {
-  if (is.null(zi) && !is.null(family) &&
-      (isTRUE(family$zero_inflated) || isTRUE(family$one_inflated))) {
-    return(family_zi_info(family, N))
-  }
+  if (is.null(zi) && !is.null(family)) zi <- family_inflation_spec(family)
 
   if (is.null(zi)) {
     return(list(

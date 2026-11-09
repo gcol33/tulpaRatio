@@ -13,7 +13,7 @@ test_that("spatial_rsr wraps spatial_gp correctly", {
 
 test_that("spatial_rsr wraps spatial_car correctly", {
   adj <- matrix(c(0, 1, 0, 1, 0, 1, 0, 1, 0), 3, 3)
-  car <- spatial_car(adj, level = "obs")
+  car <- spatial_car(adj, spatial_level = "obs")
   rsr <- spatial_rsr(car, restrict_to = ~ temp)
 
   expect_s3_class(rsr, "ratiod_rsr")

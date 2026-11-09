@@ -225,7 +225,7 @@ test_that("prepare_spatial_for_pg handles group-level spatial", {
 
   spatial <- list(
     adjacency = adj,
-    level = "group",
+    spatial_level = "group",
     group_var = "site"
   )
 
@@ -259,7 +259,7 @@ test_that("prepare_spatial_for_pg handles observation-level spatial", {
 
   spatial <- list(
     adjacency = adj,
-    level = "obs",
+    spatial_level = "obs",
     group_var = NULL
   )
 
@@ -279,7 +279,7 @@ test_that("prepare_spatial_for_pg errors without group_var for group level", {
 
   spatial <- list(
     adjacency = adj,
-    level = "group",
+    spatial_level = "group",
     group_var = NULL
   )
 

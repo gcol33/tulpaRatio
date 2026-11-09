@@ -34,7 +34,7 @@ theme_ratiod <- function() {
 #' to highlight convergence issues. Rhat values > 1.01 indicate potential
 #' convergence problems.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #' @param threshold Rhat threshold for warnings (default: 1.01).
 #' @param pars Character vector of parameter names to include. If NULL (default),
 #'   includes all main parameters (excludes high-dimensional RE/spatial).
@@ -58,14 +58,14 @@ theme_ratiod <- function() {
 #'
 #' @seealso [plot_ess()], [diagnostic_summary()], [diagnostics()]
 #' @export
-plot_rhat <- function(fit, threshold = 1.01, pars = NULL) {
-  if (!inherits(fit, "ratiod_fit")) {
+plot_rhat <- function(object, threshold = 1.01, pars = NULL) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
   # Get diagnostics
 
-  diag <- diagnostics(fit, pars = pars)
+  diag <- diagnostics(object, pars = pars)
 
   # Filter to main parameters if not specified
   if (is.null(pars)) {
@@ -155,7 +155,7 @@ plot_rhat_base <- function(diag, threshold) {
 #' expressed as a ratio of ESS to total samples. Low ESS indicates high
 #' autocorrelation.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #' @param type Type of ESS: "bulk" (default) or "tail".
 #' @param threshold Minimum acceptable ESS (default: 400).
 #' @param pars Character vector of parameter names to include.
@@ -179,15 +179,15 @@ plot_rhat_base <- function(diag, threshold) {
 #'
 #' @seealso [plot_rhat()], [diagnostic_summary()], [diagnostics()]
 #' @export
-plot_ess <- function(fit, type = c("bulk", "tail"), threshold = 400, pars = NULL) {
-  if (!inherits(fit, "ratiod_fit")) {
+plot_ess <- function(object, type = c("bulk", "tail"), threshold = 400, pars = NULL) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
   type <- match.arg(type)
 
   # Get diagnostics
-  diag <- diagnostics(fit, pars = pars)
+  diag <- diagnostics(object, pars = pars)
 
   # Filter to main parameters if not specified
   if (is.null(pars)) {
@@ -274,7 +274,7 @@ plot_ess_base <- function(diag, threshold, type) {
 #' Creates autocorrelation function (ACF) plots for selected parameters.
 #' High autocorrelation indicates slow mixing and low effective sample size.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #' @param pars Character vector of parameter names. If NULL, selects worst-mixing
 #'   parameters based on ESS.
 #' @param lags Maximum number of lags to compute (default: 25).
@@ -299,13 +299,13 @@ plot_ess_base <- function(diag, threshold, type) {
 #'
 #' @seealso [plot_ess()], [diagnostics()]
 #' @export
-plot_acf <- function(fit, pars = NULL, lags = 25, n_pars = 6) {
-  if (!inherits(fit, "ratiod_fit")) {
+plot_acf <- function(object, pars = NULL, lags = 25, n_pars = 6) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
   # Get draws
-  draws <- fit$draws
+  draws <- object$draws
   if (is.null(draws)) {
     stop("No draws available in fit object", call. = FALSE)
   }
@@ -313,7 +313,7 @@ plot_acf <- function(fit, pars = NULL, lags = 25, n_pars = 6) {
   # Select parameters
   if (is.null(pars)) {
     # Select worst ESS parameters
-    diag <- diagnostics(fit)
+    diag <- diagnostics(object)
     main_pars <- select_main_params(diag$parameter)
     diag <- diag[diag$parameter %in% main_pars, ]
     diag <- diag[order(diag$ess_bulk), ]
@@ -399,7 +399,7 @@ plot_acf_base <- function(draws, pars, lags) {
 #' Divergent transitions (if present) are highlighted to help identify
 #' problematic posterior regions.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #' @param pars Character vector of parameter names. If NULL, selects main
 #'   variance parameters.
 #' @param highlight_divergent Logical; highlight divergent transitions in red
@@ -426,14 +426,14 @@ plot_acf_base <- function(draws, pars, lags) {
 #'
 #' @seealso [plot_divergences()], [diagnostics()]
 #' @export
-plot_pairs <- function(fit, pars = NULL, highlight_divergent = TRUE,
+plot_pairs <- function(object, pars = NULL, highlight_divergent = TRUE,
                        n_pars = 5, alpha = 0.3) {
-  if (!inherits(fit, "ratiod_fit")) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
   # Get draws
-  draws <- fit$draws
+  draws <- object$draws
   if (is.null(draws)) {
     stop("No draws available in fit object", call. = FALSE)
   }
@@ -461,8 +461,8 @@ plot_pairs <- function(fit, pars = NULL, highlight_divergent = TRUE,
 
   # Add divergence indicator if available
   has_divergent <- FALSE
-  if (highlight_divergent && fit$backend == "hmc") {
-    div_idx <- fit$diagnostics$divergent_idx
+  if (highlight_divergent && object$backend == "hmc") {
+    div_idx <- object$diagnostics$divergent_idx
     if (!is.null(div_idx) && length(div_idx) > 0) {
       draws_subset$divergent <- FALSE
       draws_subset$divergent[div_idx] <- TRUE
@@ -472,7 +472,7 @@ plot_pairs <- function(fit, pars = NULL, highlight_divergent = TRUE,
 
   # Use bayesplot for pairs if available
   if (requireNamespace("bayesplot", quietly = TRUE)) {
-    draws_array <- get_draws_array(fit)$draws
+    draws_array <- get_draws_array(object)$draws
     draws_array <- draws_array[, , pars, drop = FALSE]
 
     if (has_divergent) {
@@ -573,12 +573,12 @@ plot_pairs_base <- function(draws_df, pars, has_divergent, alpha) {
 #'
 #' @seealso [plot_pairs()], [n_divergent()]
 #' @export
-plot_divergences <- function(fit, pars = NULL, type = c("parcoord", "scatter")) {
-  if (!inherits(fit, "ratiod_fit")) {
+plot_divergences <- function(object, pars = NULL, type = c("parcoord", "scatter")) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  if (fit$backend != "hmc") {
+  if (object$backend != "hmc") {
     message("Divergence plots only available for HMC backend")
     return(invisible(NULL))
   }
@@ -586,20 +586,20 @@ plot_divergences <- function(fit, pars = NULL, type = c("parcoord", "scatter")) 
   type <- match.arg(type)
 
   # Check for divergent transitions
-  n_div <- n_divergent(fit)
+  n_div <- n_divergent(object)
   if (n_div == 0) {
     message("No divergent transitions to plot")
     return(invisible(NULL))
   }
 
-  div_idx <- fit$diagnostics$divergent_idx
+  div_idx <- object$diagnostics$divergent_idx
   if (is.null(div_idx) || length(div_idx) == 0) {
     message("Divergent indices not available")
     return(invisible(NULL))
   }
 
   # Get draws
-  draws <- fit$draws
+  draws <- object$draws
 
   # Select parameters
   if (is.null(pars)) {
@@ -758,7 +758,7 @@ plot_divergences_scatter <- function(draws_df, pars) {
 #' along with the E-BFMI statistic. Low E-BFMI indicates poor exploration
 #' of the posterior.
 #'
-#' @param fit A `ratiod_fit` object (HMC backend).
+#' @param object A `ratiod_fit` object (HMC backend).
 #'
 #' @return A ggplot object (if ggplot2 available) or base R plot.
 #'
@@ -781,18 +781,18 @@ plot_divergences_scatter <- function(draws_df, pars) {
 #'
 #' @seealso [diagnostic_summary()], [check_diagnostics()]
 #' @export
-plot_energy <- function(fit) {
-  if (!inherits(fit, "ratiod_fit")) {
+plot_energy <- function(object) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  if (fit$backend != "hmc") {
+  if (object$backend != "hmc") {
     message("Energy plots only available for HMC backend")
     return(invisible(NULL))
   }
 
   # Try to get energy from diagnostics
-  diag <- fit$diagnostics
+  diag <- object$diagnostics
   energy <- diag$energy
   if (is.null(energy) || length(energy) < 10) {
     message("Energy values not available in fit object")
@@ -889,7 +889,7 @@ plot_energy_base <- function(energy, energy_diff, e_bfmi, status) {
 #' Provides a comprehensive diagnostic report for a ratio model, combining
 #' convergence metrics, divergence information, and actionable recommendations.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #'
 #' @return A list with class `ratiod_diagnostic_summary` containing:
 #' \describe{
@@ -913,12 +913,12 @@ plot_energy_base <- function(energy, energy_diff, e_bfmi, status) {
 #'
 #' @seealso [check_diagnostics()], [diagnostics()], [plot_diagnostics()]
 #' @export
-diagnostic_summary <- function(fit) {
-  if (!inherits(fit, "ratiod_fit")) {
+diagnostic_summary <- function(object) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  backend <- fit$backend %||% "unknown"
+  backend <- object$backend %||% "unknown"
   recommendations <- character(0)
   status <- "PASS"
 
@@ -936,7 +936,7 @@ diagnostic_summary <- function(fit) {
 
   # Get MCMC diagnostics
   if (backend %in% c("hmc", "ess", "pg")) {
-    diag <- tryCatch(diagnostics(fit), error = function(e) NULL)
+    diag <- tryCatch(diagnostics(object), error = function(e) NULL)
 
     if (!is.null(diag)) {
       # Filter to main parameters
@@ -968,11 +968,11 @@ diagnostic_summary <- function(fit) {
 
   # Check divergences (HMC only)
   if (backend == "hmc") {
-    n_div <- n_divergent(fit)
+    n_div <- n_divergent(object)
     result$n_divergent <- n_div
 
     # Calculate percentage
-    n_samples <- nrow(fit$draws) %||% 0
+    n_samples <- nrow(object$draws) %||% 0
     if (n_samples > 0) {
       result$divergent_pct <- 100 * n_div / n_samples
     }
@@ -993,10 +993,10 @@ diagnostic_summary <- function(fit) {
     }
 
     # E-BFMI
-    energy <- fit$diagnostics$energy
+    energy <- object$diagnostics$energy
     if (!is.null(energy) && length(energy) > 10) {
       result$e_bfmi <- tulpa::energy_bfmi(energy,
-                                          fit$diagnostics$energy_chain)$value
+                                          object$diagnostics$energy_chain)$value
 
       if (result$e_bfmi < 0.3) {
         status <- if (status == "FAIL") "FAIL" else "WARN"
@@ -1012,7 +1012,7 @@ diagnostic_summary <- function(fit) {
       "Laplace provides approximate inference. Consider HMC for full uncertainty.")
 
     # Check convergence
-    converged <- fit$laplace_result$converged %||% fit$.internal$converged
+    converged <- object$laplace_result$converged %||% object$.internal$converged
     if (!is.null(converged) && !converged) {
       status <- "WARN"
       recommendations <- c(recommendations,
@@ -1091,7 +1091,7 @@ print.ratiod_diagnostic_summary <- function(x, ...) {
 #' Creates a combined diagnostic figure with Rhat, ESS, trace plot, and
 #' energy/ACF panels. Requires the `patchwork` package for layout.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #' @param pars Character vector of parameter names for trace plot. If NULL,
 #'   uses the parameter with worst Rhat.
 #'
@@ -1110,8 +1110,8 @@ print.ratiod_diagnostic_summary <- function(x, ...) {
 #'
 #' @seealso [diagnostic_summary()], [plot_rhat()], [plot_ess()]
 #' @export
-plot_diagnostics <- function(fit, pars = NULL) {
-  if (!inherits(fit, "ratiod_fit")) {
+plot_diagnostics <- function(object, pars = NULL) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
@@ -1128,27 +1128,27 @@ plot_diagnostics <- function(fit, pars = NULL) {
     message("Using sequential plots instead...")
 
     # Fall back to sequential plots
-    print(plot_rhat(fit))
-    print(plot_ess(fit))
+    print(plot_rhat(object))
+    print(plot_ess(object))
     return(invisible(NULL))
   }
 
   # Create individual plots
-  p_rhat <- plot_rhat(fit) + ggplot2::ggtitle("Rhat")
-  p_ess <- plot_ess(fit) + ggplot2::ggtitle("ESS (bulk)")
+  p_rhat <- plot_rhat(object) + ggplot2::ggtitle("Rhat")
+  p_ess <- plot_ess(object) + ggplot2::ggtitle("ESS (bulk)")
 
   # Trace plot for worst parameter
-  diag <- tryCatch(diagnostics(fit), error = function(e) NULL)
+  diag <- tryCatch(diagnostics(object), error = function(e) NULL)
   if (!is.null(diag)) {
     main_pars <- select_main_params(diag$parameter)
     diag <- diag[diag$parameter %in% main_pars, ]
     worst_par <- diag$parameter[which.max(diag$rhat)]
   } else {
-    worst_par <- colnames(fit$draws)[1]
+    worst_par <- colnames(object$draws)[1]
   }
 
   # Create trace plot
-  draws_array <- get_draws_array(fit)$draws
+  draws_array <- get_draws_array(object)$draws
   if (worst_par %in% dimnames(draws_array)[[3]]) {
     trace_data <- data.frame(
       iteration = seq_len(dim(draws_array)[1]),
@@ -1167,10 +1167,10 @@ plot_diagnostics <- function(fit, pars = NULL) {
   }
 
   # Bottom right: Energy or ACF
-  if (fit$backend == "hmc" && !is.null(fit$diagnostics$energy)) {
-    p_br <- plot_energy(fit)
+  if (object$backend == "hmc" && !is.null(object$diagnostics$energy)) {
+    p_br <- plot_energy(object)
   } else {
-    p_br <- plot_acf(fit, n_pars = 1)
+    p_br <- plot_acf(object, n_pars = 1)
   }
 
   # Handle NULL plots
@@ -1195,7 +1195,7 @@ plot_diagnostics <- function(fit, pars = NULL) {
 #' Performs Geweke's convergence diagnostic, comparing the mean of the first
 #' portion of a chain to the last portion. Useful for single-chain diagnostics.
 #'
-#' @param fit A `ratiod_fit` object.
+#' @param object A `ratiod_fit` object.
 #' @param frac1 Fraction of chain for first window (default: 0.1).
 #' @param frac2 Fraction of chain for second window (default: 0.5).
 #' @param pars Character vector of parameter names (default: all main params).
@@ -1218,12 +1218,12 @@ plot_diagnostics <- function(fit, pars = NULL) {
 #'
 #' @seealso [diagnostics()], [check_diagnostics()]
 #' @export
-geweke_test <- function(fit, frac1 = 0.1, frac2 = 0.5, pars = NULL) {
-  if (!inherits(fit, "ratiod_fit")) {
+geweke_test <- function(object, frac1 = 0.1, frac2 = 0.5, pars = NULL) {
+  if (!inherits(object, "ratiod_fit")) {
     stop("fit must be a ratiod_fit object", call. = FALSE)
   }
 
-  draws <- fit$draws
+  draws <- object$draws
   if (is.null(draws)) {
     stop("No draws available in fit object", call. = FALSE)
   }

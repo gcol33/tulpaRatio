@@ -17,7 +17,7 @@ fit_one_spatial <- function(sim, use_specs, seed_val, spatial_struct) {
 test_that("B1d spec path matches legacy for ICAR (group-level)", {
   skip_on_cran()
   sim <- simulate_spatial_binomial()
-  sp  <- tulpaRatio::spatial_car(adjacency = sim$adj, level = "group",
+  sp  <- tulpaRatio::spatial_car(adjacency = sim$adj, spatial_level = "group",
                                   group_var = "unit",
                                   parameterization = "standard")
   legacy42 <- fit_one_spatial(sim, FALSE, 42L, sp)
@@ -33,7 +33,7 @@ test_that("B1d spec path matches legacy for ICAR (group-level)", {
 test_that("B1d spec path matches legacy for BYM2 (group-level)", {
   skip_on_cran()
   sim <- simulate_spatial_binomial()
-  sp  <- tulpaRatio::spatial_bym2(adjacency = sim$adj, level = "group",
+  sp  <- tulpaRatio::spatial_bym2(adjacency = sim$adj, spatial_level = "group",
                                    group_var = "unit",
                                    parameterization = "standard")
   legacy42 <- fit_one_spatial(sim, FALSE, 42L, sp)

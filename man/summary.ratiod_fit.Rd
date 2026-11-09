@@ -26,7 +26,7 @@
 
 \method{print}{ratiod_vi}(x, digits = 3, ...)
 
-\method{summary}{ratiod_vi}(object, prob = 0.95, ...)
+\method{summary}{ratiod_vi}(object, probs = 0.95, ...)
 
 \method{fixef}{ratiod_fit}(object, ...)
 
@@ -34,7 +34,7 @@
 
 \method{print}{ratiod_fit}(x, ...)
 
-\method{summary}{ratiod_fit}(object, prob = 0.95, ...)
+\method{summary}{ratiod_fit}(object, probs = 0.95, ...)
 
 \method{print}{summary.ratiod_fit}(x, ...)
 
@@ -63,7 +63,7 @@ summary of one.}
 
 \item{object}{A ratiod_fit object}
 
-\item{prob}{Probability mass for credible intervals (default 0.95)}
+\item{probs}{Probability mass for credible intervals (default 0.95)}
 
 \item{conf.int}{Include central posterior intervals in the tidy table.}
 

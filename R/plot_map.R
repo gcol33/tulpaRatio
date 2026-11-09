@@ -169,23 +169,23 @@ plot_map <- function(x,
 #' Prepare map data from ratiod_fit object
 #'
 #' @keywords internal
-prepare_map_data_from_fit <- function(fit, what, summary, newdata) {
+prepare_map_data_from_fit <- function(object, what, summary, newdata) {
 
   if (!is.null(newdata)) {
     # Predictions at new locations
-    pred <- predict(fit, newdata = newdata, summary = TRUE)
+    pred <- predict(object, newdata = newdata, summary = TRUE)
     coords <- extract_coords(newdata)
   } else {
     # Fitted values at observed locations
-    coords <- extract_coords_from_fit(fit)
+    coords <- extract_coords_from_fit(object)
 
     if (what == "ratio" || what == "uncertainty") {
-      r <- ratio(fit, summary = TRUE)
+      r <- ratio(object, summary = TRUE)
       pred <- r
     } else if (what == "numerator") {
-      pred <- fitted(fit, type = "numerator")
+      pred <- fitted(object, type = "numerator")
     } else {
-      pred <- fitted(fit, type = "denominator")
+      pred <- fitted(object, type = "denominator")
     }
   }
 
@@ -309,16 +309,16 @@ extract_coords <- function(x) {
 #' Extract coordinates from ratiod_fit object
 #'
 #' @keywords internal
-extract_coords_from_fit <- function(fit) {
+extract_coords_from_fit <- function(object) {
   # A point-referenced field names its coordinate columns; an areal fit has
   # none, and its data are searched for conventionally named ones.
-  vars <- fit$.internal$spatial_spec$coord_vars %||%
-    if (is.list(fit$spatial)) fit$spatial$coord_vars
-  if (length(vars) == 2L && all(vars %in% names(fit$data))) {
-    return(data.frame(x = fit$data[[vars[1]]], y = fit$data[[vars[2]]]))
+  vars <- object$.internal$spatial_spec$coord_vars %||%
+    if (is.list(object$spatial)) object$spatial$coord_vars
+  if (length(vars) == 2L && all(vars %in% names(object$data))) {
+    return(data.frame(x = object$data[[vars[1]]], y = object$data[[vars[2]]]))
   }
-  if (is.null(fit$data)) return(NULL)
-  tryCatch(extract_coords(fit$data), error = function(e) NULL)
+  if (is.null(object$data)) return(NULL)
+  tryCatch(extract_coords(object$data), error = function(e) NULL)
 }
 
 

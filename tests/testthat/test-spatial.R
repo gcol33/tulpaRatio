@@ -9,19 +9,19 @@ test_that("spatial_car validates adjacency matrix", {
 
   # Valid adjacency
   good_adj <- matrix(c(0, 1, 1, 0), 2, 2)
-  expect_s3_class(spatial_car(good_adj, level = "obs"), "ratiod_spatial")
+  expect_s3_class(spatial_car(good_adj, spatial_level = "obs"), "ratiod_spatial")
 })
 
 test_that("spatial_car requires group_var for group level", {
   adj <- matrix(c(0, 1, 1, 0), 2, 2)
 
   expect_error(
-    spatial_car(adj, level = "group"),
+    spatial_car(adj, spatial_level = "group"),
     "group_var"
   )
 
   expect_s3_class(
-    spatial_car(adj, level = "group", group_var = "site"),
+    spatial_car(adj, spatial_level = "group", group_var = "site"),
     "ratiod_spatial"
   )
 })
@@ -33,7 +33,7 @@ test_that("spatial_bym2 computes scale factor", {
   adj[2, 3] <- adj[3, 2] <- 1
   adj[3, 4] <- adj[4, 3] <- 1
 
-  sp <- spatial_bym2(adj, level = "obs")
+  sp <- spatial_bym2(adj, spatial_level = "obs")
 
   expect_s3_class(sp, "ratiod_spatial")
   expect_equal(sp$type, "bym2")
@@ -60,7 +60,7 @@ test_that("spatial_car creates ICAR by default", {
   adj[2, 3] <- adj[3, 2] <- 1
   adj[3, 4] <- adj[4, 3] <- 1
 
-  sp <- spatial_car(adj, level = "obs")
+  sp <- spatial_car(adj, spatial_level = "obs")
 
   expect_s3_class(sp, "ratiod_spatial")
   expect_equal(sp$type, "car")
@@ -74,7 +74,7 @@ test_that("spatial_car with proper = TRUE creates proper CAR", {
   adj[2, 3] <- adj[3, 2] <- 1
   adj[3, 4] <- adj[4, 3] <- 1
 
-  sp <- spatial_car(adj, level = "obs", proper = TRUE)
+  sp <- spatial_car(adj, spatial_level = "obs", proper = TRUE)
 
   expect_s3_class(sp, "ratiod_spatial")
   expect_equal(sp$type, "car_proper")
@@ -91,7 +91,7 @@ test_that("proper CAR print method shows rho info", {
   adj[2, 3] <- adj[3, 2] <- 1
   adj[3, 4] <- adj[4, 3] <- 1
 
-  sp <- spatial_car(adj, level = "obs", proper = TRUE)
+  sp <- spatial_car(adj, spatial_level = "obs", proper = TRUE)
   output <- capture.output(print(sp))
 
   expect_true(any(grepl("Proper CAR", output)))
@@ -105,7 +105,7 @@ test_that("ICAR print method shows fixed rho info", {
   adj[2, 3] <- adj[3, 2] <- 1
   adj[3, 4] <- adj[4, 3] <- 1
 
-  sp <- spatial_car(adj, level = "obs", proper = FALSE)
+  sp <- spatial_car(adj, spatial_level = "obs", proper = FALSE)
   output <- capture.output(print(sp))
 
   expect_true(any(grepl("ICAR", output)))
@@ -151,11 +151,11 @@ test_that("proper CAR works with group level", {
   adj[1, 2] <- adj[2, 1] <- 1
   adj[2, 3] <- adj[3, 2] <- 1
 
-  sp <- spatial_car(adj, level = "group", group_var = "region", proper = TRUE)
+  sp <- spatial_car(adj, spatial_level = "group", group_var = "region", proper = TRUE)
 
   expect_equal(sp$type, "car_proper")
   expect_equal(sp$group_var, "region")
-  expect_equal(sp$level, "group")
+  expect_equal(sp$spatial_level, "group")
   expect_true(sp$proper)
 })
 
@@ -174,14 +174,14 @@ test_that("spatial_car shared argument works for both variants", {
 
   # ICAR - expect warning about non-shared effects
   expect_warning(
-    sp_icar <- spatial_car(adj, level = "obs", shared = FALSE),
+    sp_icar <- spatial_car(adj, spatial_level = "obs", shared = FALSE),
     "confounded"
   )
   expect_false(sp_icar$shared)
 
   # Proper CAR - expect warning about non-shared effects
   expect_warning(
-    sp_proper <- spatial_car(adj, level = "obs", proper = TRUE, shared = FALSE),
+    sp_proper <- spatial_car(adj, spatial_level = "obs", proper = TRUE, shared = FALSE),
     "confounded"
   )
   expect_false(sp_proper$shared)
@@ -273,7 +273,7 @@ test_that("prepare_spatial_for_laplace works correctly", {
 })
 
 test_that("prepare_spatial_for_pg errors without group_var for group level", {
-  spatial <- list(level = "group", group_var = NULL, adjacency = diag(3))
+  spatial <- list(spatial_level = "group", group_var = NULL, adjacency = diag(3))
 
   expect_error(
     tulpaRatio:::prepare_spatial_for_pg(spatial, data.frame(x = 1:3), list()),
