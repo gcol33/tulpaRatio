@@ -4,6 +4,12 @@
 namespace ratiod_hmc { Rcpp::NumericMatrix residual_accumulation_probe(); }
 namespace ratiod_hmc {
 Rcpp::NumericMatrix collapsed_margin_probe(int,int,double,double,double,double,double,bool);
+Rcpp::NumericVector collapsed_gp_reference_probe(Rcpp::NumericVector,int,int,double);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta,int y,int n,double sigma) {
+    return ratiod_hmc::collapsed_gp_reference_probe(beta,y,n,sigma);
 }
 
 // [[Rcpp::export]]
@@ -29,7 +35,7 @@ Rcpp::NumericVector cpp_test_ratio_margin(std::string family, double y, int n,
     x.digamma_difference = tulpa::math::polygamma_rising_difference(0,int(y),phi);
     x.lgamma_difference = tulpa::math::lgamma_ratio_count(int(y),phi);
     const auto evaluate = [&](const auto& m) {
-        return cached ? m.template operator()<true>(x) : m.template operator()<false>(x);
+        return cached ? m.template evaluate<true>(x) : m.template evaluate<false>(x);
     };
     Result r;
     if (family == "poisson") r = evaluate(Poisson());
@@ -67,4 +73,53 @@ Rcpp::NumericMatrix cpp_test_ratio_margin_scalars(std::string family, double y, 
     auto c=margin_density(family,y,n,a,b);c.backward();
     out(2,0)=c.val();out(2,1)=a.adj();out(2,2)=b.adj();
     return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_margin_fields(std::string family, double eta,
+                                          double phi, int fields, bool cached) {
+    using namespace tulpaRatio::margins;
+    Observation x{3.,eta,8};
+    x.log_y=std::log(3.);
+    x.log_factorial=family=="binomial" || family=="beta_binomial"
+        ? tulpa::math::portable_lchoose(8,3) : std::lgamma(4.);
+    x.digamma_difference=tulpa::math::polygamma_rising_difference(0,3,phi);
+    x.lgamma_difference=tulpa::math::lgamma_ratio_count(3,phi);
+    const auto run=[&](const auto& m) {
+        const auto select=[&](auto mask) {
+            constexpr unsigned want=decltype(mask)::value;
+            return cached ? m.template evaluate<true,want>(x) : m.template evaluate<false,want>(x);
+        };
+        switch (fields) {
+            case Value: return select(std::integral_constant<unsigned,Value>{});
+            case Score: return select(std::integral_constant<unsigned,Score>{});
+            case Extra: return select(std::integral_constant<unsigned,Extra>{});
+            case Curvature: return select(std::integral_constant<unsigned,Curvature>{});
+            default: return select(std::integral_constant<unsigned,FirstOrder|Curvature>{});
+        }
+    };
+    Result r;
+    if (family=="poisson") r=run(Poisson());
+    else if (family=="negbin") r=run(NegBin(phi));
+    else if (family=="gamma") r=run(Gamma(phi));
+    else if (family=="lognormal") r=run(Lognormal(phi));
+    else if (family=="binomial") r=run(Binomial());
+    else if (family=="beta_binomial") r=run(BetaBinomial(phi));
+    else Rcpp::stop("Unknown margin");
+    return Rcpp::NumericVector::create(r.ll,r.residual,r.extra,r.neg_hess);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_margin_curvature(std::string family,double eta,double phi) {
+    using namespace tulpaRatio::margins;
+    const Observation x{3.,eta,8};
+    CurvatureDerivatives d;
+    if (family=="poisson") d=curvature_derivatives<Poisson>(x,phi);
+    else if (family=="negbin") d=curvature_derivatives<NegBin>(x,phi);
+    else if (family=="gamma") d=curvature_derivatives<Gamma>(x,phi);
+    else if (family=="lognormal") d=curvature_derivatives<Lognormal>(x,phi);
+    else if (family=="binomial") d=curvature_derivatives<Binomial>(x,phi);
+    else if (family=="beta_binomial") d=curvature_derivatives<BetaBinomial>(x,phi);
+    else Rcpp::stop("Unknown margin");
+    return Rcpp::NumericVector::create(d.w,d.eta,d.phi,d.score_phi,d.score);
 }

@@ -890,44 +890,8 @@ inline void collapsed_gp_compute_residuals(
         eta_num_i += w_star[loc_i];
         if (!is_binomial && data.gp_data.shared) eta_denom_i += w_star[loc_i];
 
-        double mu_num = std::exp(eta_num_i);
-
-        switch (data.model_type) {
-            case ModelType::POISSON_GAMMA: {
-                resid_num[i] = data.y_num[i] - mu_num;
-                if (!is_binomial && data.gp_data.shared) {
-                    double mu_denom = std::exp(eta_denom_i);
-                    resid_denom[i] = phi_denom * (data.y_denom_cont[i] / mu_denom - 1.0);
-                } else {
-                    resid_denom[i] = 0.0;
-                }
-                break;
-            }
-            case ModelType::NEGBIN_NEGBIN: {
-                double r_num = phi_num;
-                resid_num[i] = data.y_num[i] - mu_num * (data.y_num[i] + r_num) / (mu_num + r_num);
-                if (data.gp_data.shared) {
-                    double mu_denom = std::exp(eta_denom_i);
-                    int y_denom = (int)data.y_denom[i];
-                    double r_denom = phi_denom;
-                    resid_denom[i] = y_denom - mu_denom * (y_denom + r_denom) / (mu_denom + r_denom);
-                } else {
-                    resid_denom[i] = 0.0;
-                }
-                break;
-            }
-            case ModelType::BINOMIAL: {
-                int n_trials = (int)data.y_denom[i];
-                double p_i = 1.0 / (1.0 + std::exp(-eta_num_i));
-                resid_num[i] = data.y_num[i] - n_trials * p_i;
-                resid_denom[i] = 0.0;
-                break;
-            }
-            default:
-                resid_num[i] = data.y_num[i] - mu_num;
-                resid_denom[i] = 0.0;
-                break;
-        }
+        ratiod_hmc::collapsed_observation<tulpaRatio::margins::Score>(data,i,eta_num_i,eta_denom_i,
+            phi_num,phi_denom,!is_binomial && data.gp_data.shared,&resid_num[i],&resid_denom[i]);
     }
 }
 
@@ -1004,79 +968,12 @@ inline void collapsed_gp_laplace_grad_nonGP(
         eta_num_i += w_star[loc_i];
         if (!is_binomial && data.gp_data.shared) eta_denom_i += w_star[loc_i];
 
-        double mu_num = std::exp(eta_num_i);
-        int y_num = data.y_num[i];
-
-        // Third derivatives: dW_i/d(eta_num), dW_i/d(eta_denom)
-        // and dW_i/d(log_phi_num), dW_i/d(log_phi_denom)
-        double dW_deta_num = 0.0, dW_deta_denom = 0.0;
-        double dW_dlogphi_num = 0.0, dW_dlogphi_denom = 0.0;
-
-        switch (data.model_type) {
-            case ModelType::POISSON_GAMMA: {
-                // neg_hess_num = mu, d(neg_hess)/d(eta) = mu
-                dW_deta_num = mu_num;
-                if (data.gp_data.shared) {
-                    double mu_denom = std::exp(eta_denom_i);
-                    double y_denom = data.y_denom_cont[i];
-                    double shape = phi_denom;
-                    double nh_d = shape * y_denom / mu_denom;
-                    dW_deta_denom = -nh_d;
-                    dW_dlogphi_denom = nh_d;
-                }
-                break;
-            }
-            case ModelType::NEGBIN_NEGBIN: {
-                double r_num = phi_num;
-                double yr = y_num + r_num;
-                double mr = mu_num + r_num;
-                double mr3 = mr * mr * mr;
-                dW_deta_num = mu_num * r_num * yr * (r_num - mu_num) / mr3;
-                double dnh_dr = mu_num * (yr * (mu_num - r_num) + r_num * mr) / mr3;
-                dW_dlogphi_num = r_num * dnh_dr;
-
-                if (data.gp_data.shared) {
-                    double mu_d = std::exp(eta_denom_i);
-                    int y_d = (int)data.y_denom[i];
-                    double r_d = phi_denom;
-                    double yr_d = y_d + r_d;
-                    double mr_d = mu_d + r_d;
-                    double mr_d3 = mr_d * mr_d * mr_d;
-                    dW_deta_denom = mu_d * r_d * yr_d * (r_d - mu_d) / mr_d3;
-                    double dnh_dr_d = mu_d * (yr_d * (mu_d - r_d) + r_d * mr_d) / mr_d3;
-                    dW_dlogphi_denom = r_d * dnh_dr_d;
-                }
-                break;
-            }
-            case ModelType::BINOMIAL: {
-                int n_trials = (int)data.y_denom[i];
-                double p_i = 1.0 / (1.0 + std::exp(-eta_num_i));
-                dW_deta_num = n_trials * p_i * (1.0 - p_i) * (1.0 - 2.0 * p_i);
-                break;
-            }
-            case ModelType::NEGBIN_GAMMA: {
-                double r_num_v = phi_num;
-                double yr = y_num + r_num_v;
-                double mr = mu_num + r_num_v;
-                double mr3 = mr * mr * mr;
-                dW_deta_num = mu_num * r_num_v * yr * (r_num_v - mu_num) / mr3;
-                double dnh_dr = mu_num * (yr * (mu_num - r_num_v) + r_num_v * mr) / mr3;
-                dW_dlogphi_num = r_num_v * dnh_dr;
-                if (data.gp_data.shared) {
-                    double mu_denom = std::exp(eta_denom_i);
-                    double y_denom = data.y_denom_cont[i];
-                    double shape = phi_denom;
-                    double nh_d = shape * y_denom / mu_denom;
-                    dW_deta_denom = -nh_d;
-                    dW_dlogphi_denom = nh_d;
-                }
-                break;
-            }
-            default: {
-                dW_deta_num = mu_num;
-                break;
-            }
-        }
+        const auto pair=collapsed_curvature_pair(data,i,eta_num_i,eta_denom_i,
+            phi_num,phi_denom,!is_binomial && data.gp_data.shared);
+        const double dW_deta_num=pair.first.eta;
+        const double dW_deta_denom=pair.second.eta;
+        const double dW_dlogphi_num=phi_num*pair.first.phi;
+        const double dW_dlogphi_denom=phi_denom*pair.second.phi;
 
         // Laplace gradient weight for eta_num and eta_denom
         double w_num = -0.5 * h_inv_i * dW_deta_num;

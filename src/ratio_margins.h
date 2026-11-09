@@ -8,7 +8,13 @@
 #include <tulpa/count_math.h>
 #include <tulpa/precision_math.h>
 #include <tulpa/portable_math.h>
-#include "beta_binomial_obs.h"
+
+namespace tulpaRatio { namespace margins {
+struct Poisson; struct NegBin; struct Gamma; struct Lognormal;
+struct Binomial; struct BetaBinomial;
+template<class Margin, class T>
+T evaluate(double y, int n, const T& eta, const T& phi, const T* mean = nullptr);
+} }
 
 namespace ratiod { namespace math {
 
@@ -44,24 +50,22 @@ inline T negbin_log_p0(const T& mu, const T& phi) {
 
 template<typename T>
 inline T log_lik_poisson(int y, const T& mu) {
-    // y * log(mu) - mu - lgamma(y+1)
-    // Note: lgamma(y+1) is constant w.r.t. parameters, but we include it for correctness
-    return poisson_eta_density(double(y), safe_log(mu), mu, lgamma_fn(T(y + 1.0)));
+    return tulpaRatio::margins::evaluate<tulpaRatio::margins::Poisson>(double(y),0,safe_log(mu),T(1.0),&mu);
 }
 
 template<typename T>
 inline T log_lik_gamma(double y, const T& shape, const T& mu) {
-    return tulpa::math::gamma_log_density(y, mu, shape, std::log(y));
+    return tulpaRatio::margins::evaluate<tulpaRatio::margins::Gamma>(y,0,T(0.0),shape,&mu);
 }
 
 template<typename T>
 inline T log_lik_negbin(int y, const T& mu, const T& phi) {
-    return tulpa::math::negbin_log_pmf<T, NegbinMath>(y, mu, phi);
+    return tulpaRatio::margins::evaluate<tulpaRatio::margins::NegBin>(double(y),0,T(0.0),phi,&mu);
 }
 
 template<typename T>
 inline T log_lik_binomial(int y, int n, const T& q) {
-    return binomial_eta_density(double(y), n, log_inv_logit(q), log1m_inv_logit(q), portable_lchoose(n,y));
+    return tulpaRatio::margins::evaluate<tulpaRatio::margins::Binomial>(double(y),n,q,T(1.0));
 }
 
 template<typename T>
@@ -115,7 +119,7 @@ inline T log_lik_gamma_gamma(double y_num, double y_denom,
 
 template<typename T>
 inline T log_lik_lognormal(double y, const T& mu, const T& sigma) {
-    return lognormal_eta_density(std::log(y), mu, sigma, safe_log(sigma));
+    return tulpaRatio::margins::evaluate<tulpaRatio::margins::Lognormal>(y,0,mu,sigma);
 }
 
 template<typename T>
@@ -128,8 +132,7 @@ inline T log_lik_lognormal_lognormal(double y_num, double y_denom,
 
 template<typename T>
 inline T log_lik_beta_binomial(int y, int n, const T& q, const T& phi) {
-    return tulpa::math::beta_binomial_log_pmf<T, NegbinMath>(y, n,
-        safe_exp(log_inv_logit(q)), safe_exp(log1m_inv_logit(q)), phi, portable_lchoose(n,y));
+    return tulpaRatio::margins::evaluate<tulpaRatio::margins::BetaBinomial>(double(y),n,q,phi);
 }
 } }
 
@@ -144,6 +147,7 @@ struct Observation {
     int trials = 0;
     double log_y = 0.0, log_factorial = 0.0;
     double digamma_difference = 0.0, lgamma_difference = 0.0;
+    const double* mean = nullptr;
 };
 
 struct Result {
@@ -155,13 +159,13 @@ struct NoMargin {
     static constexpr Prior prior = Prior::None;
     static constexpr bool log_extra = false;
     explicit NoMargin(double = 1.0, bool = true) {}
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation&, bool = true) const { return {}; }
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation&, bool = true) const { return {}; }
 };
 
 struct Poisson : NoMargin {
     using NoMargin::NoMargin;
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
-        const double mu = std::exp(x.eta);
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation& x, bool lp = true) const {
+        const double mu = x.mean ? *x.mean : std::exp(x.eta);
         return {(Fields & Value) && lp ? ratiod::math::poisson_eta_density(x.y, x.eta, mu, Cached ? x.log_factorial : std::lgamma(x.y + 1.0)) : 0.0,
                 (Fields & Score) ? x.y - mu : 0.0, 0.0, (Fields & Curvature) ? mu : 0.0};
     }
@@ -173,8 +177,8 @@ struct NegBin {
     static constexpr bool log_extra = false;
     double phi;
     explicit NegBin(double p, bool = true) : phi(p) {}
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
-        const double mu = std::exp(x.eta);
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation& x, bool lp = true) const {
+        const double mu = x.mean ? *x.mean : std::exp(x.eta);
         Result out;
         const double denom = mu + phi;
         if constexpr (Cached) {
@@ -198,9 +202,9 @@ struct Gamma {
     double phi;
     tulpa::math::GammaPrecision precision;
     explicit Gamma(double p, bool lp = true) : phi(p), precision(p, lp) {}
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation& x, bool lp = true) const {
         if (x.y <= 0.0) return {Cached && lp ? -1e10 : 0.0, 0.0, 0.0};
-        const double mu = std::exp(x.eta);
+        const double mu = x.mean ? *x.mean : std::exp(x.eta);
         const double ratio = Cached ? x.y * (1.0 / mu) : x.y / mu;
         const double log_y = Cached ? x.log_y : std::log(x.y);
         return {(Fields & Value) && lp ? precision.log_density(x.y, mu, log_y) : 0.0,
@@ -216,7 +220,7 @@ struct Lognormal {
     static constexpr bool log_extra = true;
     double phi, variance, log_sigma;
     explicit Lognormal(double p, bool lp = true) : phi(p), variance(p*p), log_sigma(lp ? std::log(p) : 0.0) {}
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation& x, bool lp = true) const {
         const double log_y = Cached ? x.log_y : std::log(x.y);
         const double z = (log_y - x.eta) / phi;
         return {(Fields & Value) && lp ? ratiod::math::lognormal_eta_density(log_y, x.eta, phi, log_sigma) : 0.0,
@@ -232,7 +236,7 @@ struct Lognormal {
 
 struct Binomial : NoMargin {
     using NoMargin::NoMargin;
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation& x, bool lp = true) const {
         double p, log_p, log_1mp;
         if (x.eta >= 0.0) {
             const double e = std::exp(-x.eta);
@@ -245,7 +249,8 @@ struct Binomial : NoMargin {
             log_1mp = Cached ? -std::log(1.0 + e) : -std::log1p(e);
             log_p = x.eta + log_1mp;
         }
-        const double constant = Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials, int(x.y));
+        const double constant = (Fields & Value) && lp ?
+            (Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials, int(x.y))) : 0.0;
         const double q = x.eta >= 0.0 ? std::exp(log_1mp) : 1.0 - p;
         return {(Fields & Value) && lp ? ratiod::math::binomial_eta_density(x.y, x.trials, log_p, log_1mp, constant) : 0.0,
                 (Fields & Score) ? x.y - x.trials*p : 0.0, 0.0,
@@ -259,22 +264,91 @@ struct BetaBinomial {
     static constexpr bool log_extra = false;
     double phi;
     explicit BetaBinomial(double p, bool = true) : phi(p) {}
-    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
-        const auto bb = ratiod::math::beta_binomial_obs(int(x.y), x.trials, x.eta, phi);
-        const double constant = Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials, int(x.y));
-        Result out{(Fields & Value) && lp ? bb.ll + constant : 0.0,
-                   (Fields & Score) ? bb.d_eta : 0.0, (Fields & Extra) ? bb.d_phi : 0.0};
+    template<bool Cached, unsigned Fields = FirstOrder> Result evaluate(const Observation& x, bool lp = true) const {
+        const double p = 1.0 / (1.0 + std::exp(-x.eta));
+        const double q = 1.0 / (1.0 + std::exp(x.eta));
+        Result out;
+        if ((Fields & Value) && lp) {
+            const double constant = Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials,int(x.y));
+            out.ll = tulpa::math::beta_binomial_log_pmf(int(x.y),x.trials,p,q,phi,0.0) + constant;
+        }
+        double score = 0.0;
+        if constexpr (Fields & (Score | Curvature)) {
+            score = phi*p*q*(tulpa::math::polygamma_rising_difference(0,int(x.y),p*phi)
+                - tulpa::math::polygamma_rising_difference(0,x.trials-int(x.y),q*phi));
+            if constexpr (Fields & Score) out.residual = score;
+        }
+        if constexpr (Fields & Extra)
+            out.extra = tulpa::math::beta_binomial_phi_derivative(int(x.y),x.trials,p,q,phi);
         if constexpr (Fields & Curvature) {
-            const double p = 1.0 / (1.0 + std::exp(-x.eta));
-            const double q = 1.0 / (1.0 + std::exp(x.eta));
             const double d = phi*p*q;
-            out.neg_hess = -(q-p)*bb.d_eta - d*d*(
+            out.neg_hess = -(q-p)*score - d*d*(
                 tulpa::math::polygamma_rising_difference(1,int(x.y),p*phi) +
                 tulpa::math::polygamma_rising_difference(1,x.trials-int(x.y),q*phi));
         }
         return out;
     }
 };
+
+template<class Margin, class T>
+T evaluate(double y, int n, const T& eta, const T& phi, const T* mean) {
+    using namespace ratiod::math;
+    if constexpr (std::is_same<Margin,Poisson>::value) {
+        const T mu=mean ? *mean : safe_exp(eta);
+        return poisson_eta_density(y,eta,mu,lgamma_fn(T(y+1.0)));
+    } else if constexpr (std::is_same<Margin,NegBin>::value) {
+        const T mu=mean ? *mean : safe_exp(eta);
+        return tulpa::math::negbin_log_pmf<T,NegbinMath>(int(y),mu,phi);
+    } else if constexpr (std::is_same<Margin,Gamma>::value) {
+        const T mu=mean ? *mean : safe_exp(eta);
+        return tulpa::math::gamma_log_density(y,mu,phi,std::log(y));
+    } else if constexpr (std::is_same<Margin,Lognormal>::value) {
+        return lognormal_eta_density(std::log(y),eta,phi,safe_log(phi));
+    } else if constexpr (std::is_same<Margin,Binomial>::value) {
+        return binomial_eta_density(y,n,log_inv_logit(eta),log1m_inv_logit(eta),portable_lchoose(n,int(y)));
+    } else {
+        return tulpa::math::beta_binomial_log_pmf<T,NegbinMath>(int(y),n,
+            safe_exp(log_inv_logit(eta)),safe_exp(log1m_inv_logit(eta)),phi,portable_lchoose(n,int(y)));
+    }
+}
+
+struct CurvatureDerivatives {
+    double w=0.0, eta=0.0, phi=0.0, score_phi=0.0, score=0.0;
+};
+
+template<class Margin>
+CurvatureDerivatives curvature_derivatives(const Observation& x, double phi) {
+    const auto a=Margin(phi,false).template evaluate<false,Score|Curvature>(x,false);
+    CurvatureDerivatives out{a.neg_hess,0.,0.,0.,a.residual};
+    if constexpr (std::is_same<Margin,Poisson>::value) out.eta=out.w;
+    else if constexpr (std::is_same<Margin,Gamma>::value) {
+        const double ratio=x.y/std::exp(x.eta);
+        out.eta=-out.w; out.phi=ratio; out.score_phi=ratio-1.;
+    } else if constexpr (std::is_same<Margin,NegBin>::value) {
+        const double mu=std::exp(x.eta), A=mu+phi;
+        out.eta=out.w*(phi-mu)/A;
+        out.phi=mu*(mu*(x.y+2*phi)-x.y*phi)/(A*A*A);
+        out.score_phi=mu*(x.y-mu)/(A*A);
+    } else if constexpr (std::is_same<Margin,Binomial>::value) {
+        const double p=1./(1.+std::exp(-x.eta));
+        out.eta=out.w*(1.-2.*p);
+    } else if constexpr (std::is_same<Margin,Lognormal>::value) {
+        out.phi=-2./(phi*phi*phi);
+        out.score_phi=-2.*(std::log(x.y)-x.eta)/(phi*phi*phi);
+    } else if constexpr (std::is_same<Margin,BetaBinomial>::value) {
+        const double p=1./(1.+std::exp(-x.eta)),q=1./(1.+std::exp(x.eta)),d=phi*p*q;
+        const double A=tulpa::math::polygamma_rising_difference(0,int(x.y),p*phi);
+        const double B=tulpa::math::polygamma_rising_difference(0,x.trials-int(x.y),q*phi);
+        const double C=tulpa::math::polygamma_rising_difference(1,int(x.y),p*phi);
+        const double D=tulpa::math::polygamma_rising_difference(1,x.trials-int(x.y),q*phi);
+        const double E=tulpa::math::polygamma_rising_difference(2,int(x.y),p*phi);
+        const double F=tulpa::math::polygamma_rising_difference(2,x.trials-int(x.y),q*phi);
+        out.score_phi=p*q*(A-B)+d*(p*C-q*D);
+        out.eta=2.*p*q*out.score+(q-p)*out.w-2.*d*d*(q-p)*(C+D)-d*d*d*(E-F);
+        out.phi=-(q-p)*out.score_phi-2.*phi*p*p*q*q*(C+D)-d*d*(p*E+q*F);
+    }
+    return out;
+}
 
 struct Response {
     const int* counts = nullptr;
@@ -295,8 +369,8 @@ template<class Num, class Den = NoMargin> struct Ratio {
     double operator()(int i, const double* eta, double* residual, double* extra) const {
         const auto x = num_response.at(i, eta[i]);
         const auto y = den_response.at(i, Den::n_extra || den_response.counts || den_response.continuous ? eta[N+i] : 0.0);
-        const auto a = num.template operator()<false>(x);
-        const auto b = den.template operator()<false>(y);
+        const auto a = num.template evaluate<false>(x);
+        const auto b = den.template evaluate<false>(y);
         residual[0] = a.residual;
         if constexpr (!std::is_same<Den,NoMargin>::value) residual[1] = b.residual;
         if constexpr (Num::n_extra) extra[0] += a.extra;

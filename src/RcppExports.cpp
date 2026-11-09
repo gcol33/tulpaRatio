@@ -104,6 +104,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_gibbs_margin
+Rcpp::NumericVector cpp_test_gibbs_margin(int family, int y, double yd, double en, double ed, double pn, double pd);
+RcppExport SEXP _tulpaRatio_cpp_test_gibbs_margin(SEXP familySEXP, SEXP ySEXP, SEXP ydSEXP, SEXP enSEXP, SEXP edSEXP, SEXP pnSEXP, SEXP pdSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type yd(ydSEXP);
+    Rcpp::traits::input_parameter< double >::type en(enSEXP);
+    Rcpp::traits::input_parameter< double >::type ed(edSEXP);
+    Rcpp::traits::input_parameter< double >::type pn(pnSEXP);
+    Rcpp::traits::input_parameter< double >::type pd(pdSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_gibbs_margin(family, y, yd, en, ed, pn, pd));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_gibbs_spatial
 Rcpp::List cpp_gibbs_spatial(Rcpp::List data_list);
 RcppExport SEXP _tulpaRatio_cpp_gibbs_spatial(SEXP data_listSEXP) {
@@ -1810,6 +1827,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_collapsed_gp_reference
+Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta, int y, int n, double sigma);
+RcppExport SEXP _tulpaRatio_cpp_test_collapsed_gp_reference(SEXP betaSEXP, SEXP ySEXP, SEXP nSEXP, SEXP sigmaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_gp_reference(beta, y, n, sigma));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_collapsed_margin
 Rcpp::NumericMatrix cpp_test_collapsed_margin(int family, int y, double yd, double en, double ed, double pn, double pd, bool shared);
 RcppExport SEXP _tulpaRatio_cpp_test_collapsed_margin(SEXP familySEXP, SEXP ySEXP, SEXP ydSEXP, SEXP enSEXP, SEXP edSEXP, SEXP pnSEXP, SEXP pdSEXP, SEXP sharedSEXP) {
@@ -1866,6 +1897,34 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
     Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_ratio_margin_scalars(family, y, n, eta, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_margin_fields
+Rcpp::NumericVector cpp_test_margin_fields(std::string family, double eta, double phi, int fields, bool cached);
+RcppExport SEXP _tulpaRatio_cpp_test_margin_fields(SEXP familySEXP, SEXP etaSEXP, SEXP phiSEXP, SEXP fieldsSEXP, SEXP cachedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< int >::type fields(fieldsSEXP);
+    Rcpp::traits::input_parameter< bool >::type cached(cachedSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_margin_fields(family, eta, phi, fields, cached));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_margin_curvature
+Rcpp::NumericVector cpp_test_margin_curvature(std::string family, double eta, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_margin_curvature(SEXP familySEXP, SEXP etaSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_margin_curvature(family, eta, phi));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1981,8 +2040,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_tulpaRatio_run_nuts_specs
-Rcpp::List cpp_tulpaRatio_run_nuts_specs(Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::List X_list, Rcpp::List cfg_list, Rcpp::NumericVector init, int n_iter, int n_warmup, int max_treedepth, double adapt_delta, int seed, bool verbose, std::string gradient_mode, double sigma_beta, double phi_prior_shape, double phi_prior_rate, double sigma_prior_scale, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List temporal_params);
-RcppExport SEXP _tulpaRatio_cpp_tulpaRatio_run_nuts_specs(SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_listSEXP, SEXP cfg_listSEXP, SEXP initSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP max_treedepthSEXP, SEXP adapt_deltaSEXP, SEXP seedSEXP, SEXP verboseSEXP, SEXP gradient_modeSEXP, SEXP sigma_betaSEXP, SEXP phi_prior_shapeSEXP, SEXP phi_prior_rateSEXP, SEXP sigma_prior_scaleSEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP) {
+Rcpp::List cpp_tulpaRatio_run_nuts_specs(Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::List X_list, Rcpp::List cfg_list, Rcpp::NumericVector init, int n_iter, int n_warmup, int max_treedepth, double adapt_delta, int seed, bool verbose, std::string gradient_mode, double sigma_beta, double phi_prior_shape, double phi_prior_rate, double sigma_prior_scale, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List temporal_params, int n_chains, int n_threads);
+RcppExport SEXP _tulpaRatio_cpp_tulpaRatio_run_nuts_specs(SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_listSEXP, SEXP cfg_listSEXP, SEXP initSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP max_treedepthSEXP, SEXP adapt_deltaSEXP, SEXP seedSEXP, SEXP verboseSEXP, SEXP gradient_modeSEXP, SEXP sigma_betaSEXP, SEXP phi_prior_shapeSEXP, SEXP phi_prior_rateSEXP, SEXP sigma_prior_scaleSEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP, SEXP n_chainsSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2007,7 +2066,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_tulpaRatio_run_nuts_specs(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params));
+    Rcpp::traits::input_parameter< int >::type n_chains(n_chainsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_tulpaRatio_run_nuts_specs(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2049,6 +2110,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_crt_mean", (DL_FUNC) &_tulpaRatio_cpp_crt_mean, 2},
     {"_tulpaRatio_cpp_enum_names", (DL_FUNC) &_tulpaRatio_cpp_enum_names, 1},
     {"_tulpaRatio_cpp_ess_fit", (DL_FUNC) &_tulpaRatio_cpp_ess_fit, 22},
+    {"_tulpaRatio_cpp_test_gibbs_margin", (DL_FUNC) &_tulpaRatio_cpp_test_gibbs_margin, 7},
     {"_tulpaRatio_cpp_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_gibbs_spatial, 1},
     {"_tulpaRatio_cpp_gpu_available", (DL_FUNC) &_tulpaRatio_cpp_gpu_available, 0},
     {"_tulpaRatio_cpp_gpu_info", (DL_FUNC) &_tulpaRatio_cpp_gpu_info, 0},
@@ -2159,10 +2221,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
+    {"_tulpaRatio_cpp_test_collapsed_gp_reference", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_gp_reference, 4},
     {"_tulpaRatio_cpp_test_collapsed_margin", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_margin, 8},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
     {"_tulpaRatio_cpp_test_ratio_margin_scalars", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin_scalars, 5},
+    {"_tulpaRatio_cpp_test_margin_fields", (DL_FUNC) &_tulpaRatio_cpp_test_margin_fields, 5},
+    {"_tulpaRatio_cpp_test_margin_curvature", (DL_FUNC) &_tulpaRatio_cpp_test_margin_curvature, 3},
     {"_tulpaRatio_cpp_test_ratio_prior", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_prior, 2},
     {"_tulpaRatio_cpp_test_scalar_math", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_math, 2},
     {"_tulpaRatio_cpp_test_scalar_boundaries", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_boundaries, 1},
@@ -2172,7 +2237,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_runtime_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_runtime_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_pg_binomial_gibbs", (DL_FUNC) &_tulpaRatio_cpp_tulpa_pg_binomial_gibbs, 13},
-    {"_tulpaRatio_cpp_tulpaRatio_run_nuts_specs", (DL_FUNC) &_tulpaRatio_cpp_tulpaRatio_run_nuts_specs, 21},
+    {"_tulpaRatio_cpp_tulpaRatio_run_nuts_specs", (DL_FUNC) &_tulpaRatio_cpp_tulpaRatio_run_nuts_specs, 23},
     {"_tulpaRatio_cpp_vi_fit", (DL_FUNC) &_tulpaRatio_cpp_vi_fit, 20},
     {NULL, NULL, 0}
 };

@@ -10,6 +10,18 @@
 #include <omp.h>
 #endif
 
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_gibbs_margin(int family,int y,double yd,double en,double ed,
+                                         double pn,double pd) {
+  gibbs::GibbsData d{};
+  const int trials=static_cast<int>(yd);
+  d.N=1; d.family=static_cast<gibbs::GibbsFamily>(family);
+  d.y_num=&y; d.y_denom=&trials; d.y_denom_cont=&yd;
+  const auto a=gibbs::obs_log_lik_derivs(0,en,ed,pn,pd,d);
+  return Rcpp::NumericVector::create(gibbs::obs_log_lik(0,en,ed,pn,pd,d),
+      a.g_num,a.g_den,a.h_num,a.h_den);
+}
+
 namespace {
 
 // Convert one chain's pure-C++ result into the R list the backend expects.

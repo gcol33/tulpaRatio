@@ -12,6 +12,7 @@
 
 #include "lik_specs/family_registry.h"
 #include "lik_specs/lik_helpers.h"
+#include "re_model_data.h"
 
 namespace tulpaRatio {
 tulpa::LikelihoodSpec build_ratio_likelihood_spec(const RatioConfig& cfg);
@@ -55,8 +56,6 @@ Rcpp::IntegerVector buffer_int_vector(const T* values, int n) {
   return out;
 }
 
-// Copy a column-major Rcpp NumericMatrix into a row-major flat double vector
-// with shape [N x p], matching tulpa::ProcessData::X_flat layout.
 std::vector<double> rmajor_from_rmatrix(const Rcpp::NumericMatrix& X) {
   const int N = X.nrow();
   const int p = X.ncol();
@@ -77,7 +76,7 @@ std::unique_ptr<tulpaRatio::lik::ResponseData> build_response_payload(
   auto p = std::make_unique<tulpaRatio::lik::ResponseData>();
   const auto copy = [N](tulpaRatio::ResponseShape shape, const Rcpp::IntegerVector& counts,
       const Rcpp::NumericVector& continuous, std::vector<int>& ints, std::vector<double>& reals) {
-    if (shape == tulpaRatio::ResponseShape::Positive) {
+    if (shape == tulpaRatio::ResponseShape::Positive || shape == tulpaRatio::ResponseShape::Exposure) {
       if (continuous.size() != N) Rcpp::stop("Continuous response length must equal N");
       reals.assign(continuous.begin(),continuous.end());
     } else {
@@ -101,16 +100,11 @@ int cpp_tulpa_abi_version() {
   return fn();
 }
 
-// The ABI constant baked into this package at compile time, taken from the
-// tulpa headers seen via LinkingTo. Unguarded, so a mismatch can be reported
-// as two numbers rather than thrown.
 // [[Rcpp::export]]
 int cpp_tulpa_compiled_abi_version() {
   return tulpa::TULPA_ABI_VERSION;
 }
 
-// The ABI constant carried by the tulpa DLL currently loaded. Unguarded, as
-// above.
 // [[Rcpp::export]]
 int cpp_tulpa_runtime_abi_version() {
   auto fn = reinterpret_cast<tulpa::GetABIVersionFn>(
@@ -158,18 +152,6 @@ Rcpp::List cpp_tulpa_pg_binomial_gibbs(
   return ratiod::pg_engine_fit(result.value, store_eta);
 }
 
-// ============================================================================
-// LikelihoodSpec-driven NUTS entry point (B1b: 7 ratio families).
-//
-// Takes a list of design matrices (one per process) so adding a 3+-process
-// family is a dispatcher branch + one extra X in X_list, with no signature
-// change here. Attaches a per-family response payload, asks the family
-// dispatcher for a LikelihoodSpec, then routes through tulpa::get_nuts_fn().
-//
-// Returns a list shaped like the legacy `cpp_hmc_fit` output (samples,
-// log_prob, accept_prob, n_leapfrog, treedepth, divergent, epsilon, sampler)
-// for a single chain so backend_hmc.R's existing converter can consume it.
-// ============================================================================
 // [[Rcpp::export]]
 Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     Rcpp::IntegerVector y_num,
@@ -192,7 +174,9 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     double sigma_prior_scale = 1.0,
     Rcpp::List re_params = Rcpp::List::create(),
     Rcpp::List spatial_params = Rcpp::List::create(),
-    Rcpp::List temporal_params = Rcpp::List::create()
+    Rcpp::List temporal_params = Rcpp::List::create(),
+    int n_chains = 1,
+    int n_threads = 1
 ) {
   const int n_proc_input = X_list.size();
   if (n_proc_input < 1) {
@@ -202,17 +186,12 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   Rcpp::NumericMatrix X0 = X_list[0];
   const int N = X0.nrow();
 
-  // ---- Build RatioConfig from R-side list (with hyperprior overrides) -----
   tulpaRatio::RatioConfig cfg;
   cfg.family    = Rcpp::as<std::string>(cfg_list["family"]);
   if (cfg_list.containsElementNamed("zi"))         cfg.zi         = Rcpp::as<std::string>(cfg_list["zi"]);
   if (cfg_list.containsElementNamed("num_link"))   cfg.num_link   = Rcpp::as<std::string>(cfg_list["num_link"]);
   if (cfg_list.containsElementNamed("denom_link")) cfg.denom_link = Rcpp::as<std::string>(cfg_list["denom_link"]);
 
-  // Map cfg.zi (string) to tulpa::ZIType. The legacy distribution-specific
-  // values match what the engine uses to build the X_zi / X_oi blocks in the
-  // layout. The templated LikelihoodFn dispatches on data.zi_type to pick the
-  // right mixture-form log-pmf.
   auto parse_zi = [](const std::string& s) -> tulpa::ZIType {
     if (s == "none" || s.empty())       return tulpa::ZIType::NONE;
     if (s == "zi_poisson")              return tulpa::ZIType::ZI_POISSON;
@@ -229,19 +208,15 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   const tulpa::ZIType zi_type = parse_zi(cfg.zi);
   const bool has_oi_block = (zi_type == tulpa::ZIType::OI_BINOMIAL) ||
                             (zi_type == tulpa::ZIType::ZOIB);
-  // ZI block is present whenever zi_type != NONE EXCEPT pure OI (OI alone uses
-  // X_oi only, no X_zi). ZOIB needs both. The other inflation types use X_zi.
   const bool has_zi_block = (zi_type != tulpa::ZIType::NONE) &&
                             (zi_type != tulpa::ZIType::OI_BINOMIAL);
 
-  // ---- Validate response shape vs. family expectations -------------------
   const bool has_y_int  = (y_num.size()  == N) && (y_denom.size()  == N);
   const bool has_y_cont = (y_num_cont.size() == N) || (y_denom_cont.size() == N);
   if (!has_y_int && !has_y_cont) {
     Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: response vectors all empty.");
   }
 
-  // ---- Build LikelihoodSpec & response payload via dispatcher ------------
   tulpa::LikelihoodSpec spec = tulpaRatio::build_ratio_likelihood_spec(cfg);
   auto response = build_response_payload(
       cfg.family, y_num, y_denom, y_num_cont, y_denom_cont, N);
@@ -252,7 +227,6 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
                n_proc_input, cfg.family.c_str(), spec.n_processes);
   }
 
-  // ---- ModelData (n_processes from spec; no spatial/temporal/RE/ZI) -----
   tulpa::ModelData data;
   data.N = N;
   data.n_processes = spec.n_processes;
@@ -275,23 +249,20 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     }
     data.processes[k].p      = Xk.ncol();
     data.processes[k].X_flat = rmajor_from_rmatrix(Xk);
+    if (cfg_list.containsElementNamed("offsets")) {
+      Rcpp::List offsets=cfg_list["offsets"];
+      if (offsets.size() != spec.n_processes) Rcpp::stop("One offset is required per process");
+      data.processes[k].offset=Rcpp::as<std::vector<double>>(offsets[k]);
+      if (data.processes[k].offset.size() != static_cast<size_t>(N))
+        Rcpp::stop("Process offset length must equal N");
+    }
     total_p_design += Xk.ncol();
   }
   data.sharing.init(spec.n_processes);
 
-  // ---- ZI / OI blocks (B1c) ---------------------------------------------
-  // R-side passes X_zi (always for ZI/hurdle/ZOIB; mandatory) and X_oi (for
-  // OI/ZOIB). The engine extends the layout with beta_zi / beta_oi blocks
-  // based on these dimensions and pre-computes logit_zi[i] / logit_oi[i] for
-  // each obs before calling the LikelihoodFn — the family kernels never have
-  // to multiply X_zi * beta_zi themselves.
   data.zi_type     = zi_type;
   data.p_zi        = 0;
   data.p_oi        = 0;
-  // Defaults match the legacy backend (R-side: priors$zi_prior_sd %||% 10.0,
-  // priors$oi_prior_sd %||% priors$zi_prior_sd %||% 10.0). R passes overrides
-  // via cfg_list$zi_prior_sd / cfg_list$oi_prior_sd so the engine stays
-  // signature-stable while the prior survives a path switch.
   data.zi_prior_sd = cfg_list.containsElementNamed("zi_prior_sd")
       ? Rcpp::as<double>(cfg_list["zi_prior_sd"]) : 10.0;
   data.oi_prior_sd = cfg_list.containsElementNamed("oi_prior_sd")
@@ -328,134 +299,13 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     p_oi_block     = X_oi.ncol();
   }
 
-  // ---- Random effects (B1d-1: single grouping factor, intercepts + slopes) ----
-  // R passes the same re_params list shape used by legacy cpp_hmc_fit. The
-  // spec path supports the single-grouping-factor case in B1d-1: random
-  // intercepts (n_coefs == 1) and uncorrelated random slopes (n_coefs > 1,
-  // correlated == FALSE). Multi-term (crossed/nested) and correlated slopes
-  // (LKJ-Cholesky) still fall back to legacy.
-  //
-  // The engine's tulpa::compute_re_prior reads these fields:
-  //   * intercept-only path:  n_re_terms == 0, n_re_groups, re_group
-  //   * slopes path:          n_re_terms == 1, has_re_slopes,
-  //                           re_n_coefs, re_n_groups_multi,
-  //                           re_slope_matrices, re_group_multi_flat
-  // tulpa::compute_param_layout matches tulpaRatio's legacy
-  // compute_param_layout slot-for-slot, so q_init / sample columns agree
-  // without any reordering of the RE block.
-  int p_re_block = 0;
-  if (re_params.containsElementNamed("n_groups")) {
-    const int n_re_groups = Rcpp::as<int>(re_params["n_groups"]);
-    const int n_re_terms  = Rcpp::as<int>(re_params["n_terms"]);
-    const bool has_slopes = Rcpp::as<bool>(re_params["has_slopes"]);
-    const bool has_correlated_slopes =
-        re_params.containsElementNamed("has_correlated_slopes")
-          ? Rcpp::as<bool>(re_params["has_correlated_slopes"])
-          : false;
-
-    if (n_re_groups > 0) {
-      if (n_re_terms > 1) {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: multi-term RE is not yet "
-                   "supported on the spec path. Use the legacy backend.");
-      }
-      if (has_correlated_slopes) {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: correlated random slopes "
-                   "are not yet supported on the spec path. "
-                   "Use the legacy backend.");
-      }
-
-      data.re_group = Rcpp::as<std::vector<int>>(re_params["group"]);
-      data.n_re_groups = n_re_groups;
-      data.re_parameterization =
-          Rcpp::as<int>(re_params["parameterization"]);  // 0=centered, 1=NC
-      if ((int)data.re_group.size() != N) {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: re_params$group length (%d) "
-                   "must equal N (%d).", (int)data.re_group.size(), N);
-      }
-
-      if (has_slopes) {
-        // Single-term slopes path. Engine reads:
-        //   re_n_coefs[0], re_n_groups_multi[0], re_correlated[0],
-        //   re_n_chol[0], re_slope_matrices[0], re_group_multi_flat
-        //   (length N — same content as re_group when n_terms == 1).
-        const int n_coefs = Rcpp::as<int>(re_params["n_coefs"]);
-        if (n_coefs < 2) {
-          Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: has_slopes=TRUE but "
-                     "n_coefs (%d) < 2.", n_coefs);
-        }
-        const int n_slopes = n_coefs - 1;
-        Rcpp::NumericMatrix Xs = Rcpp::as<Rcpp::NumericMatrix>(
-            re_params["slope_matrix"]);
-        if (Xs.nrow() != N || Xs.ncol() != n_slopes) {
-          Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: slope_matrix shape "
-                     "(%d x %d) does not match N x (n_coefs - 1) = %d x %d.",
-                     Xs.nrow(), Xs.ncol(), N, n_slopes);
-        }
-
-        data.n_re_terms = 1;
-        data.re_n_groups_multi.assign(1, n_re_groups);
-        data.re_offsets.assign(1, 0);
-        data.re_group_multi_flat.assign(N, 0);
-        for (int i = 0; i < N; ++i) {
-          data.re_group_multi_flat[i] = data.re_group[i];
-        }
-
-        data.has_re_slopes = true;
-        data.has_re_correlated_slopes = false;
-        data.re_n_coefs.assign(1, n_coefs);
-        data.re_n_slopes.assign(1, n_slopes);
-        data.re_correlated.assign(1, false);
-        data.re_n_chol.assign(1, 0);
-        data.re_slope_matrices.assign(1, std::vector<double>(
-            static_cast<size_t>(N) * n_slopes, 0.0));
-        for (int i = 0; i < N; ++i) {
-          for (int s = 0; s < n_slopes; ++s) {
-            data.re_slope_matrices[0][i * n_slopes + s] = Xs(i, s);
-          }
-        }
-
-        data.total_re_groups   = n_re_groups;
-        data.total_re_params   = n_re_groups * n_coefs;
-        data.total_sigma_params = n_coefs;
-        data.total_chol_params = 0;
-
-        // Layout: n_coefs sigmas + n_groups * n_coefs RE effects.
-        p_re_block = n_coefs + n_re_groups * n_coefs;
-      } else {
-        // Single-term intercept-only path. Mirrors the engine's legacy slot
-        // selection: n_re_terms == 0 routes through compute_param_layout's
-        // single-term branch and through generic_re_effect's re_group fallback.
-        data.n_re_terms = 0;
-        data.has_re_slopes = false;
-        data.has_re_correlated_slopes = false;
-        data.total_re_groups = n_re_groups;
-        data.total_re_params = n_re_groups;
-        data.total_sigma_params = 1;
-        data.total_chol_params = 0;
-        // 1 (log_sigma) + n_re_groups (z or re).
-        p_re_block = 1 + n_re_groups;
-      }
-
-      // Disable the hand-coded H gradient when RE is present: the H-kernel
-      // asserts no latent structure. The autodiff path picks up RE via
-      // tulpa::compute_log_post_generic, which includes the RE prior and
-      // adds the per-obs RE effect to eta. Lifting this requires extending
-      // lik_grad_h_kernel.cpp with the RE prior gradient + Z^T residual
-      // accumulation; deferred to a follow-up.
-      spec.gradient_fn = nullptr;
-    }
+  int p_re_block=0;
+  if (re_params.size() > 0) {
+    ratiod_hmc::apply_re_params(data,re_params);
+    p_re_block=data.total_sigma_params+data.total_chol_params+data.total_re_params;
+    if (data.n_re_groups > 0 || data.n_re_terms > 0) spec.gradient_fn=nullptr;
   }
 
-  // ---- Spatial (B1d Step 2: ICAR / BYM2, non-collapsed) -----------------
-  // R passes the same spatial_params list shape used by legacy cpp_hmc_fit.
-  // The spec path supports:
-  //   - "icar": log_tau + n_units phi values  (1 + n_units params)
-  //   - "bym2": log_sigma + logit_rho + 2*n_units (phi_scaled, theta)
-  //                                     (2 + 2*n_units params)
-  // Collapsed parameterisations and CAR_PROPER / GP / HSGP / multiscale GP
-  // are deferred. The engine's compute_layout + compute_log_post_generic
-  // wires the prior and adds the per-obs spatial effect to eta when these
-  // fields are set.
   int p_spatial_block = 0;
   if (spatial_params.containsElementNamed("type")) {
     const std::string spatial_type =
@@ -511,17 +361,10 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
           ? (2 + 2 * data.n_spatial_units)
           : (1 +     data.n_spatial_units);
 
-      // Same rationale as RE: the H-kernel rejects spatial structure.
       spec.gradient_fn = nullptr;
     }
   }
 
-  // ---- Temporal (B1d Step 3: RW1 / RW2 / AR1) ---------------------------
-  // Layout sizes follow compute_param_layout exactly:
-  //   - RW1/RW2:  log_tau + n_temporal_params           = 1 + n_temporal_params
-  //   - AR1   :  log_tau + logit_rho + n_temporal_params = 2 + n_temporal_params
-  //   - GP    : deferred (separate hyperprior surface)
-  // n_temporal_params = n_times * n_temporal_groups (R-side already computed).
   int p_temporal_block = 0;
   if (temporal_params.containsElementNamed("type")) {
     const std::string temporal_type =
@@ -569,12 +412,10 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
                                                                           : 1;
       p_temporal_block = hyper + data.n_temporal_params;
 
-      // H-kernel rejects temporal structure too.
       spec.gradient_fn = nullptr;
     }
   }
 
-  // ---- Param layout (engine derives from data + spec) -------------------
   tulpa::ParamLayout layout = tulpa::compute_layout(data);
 
   int expected_total = total_p_design + p_re_block + p_spatial_block
@@ -595,63 +436,49 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
                (int)init.size(), expected_total, cfg.family.c_str());
   }
 
-  // ---- Pin gradient mode -------------------------------------------------
   int grad_rc = tulpa::set_gradient_mode_str(gradient_mode.c_str());
   if (grad_rc != 0) {
     Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: unrecognised gradient_mode '%s'.",
                gradient_mode.c_str());
   }
-  // NB: tulpa's dispatcher (hmc_gradient_dispatch.h:33) routes a registered
-  // `spec.gradient_fn` for every mode except NUMERICAL — so a caller passing
-  // gradient_mode = "A_r" while the spec ships `grad_h_<family>` actually
-  // runs the hand-coded H kernel. In practice the H kernel tracks the
-  // legacy backend's analytical/AD gradients more tightly than tulpa's
-  // generic arena AD does (matching summation order on the same closed-form
-  // derivatives), so we leave the hook in place.
 
-  // ---- Run NUTS via the registered tulpa entry point ---------------------
-  std::vector<double> init_vec(init.begin(), init.end());
-  tulpa::NUTSResult result{};
-  tulpa::get_nuts_fn()(
-    &data,
-    &layout,
-    init_vec.data(),
-    layout.total_params,
-    n_iter,
-    n_warmup,
-    max_treedepth,
-    adapt_delta,
-    static_cast<unsigned int>(seed),
-    verbose ? 1 : 0,
-    nullptr,            // inv_metric_diag (v11) — default mass-adaptation
-    &result
-  );
-
-  const int n_save = result.n_sample;
-  const int n_par  = result.n_params;
-
-  Rcpp::NumericMatrix samples = row_major_matrix(result.samples, n_save, n_par);
-  Rcpp::NumericVector log_prob    = buffer_vector(result.log_prob,    n_save);
-  Rcpp::NumericVector accept_prob = buffer_vector(result.accept_prob, n_save);
-  Rcpp::IntegerVector divergent   = buffer_int_vector(result.divergent, n_save);
-  Rcpp::IntegerVector treedepth   = buffer_int_vector(result.treedepth, n_save);
-  Rcpp::IntegerVector n_leapfrog(n_save);
-  for (int s = 0; s < n_save; ++s) {
-    int td = treedepth[s];
-    n_leapfrog[s] = (td > 0) ? ((1 << td) - 1) : 1;
+  if (n_chains < 1) Rcpp::stop("n_chains must be positive");
+  tulpa::OmpCapScope thread_cap(n_threads);
+  std::vector<double> init_vec;
+  for (int c=0;c<n_chains;++c) init_vec.insert(init_vec.end(),init.begin(),init.end());
+  std::vector<tulpa::NUTSResult> results(n_chains);
+  if (n_chains == 1) {
+    tulpa::get_nuts_fn()(&data,&layout,init_vec.data(),layout.total_params,
+      n_iter,n_warmup,max_treedepth,adapt_delta,static_cast<unsigned int>(seed),
+      verbose ? 1 : 0,nullptr,results.data());
+  } else {
+    tulpa::get_nuts_chains_fn()(&data,&layout,init_vec.data(),layout.total_params,n_chains,
+      n_iter,n_warmup,max_treedepth,adapt_delta,static_cast<unsigned int>(seed),
+      verbose ? 1 : 0,nullptr,results.data());
   }
-
-  Rcpp::List out = Rcpp::List::create(
-    Rcpp::Named("samples")     = samples,
-    Rcpp::Named("log_prob")    = log_prob,
-    Rcpp::Named("accept_prob") = accept_prob,
-    Rcpp::Named("n_leapfrog")  = n_leapfrog,
-    Rcpp::Named("treedepth")   = treedepth,
-    Rcpp::Named("divergent")   = divergent,
-    Rcpp::Named("epsilon")     = result.epsilon,
-    Rcpp::Named("sampler")     = std::string(result.sampler[0] ? result.sampler : "NUTS")
-  );
-
-  result.free_buffers();
-  return out;
+  Rcpp::List samples(n_chains),log_prob(n_chains),accept_prob(n_chains),
+             divergent(n_chains),treedepth(n_chains),n_leapfrog(n_chains);
+  Rcpp::NumericVector epsilon(n_chains);
+  for (int c=0;c<n_chains;++c) {
+    auto& result=results[c];
+    const int n=result.n_sample;
+    samples[c]=row_major_matrix(result.samples,n,result.n_params);
+    log_prob[c]=buffer_vector(result.log_prob,n);
+    accept_prob[c]=buffer_vector(result.accept_prob,n);
+    divergent[c]=buffer_int_vector(result.divergent,n);
+    treedepth[c]=buffer_int_vector(result.treedepth,n);
+    Rcpp::IntegerVector steps(n);
+    for (int i=0;i<n;++i) steps[i]=result.treedepth[i] > 0 ? (1 << result.treedepth[i])-1 : 1;
+    n_leapfrog[c]=steps;
+    epsilon[c]=result.epsilon;
+    result.free_buffers();
+  }
+  const auto pack = [n_chains](const Rcpp::List& x) -> SEXP {
+    return n_chains == 1 ? SEXP(x[0]) : SEXP(x);
+  };
+  return Rcpp::List::create(Rcpp::Named("samples")=pack(samples),
+    Rcpp::Named("log_prob")=pack(log_prob),Rcpp::Named("accept_prob")=pack(accept_prob),
+    Rcpp::Named("n_leapfrog")=pack(n_leapfrog),Rcpp::Named("treedepth")=pack(treedepth),
+    Rcpp::Named("divergent")=pack(divergent),Rcpp::Named("epsilon")=epsilon,
+    Rcpp::Named("sampler")="NUTS");
 }

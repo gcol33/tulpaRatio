@@ -5,7 +5,11 @@ test_that("R reads compiled family shapes, links, inflation and extra counts", {
     model <- tulpaRatio:::MODEL_TYPES[[name]]
     for (key in names(entry)) expect_identical(model[[key]],entry[[key]])
     expect_equal(entry$n_extra,length(model$dispersion))
-    expect_equal(entry$n_processes,if (model$responses[['denom']]=='trials') 1L else 2L)
+    expect_equal(entry$n_processes,if (model$responses[['denom']] %in% c('trials','exposure')) 1L else 2L)
+  }
+  for (name in c('poisson_fixed','negbin_fixed','lognormal_fixed','poisson_negbin')) {
+    expect_false(entries[[name]]$handcoded)
+    expect_true(entries[[name]]$n_processes > 0L)
   }
 })
 

@@ -47,3 +47,57 @@ test_that("residual kernels accumulate every margin's extra score", {
     expect_equal(unname(z[i,]),unname(expected),tolerance=1e-14)
   }
 })
+
+test_that("margin field selection preserves caches and observed curvature", {
+  for (family in c('poisson','negbin','gamma','lognormal','binomial','beta_binomial')) {
+    for (cached in c(FALSE,TRUE)) for (phi in c(.2,2.4,1e5)) {
+      eta <- -.35
+      all <- tulpaRatio:::cpp_test_margin_fields(family,eta,phi,15L,cached)
+      expect_identical(unname(all[1:3]),unname(
+        tulpaRatio:::cpp_test_ratio_margin(family,3.,8L,eta,phi,cached)))
+      for (k in 1:4) {
+        part <- tulpaRatio:::cpp_test_margin_fields(family,eta,phi,as.integer(2^(k-1L)),cached)
+        expect_identical(part[k],all[k])
+        expect_identical(part[-k],rep(0.,3))
+      }
+      h <- 1e-5
+      plus <- tulpaRatio:::cpp_test_margin_fields(family,eta+h,phi,2L,cached)[2]
+      minus <- tulpaRatio:::cpp_test_margin_fields(family,eta-h,phi,2L,cached)[2]
+      expect_equal(all[4],(minus-plus)/(2*h),tolerance=1e-8)
+    }
+  }
+})
+
+test_that("curvature derivatives differentiate the shared margins", {
+  for (family in c('poisson','negbin','gamma','lognormal','binomial','beta_binomial')) {
+    for (eta in c(-2.,-.35,3.)) for (phi in c(.2,2.4,10.)) {
+      d <- tulpaRatio:::cpp_test_margin_curvature(family,eta,phi)
+      h <- 1e-5
+      en <- tulpaRatio:::cpp_test_margin_curvature(family,eta-h,phi)
+      ep <- tulpaRatio:::cpp_test_margin_curvature(family,eta+h,phi)
+      pn <- tulpaRatio:::cpp_test_margin_curvature(family,eta,phi-h)
+      pp <- tulpaRatio:::cpp_test_margin_curvature(family,eta,phi+h)
+      expect_equal(d[2],(ep[1]-en[1])/(2*h),tolerance=1e-7)
+      expect_equal(d[3],(pp[1]-pn[1])/(2*h),tolerance=1e-7)
+      expect_equal(d[4],(pp[5]-pn[5])/(2*h),tolerance=1e-7)
+    }
+  }
+})
+
+test_that("Gibbs observation kernels read normalized uncapped margins", {
+  pairs <- list(c('poisson','gamma'),c('negbin','negbin'),
+                c('binomial','none'),c('negbin','gamma'))
+  for (family in 0:3) for (eta in c(-40.,-.35,20.,21.,30.,40.)) {
+    pair <- pairs[[family+1L]]
+    a <- tulpaRatio:::cpp_test_margin_fields(pair[1],eta,2.4,15L,FALSE)
+    b <- if (pair[2]=='none') rep(0.,4) else {
+      e <- .2; p <- 1.7; y <- if (pair[2]=='negbin') 8. else 4.
+      r <- tulpaRatio:::cpp_test_ratio_margin(pair[2],y,8L,e,p,FALSE)
+      w <- if (pair[2]=='negbin') exp(e)/(exp(e)+p)*p/(exp(e)+p)*(y+p) else p*y/exp(e)
+      c(unname(r),w)
+    }
+    yd <- if (pair[2] %in% c('none','negbin')) 8. else 4.
+    z <- tulpaRatio:::cpp_test_gibbs_margin(family,3L,yd,eta,.2,2.4,1.7)
+    expect_equal(unname(z),c(a[1]+b[1],a[2],b[2],a[4],b[4]),tolerance=1e-12)
+  }
+})

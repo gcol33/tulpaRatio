@@ -291,14 +291,14 @@ FAMILY_DISTRIBUTIONS <- list(
 
 model_type_spec <- function(num, denom, responses, dispersion = NULL,
                             samplers = character(), phi_rate = 0.1, name = NULL,
-                            spec_inflation = NULL, handcoded = FALSE) {
+                            handcoded = FALSE) {
   list(distributions = c(num = num, denom = denom), responses = responses,
        dispersion = dispersion,
        samplers = c("hmc", "ess", "sghmc", "sgld", "vi", samplers),
        phi_prior = c(shape = 2, rate = phi_rate), name = name,
        labels = vapply(FAMILY_DISTRIBUTIONS[c(num, denom)], `[[`, "", "label"),
        handcoded = handcoded,
-       spec_inflation = spec_inflation)
+       spec_inflation = character())
 }
 
 # Each model's distributions, response domains, draw names and inference support.
@@ -309,7 +309,7 @@ MODEL_TYPES <- list(
     c(num = "phi"), name = "beta_binomial_fixed"),
   negbin_negbin = model_type_spec("neg_binomial_2", "neg_binomial_2", NULL,
     c(num = "phi_num", denom = "phi_denom"), c("laplace", "gibbs", "pg")),
-  poisson_negbin = model_type_spec("poisson", "neg_binomial_2", c(num = "count", denom = "count"),
+  poisson_negbin = model_type_spec("poisson", "neg_binomial_2", NULL,
     c(denom = "phi_denom")),
   poisson_gamma = model_type_spec("poisson", "gamma", NULL,
     c(denom = "shape"), c("laplace", "gibbs"), phi_rate = 0.5),
@@ -320,10 +320,10 @@ MODEL_TYPES <- list(
   lognormal = model_type_spec("lognormal", "lognormal", NULL,
     c(num = "sigma_num", denom = "sigma_denom"), phi_rate = 2,
     name = "lognormal_lognormal"),
-  poisson_fixed = model_type_spec("poisson", "fixed", c(num = "count", denom = "exposure")),
-  negbin_fixed = model_type_spec("neg_binomial_2", "fixed", c(num = "count", denom = "exposure"),
+  poisson_fixed = model_type_spec("poisson", "fixed", NULL),
+  negbin_fixed = model_type_spec("neg_binomial_2", "fixed", NULL,
     c(num = "phi_num")),
-  lognormal_fixed = model_type_spec("lognormal", "fixed", c(num = "positive", denom = "exposure"),
+  lognormal_fixed = model_type_spec("lognormal", "fixed", NULL,
     c(num = "sigma_num"))
 )
 

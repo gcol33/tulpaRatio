@@ -19,6 +19,7 @@
 #include <Rcpp.h>
 #include "enum_names.h"
 #include "scale_prior.h"
+#include "ratio_margins.h"
 #include <tulpa/count_math.h>
 #include "icar_quadratic.h"
 #include <tulpa/precision_math.h>
@@ -198,55 +199,36 @@ inline double compute_tvc_eta_obs(int i, const double* tvc_w, const GibbsData& d
     return eta;
 }
 
-// Log-likelihood for a single observation given eta_num, eta_denom
-inline double obs_log_lik(int i, double eta_num, double eta_denom,
-                          double phi_num, double phi_denom,
-                          const GibbsData& d) {
-    double ll = 0.0;
+template<class Num, class Den = tulpaRatio::margins::NoMargin>
+struct MarginPair { using numerator=Num; using denominator=Den; };
 
+template<unsigned Fields>
+inline auto obs_margins(int i, double en, double ed, double pn, double pd, const GibbsData& d) {
+    using namespace tulpaRatio::margins;
+    const auto run=[&](auto tag) {
+        using Num=typename decltype(tag)::numerator;
+        using Den=typename decltype(tag)::denominator;
+        const Observation xn{double(d.y_num[i]),en,std::is_same<Den,NoMargin>::value ? d.y_denom[i] : 0};
+        const auto a=Num(pn,Fields & Value).template evaluate<false,Fields>(xn);
+        Result b;
+        if constexpr (!std::is_same<Den,NoMargin>::value) {
+            const Observation xd{std::is_same<Den,Gamma>::value ? d.y_denom_cont[i] : double(d.y_denom[i]),ed};
+            b=Den(pd,Fields & Value).template evaluate<false,Fields>(xd);
+        }
+        return std::make_pair(a,b);
+    };
     switch (d.family) {
-    case GibbsFamily::POISSON_GAMMA: {
-        double mu = std::exp(std::min(eta_num, 20.0));
-        ll += d.y_num[i] * eta_num - mu;                // Poisson (drop y! constant)
-        double alpha = phi_denom;
-        double mu_d = std::exp(std::min(eta_denom, 20.0));
-        double y_d = d.y_denom_cont[i];
-        ll += tulpa::math::gamma_log_density(y_d, mu_d, alpha, std::log(y_d));
-        break;
+        case GibbsFamily::POISSON_GAMMA: return run(MarginPair<Poisson,Gamma>{});
+        case GibbsFamily::NEGBIN_GAMMA: return run(MarginPair<NegBin,Gamma>{});
+        case GibbsFamily::NEGBIN_NEGBIN: return run(MarginPair<NegBin,NegBin>{});
+        case GibbsFamily::BINOMIAL: return run(MarginPair<Binomial>{});
+        default: Rcpp::stop("Unknown Gibbs observation family");
     }
-    case GibbsFamily::NEGBIN_NEGBIN: {
-        double mu_n = std::exp(std::min(eta_num, 20.0));
-        double r_n = phi_num;
-        int y_n = d.y_num[i];
-        ll += tulpa::math::negbin_log_pmf(y_n, mu_n, r_n);
+}
 
-        double mu_d = std::exp(std::min(eta_denom, 20.0));
-        double r_d = phi_denom;
-        int y_d = d.y_denom[i];
-        ll += tulpa::math::negbin_log_pmf(y_d, mu_d, r_d);
-        break;
-    }
-    case GibbsFamily::BINOMIAL: {
-        double p = 1.0 / (1.0 + std::exp(-eta_num));
-        int y = d.y_num[i];
-        int n_trials = d.y_denom[i];
-        ll += y * std::log(p + 1e-300) + (n_trials - y) * std::log(1.0 - p + 1e-300);
-        break;
-    }
-    case GibbsFamily::NEGBIN_GAMMA: {
-        double mu_n = std::exp(std::min(eta_num, 20.0));
-        double r_n = phi_num;
-        int y_n = d.y_num[i];
-        ll += tulpa::math::negbin_log_pmf(y_n, mu_n, r_n);
-
-        double alpha = phi_denom;
-        double mu_d = std::exp(std::min(eta_denom, 20.0));
-        double y_d = d.y_denom_cont[i];
-        ll += tulpa::math::gamma_log_density(y_d, mu_d, alpha, std::log(y_d));
-        break;
-    }
-    }
-    return ll;
+inline double obs_log_lik(int i,double en,double ed,double pn,double pd,const GibbsData& d) {
+    const auto pair=obs_margins<tulpaRatio::margins::Value>(i,en,ed,pn,pd,d);
+    return pair.first.ll+pair.second.ll;
 }
 
 // Sum log-likelihood over all observations at site s, given spatial effect value
@@ -777,41 +759,9 @@ struct ObsDerivs {
 inline ObsDerivs obs_log_lik_derivs(int i, double eta_num, double eta_denom,
                                     double disp_num, double disp_denom,
                                     const GibbsData& d) {
-    ObsDerivs out;
-    auto negbin = [](double y, double eta, double r, double& g, double& h) {
-        const double mu = std::exp(std::min(eta, 20.0));
-        g = y - (y + r) * mu / (r + mu);
-        h = (y + r) * mu * r / ((r + mu) * (r + mu));
-    };
-    auto gamma = [](double y, double eta, double alpha, double& g, double& h) {
-        const double ratio = y * std::exp(-std::min(eta, 20.0));
-        g = alpha * (ratio - 1.0);
-        h = alpha * ratio;
-    };
-    switch (d.family) {
-    case GibbsFamily::POISSON_GAMMA: {
-        const double mu = std::exp(std::min(eta_num, 20.0));
-        out.g_num = d.y_num[i] - mu;
-        out.h_num = mu;
-        gamma(d.y_denom_cont[i], eta_denom, disp_denom, out.g_den, out.h_den);
-        break;
-    }
-    case GibbsFamily::NEGBIN_NEGBIN:
-        negbin(d.y_num[i], eta_num, disp_num, out.g_num, out.h_num);
-        negbin(d.y_denom[i], eta_denom, disp_denom, out.g_den, out.h_den);
-        break;
-    case GibbsFamily::BINOMIAL: {
-        const double p = 1.0 / (1.0 + std::exp(-eta_num));
-        out.g_num = d.y_num[i] - d.y_denom[i] * p;
-        out.h_num = d.y_denom[i] * p * (1.0 - p);
-        break;
-    }
-    case GibbsFamily::NEGBIN_GAMMA:
-        negbin(d.y_num[i], eta_num, disp_num, out.g_num, out.h_num);
-        gamma(d.y_denom_cont[i], eta_denom, disp_denom, out.g_den, out.h_den);
-        break;
-    }
-    return out;
+    const auto pair=obs_margins<tulpaRatio::margins::Score|tulpaRatio::margins::Curvature>(
+        i,eta_num,eta_denom,disp_num,disp_denom,d);
+    return {pair.first.residual,pair.first.neg_hess,pair.second.residual,pair.second.neg_hess};
 }
 
 // The latent Gaussian of a BYM2 model, x = (beta_num, beta_denom, phi, theta),

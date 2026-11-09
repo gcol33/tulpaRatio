@@ -8,13 +8,14 @@ namespace tulpaRatio {
 
 template<class Num, class Den = margins::NoMargin>
 FamilyEntry make_family_entry(const char* name, const char* spec_name,
-    const char* link, std::vector<std::string> zi, tulpa::FullGradFn gradient) {
+    const char* link, std::vector<std::string> zi, tulpa::FullGradFn gradient,
+    ResponseShape fixed = ResponseShape::Trials, bool legacy_likelihood = true) {
     constexpr bool single = std::is_same<Den,margins::NoMargin>::value;
     return {name,spec_name,single ? 1 : 2,Num::n_extra+Den::n_extra,link,"log",std::move(zi),
         lik::continuous_response<Num> ? ResponseShape::Positive : ResponseShape::Count,
-        single ? ResponseShape::Trials : lik::continuous_response<Den> ? ResponseShape::Positive : ResponseShape::Count,
+        single ? fixed : lik::continuous_response<Den> ? ResponseShape::Positive : ResponseShape::Count,
         &lik::family_likelihood<Num,Den,double>,
-        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient};
+        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient,legacy_likelihood};
 }
 
 const std::vector<FamilyEntry>& family_entries() {
@@ -33,7 +34,15 @@ const std::vector<FamilyEntry>& family_entries() {
         make_family_entry<Lognormal,Lognormal>("lognormal","tulpaRatio_lognormal","log",
             {"none"},&grad_h_lognormal),
         make_family_entry<BetaBinomial>("beta_binomial","tulpaRatio_beta_binomial","logit",
-            {"none"},&grad_h_beta_binomial)
+            {"none"},&grad_h_beta_binomial),
+        make_family_entry<Poisson>("poisson_fixed","tulpaRatio_poisson_fixed","log",
+            {"none","zi_poisson","hurdle_poisson"},nullptr,ResponseShape::Exposure,false),
+        make_family_entry<NegBin>("negbin_fixed","tulpaRatio_negbin_fixed","log",
+            {"none","zi_negbin","hurdle_negbin"},nullptr,ResponseShape::Exposure,false),
+        make_family_entry<Lognormal>("lognormal_fixed","tulpaRatio_lognormal_fixed","log",
+            {"none"},nullptr,ResponseShape::Exposure,false),
+        make_family_entry<Poisson,NegBin>("poisson_negbin","tulpaRatio_poisson_negbin","log",
+            {"none","zi_poisson","hurdle_poisson"},nullptr,ResponseShape::Trials,false)
     };
     return entries;
 }
@@ -68,6 +77,7 @@ Rcpp::List cpp_ratio_family_entries() {
     Rcpp::CharacterVector names(entries.size());
     const auto domain = [](tulpaRatio::ResponseShape shape) {
         return shape == tulpaRatio::ResponseShape::Positive ? "positive" :
+               shape == tulpaRatio::ResponseShape::Exposure ? "exposure" :
                shape == tulpaRatio::ResponseShape::Trials ? "trials" : "count";
     };
     for (size_t k=0;k<entries.size();++k) {
@@ -75,6 +85,7 @@ Rcpp::List cpp_ratio_family_entries() {
         out[k]=Rcpp::List::create(Rcpp::Named("n_processes")=e.processes,
             Rcpp::Named("n_extra")=e.n_extra,Rcpp::Named("num_link")=e.num_link,
             Rcpp::Named("denom_link")=e.denom_link,Rcpp::Named("spec_inflation")=e.zi,
+            Rcpp::Named("handcoded")=e.legacy_likelihood,
             Rcpp::Named("responses")=Rcpp::CharacterVector::create(
                 Rcpp::Named("num")=domain(e.num_response),Rcpp::Named("denom")=domain(e.denom_response)));
     }

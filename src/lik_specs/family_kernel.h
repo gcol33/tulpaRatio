@@ -34,7 +34,7 @@ T margin_likelihood(double y, int n, const T& eta, const T& phi,
         if constexpr (std::is_same<Margin,Poisson>::value) {
             if (zi == tulpa::ZIType::ZI_POISSON) return ratiod_zi::zi_poisson_lpmf_logit(int(y),mu,logit_zi);
             if (zi == tulpa::ZIType::HURDLE_POISSON) return ratiod_zi::hurdle_poisson_lpmf_logit(int(y),mu,logit_zi);
-            return poisson_eta_density(y,eta,mu,T(std::lgamma(y+1.0)));
+            return margins::evaluate<Poisson>(y,0,eta,phi,&mu);
         } else if constexpr (std::is_same<Margin,NegBin>::value) {
             if (zi == tulpa::ZIType::ZI_NEGBIN) return ratiod_zi::zi_negbin_lpmf_logit(int(y),mu,phi,logit_zi);
             if (zi == tulpa::ZIType::HURDLE_NEGBIN) return ratiod_zi::hurdle_negbin_lpmf_logit(int(y),mu,phi,logit_zi);
@@ -59,7 +59,8 @@ T family_likelihood(int i, const T* eta, const T& logit_zi, const T& logit_oi,
         tulpa::arena::current_arena() = eta[0].arena_;
     const auto& r = *static_cast<const ResponseData*>(payload);
     const double yn = continuous_response<Num> ? r.y_num_cont[i] : r.y_num[i];
-    const int n = std::is_same<Den,margins::NoMargin>::value ? r.y_denom[i] : 0;
+    const int n = std::is_same<Num,margins::Binomial>::value ||
+                  std::is_same<Num,margins::BetaBinomial>::value ? r.y_denom[i] : 0;
     T pn(1.0), pd(1.0);
     if constexpr (Num::n_extra) pn = exp(params[layout.extra_offset]);
     if constexpr (Den::n_extra) pd = exp(params[layout.extra_offset+Num::n_extra]);

@@ -12,7 +12,6 @@
 #include <RcppEigen.h>
 #include "hmc_progress.h"
 #include "autodiff_utils.h"
-#include "beta_binomial_obs.h"
 #include "ratio_margins.h"
 #include "ar1_shared.h"
 #include "hmc_gp_autodiff.h"
@@ -923,6 +922,29 @@ Rcpp::NumericMatrix collapsed_margin_probe(int family, int y, double yd, double 
   return out;
 }
 
+Rcpp::NumericVector collapsed_gp_reference_probe(Rcpp::NumericVector beta, int y, int n,
+                                                double sigma) {
+  ModelData data;
+  data.N=1; data.p_num=1; data.p_denom=0; data.model_type=ModelType::BINOMIAL;
+  data.y_num={y}; data.y_denom={n}; data.X_num_flat={1};
+  data.gp_data.n_obs=1; data.gp_data.nn=1; data.gp_data.nn_order={0};
+  data.gp_data.nn_idx={0}; data.gp_data.nn_dist={0}; data.gp_data.obs_to_loc={0};
+  data.gp_data.shared=false; data.unique_id=224;
+  Rcpp::NumericVector out(beta.size());
+  for (int k=0;k<beta.size();++k) {
+    CollapsedGPWorkspace ws;
+    ws.bind(data.unique_id);
+    build_nngp_B_D(sigma*sigma,1.,data.gp_data,ws);
+    ws.cached_sigma2=sigma*sigma; ws.cached_phi=1.;
+    ws.w_star[0]=std::log((y+.5)/(n-y+.5))-beta[k];
+    ws.mode_found=true;
+    const double b=beta[k],unused=0.;
+    out[k]=collapsed_gp_find_mode(&b,&unused,sigma*sigma,1.,1.,1.,data,ws,100,1e-10)
+      + ws.laplace_log_det;
+  }
+  return out;
+}
+
 Rcpp::NumericVector negbin_table_probe(int y, double mu, double phi) {
   ModelData data;
   data.N = 1;
@@ -1762,8 +1784,8 @@ void compute_gradient_analytical(
                                const Observation& x, const Observation& y) {
           using Num = std::decay_t<decltype(num)>;
           using Den = std::decay_t<decltype(den)>;
-          const auto n = num.template operator()<std::is_same<Num,Binomial>::value>(x,false);
-          const auto d = den.template operator()<std::is_same<Den,Binomial>::value>(y,false);
+          const auto n = num.template evaluate<std::is_same<Num,Binomial>::value>(x,false);
+          const auto d = den.template evaluate<std::is_same<Den,Binomial>::value>(y,false);
           resid_num = n.residual;
           resid_denom = d.residual;
           grad_phi_num_i = n.extra;
@@ -3553,55 +3575,10 @@ void compute_gradient_icar_collapsed(
                 if (temporal_offset_num != nullptr) eta_num_i += temporal_offset_num[i];
                 if (!is_binomial && temporal_offset_denom != nullptr) eta_denom_i += temporal_offset_denom[i];
 
-                double mu_num = std::exp(std::min(eta_num_i, 20.0));
-
-                // Per-family dispersion gradients
-                switch (data.model_type) {
-                    case ModelType::POISSON_GAMMA: {
-                        if (layout.has_phi_denom) {
-                            double mu_d = std::exp(std::min(eta_denom_i, 20.0));
-                            double y_d = data.y_denom_cont[i];
-                            double alpha = phi_denom;
-                            // d/d(log_alpha)[LL_denom] = alpha * dLL/dalpha
-                            // dLL/dalpha = log(alpha) + 1 - digamma(alpha) + log(y/mu) - y/mu
-                            grad[layout.log_phi_denom_idx] += alpha * tulpa::math::gamma_phi_derivative(y_d, mu_d, alpha, 1);
-                        }
-                        break;
-                    }
-                    case ModelType::NEGBIN_NEGBIN: {
-                        if (layout.has_phi_num) {
-                            double r = phi_num;
-                            double y = data.y_num[i];
-                            grad[layout.log_phi_num_idx] += r * (
-                                tulpa::math::negbin_size_score(static_cast<int>(y), mu_num, r));
-                        }
-                        if (layout.has_phi_denom && !is_binomial) {
-                            double mu_d = std::exp(std::min(eta_denom_i, 20.0));
-                            double y_d = (double)data.y_denom[i];
-                            double r_d = phi_denom;
-                            grad[layout.log_phi_denom_idx] += r_d * (
-                                tulpa::math::negbin_size_score(static_cast<int>(y_d), mu_d, r_d));
-                        }
-                        break;
-                    }
-                    case ModelType::NEGBIN_GAMMA: {
-                        if (layout.has_phi_num) {
-                            double r = phi_num;
-                            double y = data.y_num[i];
-                            grad[layout.log_phi_num_idx] += r * (
-                                tulpa::math::negbin_size_score(static_cast<int>(y), mu_num, r));
-                        }
-                        if (layout.has_phi_denom) {
-                            double mu_d = std::exp(std::min(eta_denom_i, 20.0));
-                            double y_d = data.y_denom_cont[i];
-                            double alpha = phi_denom;
-                            grad[layout.log_phi_denom_idx] += alpha * tulpa::math::gamma_phi_derivative(y_d, mu_d, alpha, 1);
-                        }
-                        break;
-                    }
-                    default:
-                        break;
-                }
+                const auto extra=collapsed_extra_scores(data,i,eta_num_i,eta_denom_i,
+                                                        phi_num,phi_denom,!is_binomial);
+                if (layout.has_phi_num) grad[layout.log_phi_num_idx] += extra.first;
+                if (layout.has_phi_denom) grad[layout.log_phi_denom_idx] += extra.second;
             }
         }
 
@@ -3741,52 +3718,10 @@ void compute_gradient_icar_collapsed(
                 }
                 if (temporal_offset_num != nullptr) eta_num_i += temporal_offset_num[i];
                 if (!is_binomial && temporal_offset_denom != nullptr) eta_denom_i += temporal_offset_denom[i];
-                double mu_num = std::exp(std::min(eta_num_i, 20.0));
-
-                switch (data.model_type) {
-                    case ModelType::POISSON_GAMMA: {
-                        if (layout.has_phi_denom) {
-                            double mu_d = std::exp(std::min(eta_denom_i, 20.0));
-                            double y_d = data.y_denom_cont[i];
-                            double alpha = phi_denom;
-                            grad[layout.log_phi_denom_idx] += alpha * tulpa::math::gamma_phi_derivative(y_d, mu_d, alpha, 1);
-                        }
-                        break;
-                    }
-                    case ModelType::NEGBIN_NEGBIN: {
-                        if (layout.has_phi_num) {
-                            double r = phi_num;
-                            double y = data.y_num[i];
-                            grad[layout.log_phi_num_idx] += r * (
-                                tulpa::math::negbin_size_score(static_cast<int>(y), mu_num, r));
-                        }
-                        if (layout.has_phi_denom && !is_binomial) {
-                            double mu_d = std::exp(std::min(eta_denom_i, 20.0));
-                            double y_d = (double)data.y_denom[i];
-                            double r_d = phi_denom;
-                            grad[layout.log_phi_denom_idx] += r_d * (
-                                tulpa::math::negbin_size_score(static_cast<int>(y_d), mu_d, r_d));
-                        }
-                        break;
-                    }
-                    case ModelType::NEGBIN_GAMMA: {
-                        if (layout.has_phi_num) {
-                            double r = phi_num;
-                            double y = data.y_num[i];
-                            grad[layout.log_phi_num_idx] += r * (
-                                tulpa::math::negbin_size_score(static_cast<int>(y), mu_num, r));
-                        }
-                        if (layout.has_phi_denom) {
-                            double mu_d = std::exp(std::min(eta_denom_i, 20.0));
-                            double y_d = data.y_denom_cont[i];
-                            double alpha = phi_denom;
-                            grad[layout.log_phi_denom_idx] += alpha * tulpa::math::gamma_phi_derivative(y_d, mu_d, alpha, 1);
-                        }
-                        break;
-                    }
-                    default:
-                        break;
-                }
+                const auto extra=collapsed_extra_scores(data,i,eta_num_i,eta_denom_i,
+                                                        phi_num,phi_denom,!is_binomial);
+                if (layout.has_phi_num) grad[layout.log_phi_num_idx] += extra.first;
+                if (layout.has_phi_denom) grad[layout.log_phi_denom_idx] += extra.second;
             }
         }
 

@@ -7,7 +7,6 @@
   for (name in names(entries)) {
     entry <- entries[[name]]
     models[[name]][names(entry)] <- entry
-    models[[name]]$handcoded <- TRUE
   }
   assign("MODEL_TYPES", models, envir = asNamespace(pkgname))
 }
