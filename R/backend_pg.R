@@ -335,63 +335,30 @@ extract_re_from_data <- function(formula, data) {
     }
   }
 
-  if (n_re_terms > 1) {
-    # Multiple RE terms
-    re_terms_processed <- vector("list", n_re_terms)
-    total_groups <- 0L
-
-    for (t in seq_len(n_re_terms)) {
-      term <- re_terms[[t]]
-      re_terms_processed[[t]] <- list(
-        group_var = term$group_var,
-        group_idx = as.integer(term$group),
-        n_groups = as.integer(term$n_groups),
-        offset = total_groups
-      )
-      total_groups <- total_groups + term$n_groups
-    }
-
-    # Build group index matrix
-    group_idx_matrix <- matrix(0L, nrow = n_obs, ncol = n_re_terms)
-    for (t in seq_len(n_re_terms)) {
-      group_idx_matrix[, t] <- as.integer(re_terms[[t]]$group)
-    }
-
-    return(list(
-      # Legacy fields (for backwards compatibility)
-      group_idx = as.integer(re_terms[[1]]$group),
-      n_groups = as.integer(re_terms[[1]]$n_groups),
-      group_var = re_terms[[1]]$group_var,
-      group_levels = NULL,
-      # Multi-term fields
-      n_re_terms = n_re_terms,
-      re_terms = re_terms_processed,
-      group_idx_matrix = group_idx_matrix,
-      total_groups = total_groups,
-      has_slopes = has_slopes
-    ))
+  re_terms_processed <- vector("list", n_re_terms)
+  group_idx_matrix <- matrix(0L, nrow = n_obs, ncol = n_re_terms)
+  total_groups <- 0L
+  for (t in seq_len(n_re_terms)) {
+    term <- re_terms[[t]]
+    group_idx_matrix[, t] <- as.integer(term$group)
+    re_terms_processed[[t]] <- list(
+      group_var = term$group_var,
+      group_idx = group_idx_matrix[, t],
+      n_groups = as.integer(term$n_groups),
+      offset = total_groups
+    )
+    total_groups <- total_groups + term$n_groups
   }
 
-  # Single RE term
-  re_info <- re_terms[[1]]
-  re_var <- re_info$group_var
-  group_idx <- as.integer(re_info$group)
-  n_groups <- re_info$n_groups
-
-  return(list(
-    group_idx = group_idx,
-    n_groups = n_groups,
-    group_var = re_var,
+  c(list(
+    group_idx = re_terms_processed[[1]]$group_idx,
+    n_groups = re_terms_processed[[1]]$n_groups,
+    group_var = re_terms_processed[[1]]$group_var,
     group_levels = NULL,
-    # Multi-term fields
-    n_re_terms = 1L,
-    re_terms = list(list(
-      group_var = re_var,
-      group_idx = group_idx,
-      n_groups = as.integer(n_groups),
-      offset = 0L
-    )),
-    total_groups = as.integer(n_groups),
+    n_re_terms = n_re_terms,
+    re_terms = re_terms_processed),
+    if (n_re_terms > 1L) list(group_idx_matrix = group_idx_matrix),
+    list(total_groups = total_groups,
     has_slopes = has_slopes
   ))
 }
@@ -421,22 +388,13 @@ prepare_spatial_for_pg <- function(spatial, data, formula) {
     n_units <- nrow(data)
   }
 
-  # Convert adjacency matrix to list format
-  adj_matrix <- spatial$adjacency
-  adj_list <- vector("list", n_units)
-  n_neighbors <- integer(n_units)
-
-  for (i in seq_len(n_units)) {
-    neighbors <- which(adj_matrix[i, ] > 0)
-    adj_list[[i]] <- as.integer(neighbors)
-    n_neighbors[i] <- length(neighbors)
-  }
+  csr <- adjacency_csr(spatial$adjacency)
 
   return(list(
     group_idx = as.integer(group_idx),
     n_units = as.integer(n_units),
-    adj_list = adj_list,
-    n_neighbors = as.integer(n_neighbors)
+    adj_list = csr$adj_list,
+    n_neighbors = csr$n_neighbors
   ))
 }
 

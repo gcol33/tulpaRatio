@@ -784,29 +784,20 @@ prepare_spatial_precision <- function(spatial) {
     )
   } else {
     # CAR/BYM2: return adjacency structure
-    adj <- as.matrix(spatial$adjacency)
+    adj <- spatial$adjacency
     n <- nrow(adj)
 
-    # Build CSR format (0-based row_ptr, 1-based col_idx — C++ does -1)
-    row_ptr <- integer(n + 1)  # initialized to 0 (0-based CSR)
-    col_idx <- integer(0)
-
-    for (i in seq_len(n)) {
-      neighbors <- which(adj[i, ] > 0)
-      col_idx <- c(col_idx, neighbors)
-      row_ptr[i + 1] <- row_ptr[i] + length(neighbors)
-    }
-
-    n_neighbors <- diff(row_ptr)
+    csr <- adjacency_csr(adj)
+    n_neighbors <- csr$n_neighbors
 
     # Compute Q_inv and L_Q for precision mass matrix
-    mass <- ridged_precision_factors(diag(n_neighbors) - adj)
+    mass <- ridged_precision_factors(diag(n_neighbors) - as.matrix(adj))
 
     list(
       type = if (spatial$type == "bym2") "bym2" else "car",
       n = n,
-      adj_row_ptr = row_ptr,
-      adj_col_idx = col_idx,
+      adj_row_ptr = csr$adj_row_ptr,
+      adj_col_idx = csr$adj_col_idx,
       n_neighbors = n_neighbors,
       proper = isTRUE(spatial$proper),
       scale_factor = spatial$scale_factor,

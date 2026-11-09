@@ -1412,21 +1412,10 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
 
   # Convert adjacency matrix to CSR format
   adj <- spatial$adjacency
-  if (inherits(adj, "Matrix")) {
-    adj <- as.matrix(adj)
-  }
-
-  # Build CSR structure
-  n_neighbors <- integer(n_units)
-  adj_col_idx <- integer(0)
-  adj_row_ptr <- integer(n_units + 1)
-
-  for (i in seq_len(n_units)) {
-    neighbors <- which(adj[i, ] > 0)
-    n_neighbors[i] <- length(neighbors)
-    adj_col_idx <- c(adj_col_idx, neighbors - 1L)  # Convert to 0-based for C++
-    adj_row_ptr[i + 1] <- adj_row_ptr[i] + n_neighbors[i]
-  }
+  csr <- adjacency_csr(adj)
+  n_neighbors <- csr$n_neighbors
+  adj_col_idx <- csr$adj_col_idx - 1L
+  adj_row_ptr <- csr$adj_row_ptr
 
   # BYM2 scale factor: the one the specification carries, which every
   # backend multiplies into the structured component
@@ -1441,7 +1430,7 @@ prepare_spatial_for_hmc <- function(spatial, data, N) {
   Q_inv_flat <- NULL
   L_Q_flat <- NULL
   if (spatial_type %in% c("icar", "bym2", "car", "car_proper") && n_units >= 5) {
-    mass <- ridged_precision_factors(diag(n_neighbors) - adj)
+    mass <- ridged_precision_factors(diag(n_neighbors) - as.matrix(adj))
     Q_inv_flat <- mass$Q_inv
     L_Q_flat <- mass$L
   }

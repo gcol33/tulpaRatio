@@ -243,25 +243,14 @@ prepare_spatial_for_laplace <- function(spatial, data, formula) {
   group_idx <- areal_unit_index(adj_matrix, data[[group_var]])
   n_units <- nrow(adj_matrix)
 
-  # CSR with 0-based column indices
-  n_neighbors <- integer(n_units)
-  adj_row_ptr <- integer(n_units + 1)
-  adj_col_idx <- integer(0)
-
-  adj_row_ptr[1] <- 0L
-  for (i in seq_len(n_units)) {
-    neighbors <- which(adj_matrix[i, ] != 0)
-    n_neighbors[i] <- length(neighbors)
-    adj_col_idx <- c(adj_col_idx, neighbors - 1L)
-    adj_row_ptr[i + 1] <- adj_row_ptr[i] + n_neighbors[i]
-  }
+  csr <- adjacency_csr(adj_matrix != 0)
 
   list(
     group_idx = group_idx,
     n_units = as.integer(n_units),
-    n_neighbors = as.integer(n_neighbors),
-    adj_row_ptr = as.integer(adj_row_ptr),
-    adj_col_idx = as.integer(adj_col_idx)
+    n_neighbors = csr$n_neighbors,
+    adj_row_ptr = csr$adj_row_ptr,
+    adj_col_idx = csr$adj_col_idx - 1L
   )
 }
 

@@ -130,26 +130,16 @@ fit_gibbs <- function(formula,
   }
 
   # Build adjacency in CSR format (1-based for R, C++ converts to 0-based)
-  adj_matrix <- spatial$adjacency
-  adj_row_ptr <- integer(S + 1)
-  adj_col_idx <- integer(0)
-  n_neighbors <- integer(S)
-
-  for (i in seq_len(S)) {
-    neighbors <- which(adj_matrix[i, ] > 0)
-    n_neighbors[i] <- length(neighbors)
-    adj_col_idx <- c(adj_col_idx, neighbors)  # 1-based
-    adj_row_ptr[i + 1] <- adj_row_ptr[i] + length(neighbors)
-  }
+  csr <- adjacency_csr(spatial$adjacency)
 
   # Build data list for C++
   data_list <- list(
     y_num = y_num,
     X_num = as.numeric(t(X_num)),  # Row-major flat vector
     spatial_group = spatial_group,  # 1-based (C++ converts)
-    adj_row_ptr = adj_row_ptr,     # Already 0-indexed start
-    adj_col_idx = as.integer(adj_col_idx),  # 1-based (C++ converts)
-    n_neighbors = n_neighbors,
+    adj_row_ptr = csr$adj_row_ptr,
+    adj_col_idx = csr$adj_col_idx,  # 1-based (C++ converts)
+    n_neighbors = csr$n_neighbors,
     N = as.integer(N),
     S = as.integer(S),
     p_num = as.integer(p_num),

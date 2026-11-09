@@ -15,7 +15,7 @@
 #' @return `NULL`, invisibly; called for the error it may raise
 #' @keywords internal
 validate_response <- function(y, dist, name) {
-  if (dist %in% c("poisson", "neg_binomial_2", "binomial", "beta_binomial")) {
+  if (response_is_discrete(dist)) {
     # Must be non-negative integers
     if (!is.numeric(y)) {
       stop(sprintf("%s response must be numeric", name), call. = FALSE)

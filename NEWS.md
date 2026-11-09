@@ -1,5 +1,12 @@
 # tulpaRatio 1.7.3
 
+* Adjacency lists reach every spatial backend through one sparse conversion
+  whose work is linear in nodes and edges: a 10,000-node lattice converts in
+  0.002 s, against 5.1 s when the Gibbs path grew its neighbour vector edge by
+  edge (#204). Core budgets share one `R CMD check` clamp across backends (#201),
+  and the prior constructors, `print()` and prior-predictive draws read one
+  distribution table (#203); fits, printed priors and seeded draws are unchanged.
+
 * Negative-binomial densities, zero masses and size scores stay exact at a
   large size `phi` on every path (spec, autodiff, H tables, collapsed spatial,
   Gibbs, Polya-Gamma, CRT) through one shared count normalizer (#213): at
