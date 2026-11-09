@@ -1130,9 +1130,9 @@ T compute_log_post_impl(
                 }
 
                 for (int j = 0; j < M; j++) {
-                    T S_j = ratiod_hsgp::spectral_density_se(
+                    T S_j = ratiod_hsgp::spectral_density(
                         data.st_hsgp_data.eigenvalues[j], sigma2_st_hsgp,
-                        lengthscale_st_hsgp);
+                        lengthscale_st_hsgp, data.st_hsgp_data.n_dim);
                     T S_j_floor = (get_value(S_j) < 1e-10) ? T(1e-10) : S_j;
                     T prec_j = tau_st / S_j_floor;
 

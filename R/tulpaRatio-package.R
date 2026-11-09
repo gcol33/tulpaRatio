@@ -63,6 +63,7 @@ utils::globalVariables(c(
   "cpp_gpu_available",
   "cpp_gpu_info",
   "cpp_hmc_fit",
+  "cpp_hsgp_spectrum",
   "cpp_get_max_threads",
   "cpp_kriging_predict",
   "cpp_pg_get_max_threads",

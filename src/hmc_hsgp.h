@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <RcppEigen.h>
 #include "autodiff_utils.h"
+#include "hsgp_spectral.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -41,33 +42,6 @@ struct HSGPData {
 
     bool shared;         // Whether GP is shared between num/denom
 };
-
-// Spectral density for squared exponential kernel
-// S(omega) = sigma^2 * sqrt(2*pi) * ell * exp(-0.5 * ell^2 * omega^2)
-template<typename Scalar>
-inline Scalar spectral_density_se(double omega_sq, const Scalar& sigma2,
-                                  const Scalar& lengthscale) {
-    Scalar ell = lengthscale;
-    Scalar ell2 = ell * ell;
-    return sigma2 * Scalar(std::sqrt(2.0 * M_PI)) * ell *
-           ratiod::math::safe_exp(Scalar(-0.5) * ell2 * omega_sq);
-}
-
-// Derivative of spectral density w.r.t. sigma2
-// dS/d(sigma2) = sqrt(2*pi) * ell * exp(-0.5 * ell^2 * omega^2) = S / sigma2
-inline double dS_dsigma2(double omega_sq, double sigma2, double lengthscale) {
-    return spectral_density_se(omega_sq, sigma2, lengthscale) / sigma2;
-}
-
-// Derivative of spectral density w.r.t. lengthscale
-// S = sigma2 * sqrt(2*pi) * ell * exp(-0.5 * ell^2 * omega^2)
-// dS/d(ell) = sigma2 * sqrt(2*pi) * [exp(...) + ell * (-ell * omega^2) * exp(...)]
-//           = S * (1/ell - ell * omega^2)
-inline double dS_dlengthscale(double omega_sq, double sigma2, double lengthscale) {
-    double S = spectral_density_se(omega_sq, sigma2, lengthscale);
-    double ell = lengthscale;
-    return S * (1.0 / ell - ell * omega_sq);
-}
 
 // 1D Laplacian eigenfunction: phi_j(x) = 1/sqrt(L) * sin(pi*j*(x+L)/(2L))
 // For x in [-L, L], j = 1, 2, ...
@@ -175,7 +149,7 @@ inline void hsgp_matvec(
 
     Eigen::VectorXd scaled_beta(M);
     for (int j = 0; j < M; j++) {
-        double S = spectral_density_se(data.eigenvalues[j], sigma2, lengthscale);
+        double S = spectral_density(data.eigenvalues[j], sigma2, lengthscale, data.n_dim);
         double sqrt_S = std::sqrt(S);
         if (sqrt_S_out) sqrt_S_out[j] = sqrt_S;
         scaled_beta(j) = sqrt_S * beta[j];
@@ -209,7 +183,7 @@ inline void hsgp_evaluate_t(
         f.assign(N, T(0.0));
         for (int j = 0; j < M; j++) {
             T scaled_j = ratiod::math::safe_sqrt(
-                spectral_density_se(data.eigenvalues[j], sigma2, lengthscale)) * beta[j];
+                spectral_density(data.eigenvalues[j], sigma2, lengthscale, data.n_dim)) * beta[j];
             for (int i = 0; i < N; i++) {
                 f[i] = f[i] + T(data.phi_flat[i * M + j]) * scaled_j;
             }
@@ -304,8 +278,8 @@ inline void hsgp_compute_gradients_ws(
 
         ws.dsqrtS_dsigma2(j) = 0.5 * sqrt_S_safe / sigma2;
 
-        // dS/d(ell) = S * (1/ell - ell * omega_sq) — inline, no spectral_density_se() call
-        double dS_dell = S * (1.0 / lengthscale - lengthscale * omega_sq);
+        double dS_dell = S * spectral_log_lengthscale_derivative(
+            omega_sq, lengthscale, data.n_dim) / lengthscale;
         ws.dsqrtS_dlengthscale(j) = 0.5 * dS_dell / sqrt_S_safe;
     }
 
@@ -353,7 +327,7 @@ inline void hsgp_compute_gradients(
 
     for (int j = 0; j < M; j++) {
         double omega_sq = data.eigenvalues[j];
-        double S = spectral_density_se(omega_sq, sigma2, lengthscale);
+        double S = spectral_density(omega_sq, sigma2, lengthscale, data.n_dim);
         sqrt_S(j) = std::sqrt(S);
 
         const double eps = 1e-10;
@@ -361,7 +335,8 @@ inline void hsgp_compute_gradients(
 
         dsqrtS_dsigma2(j) = 0.5 * sqrt_S_safe / sigma2;
 
-        double dS_dell = dS_dlengthscale(omega_sq, sigma2, lengthscale);
+        double dS_dell = S * spectral_log_lengthscale_derivative(
+            omega_sq, lengthscale, data.n_dim) / lengthscale;
         dsqrtS_dlengthscale(j) = 0.5 * dS_dell / sqrt_S_safe;
     }
 

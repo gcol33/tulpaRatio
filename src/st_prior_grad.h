@@ -234,8 +234,8 @@ inline StPriorGrad st_interaction_prior_grad(
 
     for (int j = 0; j < M; j++) {
       const double omega_sq = hsgp.eigenvalues[j];
-      const double S_j = ratiod_hsgp::spectral_density_se(omega_sq, sigma2_hsgp,
-                                                          lengthscale_hsgp);
+      const double S_j = ratiod_hsgp::spectral_density(omega_sq, sigma2_hsgp,
+                                                          lengthscale_hsgp, hsgp.n_dim);
       const double S_j_safe = std::max(S_j, 1e-10);
       const double prec_j = tau / S_j_safe;
 
@@ -294,8 +294,8 @@ inline StPriorGrad st_interaction_prior_grad(
                                 + 0.5 * tau * qf / (S_j_safe * S_j_safe);
       const double dS_dsigma2 = S_j_safe / sigma2_hsgp;
       out.log_sigma2_hsgp += dLogPrior_dS * dS_dsigma2 * sigma2_hsgp;
-      const double dS_dl = S_j_safe * (1.0 / lengthscale_hsgp
-                                       - lengthscale_hsgp * omega_sq);
+      const double dS_dl = S_j_safe * ratiod_hsgp::spectral_log_lengthscale_derivative(
+          omega_sq, lengthscale_hsgp, hsgp.n_dim) / lengthscale_hsgp;
       out.log_lengthscale_hsgp += dLogPrior_dS * dS_dl * lengthscale_hsgp;
     }
 

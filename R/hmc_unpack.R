@@ -713,19 +713,14 @@ unpack_msgp <- function(samples, lay, spatial_info) {
 #' Reconstruct an HSGP field from its basis coefficients
 #'
 #' `f = Phi (sqrt(S) * beta)` with the squared-exponential spectral density
-#' `S(omega) = sigma2 sqrt(2 pi) ell exp(-ell^2 omega^2 / 2)`, matching
+#' `S(omega) = sigma2 (2 pi)^(d/2) ell^d exp(-ell^2 omega^2 / 2)`, matching
 #' `hsgp_evaluate()` in `src/hmc_hsgp.h`.
 #'
 #' @keywords internal
-hsgp_field <- function(beta, sigma2, lengthscale, Phi, eigenvalues) {
-  n_samples <- nrow(beta)
-  out <- matrix(0, n_samples, nrow(Phi))
-  for (s in seq_len(n_samples)) {
-    S_k <- sigma2[s] * sqrt(2 * pi) * lengthscale[s] *
-      exp(-0.5 * lengthscale[s]^2 * eigenvalues)
-    out[s, ] <- as.numeric(Phi %*% (sqrt(pmax(S_k, 0)) * beta[s, ]))
-  }
-  out
+hsgp_field <- function(beta, sigma2, lengthscale, Phi, eigenvalues,
+                       dimension = 2L, kernel = 0L) {
+  S <- cpp_hsgp_spectrum(eigenvalues, sigma2, lengthscale, dimension, kernel)
+  (beta * sqrt(S)) %*% t(Phi)
 }
 
 

@@ -4,11 +4,19 @@
 \alias{hsgp_field}
 \title{Reconstruct an HSGP field from its basis coefficients}
 \usage{
-hsgp_field(beta, sigma2, lengthscale, Phi, eigenvalues)
+hsgp_field(
+  beta,
+  sigma2,
+  lengthscale,
+  Phi,
+  eigenvalues,
+  dimension = 2L,
+  kernel = 0L
+)
 }
 \description{
 \code{f = Phi (sqrt(S) * beta)} with the squared-exponential spectral density
-\verb{S(omega) = sigma2 sqrt(2 pi) ell exp(-ell^2 omega^2 / 2)}, matching
+\verb{S(omega) = sigma2 (2 pi)^(d/2) ell^d exp(-ell^2 omega^2 / 2)}, matching
 \code{hsgp_evaluate()} in \code{src/hmc_hsgp.h}.
 }
 \keyword{internal}

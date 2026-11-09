@@ -182,9 +182,8 @@ laplace_hsgp_part <- function(k, label, columns, basis, obs_to_loc, n_arms,
     n = nrow(Phi), index = obs_to_loc,
     effect = function(Z, theta) {
       sigma2 <- theta[, paste0("b", k, ".sigma2")]
-      ell2 <- theta[, paste0("b", k, ".lengthscale")]^2
-      sqrt_S <- sqrt(sigma2 * 2 * pi * ell2 * exp(-0.5 * outer(ell2, lam)))
-      (Z * sqrt_S) %*% t(Phi)
+      ell <- theta[, paste0("b", k, ".lengthscale")]
+      hsgp_field(Z, sigma2, ell, Phi, lam)
     },
     hyper = stats::setNames(
       paste0(c("sigma2_", "lengthscale_"), label),

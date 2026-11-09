@@ -203,6 +203,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_hsgp_spectrum
+Rcpp::NumericMatrix cpp_hsgp_spectrum(Rcpp::NumericVector eigenvalues, Rcpp::NumericVector sigma2, Rcpp::NumericVector lengthscale, int dimension, int kernel);
+RcppExport SEXP _tulpaRatio_cpp_hsgp_spectrum(SEXP eigenvaluesSEXP, SEXP sigma2SEXP, SEXP lengthscaleSEXP, SEXP dimensionSEXP, SEXP kernelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigenvalues(eigenvaluesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type sigma2(sigma2SEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type lengthscale(lengthscaleSEXP);
+    Rcpp::traits::input_parameter< int >::type dimension(dimensionSEXP);
+    Rcpp::traits::input_parameter< int >::type kernel(kernelSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_hsgp_spectrum(eigenvalues, sigma2, lengthscale, dimension, kernel));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_kriging_predict
 Rcpp::NumericMatrix cpp_kriging_predict(Rcpp::NumericMatrix coords_train, Rcpp::NumericMatrix coords_new, Rcpp::NumericMatrix w_train, Rcpp::NumericVector sigma2, Rcpp::NumericVector phi, int cov_type, int nn);
 RcppExport SEXP _tulpaRatio_cpp_kriging_predict(SEXP coords_trainSEXP, SEXP coords_newSEXP, SEXP w_trainSEXP, SEXP sigma2SEXP, SEXP phiSEXP, SEXP cov_typeSEXP, SEXP nnSEXP) {
@@ -2147,6 +2162,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_gpu_info", (DL_FUNC) &_tulpaRatio_cpp_gpu_info, 0},
     {"_tulpaRatio_cpp_hmc_fit", (DL_FUNC) &_tulpaRatio_cpp_hmc_fit, 31},
     {"_tulpaRatio_cpp_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_get_max_threads, 0},
+    {"_tulpaRatio_cpp_hsgp_spectrum", (DL_FUNC) &_tulpaRatio_cpp_hsgp_spectrum, 5},
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
     {"_tulpaRatio_cpp_ratio_family_entries", (DL_FUNC) &_tulpaRatio_cpp_ratio_family_entries, 0},
     {"_tulpaRatio_cpp_test_family_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_family_likelihood, 4},

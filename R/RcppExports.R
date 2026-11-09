@@ -49,6 +49,10 @@ cpp_get_max_threads <- function() {
     .Call(`_tulpaRatio_cpp_get_max_threads`)
 }
 
+cpp_hsgp_spectrum <- function(eigenvalues, sigma2, lengthscale, dimension, kernel) {
+    .Call(`_tulpaRatio_cpp_hsgp_spectrum`, eigenvalues, sigma2, lengthscale, dimension, kernel)
+}
+
 cpp_kriging_predict <- function(coords_train, coords_new, w_train, sigma2, phi, cov_type, nn) {
     .Call(`_tulpaRatio_cpp_kriging_predict`, coords_train, coords_new, w_train, sigma2, phi, cov_type, nn)
 }
