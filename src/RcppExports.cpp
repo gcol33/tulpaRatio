@@ -1786,6 +1786,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_collapsed_margin
+Rcpp::NumericMatrix cpp_test_collapsed_margin(int family, int y, double yd, double en, double ed, double pn, double pd, bool shared);
+RcppExport SEXP _tulpaRatio_cpp_test_collapsed_margin(SEXP familySEXP, SEXP ySEXP, SEXP ydSEXP, SEXP enSEXP, SEXP edSEXP, SEXP pnSEXP, SEXP pdSEXP, SEXP sharedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type yd(ydSEXP);
+    Rcpp::traits::input_parameter< double >::type en(enSEXP);
+    Rcpp::traits::input_parameter< double >::type ed(edSEXP);
+    Rcpp::traits::input_parameter< double >::type pn(pnSEXP);
+    Rcpp::traits::input_parameter< double >::type pd(pdSEXP);
+    Rcpp::traits::input_parameter< bool >::type shared(sharedSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_margin(family, y, yd, en, ed, pn, pd, shared));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_residual_accumulation
 Rcpp::NumericMatrix cpp_test_residual_accumulation();
 RcppExport SEXP _tulpaRatio_cpp_test_residual_accumulation() {
@@ -2115,6 +2133,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
+    {"_tulpaRatio_cpp_test_collapsed_margin", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_margin, 8},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
     {"_tulpaRatio_cpp_test_ratio_margin_scalars", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin_scalars, 5},

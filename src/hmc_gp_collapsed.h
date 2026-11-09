@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <RcppEigen.h>
 #include "tls_workspace.h"
+#include "ratio_collapsed_lik.h"
 // NOTE: This header must be included AFTER hmc_sampler.h (which defines ModelData/ModelType)
 // and hmc_gp.h (which defines GPData in namespace ratiod_gp).
 // It is included from hmc_sampler.cpp in the correct order.
@@ -626,65 +627,11 @@ inline LocLikResult compute_loc_lik(
         eta_num_i += w[loc];
         if (!is_binomial && data.gp_data.shared) eta_denom_i += w[loc];
 
-        // Per-family likelihood, gradient, Hessian
-        double mu_num = std::exp(eta_num_i);
-        int y_num = data.y_num[i];
-
-        switch (data.model_type) {
-            case ModelType::POISSON_GAMMA: {
-                // Numerator: Poisson
-                res.ll += y_num * eta_num_i - mu_num;
-                double resid_num = y_num - mu_num;
-                res.grad += resid_num;
-                res.neg_hess += mu_num;
-
-                // Denominator: Gamma (log link, continuous y_denom)
-                if (data.gp_data.shared) {
-                    double mu_denom = std::exp(eta_denom_i);
-                    double y_denom = data.y_denom_cont[i];
-                    double shape = phi_denom;
-                    double resid_denom = shape * (y_denom / mu_denom - 1.0);
-                    res.ll += tulpa::math::gamma_log_density(y_denom, mu_denom, shape, std::log(y_denom));
-                    res.grad += resid_denom;
-                    res.neg_hess += shape * y_denom / mu_denom;
-                }
-                break;
-            }
-            case ModelType::NEGBIN_NEGBIN: {
-                // Numerator: NegBin
-                double r_num = phi_num;
-                res.ll += ratiod::math::log_lik_negbin(y_num, mu_num, r_num);
-                double resid_num = y_num - mu_num * (y_num + r_num) / (mu_num + r_num);
-                res.grad += resid_num;
-                res.neg_hess += mu_num * r_num * (y_num + r_num) / ((mu_num + r_num) * (mu_num + r_num));
-
-                // Denominator: NegBin (shared GP)
-                if (data.gp_data.shared) {
-                    double mu_denom = std::exp(eta_denom_i);
-                    int y_denom = (int)data.y_denom[i];
-                    double r_denom = phi_denom;
-                    res.ll += ratiod::math::log_lik_negbin(y_denom, mu_denom, r_denom);
-                    double resid_denom = y_denom - mu_denom * (y_denom + r_denom) / (mu_denom + r_denom);
-                    res.grad += resid_denom;
-                    res.neg_hess += mu_denom * r_denom * (y_denom + r_denom) / ((mu_denom + r_denom) * (mu_denom + r_denom));
-                }
-                break;
-            }
-            case ModelType::BINOMIAL: {
-                int n_trials = (int)data.y_denom[i];
-                double p_i = 1.0 / (1.0 + std::exp(-eta_num_i));
-                res.ll += y_num * eta_num_i - n_trials * std::log(1.0 + std::exp(eta_num_i));
-                res.grad += y_num - n_trials * p_i;
-                res.neg_hess += n_trials * p_i * (1.0 - p_i);
-                break;
-            }
-            default:
-                // Fallback: Poisson-like
-                res.ll += y_num * eta_num_i - mu_num;
-                res.grad += y_num - mu_num;
-                res.neg_hess += mu_num;
-                break;
-        }
+        const auto margin = collapsed_observation(data, i, eta_num_i, eta_denom_i,
+                                                  phi_num, phi_denom, !is_binomial && data.gp_data.shared);
+        res.ll += margin.ll;
+        res.grad += margin.residual;
+        res.neg_hess += margin.neg_hess;
     }
     return res;
 }

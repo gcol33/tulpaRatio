@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <RcppEigen.h>
 #include "tls_workspace.h"
+#include "ratio_collapsed_lik.h"
 
 // NOTE: Must be included AFTER hmc_sampler.h (which defines ModelData/ModelType).
 using ratiod_hmc::ModelData;
@@ -697,73 +698,11 @@ inline UnitLikResult compute_unit_lik(
         if (obs_offset_num != nullptr) eta_num_i += obs_offset_num[i];
         if (!is_binomial && obs_offset_denom != nullptr) eta_denom_i += obs_offset_denom[i];
 
-        // Per-family likelihood, gradient, Hessian
-        double mu_num = std::exp(std::min(eta_num_i, 20.0));
-        int y_num = data.y_num[i];
-
-        switch (data.model_type) {
-            case ModelType::POISSON_GAMMA: {
-                res.ll += y_num * eta_num_i - mu_num;
-                res.grad += y_num - mu_num;
-                res.neg_hess += mu_num;
-                if (!is_binomial) {
-                    double mu_denom = std::exp(std::min(eta_denom_i, 20.0));
-                    double y_denom = data.y_denom_cont[i];
-                    double shape = phi_denom;
-                    res.ll += tulpa::math::gamma_log_density(y_denom, mu_denom, shape, std::log(y_denom));
-                    res.grad += shape * (y_denom / mu_denom - 1.0);
-                    res.neg_hess += shape * y_denom / mu_denom;
-                }
-                break;
-            }
-            case ModelType::NEGBIN_NEGBIN: {
-                double r_num = phi_num;
-                res.ll += ratiod::math::log_lik_negbin(y_num, mu_num, r_num);
-                double resid_num = y_num - mu_num * (y_num + r_num) / (mu_num + r_num);
-                res.grad += resid_num;
-                res.neg_hess += mu_num * r_num * (y_num + r_num) / ((mu_num + r_num) * (mu_num + r_num));
-                if (!is_binomial) {
-                    double mu_denom = std::exp(std::min(eta_denom_i, 20.0));
-                    int y_denom = (int)data.y_denom[i];
-                    double r_denom = phi_denom;
-                    res.ll += ratiod::math::log_lik_negbin(y_denom, mu_denom, r_denom);
-                    double resid_denom = y_denom - mu_denom * (y_denom + r_denom) / (mu_denom + r_denom);
-                    res.grad += resid_denom;
-                    res.neg_hess += mu_denom * r_denom * (y_denom + r_denom) / ((mu_denom + r_denom) * (mu_denom + r_denom));
-                }
-                break;
-            }
-            case ModelType::NEGBIN_GAMMA: {
-                double r_num = phi_num;
-                res.ll += ratiod::math::log_lik_negbin(y_num, mu_num, r_num);
-                double resid_num = y_num - mu_num * (y_num + r_num) / (mu_num + r_num);
-                res.grad += resid_num;
-                res.neg_hess += mu_num * r_num * (y_num + r_num) / ((mu_num + r_num) * (mu_num + r_num));
-                // Gamma denominator
-                {
-                    double mu_denom = std::exp(std::min(eta_denom_i, 20.0));
-                    double y_denom = data.y_denom_cont[i];
-                    double shape = phi_denom;
-                    res.ll += tulpa::math::gamma_log_density(y_denom, mu_denom, shape, std::log(y_denom));
-                    res.grad += shape * (y_denom / mu_denom - 1.0);
-                    res.neg_hess += shape * y_denom / mu_denom;
-                }
-                break;
-            }
-            case ModelType::BINOMIAL: {
-                int n_trials = (int)data.y_denom[i];
-                double p_i = 1.0 / (1.0 + std::exp(-eta_num_i));
-                res.ll += y_num * eta_num_i - n_trials * std::log(1.0 + std::exp(eta_num_i));
-                res.grad += y_num - n_trials * p_i;
-                res.neg_hess += n_trials * p_i * (1.0 - p_i);
-                break;
-            }
-            default:
-                res.ll += y_num * eta_num_i - mu_num;
-                res.grad += y_num - mu_num;
-                res.neg_hess += mu_num;
-                break;
-        }
+        const auto margin = collapsed_observation(data, i, eta_num_i, eta_denom_i,
+                                                  phi_num, phi_denom, !is_binomial);
+        res.ll += margin.ll;
+        res.grad += margin.residual;
+        res.neg_hess += margin.neg_hess;
     }
     return res;
 }

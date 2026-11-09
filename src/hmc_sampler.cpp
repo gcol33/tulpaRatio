@@ -905,6 +905,24 @@ Rcpp::NumericMatrix precision_h_probe(double y, double mu, double phi, int famil
   return out;
 }
 
+Rcpp::NumericMatrix collapsed_margin_probe(int family, int y, double yd, double en,
+    double ed, double pn, double pd, bool shared) {
+  ModelData data;
+  data.N=1; data.p_num=1; data.p_denom=1;
+  data.y_num={y}; data.y_denom={static_cast<int>(yd)}; data.y_denom_cont={yd};
+  data.X_num_flat={1}; data.X_denom_flat={1}; data.spatial_group={1};
+  data.gp_data.obs_to_loc={0}; data.gp_data.shared=shared;
+  data.model_type=static_cast<ModelType>(family);
+  const bool binomial=data.model_type==ModelType::BINOMIAL;
+  const double w=0;
+  const auto a=compute_unit_lik(0,0,&en,&ed,pn,pd,nullptr,data,binomial);
+  const auto b=compute_loc_lik(0,&w,&en,&ed,pn,pd,data,binomial);
+  Rcpp::NumericMatrix out(2,3);
+  out(0,0)=a.ll; out(0,1)=a.grad; out(0,2)=a.neg_hess;
+  out(1,0)=b.ll; out(1,1)=b.grad; out(1,2)=b.neg_hess;
+  return out;
+}
+
 Rcpp::NumericVector negbin_table_probe(int y, double mu, double phi) {
   ModelData data;
   data.N = 1;

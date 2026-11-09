@@ -2,6 +2,15 @@
 #include "ratio_margins.h"
 
 namespace ratiod_hmc { Rcpp::NumericMatrix residual_accumulation_probe(); }
+namespace ratiod_hmc {
+Rcpp::NumericMatrix collapsed_margin_probe(int,int,double,double,double,double,double,bool);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix cpp_test_collapsed_margin(int family, int y, double yd, double en,
+    double ed, double pn, double pd, bool shared) {
+    return ratiod_hmc::collapsed_margin_probe(family,y,yd,en,ed,pn,pd,shared);
+}
 
 // [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_test_residual_accumulation() {

@@ -457,6 +457,10 @@ cpp_test_precision_beta_spec_h <- function(y, n, phi) {
     .Call(`_tulpaRatio_cpp_test_precision_beta_spec_h`, y, n, phi)
 }
 
+cpp_test_collapsed_margin <- function(family, y, yd, en, ed, pn, pd, shared) {
+    .Call(`_tulpaRatio_cpp_test_collapsed_margin`, family, y, yd, en, ed, pn, pd, shared)
+}
+
 cpp_test_residual_accumulation <- function() {
     .Call(`_tulpaRatio_cpp_test_residual_accumulation`)
 }

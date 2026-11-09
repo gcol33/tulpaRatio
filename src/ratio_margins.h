@@ -136,6 +136,8 @@ inline T log_lik_beta_binomial(int y, int n, const T& q, const T& phi) {
 namespace tulpaRatio { namespace margins {
 
 enum class Prior { None, Gamma, HalfCauchy };
+enum Field : unsigned { Value = 1, Score = 2, Extra = 4, Curvature = 8,
+                        FirstOrder = Value | Score | Extra, SecondOrder = Value | Score | Curvature };
 
 struct Observation {
     double y, eta;
@@ -145,7 +147,7 @@ struct Observation {
 };
 
 struct Result {
-    double ll = 0.0, residual = 0.0, extra = 0.0;
+    double ll = 0.0, residual = 0.0, extra = 0.0, neg_hess = 0.0;
 };
 
 struct NoMargin {
@@ -153,15 +155,15 @@ struct NoMargin {
     static constexpr Prior prior = Prior::None;
     static constexpr bool log_extra = false;
     explicit NoMargin(double = 1.0, bool = true) {}
-    template<bool Cached> Result operator()(const Observation&, bool = true) const { return {}; }
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation&, bool = true) const { return {}; }
 };
 
 struct Poisson : NoMargin {
     using NoMargin::NoMargin;
-    template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
         const double mu = std::exp(x.eta);
-        return {lp ? ratiod::math::poisson_eta_density(x.y, x.eta, mu, Cached ? x.log_factorial : std::lgamma(x.y + 1.0)) : 0.0,
-                x.y - mu, 0.0};
+        return {(Fields & Value) && lp ? ratiod::math::poisson_eta_density(x.y, x.eta, mu, Cached ? x.log_factorial : std::lgamma(x.y + 1.0)) : 0.0,
+                (Fields & Score) ? x.y - mu : 0.0, 0.0, (Fields & Curvature) ? mu : 0.0};
     }
 };
 
@@ -171,19 +173,20 @@ struct NegBin {
     static constexpr bool log_extra = false;
     double phi;
     explicit NegBin(double p, bool = true) : phi(p) {}
-    template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
         const double mu = std::exp(x.eta);
         Result out;
         const double denom = mu + phi;
         if constexpr (Cached) {
-            out.residual = x.y - mu * (x.y + phi) * (1.0 / denom);
-            out.extra = tulpa::math::negbin_size_score(int(x.y), mu, phi, x.digamma_difference);
-            if (lp) out.ll = tulpa::math::negbin_log_pmf(int(x.y), mu, phi, x.lgamma_difference, x.log_factorial);
+            if constexpr (Fields & Score) out.residual = x.y - mu * (x.y + phi) * (1.0 / denom);
+            if constexpr (Fields & Extra) out.extra = tulpa::math::negbin_size_score(int(x.y), mu, phi, x.digamma_difference);
+            if ((Fields & Value) && lp) out.ll = tulpa::math::negbin_log_pmf(int(x.y), mu, phi, x.lgamma_difference, x.log_factorial);
         } else {
-            out.residual = x.y - mu * (x.y + phi) / denom;
-            out.extra = tulpa::math::negbin_size_score(int(x.y), mu, phi);
-            if (lp) out.ll = tulpa::math::negbin_log_pmf(int(x.y), mu, phi);
+            if constexpr (Fields & Score) out.residual = x.y - mu * (x.y + phi) / denom;
+            if constexpr (Fields & Extra) out.extra = tulpa::math::negbin_size_score(int(x.y), mu, phi);
+            if ((Fields & Value) && lp) out.ll = tulpa::math::negbin_log_pmf(int(x.y), mu, phi);
         }
+        if constexpr (Fields & Curvature) out.neg_hess = (mu / denom) * (phi / denom) * (x.y + phi);
         return out;
     }
 };
@@ -195,13 +198,15 @@ struct Gamma {
     double phi;
     tulpa::math::GammaPrecision precision;
     explicit Gamma(double p, bool lp = true) : phi(p), precision(p, lp) {}
-    template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
         if (x.y <= 0.0) return {Cached && lp ? -1e10 : 0.0, 0.0, 0.0};
         const double mu = std::exp(x.eta);
         const double ratio = Cached ? x.y * (1.0 / mu) : x.y / mu;
         const double log_y = Cached ? x.log_y : std::log(x.y);
-        return {lp ? precision.log_density(x.y, mu, log_y) : 0.0,
-                phi * (ratio - 1.0), precision.derivative(x.y, mu, log_y)};
+        return {(Fields & Value) && lp ? precision.log_density(x.y, mu, log_y) : 0.0,
+                (Fields & Score) ? phi * (ratio - 1.0) : 0.0,
+                (Fields & Extra) ? precision.derivative(x.y, mu, log_y) : 0.0,
+                (Fields & Curvature) ? phi * ratio : 0.0};
     }
 };
 
@@ -211,11 +216,12 @@ struct Lognormal {
     static constexpr bool log_extra = true;
     double phi, variance, log_sigma;
     explicit Lognormal(double p, bool lp = true) : phi(p), variance(p*p), log_sigma(lp ? std::log(p) : 0.0) {}
-    template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
         const double log_y = Cached ? x.log_y : std::log(x.y);
         const double z = (log_y - x.eta) / phi;
-        return {lp ? ratiod::math::lognormal_eta_density(log_y, x.eta, phi, log_sigma) : 0.0,
-                (log_y - x.eta) / variance, -1.0 + z*z};
+        return {(Fields & Value) && lp ? ratiod::math::lognormal_eta_density(log_y, x.eta, phi, log_sigma) : 0.0,
+                (Fields & Score) ? (log_y - x.eta) / variance : 0.0,
+                (Fields & Extra) ? -1.0 + z*z : 0.0, (Fields & Curvature) ? 1.0 / variance : 0.0};
     }
     double add_density(double ll, const Observation& x) const {
         const double log_y = std::log(x.y);
@@ -226,7 +232,7 @@ struct Lognormal {
 
 struct Binomial : NoMargin {
     using NoMargin::NoMargin;
-    template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
         double p, log_p, log_1mp;
         if (x.eta >= 0.0) {
             const double e = std::exp(-x.eta);
@@ -240,8 +246,10 @@ struct Binomial : NoMargin {
             log_p = x.eta + log_1mp;
         }
         const double constant = Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials, int(x.y));
-        return {lp ? ratiod::math::binomial_eta_density(x.y, x.trials, log_p, log_1mp, constant) : 0.0,
-                x.y - x.trials*p, 0.0};
+        const double q = x.eta >= 0.0 ? std::exp(log_1mp) : 1.0 - p;
+        return {(Fields & Value) && lp ? ratiod::math::binomial_eta_density(x.y, x.trials, log_p, log_1mp, constant) : 0.0,
+                (Fields & Score) ? x.y - x.trials*p : 0.0, 0.0,
+                (Fields & Curvature) ? x.trials*p*q : 0.0};
     }
 };
 
@@ -251,10 +259,20 @@ struct BetaBinomial {
     static constexpr bool log_extra = false;
     double phi;
     explicit BetaBinomial(double p, bool = true) : phi(p) {}
-    template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
+    template<bool Cached, unsigned Fields = FirstOrder> Result operator()(const Observation& x, bool lp = true) const {
         const auto bb = ratiod::math::beta_binomial_obs(int(x.y), x.trials, x.eta, phi);
         const double constant = Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials, int(x.y));
-        return {lp ? bb.ll + constant : 0.0, bb.d_eta, bb.d_phi};
+        Result out{(Fields & Value) && lp ? bb.ll + constant : 0.0,
+                   (Fields & Score) ? bb.d_eta : 0.0, (Fields & Extra) ? bb.d_phi : 0.0};
+        if constexpr (Fields & Curvature) {
+            const double p = 1.0 / (1.0 + std::exp(-x.eta));
+            const double q = 1.0 / (1.0 + std::exp(x.eta));
+            const double d = phi*p*q;
+            out.neg_hess = -(q-p)*bb.d_eta - d*d*(
+                tulpa::math::polygamma_rising_difference(1,int(x.y),p*phi) +
+                tulpa::math::polygamma_rising_difference(1,x.trials-int(x.y),q*phi));
+        }
+        return out;
     }
 };
 
