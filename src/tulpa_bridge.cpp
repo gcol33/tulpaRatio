@@ -176,7 +176,10 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     Rcpp::List spatial_params = Rcpp::List::create(),
     Rcpp::List temporal_params = Rcpp::List::create(),
     int n_chains = 1,
-    int n_threads = 1
+    int n_threads = 1,
+    int L = 0,
+    std::string metric = "auto",
+    bool walnuts = false
 ) {
   const int n_proc_input = X_list.size();
   if (n_proc_input < 1) {
@@ -443,6 +446,14 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   }
 
   if (n_chains < 1) Rcpp::stop("n_chains must be positive");
+  tulpa::SamplerControl control;
+  control.L = L;
+  control.walnuts = walnuts;
+  if (metric == "auto") control.metric = tulpa::MassMatrixType::AUTO;
+  else if (metric == "diag") control.metric = tulpa::MassMatrixType::DIAG;
+  else if (metric == "dense") control.metric = tulpa::MassMatrixType::DENSE;
+  else if (metric == "block_diag") control.metric = tulpa::MassMatrixType::BLOCK_DIAG;
+  else Rcpp::stop("Unknown metric '%s'", metric.c_str());
   tulpa::OmpCapScope thread_cap(n_threads);
   std::vector<double> init_vec;
   for (int c=0;c<n_chains;++c) init_vec.insert(init_vec.end(),init.begin(),init.end());
@@ -450,15 +461,16 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   if (n_chains == 1) {
     tulpa::get_nuts_fn()(&data,&layout,init_vec.data(),layout.total_params,
       n_iter,n_warmup,max_treedepth,adapt_delta,static_cast<unsigned int>(seed),
-      verbose ? 1 : 0,nullptr,results.data());
+      verbose ? 1 : 0,&control,nullptr,results.data());
   } else {
     tulpa::get_nuts_chains_fn()(&data,&layout,init_vec.data(),layout.total_params,n_chains,
       n_iter,n_warmup,max_treedepth,adapt_delta,static_cast<unsigned int>(seed),
-      verbose ? 1 : 0,nullptr,results.data());
+      verbose ? 1 : 0,&control,nullptr,results.data());
   }
   Rcpp::List samples(n_chains),log_prob(n_chains),accept_prob(n_chains),
-             divergent(n_chains),treedepth(n_chains),n_leapfrog(n_chains);
+             divergent(n_chains),treedepth(n_chains),n_leapfrog(n_chains),energy(n_chains);
   Rcpp::NumericVector epsilon(n_chains);
+  Rcpp::CharacterVector samplers(n_chains);
   for (int c=0;c<n_chains;++c) {
     auto& result=results[c];
     const int n=result.n_sample;
@@ -467,9 +479,10 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     accept_prob[c]=buffer_vector(result.accept_prob,n);
     divergent[c]=buffer_int_vector(result.divergent,n);
     treedepth[c]=buffer_int_vector(result.treedepth,n);
-    Rcpp::IntegerVector steps(n);
-    for (int i=0;i<n;++i) steps[i]=result.treedepth[i] > 0 ? (1 << result.treedepth[i])-1 : 1;
-    n_leapfrog[c]=steps;
+    n_leapfrog[c]=buffer_int_vector(result.n_leapfrog,n);
+    energy[c]=buffer_vector(result.energy,n);
+    const std::string sampler(result.sampler);
+    samplers[c]=sampler == "nuts" ? "NUTS" : sampler;
     epsilon[c]=result.epsilon;
     result.free_buffers();
   }
@@ -480,5 +493,6 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     Rcpp::Named("log_prob")=pack(log_prob),Rcpp::Named("accept_prob")=pack(accept_prob),
     Rcpp::Named("n_leapfrog")=pack(n_leapfrog),Rcpp::Named("treedepth")=pack(treedepth),
     Rcpp::Named("divergent")=pack(divergent),Rcpp::Named("epsilon")=epsilon,
-    Rcpp::Named("sampler")="NUTS");
+    Rcpp::Named("energy")=pack(energy),
+    Rcpp::Named("sampler")=Rcpp::as<std::string>(samplers[0]));
 }

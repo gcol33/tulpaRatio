@@ -226,10 +226,7 @@ fit_hmc <- function(formula,
     identical(latent_info$type, "none") &&
     isFALSE(svc_params$has_svc) &&
     isFALSE(tvc_params$has_tvc) &&
-    isFALSE(st_params$has_spatiotemporal) &&
-    identical(metric, "auto") &&
-    isFALSE(walnuts) &&
-    as.integer(L) == 0L
+    isFALSE(st_params$has_spatiotemporal)
 
   if (specs_eligible) {
     num_link   <- MODEL_TYPES[[model_type]]$num_link
@@ -347,7 +344,7 @@ fit_hmc <- function(formula,
       n_iter            = as.integer(iter),
       n_warmup          = as.integer(warmup),
       max_treedepth     = as.integer(max_treedepth %||% 10L),
-      adapt_delta       = if (adapt_delta_value < 0) 0.8 else adapt_delta_value,
+      adapt_delta       = adapt_delta_value,
       seed              = as.integer(seed),
       verbose           = isTRUE(verbose),
       gradient_mode     = if (identical(gradient_mode, "auto")) "A_r" else gradient_mode,
@@ -359,7 +356,10 @@ fit_hmc <- function(formula,
       spatial_params    = spatial_params_spec,
       temporal_params   = temporal_params_spec,
       n_chains          = as.integer(chains),
-      n_threads         = as.integer(cores)
+      n_threads         = as.integer(cores),
+      L                 = as.integer(L),
+      metric            = metric,
+      walnuts           = isTRUE(walnuts)
     )
 
     if (need_reorder) {
