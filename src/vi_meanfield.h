@@ -6,9 +6,8 @@
 #define RATIOD_VI_MEANFIELD_H
 
 #include "vi_types.h"
-#include "vi_optimizer.h"
+#include <tulpa/vi_math.h>
 #include "hmc_sampler.h"
-#include "autodiff.h"
 #include <random>
 #include <cmath>
 
@@ -64,8 +63,9 @@ inline MeanFieldGradients compute_meanfield_elbo_grad(
     // Gradient of log p(y, θ) w.r.t. θ
     Eigen::VectorXd grad_theta;
     double log_joint = compute_log_joint_grad(theta, data, layout, grad_theta);
+    tulpa::vi::path_gradient(grad_theta,(eps.array()/sigma.array()).matrix());
 
-    // Chain rule for μ: ∂L/∂μ = ∂log_p/∂θ · ∂θ/∂μ = ∂log_p/∂θ
+    // Derivative through the variational mean.
     result.grad_mu += grad_theta;
 
     // Chain rule for log_σ: ∂L/∂log_σᵢ = ∂log_p/∂θᵢ · ∂θᵢ/∂log_σᵢ
@@ -79,9 +79,6 @@ inline MeanFieldGradients compute_meanfield_elbo_grad(
   result.grad_mu /= mc_samples;
   result.grad_log_sigma /= mc_samples;
   result.elbo /= mc_samples;
-
-  // Add entropy gradient: ∂H/∂log_σ = 1 (since H = Σ log_σ + const)
-  result.grad_log_sigma.array() += 1.0;
 
   // Add entropy to ELBO
   result.elbo += params.entropy();
@@ -108,12 +105,12 @@ inline VIResult fit_meanfield(
   }
 
   // Initialize optimizer
-  AdamOptimizer optimizer(config.adam_alpha, config.adam_beta1,
+  tulpa::vi::AdamOptimizer optimizer(config.adam_alpha, config.adam_beta1,
                           config.adam_beta2, config.adam_eps);
-  AdamState state = optimizer.init_state(params.n_variational_params());
+  tulpa::vi::AdamState state = optimizer.init_state(params.n_variational_params());
 
   // Convergence checker
-  ConvergenceChecker checker(config.tol_grad, config.tol_rel_elbo, config.patience);
+  tulpa::vi::ConvergenceChecker checker(config.tol_grad, config.tol_rel_elbo, config.patience);
 
   // Random number generator
   std::mt19937 rng(config.seed);
@@ -139,7 +136,7 @@ inline VIResult fit_meanfield(
     double grad_norm = grad_flat.norm();
 
     // Check convergence
-    std::string converged = checker.check(grads.elbo, grad_norm);
+    std::string converged = checker.check(grads.elbo, grad_flat);
     if (!converged.empty()) {
       result.converged = true;
       result.iterations = iter + 1;

@@ -61,8 +61,8 @@ struct VIConfig {
   int max_iter = 10000;
   int mc_samples = 10;        // Monte Carlo samples for gradient
   double tol_grad = 1e-4;     // Gradient norm tolerance
-  double tol_rel_elbo = 0.01; // Relative ELBO change tolerance
-  int patience = 50;          // Early stopping patience
+  double tol_rel_elbo = 0.01; // Window gain relative to the ELBO span
+  int patience = 50;          // Gradient averaging window
 
   // Adam optimizer parameters
   double adam_alpha = 0.01;

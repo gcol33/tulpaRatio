@@ -67,7 +67,7 @@
   metric        = list(default = "auto",
                        choices = c("auto", "dense", "diag", "block_diag")),
   gradient_mode = list(default = "auto",
-                       choices = c("auto", "N", "A", "A_r", "A_t", "H")),
+                       choices = c("auto", "N", "A", "A_r", "H")),
   re_param      = list(default = "noncentered",
                        choices = c("noncentered", "centered")),
 

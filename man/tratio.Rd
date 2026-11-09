@@ -143,7 +143,7 @@ scale near zero) needs. \code{FALSE} (default) runs NUTS.
 \item \code{gradient_mode}: \code{"auto"} (default) selects the fastest available;
 \code{"H"} hand-coded analytical (fastest); \code{"A_r"} arena reverse-mode
 autodiff (fast, O(N)); \code{"A"} forward-mode (O(p*N), thread-safe);
-\code{"A_t"} tape-based reverse-mode (slow, legacy); \code{"N"} numerical finite
+\code{"N"} numerical finite
 differences (slowest, always works).
 \item \code{re_param}: random-effect parameterization. \code{"noncentered"} (default)
 stores z ~ N(0, 1) and computes re = sigma * z (or diag(sigma) * L * z

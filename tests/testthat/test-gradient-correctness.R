@@ -211,9 +211,14 @@ ALL_FIELDS <- c(FIELDS, MULTI_FIELDS, STRUCTURE_FIELDS, ST_IV_FIELDS,
                 ST_OTHER_FIELDS, ST_IV_AR1_FIELDS, ST_GP_FIELDS, KERNEL_FIELDS,
                 DISPATCH_MASK_FIELDS, RSR_FIELDS, RTR_FIELDS)
 MODES <- c("handcoded", "arena")
-AUTODIFF_MODES <- c("arena", "forward", "tape")
+test_that("gradient controls expose the supported scalar implementations", {
+  expect_error(tulpaRatio:::.tratio_control(list(gradient_mode = "A_t")), "one of")
+  expect_error(tulpaRatio:::cpp_gradient_check("none", mode = "tape"), "gradient mode")
+})
+
+AUTODIFF_MODES <- c("arena", "forward")
 # The same three under the names the front door takes.
-AUTODIFF_MODES_STR <- c("A_r", "A", "A_t")
+AUTODIFF_MODES_STR <- c("A_r", "A")
 
 for (field in FIELDS) {
   for (mode in MODES) {

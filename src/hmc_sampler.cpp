@@ -11,7 +11,6 @@
 #include "linalg_fast.h"
 #include <RcppEigen.h>
 #include "hmc_progress.h"
-#include "autodiff.h"
 #include "autodiff_utils.h"
 #include "beta_binomial_obs.h"
 #include "ratio_margins.h"
@@ -2229,8 +2228,7 @@ bool verify_gradient_runtime(
   // different parameterization than H-mode's compute_log_post, e.g. non-centered RE).
   // For H mode: use compute_log_post (H-mode function) as reference.
   if (g_gradient_mode == GradientMode::AUTODIFF_ARENA ||
-      g_gradient_mode == GradientMode::AUTODIFF_FORWARD ||
-      g_gradient_mode == GradientMode::AUTODIFF_TAPE) {
+      g_gradient_mode == GradientMode::AUTODIFF_FORWARD) {
     reference_gradient(params, data, layout, grad_numerical, true);
   } else {
     reference_gradient(params, data, layout, grad_numerical, false);
@@ -2289,36 +2287,7 @@ void verify_gradient_or_fallback(const std::vector<double>& q_init,
 // Autodiff gradient (O(n) - works for ALL models)
 // =====================================================================
 
-void compute_gradient_autodiff(
-    const std::vector<double>& params,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out = nullptr
-) {
-    using namespace ratiod::ad;
 
-    // Thread-safe: each call gets its own tape via RAII
-    TapeScope tape_scope;
-    Tape* tape = tape_scope.tape;
-
-    // Create autodiff variables from parameters
-    std::vector<Var> params_ad = make_vars(tape, params);
-
-    // Compute log posterior using templated implementation
-    Var log_post = ratiod::compute_log_post_impl(params_ad, data, layout);
-
-    // Extract log_post value before backward pass (free: already computed)
-    if (log_post_out) *log_post_out = log_post.val();
-
-    // Backward pass to compute gradients
-    log_post.backward();
-
-    // Extract gradients
-    grad = get_adjoints(params_ad);
-
-    // TapeScope destructor handles cleanup
-}
 
 // =====================================================================
 // Arena-based reverse-mode autodiff gradient (O(N) - fast, all models)
@@ -4993,78 +4962,9 @@ void compute_gradient_latent_handcoded(
 // Shared by gp_autodiff, msgp_autodiff, gp_temporal_autodiff.
 // Returns log_post, sigma_re, phi_num, phi_denom via output parameters.
 // =====================================================================
-struct AutodiffCommonResult {
-    ratiod::ad::Var log_post;
-    ratiod::ad::Var sigma_re;
-    ratiod::ad::Var phi_num;
-    ratiod::ad::Var phi_denom;
-};
 
-static inline AutodiffCommonResult add_common_priors_ad(
-    ratiod::ad::Tape* tape,
-    const std::vector<ratiod::ad::Var>& params_ad,
-    const ModelData& data,
-    const ParamLayout& layout
-) {
-    using namespace ratiod::ad;
-    using namespace ratiod::math;
 
-    Var log_post(tape, 0.0);
 
-    // Fixed effects priors: N(0, sigma_beta^2)
-    double tau_beta = 1.0 / (data.sigma_beta * data.sigma_beta);
-    for (int j = 0; j < data.p_num; j++) {
-        Var beta = params_ad[layout.beta_num_start + j];
-        log_post = log_post - (0.5 * tau_beta) * beta * beta;
-    }
-    for (int j = 0; j < data.p_denom; j++) {
-        Var beta = params_ad[layout.beta_denom_start + j];
-        log_post = log_post - (0.5 * tau_beta) * beta * beta;
-    }
-
-    // Random effects priors (if present)
-    Var sigma_re(tape, 1.0);
-    if (layout.has_re && data.n_re_groups > 0) {
-        Var log_sigma_re = params_ad[layout.log_sigma_re_idx];
-        sigma_re = safe_exp(log_sigma_re);
-
-        Var ratio = sigma_re / data.sigma_re_scale;
-        log_post = log_post - safe_log(1.0 + ratio * ratio);
-        log_post = log_post + log_sigma_re;  // Jacobian
-
-        if (data.re_parameterization == 1) {
-            for (int g = 0; g < data.n_re_groups; g++) {
-                Var re_g = params_ad[layout.re_start + g];
-                log_post = log_post - 0.5 * re_g * re_g;
-            }
-        } else {
-            Var tau_re = 1.0 / (sigma_re * sigma_re + 1e-10);
-            for (int g = 0; g < data.n_re_groups; g++) {
-                Var re_g = params_ad[layout.re_start + g];
-                log_post = log_post - 0.5 * tau_re * re_g * re_g;
-                log_post = log_post + 0.5 * safe_log(tau_re);
-            }
-        }
-    }
-
-    // Overdispersion priors (Gamma)
-    Var phi_num(tape, 1.0);
-    Var phi_denom(tape, 1.0);
-    if (layout.has_phi_num) {
-        Var log_phi = params_ad[layout.log_phi_num_idx];
-        phi_num = safe_exp(log_phi);
-        log_post = log_post + (data.phi_prior_shape - 1.0) * log_phi
-                            - data.phi_prior_rate * phi_num + log_phi;
-    }
-    if (layout.has_phi_denom) {
-        Var log_phi = params_ad[layout.log_phi_denom_idx];
-        phi_denom = safe_exp(log_phi);
-        log_post = log_post + (data.phi_prior_shape - 1.0) * log_phi
-                            - data.phi_prior_rate * phi_denom + log_phi;
-    }
-
-    return {log_post, sigma_re, phi_num, phi_denom};
-}
 
 // =====================================================================
 // HSGP gradient (O(N*M^2) - analytical, ~50x faster than numerical)
@@ -7247,8 +7147,6 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
     // Explicit mode overrides
     if (mode == GradientMode::NUMERICAL)
         return &compute_gradient_numerical;
-    if (mode == GradientMode::AUTODIFF_TAPE)
-        return &compute_gradient_autodiff;
     if (mode == GradientMode::AUTODIFF_ARENA)
         return &compute_gradient_arena;
     if (mode == GradientMode::AUTODIFF_FORWARD)
@@ -7355,7 +7253,6 @@ GradientFn resolve_gradient_fn(GradientMode mode, const ModelData& data, const P
 // happens to come out right.
 const char* gradient_fn_name(GradientFn fn) {
   if (fn == &compute_gradient_numerical) return "numerical";
-  if (fn == &compute_gradient_autodiff) return "autodiff_tape";
   if (fn == &compute_gradient_arena) return "autodiff_arena";
   if (fn == &compute_gradient_forward) return "autodiff_forward";
   if (fn == &compute_gradient_analytical) return "analytical";
@@ -7423,15 +7320,14 @@ void require_gradient_supported(const ModelData& data, const ParamLayout& layout
   }
 
   if (g_gradient_mode != GradientMode::AUTODIFF_ARENA &&
-      g_gradient_mode != GradientMode::AUTODIFF_FORWARD &&
-      g_gradient_mode != GradientMode::AUTODIFF_TAPE) return;
+      g_gradient_mode != GradientMode::AUTODIFF_FORWARD) return;
 
   const char* gap = ratiod::log_post_impl_gap(data, layout);
   if (gap == nullptr) return;
 
   const char* mode_name =
       (g_gradient_mode == GradientMode::AUTODIFF_ARENA)   ? "A_r" :
-      (g_gradient_mode == GradientMode::AUTODIFF_FORWARD) ? "A"   : "A_t";
+      "A";
   Rcpp::stop(std::string("gradient_mode '") + mode_name +
              "' differentiates the templated log posterior, which does not "
              "express the " + gap + " parameterization: that field is "
@@ -8176,8 +8072,7 @@ HMCResultCpp run_hmc_chain_cpp(
   } else {
     // Use same log-post function as the active gradient mode
     if (g_gradient_mode == GradientMode::AUTODIFF_ARENA ||
-        g_gradient_mode == GradientMode::AUTODIFF_FORWARD ||
-        g_gradient_mode == GradientMode::AUTODIFF_TAPE) {
+        g_gradient_mode == GradientMode::AUTODIFF_FORWARD) {
       log_prob_current = ratiod::compute_log_post_impl(q, data, layout);
     } else {
       log_prob_current = compute_log_post(q, data, layout);
@@ -9469,8 +9364,7 @@ HMCResultCpp run_hmc_chain_cpp(
       // Compute proposed Hamiltonian (use same log-post as gradient mode)
       double log_prob_prop;
       if (g_gradient_mode == GradientMode::AUTODIFF_ARENA ||
-          g_gradient_mode == GradientMode::AUTODIFF_FORWARD ||
-          g_gradient_mode == GradientMode::AUTODIFF_TAPE) {
+          g_gradient_mode == GradientMode::AUTODIFF_FORWARD) {
         log_prob_prop = ratiod::compute_log_post_impl(q_prop, data, layout);
       } else {
         log_prob_prop = compute_log_post(q_prop, data, layout);
@@ -9772,8 +9666,6 @@ std::vector<HMCResult> run_hmc_parallel_chains(
   std::vector<HMCResultCpp> cpp_results(n_chains);
 
   // Thread-safe autodiff: Each chain creates its own tape via TapeScope (RAII).
-  // All gradient modes (N, A, A_t, H) are now thread-safe and can run in parallel.
-  // The old global tape limitation has been removed.
 
   require_gradient_supported(data, layout);
 

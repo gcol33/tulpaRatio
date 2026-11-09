@@ -10,7 +10,6 @@
 #include <limits>
 #include <vector>
 #include <Rcpp.h>
-#include "autodiff.h"
 #include "autodiff_fwd.h"
 #include "autodiff_arena.h"
 #include "link_function.h"
@@ -19,17 +18,7 @@
 
 namespace tulpa { namespace math {
 template<> struct PrecisionUnary<ratiod::arena::Var> : PrecisionArenaUnary<ratiod::arena::Var> {};
-template<> struct PrecisionUnary<ratiod::ad::Var> {
-    static ratiod::ad::Var apply(const ratiod::ad::Var& x, double value, double derivative) {
-        ratiod::ad::Var out(x.tape, value);
-        const size_t input=x.idx, result=out.idx;
-        x.tape->nodes[result].backward = [input,result,derivative](ratiod::ad::Tape* tape) {
-            const double adj=tape->nodes[result].adjoint;
-            if (adj != 0) tape->nodes[input].adjoint += adj*derivative;
-        };
-        return out;
-    }
-};
+
 } }
 
 namespace ratiod {
@@ -44,8 +33,6 @@ namespace math {
 template<typename T>
 struct is_ad_var : std::false_type {};
 
-template<>
-struct is_ad_var<ad::Var> : std::true_type {};
 
 template<typename T>
 struct is_fwd_dual : std::false_type {};
@@ -85,11 +72,7 @@ safe_exp(T x) {
 }
 
 // exp - ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-safe_exp(const T& x) {
-    return ad::exp(x);
-}
+
 
 // exp - fwd::Dual version
 template<typename T>
@@ -120,11 +103,7 @@ safe_log(T x) {
 }
 
 // log - ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-safe_log(const T& x) {
-    return ad::log(x);
-}
+
 
 // log - fwd::Dual version
 template<typename T>
@@ -150,11 +129,7 @@ safe_sqrt(T x) {
 }
 
 // sqrt - ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-safe_sqrt(const T& x) {
-    return ad::sqrt(x);
-}
+
 
 // sqrt - fwd::Dual version
 template<typename T>
@@ -182,15 +157,7 @@ safe_max(T a, T b) {
 // max - ad::Var (tape) version
 // Note: for tape autodiff, max is non-differentiable at a==b,
 // but we use subgradient (gradient of the active branch)
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-safe_max(const T& a, const T& b) {
-    if (a.val() >= b.val()) {
-        return a;
-    } else {
-        return b;
-    }
-}
+
 
 // max - fwd::Dual version
 template<typename T>
@@ -222,11 +189,7 @@ lgamma_fn(T x) {
 }
 
 // lgamma - ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-lgamma_fn(const T& x) {
-    return ad::lgamma(x);
-}
+
 
 // lgamma - fwd::Dual version
 template<typename T>
@@ -281,11 +244,7 @@ inv_logit(T x) {
 }
 
 // inv_logit - ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-inv_logit(const T& x) {
-    return ad::inv_logit(x);
-}
+
 
 // inv_logit - fwd::Dual version
 template<typename T>
@@ -309,11 +268,7 @@ log1p_fn(T x) {
 }
 
 // log1p - ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-log1p_fn(const T& x) {
-    return ad::log1p(x);
-}
+
 
 // log1p - fwd::Dual version
 template<typename T>
@@ -341,11 +296,7 @@ get_value(const T& x) {
 }
 
 // ad::Var (tape) version
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, double>::type
-get_value(const T& x) {
-    return x.val();
-}
+
 
 // fwd::Dual version
 template<typename T>
@@ -371,11 +322,7 @@ lift_unary(const T&, double f, double) {
     return f;
 }
 
-template<typename T>
-inline typename std::enable_if<is_ad_var<T>::value, T>::type
-lift_unary(const T& x, double f, double df) {
-    return ad::unary(x, f, df);
-}
+
 
 template<typename T>
 inline typename std::enable_if<is_fwd_dual<T>::value, T>::type

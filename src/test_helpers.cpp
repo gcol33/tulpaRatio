@@ -5,7 +5,6 @@
 #include <cmath>
 #include <vector>
 #include <random>
-#include "autodiff.h"
 #include "pg_binomial.h"
 #include "omp_sum.h"
 #include "hmc_sampler.h"
@@ -55,8 +54,8 @@ T negbin_probe_density(int y, const T& eta, const T& log_phi, const T& z,
 List cpp_test_negbin_paths(int y, double mu, double phi, double z,
                            std::string type = "zi_negbin") {
   const double eta = std::log(mu), lp = std::log(phi);
-  NumericMatrix out(3, 4);
-  rownames(out) = CharacterVector::create("legacy_forward", "legacy_arena", "legacy_tape");
+  NumericMatrix out(2, 4);
+  rownames(out) = CharacterVector::create("legacy_forward", "legacy_arena");
   colnames(out) = CharacterVector::create("value", "eta", "log_phi", "zi");
   for (int j = 0; j < 3; ++j) {
     const auto val = negbin_probe_density(y, fwd::Dual(eta, j == 0),
@@ -71,13 +70,7 @@ List cpp_test_negbin_paths(int y, double mu, double phi, double z,
     val.backward();
     out(1, 0) = val.val(); out(1, 1) = a.adj(); out(1, 2) = b.adj(); out(1, 3) = c.adj();
   }
-  {
-    ratiod::ad::TapeScope scope;
-    ratiod::ad::Var a(eta), b(lp), c(z);
-    auto val = negbin_probe_density(y, a, b, c, type);
-    val.backward();
-    out(2, 0) = val.val(); out(2, 1) = a.adj(); out(2, 2) = b.adj(); out(2, 3) = c.adj();
-  }
+
   ratiod::ModelData data;
   data.model_type = ratiod::ModelType::NEGBIN_NEGBIN;
   data.y_num = {y}; data.y_denom = {0};
@@ -131,8 +124,8 @@ List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon) {
 
 // [[Rcpp::export]]
 List cpp_test_autodiff_unary(std::string op, double value, double parameter = 1.0) {
-  using namespace ratiod::ad;
-  TapeScope scope;
+  using namespace ratiod::arena;
+  ArenaScope scope;
   Var x(value), out(0.0);
   if (op == "exp_chain") out = exp(x * x);
   else if (op == "lgamma") out = lgamma(x);
@@ -150,8 +143,8 @@ List cpp_test_autodiff_unary(std::string op, double value, double parameter = 1.
 
 // [[Rcpp::export]]
 List cpp_test_autodiff_binary(std::string op, double first, double second) {
-  using namespace ratiod::ad;
-  TapeScope scope;
+  using namespace ratiod::arena;
+  ArenaScope scope;
   Var a(first), b(second), out(0.0);
   if (op == "division") out = a / b;
   else if (op == "log_sum_exp") out = log_sum_exp(a, b);
@@ -164,8 +157,8 @@ List cpp_test_autodiff_binary(std::string op, double first, double second) {
 // [[Rcpp::export]]
 List cpp_test_autodiff_vector(std::string op, NumericVector values,
                               IntegerVector y, double phi = 1.0) {
-  using namespace ratiod::ad;
-  TapeScope scope;
+  using namespace ratiod::arena;
+  ArenaScope scope;
   std::vector<Var> x;
   for (double value : values) x.emplace_back(value);
   Var scale(phi), out(0.0);

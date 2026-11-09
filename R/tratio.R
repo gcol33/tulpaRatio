@@ -112,7 +112,7 @@
 #'   - `gradient_mode`: `"auto"` (default) selects the fastest available;
 #'     `"H"` hand-coded analytical (fastest); `"A_r"` arena reverse-mode
 #'     autodiff (fast, O(N)); `"A"` forward-mode (O(p*N), thread-safe);
-#'     `"A_t"` tape-based reverse-mode (slow, legacy); `"N"` numerical finite
+#'     `"N"` numerical finite
 #'     differences (slowest, always works).
 #'   - `re_param`: random-effect parameterization. `"noncentered"` (default)
 #'     stores z ~ N(0, 1) and computes re = sigma * z (or diag(sigma) * L * z

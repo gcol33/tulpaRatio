@@ -457,6 +457,10 @@ cpp_tls_workspace_shrink <- function(cycles, work, n) {
     .Call(`_tulpaRatio_cpp_tls_workspace_shrink`, cycles, work, n)
 }
 
+cpp_test_vi_math <- function() {
+    .Call(`_tulpaRatio_cpp_test_vi_math`)
+}
+
 cpp_tulpa_abi_version <- function() {
     .Call(`_tulpaRatio_cpp_tulpa_abi_version`)
 }

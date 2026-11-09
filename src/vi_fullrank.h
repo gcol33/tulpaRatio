@@ -6,9 +6,8 @@
 #define RATIOD_VI_FULLRANK_H
 
 #include "vi_types.h"
-#include "vi_optimizer.h"
+#include <tulpa/vi_math.h>
 #include "hmc_sampler.h"
-#include "autodiff.h"
 #include <random>
 #include <cmath>
 
@@ -63,8 +62,11 @@ inline FullRankGradients compute_fullrank_elbo_grad(
     // Gradient of log p(y, θ) w.r.t. θ
     Eigen::VectorXd grad_theta;
     double log_joint = compute_log_joint_grad(theta, data, layout, grad_theta);
+    const Eigen::VectorXd precision_delta =
+      params.L.transpose().template triangularView<Eigen::Upper>().solve(eps);
+    tulpa::vi::path_gradient(grad_theta,precision_delta);
 
-    // Chain rule for μ: ∂L/∂μ = ∂log_p/∂θ
+    // Derivative through the variational mean.
     result.grad_mu += grad_theta;
 
     // Chain rule for L: ∂θ/∂L[i,j] = ε[j] (only if i >= j for lower triangular)
@@ -83,13 +85,6 @@ inline FullRankGradients compute_fullrank_elbo_grad(
   for (int i = 0; i < D; ++i) {
     for (int j = i + 1; j < D; ++j) {
       result.grad_L(i, j) = 0.0;
-    }
-  }
-
-  // Entropy gradient: ∂H/∂L[i,i] = 1/L[i,i] (only diagonal)
-  for (int i = 0; i < D; ++i) {
-    if (std::abs(params.L(i, i)) > 1e-10) {
-      result.grad_L(i, i) += 1.0 / params.L(i, i);
     }
   }
 
@@ -132,12 +127,12 @@ inline VIResult fit_fullrank(
   int n_var_params = D + n_L;
 
   // Initialize optimizer
-  AdamOptimizer optimizer(config.adam_alpha, config.adam_beta1,
+  tulpa::vi::AdamOptimizer optimizer(config.adam_alpha, config.adam_beta1,
                           config.adam_beta2, config.adam_eps);
-  AdamState state = optimizer.init_state(n_var_params);
+  tulpa::vi::AdamState state = optimizer.init_state(n_var_params);
 
   // Convergence checker
-  ConvergenceChecker checker(config.tol_grad, config.tol_rel_elbo, config.patience);
+  tulpa::vi::ConvergenceChecker checker(config.tol_grad, config.tol_rel_elbo, config.patience);
 
   // Random number generator
   std::mt19937 rng(config.seed);
@@ -170,7 +165,7 @@ inline VIResult fit_fullrank(
     double grad_norm = grad_flat.norm();
 
     // Check convergence
-    std::string converged = checker.check(grads.elbo, grad_norm);
+    std::string converged = checker.check(grads.elbo, grad_flat);
     if (!converged.empty()) {
       result.converged = true;
       result.iterations = iter + 1;

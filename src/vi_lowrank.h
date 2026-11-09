@@ -6,9 +6,8 @@
 #define RATIOD_VI_LOWRANK_H
 
 #include "vi_types.h"
-#include "vi_optimizer.h"
+#include <tulpa/vi_math.h>
 #include "hmc_sampler.h"
-#include "autodiff.h"
 #include <random>
 #include <cmath>
 
@@ -54,6 +53,7 @@ inline LowRankGradients compute_lowrank_elbo_grad(
 
   std::normal_distribution<double> N01(0.0, 1.0);
   Eigen::VectorXd d = exp(params.log_d.array());
+  const tulpa::vi::LowRankPrecision precision(d,params.L);
 
   for (int m = 0; m < mc_samples; ++m) {
     // Sample η ~ N(0, Iᵣ) for low-rank part
@@ -74,8 +74,9 @@ inline LowRankGradients compute_lowrank_elbo_grad(
     // Gradient of log p(y, θ) w.r.t. θ
     Eigen::VectorXd grad_theta;
     double log_joint = compute_log_joint_grad(theta, data, layout, grad_theta);
+    tulpa::vi::path_gradient(grad_theta,precision.apply(theta-params.mu));
 
-    // Chain rule for μ: ∂L/∂μ = ∂log_p/∂θ
+    // Derivative through the variational mean.
     result.grad_mu += grad_theta;
 
     // Chain rule for L: ∂θ/∂L = η' (outer product with grad_theta)
@@ -92,39 +93,6 @@ inline LowRankGradients compute_lowrank_elbo_grad(
   result.grad_L /= mc_samples;
   result.grad_log_d /= mc_samples;
   result.elbo /= mc_samples;
-
-  // Entropy gradient computation via matrix determinant lemma
-  // Σ = LL' + D where D = diag(d²)
-  // ∂H/∂log_d and ∂H/∂L require derivatives of log|Σ|
-
-  Eigen::VectorXd d2 = d.array().square();
-
-  // Compute I + L'D⁻¹L (r × r matrix)
-  Eigen::MatrixXd LtDinvL = Eigen::MatrixXd::Identity(r, r);
-  for (int i = 0; i < D; ++i) {
-    LtDinvL.noalias() += params.L.row(i).transpose() * params.L.row(i) / d2(i);
-  }
-
-  // Cholesky of I + L'D⁻¹L for solving
-  Eigen::LLT<Eigen::MatrixXd> llt(LtDinvL);
-
-  // Entropy gradient for log_d:
-  // ∂(0.5 log|Σ|)/∂log_d = 1 - diag(L (I + L'D⁻¹L)⁻¹ L') / d²
-  Eigen::MatrixXd LtDinvL_inv = llt.solve(Eigen::MatrixXd::Identity(r, r));
-  Eigen::MatrixXd L_Minv = params.L * LtDinvL_inv;
-  Eigen::VectorXd L_Minv_Lt_diag(D);
-  for (int i = 0; i < D; ++i) {
-    L_Minv_Lt_diag(i) = L_Minv.row(i).dot(params.L.row(i));
-  }
-  result.grad_log_d.array() += 1.0 - L_Minv_Lt_diag.array() / d2.array();
-
-  // Entropy gradient for L:
-  // ∂(0.5 log|Σ|)/∂L = D⁻¹ L (I + L'D⁻¹L)⁻¹
-  Eigen::MatrixXd DinvL(D, r);
-  for (int i = 0; i < D; ++i) {
-    DinvL.row(i) = params.L.row(i) / d2(i);
-  }
-  result.grad_L += DinvL * LtDinvL_inv;
 
   // Add entropy to ELBO
   result.elbo += params.entropy();
@@ -152,6 +120,7 @@ inline VIResult fit_lowrank(
 
   // Initialize parameters
   LowRankParams params(D, r);
+  const Eigen::MatrixXd convergence_reference=params.L;
 
   if (init_mu != nullptr && init_mu->size() == D) {
     params.mu = *init_mu;
@@ -161,12 +130,12 @@ inline VIResult fit_lowrank(
   int n_var_params = D + D * r + D;
 
   // Initialize optimizer
-  AdamOptimizer optimizer(config.adam_alpha, config.adam_beta1,
+  tulpa::vi::AdamOptimizer optimizer(config.adam_alpha, config.adam_beta1,
                           config.adam_beta2, config.adam_eps);
-  AdamState state = optimizer.init_state(n_var_params);
+  tulpa::vi::AdamState state = optimizer.init_state(n_var_params);
 
   // Convergence checker
-  ConvergenceChecker checker(config.tol_grad, config.tol_rel_elbo, config.patience);
+  tulpa::vi::ConvergenceChecker checker(config.tol_grad, config.tol_rel_elbo, config.patience);
 
   // Random number generator
   std::mt19937 rng(config.seed);
@@ -197,7 +166,11 @@ inline VIResult fit_lowrank(
     double grad_norm = grad_flat.norm();
 
     // Check convergence
-    std::string converged = checker.check(grads.elbo, grad_norm);
+    Eigen::VectorXd convergence_gradient=grad_flat;
+    const Eigen::MatrixXd aligned=tulpa::vi::align_factor_gradient(params.L,grads.grad_L,convergence_reference);
+    Eigen::Map<Eigen::VectorXd>(convergence_gradient.data()+D,D*r)=
+      Eigen::Map<const Eigen::VectorXd>(aligned.data(),D*r);
+    std::string converged = checker.check(grads.elbo, convergence_gradient);
     if (!converged.empty()) {
       result.converged = true;
       result.iterations = iter + 1;

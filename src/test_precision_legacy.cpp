@@ -17,8 +17,8 @@ template<class T> T precision_legacy_density(double y, const T& mu, const T& phi
 
 // [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_test_precision_legacy(double y, double mu, double phi) {
-    Rcpp::NumericMatrix out(4, 2);
-    Rcpp::rownames(out) = Rcpp::CharacterVector::create("double", "forward", "arena", "tape");
+    Rcpp::NumericMatrix out(3, 2);
+    Rcpp::rownames(out) = Rcpp::CharacterVector::create("double", "forward", "arena");
     Rcpp::colnames(out) = Rcpp::CharacterVector::create("value", "dphi");
     out(0, 0) = precision_legacy_density(y, mu, phi);
     auto f = precision_legacy_density(y, fwd::Dual(mu), fwd::Dual(phi, 1));
@@ -27,10 +27,6 @@ Rcpp::NumericMatrix cpp_test_precision_legacy(double y, double mu, double phi) {
     ratiod::arena::Var m(mu), p(phi);
     auto a = precision_legacy_density(y, m, p); a.backward();
     out(2, 0) = a.val(); out(2, 1) = p.adj();
-    ratiod::ad::TapeScope ts;
-    ratiod::ad::Var mt(ts.tape, mu), pt(ts.tape, phi);
-    auto t = precision_legacy_density(y, mt, pt); ts.tape->backward(t.idx);
-    out(3, 0) = t.val(); out(3, 1) = ts.tape->nodes[pt.idx].adjoint;
     return out;
 }
 
@@ -49,7 +45,7 @@ Rcpp::NumericVector cpp_test_precision_gibbs(double y, double mu, double phi) {
 
 // [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_test_precision_beta_legacy(int y, int n, double phi) {
-    Rcpp::NumericMatrix out(4,2);
+    Rcpp::NumericMatrix out(3,2);
     out(0,0)=ratiod::math::log_lik_beta_binomial(y,n,0.,phi);
     auto f=ratiod::math::log_lik_beta_binomial(y,n,fwd::Dual(0),fwd::Dual(phi,1));
     out(1,0)=f.val; out(1,1)=f.grad;
@@ -57,9 +53,5 @@ Rcpp::NumericMatrix cpp_test_precision_beta_legacy(int y, int n, double phi) {
     ratiod::arena::Var p(phi), eta(0.);
     auto a=ratiod::math::log_lik_beta_binomial(y,n,eta,p);a.backward();
     out(2,0)=a.val();out(2,1)=p.adj();
-    ratiod::ad::TapeScope ts;
-    ratiod::ad::Var pt(ts.tape,phi), et(ts.tape,0);
-    auto t=ratiod::math::log_lik_beta_binomial(y,n,et,pt);ts.tape->backward(t.idx);
-    out(3,0)=t.val();out(3,1)=ts.tape->nodes[pt.idx].adjoint;
     return out;
 }

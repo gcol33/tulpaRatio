@@ -1792,6 +1792,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_vi_math
+Rcpp::NumericVector cpp_test_vi_math();
+RcppExport SEXP _tulpaRatio_cpp_test_vi_math() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_test_vi_math());
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_tulpa_abi_version
 int cpp_tulpa_abi_version();
 RcppExport SEXP _tulpaRatio_cpp_tulpa_abi_version() {
@@ -2022,6 +2032,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
+    {"_tulpaRatio_cpp_test_vi_math", (DL_FUNC) &_tulpaRatio_cpp_test_vi_math, 0},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_runtime_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_runtime_abi_version, 0},

@@ -5,11 +5,9 @@
 #include "hmc_sampler.h"
 #include "hmc_model_data_blocks.h"
 #include "vi_types.h"
-#include "vi_optimizer.h"
 #include "vi_meanfield.h"
 #include "vi_fullrank.h"
 #include "vi_lowrank.h"
-#include "autodiff.h"
 #include "log_post_impl.h"
 #include <Rcpp.h>
 

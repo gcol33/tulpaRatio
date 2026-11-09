@@ -86,13 +86,12 @@ inline ModelTypeInfo model_type_info(ModelType t) {
 enum class SpatialType { NONE, ICAR, BYM2, GP, MULTISCALE_GP, HSGP, CAR_PROPER };
 
 // Gradient computation methods
-// AUTO: Use fastest available (H > A_r > A > A_t > N)
+// AUTO: Use fastest available (H > A_r > A > N)
 // NUMERICAL (N): Finite differences - slow but always works
-// AUTODIFF_TAPE (A_t): Tape-based reverse-mode - slow due to heap allocation
-// AUTODIFF_ARENA (A_r): Arena-based reverse-mode - fast O(N), ~10-30x over A_t
+// AUTODIFF_ARENA (A_r): Arena-based reverse-mode - fast O(N)
 // AUTODIFF_FORWARD (A): Forward-mode dual numbers - O(p*N), thread-safe
 // HANDCODED (H): Analytical gradients - fastest when available
-enum class GradientMode { AUTO, NUMERICAL, AUTODIFF_TAPE, AUTODIFF_ARENA, AUTODIFF_FORWARD, HANDCODED };
+enum class GradientMode { AUTO, NUMERICAL, AUTODIFF_ARENA, AUTODIFF_FORWARD, HANDCODED };
 
 // Mass matrix type for NUTS
 enum class MassMatrixType { DIAG, DENSE, BLOCK_DIAG, AUTO };
@@ -104,12 +103,10 @@ inline constexpr ratiod_enum::EnumName<GradientMode> GRADIENT_MODE_NAMES[] = {
     {"N", GradientMode::NUMERICAL},
     {"A", GradientMode::AUTODIFF_FORWARD},
     {"A_r", GradientMode::AUTODIFF_ARENA},
-    {"A_t", GradientMode::AUTODIFF_TAPE},
     {"H", GradientMode::HANDCODED},
     {"numerical", GradientMode::NUMERICAL},
     {"forward", GradientMode::AUTODIFF_FORWARD},
     {"arena", GradientMode::AUTODIFF_ARENA},
-    {"tape", GradientMode::AUTODIFF_TAPE},
     {"handcoded", GradientMode::HANDCODED}};
 
 inline GradientMode parse_gradient_mode(const std::string& s) {
