@@ -117,9 +117,11 @@ List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon) {
   const auto layout = ratiod_hmc::compute_param_layout(data);
   std::vector<double> position(q.begin(), q.end()), momentum(p.begin(), p.end());
   const auto step = ratiod_hmc::leapfrog_step(position, momentum, epsilon, data, layout);
-  const double h = ratiod_hmc::nuts_compute_hamiltonian(
+  ratiod_hmc::DenseMassMatrix mass;
+  mass.init(p.size(), ratiod_hmc::MassMatrixType::DIAG);
+  const double h = ratiod_hmc::nuts_compute_hamiltonian_fast(
       -0.5 * ratiod_linalg::norm_squared(position.data(), position.size()),
-      momentum, std::vector<double>(p.size(), 1.0), p.size());
+      momentum.data(), mass, p.size());
   return List::create(_["q"] = step.q, _["p"] = step.p, _["hamiltonian"] = h);
 }
 

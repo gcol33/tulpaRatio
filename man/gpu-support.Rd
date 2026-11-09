@@ -4,8 +4,7 @@
 \alias{gpu-support}
 \title{GPU Support Utilities}
 \description{
-Functions to check GPU availability and capabilities for accelerated
-GP computations.
+Functions to check whether CUDA or OpenCL driver libraries can be loaded.
 }
 \examples{
 gpu_available()

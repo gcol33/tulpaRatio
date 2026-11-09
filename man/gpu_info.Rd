@@ -24,8 +24,9 @@ A list with GPU information, or NULL if no GPU is available.
 }
 }
 \description{
-Returns information about available GPU devices including name, memory,
-compute capability, and backend (CUDA or OpenCL).
+Reports the loadable driver backend (CUDA or OpenCL). Device details are
+placeholders: a loadable driver is reported as one device with unknown
+memory and compute capability.
 }
 \examples{
 info <- gpu_info()

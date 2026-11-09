@@ -41,28 +41,12 @@ namespace ratiod {
 // @return Number of "tables" L in {0, 1, ..., y}
 int sample_crt(int y, double r);
 
-// Vectorized CRT sampler
-// @param y Integer vector of counts
-// @param r Concentration parameter (scalar, shared across all)
-// @return Integer vector of table counts
-Rcpp::IntegerVector sample_crt_vec(Rcpp::IntegerVector y, double r);
-
-// Vectorized CRT sampler with observation-specific r
-// @param y Integer vector of counts
-// @param r Numeric vector of concentration parameters
-// @return Integer vector of table counts
-Rcpp::IntegerVector sample_crt_vec2(Rcpp::IntegerVector y, Rcpp::NumericVector r);
-
 // ---------------------------------------------------------------------
 // Utility functions
 // ---------------------------------------------------------------------
 
 // Expected value of CRT(y, r): r * (psi(y + r) - psi(r))
 double crt_mean(int y, double r);
-
-// Sum of CRT draws (sufficient statistic for r update)
-// Returns sum(L_i) where each L_i ~ CRT(y_i, r)
-int sample_crt_sum(Rcpp::IntegerVector y, double r);
 
 } // namespace ratiod
 

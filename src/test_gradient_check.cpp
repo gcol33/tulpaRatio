@@ -1207,6 +1207,31 @@ Rcpp::CharacterVector cpp_gradient_fields() {
   return out;
 }
 
+// [[Rcpp::export]]
+Rcpp::List cpp_gradient_chain_fixture(std::string field, std::string mode = "H",
+                                      unsigned int seed = 17192,
+                                      bool auto_coordinates = false) {
+  ModelData data = make_model(field, 20, 4, 4, seed, "binomial", true, "none");
+  data.n_threads = 1;
+  data.auto_spatial_coordinates = auto_coordinates;
+  data.auto_temporal_coordinates = auto_coordinates;
+  const ParamLayout layout = compute_param_layout(data);
+  const auto selected = parse_gradient_mode(mode);
+  set_gradient_mode(selected);
+  const auto initial = draw_params(data, layout, get_n_params(data), seed);
+  const auto fn = resolve_gradient_fn(selected, data, layout);
+  const auto out = run_hmc_chain_cpp(initial, data, layout, 160, 120, 0, 1,
+                                    seed, false, 4, MassMatrixType::AUTO);
+  set_gradient_mode(GradientMode::AUTO);
+  return Rcpp::List::create(Rcpp::_["gradient"] = gradient_fn_name(fn),
+      Rcpp::_["samples"] = out.samples_flat, Rcpp::_["log_prob"] = out.log_prob,
+      Rcpp::_["energy"] = out.energy, Rcpp::_["accept_prob"] = out.accept_prob,
+      Rcpp::_["n_leapfrog"] = out.n_leapfrog, Rcpp::_["divergent"] = out.divergent,
+      Rcpp::_["treedepth"] = out.treedepth, Rcpp::_["epsilon"] = out.epsilon,
+      Rcpp::_["gp"] = out.gp_w_star_flat, Rcpp::_["icar"] = out.icar_phi_star_flat,
+      Rcpp::_["bym2"] = out.bym2_theta_star_flat, Rcpp::_["st"] = out.st_delta_flat);
+}
+
 // Scale-prior contributions at fixed latent fields and fixed likelihood.
 // [[Rcpp::export]]
 Rcpp::List cpp_scale_prior_check(std::string field, double x,
@@ -1554,31 +1579,6 @@ double cpp_gradient_race(std::string field,
     }
   }
   return max_dev;
-}
-
-// Milliseconds per gradient evaluation (with its fused log posterior) of the
-// default gradient path, over `n_rep` evaluations at points a small step
-// apart, as a leapfrog trajectory visits them.
-// [[Rcpp::export]]
-double cpp_time_gradient(std::string field, int n_rep = 50, int n_obs = 400,
-                         int n_units = 25, int n_times = 10,
-                         unsigned int seed = 42,
-                         std::string family = "poisson_gamma") {
-  ModelData data = make_model(field, n_obs, n_units, n_times, seed, family);
-  ParamLayout layout = compute_param_layout(data);
-  const int n_params = get_n_params(data);
-  set_gradient_mode(GradientMode::HANDCODED);
-  std::vector<double> params = draw_params(data, layout, n_params, seed);
-  std::vector<double> grad(n_params, 0.0);
-  double lp = 0.0;
-  compute_gradient(params, data, layout, grad, &lp);
-  const auto t0 = std::chrono::steady_clock::now();
-  for (int r = 0; r < n_rep; r++) {
-    for (int k = 0; k < n_params; k++) params[k] += 1e-3 * grad[k] / (1.0 + std::abs(grad[k]));
-    compute_gradient(params, data, layout, grad, &lp);
-  }
-  const auto t1 = std::chrono::steady_clock::now();
-  return std::chrono::duration<double, std::milli>(t1 - t0).count() / n_rep;
 }
 
 // Evaluates the log posterior at a shared point so the analytic and autodiff

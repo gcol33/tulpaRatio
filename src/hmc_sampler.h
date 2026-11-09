@@ -677,23 +677,6 @@ struct LeapfrogResultWithGrad {
   bool divergent;
 };
 
-struct NUTSNode {
-  std::vector<double> q, p, grad;
-  double log_prob;
-};
-
-struct NUTSTreeResult {
-  NUTSNode left, right;
-  std::vector<double> q_proposal;
-  std::vector<double> grad_proposal;
-  double log_prob_proposal;
-  int n_valid;
-  bool divergent, stop;
-  double sum_accept_prob;
-  int n_leapfrog;
-  double sum_log_weight;
-};
-
 // =====================================================================
 // Optimized NUTS infrastructure (zero-allocation tree building)
 // =====================================================================
@@ -1984,24 +1967,6 @@ inline HMCResult cpp_to_r_result(const HMCResultCpp& cpp_result, int n_params) {
 
   return r_result;
 }
-
-// NUTS helper function declarations
-double nuts_log_sum_exp(double a, double b);
-double nuts_compute_hamiltonian(double log_prob, const std::vector<double>& p,
-                                const std::vector<double>& inv_mass, int n);
-bool nuts_check_uturn(const std::vector<double>& q_minus, const std::vector<double>& q_plus,
-                      const std::vector<double>& p_minus, const std::vector<double>& p_plus,
-                      const std::vector<double>& inv_mass, int n);
-LeapfrogResultWithGrad leapfrog_step_with_grad(
-    const std::vector<double>& q, const std::vector<double>& p,
-    const std::vector<double>& grad,
-    double epsilon, const std::vector<double>& inv_mass,
-    bool use_mass, const ModelData& data, const ParamLayout& layout);
-NUTSTreeResult build_tree(const NUTSNode& node, int direction, int depth,
-                          double epsilon, const std::vector<double>& inv_mass,
-                          bool use_mass, double H0, double delta_max,
-                          const ModelData& data, const ParamLayout& layout,
-                          std::mt19937& rng);
 
 // Optimized NUTS: zero-allocation in-place leapfrog + buffer pool tree building
 // Pointer-based Hamiltonian (no vector overhead)

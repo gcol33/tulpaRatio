@@ -25,30 +25,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_sample_crt
-Rcpp::IntegerVector cpp_sample_crt(Rcpp::IntegerVector y, double r);
-RcppExport SEXP _tulpaRatio_cpp_sample_crt(SEXP ySEXP, SEXP rSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type r(rSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sample_crt(y, r));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_sample_crt_sum
-int cpp_sample_crt_sum(Rcpp::IntegerVector y, double r);
-RcppExport SEXP _tulpaRatio_cpp_sample_crt_sum(SEXP ySEXP, SEXP rSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type r(rSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sample_crt_sum(y, r));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_crt_mean
 double cpp_crt_mean(int y, double r);
 RcppExport SEXP _tulpaRatio_cpp_crt_mean(SEXP ySEXP, SEXP rSEXP) {
@@ -789,6 +765,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_gradient_chain_fixture
+Rcpp::List cpp_gradient_chain_fixture(std::string field, std::string mode, unsigned int seed, bool auto_coordinates);
+RcppExport SEXP _tulpaRatio_cpp_gradient_chain_fixture(SEXP fieldSEXP, SEXP modeSEXP, SEXP seedSEXP, SEXP auto_coordinatesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
+    Rcpp::traits::input_parameter< std::string >::type mode(modeSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< bool >::type auto_coordinates(auto_coordinatesSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_gradient_chain_fixture(field, mode, seed, auto_coordinates));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_scale_prior_check
 Rcpp::List cpp_scale_prior_check(std::string field, double x, double U, double alpha);
 RcppExport SEXP _tulpaRatio_cpp_scale_prior_check(SEXP fieldSEXP, SEXP xSEXP, SEXP USEXP, SEXP alphaSEXP) {
@@ -877,23 +867,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
     Rcpp::traits::input_parameter< bool >::type prime_other_model(prime_other_modelSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_gradient_race(field, n_points, n_threads, rounds, n_obs, n_units, n_times, seed, family, prime_other_model));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_time_gradient
-double cpp_time_gradient(std::string field, int n_rep, int n_obs, int n_units, int n_times, unsigned int seed, std::string family);
-RcppExport SEXP _tulpaRatio_cpp_time_gradient(SEXP fieldSEXP, SEXP n_repSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP, SEXP seedSEXP, SEXP familySEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
-    Rcpp::traits::input_parameter< int >::type n_rep(n_repSEXP);
-    Rcpp::traits::input_parameter< int >::type n_obs(n_obsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_units(n_unitsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_time_gradient(field, n_rep, n_obs, n_units, n_times, seed, family));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2151,8 +2124,6 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_flatten_3d_rowmajor", (DL_FUNC) &_tulpaRatio_cpp_flatten_3d_rowmajor, 4},
-    {"_tulpaRatio_cpp_sample_crt", (DL_FUNC) &_tulpaRatio_cpp_sample_crt, 2},
-    {"_tulpaRatio_cpp_sample_crt_sum", (DL_FUNC) &_tulpaRatio_cpp_sample_crt_sum, 2},
     {"_tulpaRatio_cpp_crt_mean", (DL_FUNC) &_tulpaRatio_cpp_crt_mean, 2},
     {"_tulpaRatio_cpp_enum_names", (DL_FUNC) &_tulpaRatio_cpp_enum_names, 1},
     {"_tulpaRatio_cpp_ess_fit", (DL_FUNC) &_tulpaRatio_cpp_ess_fit, 22},
@@ -2192,12 +2163,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_within_chain_team", (DL_FUNC) &_tulpaRatio_cpp_within_chain_team, 3},
     {"_tulpaRatio_cpp_num_procs", (DL_FUNC) &_tulpaRatio_cpp_num_procs, 0},
     {"_tulpaRatio_cpp_gradient_fields", (DL_FUNC) &_tulpaRatio_cpp_gradient_fields, 0},
+    {"_tulpaRatio_cpp_gradient_chain_fixture", (DL_FUNC) &_tulpaRatio_cpp_gradient_chain_fixture, 4},
     {"_tulpaRatio_cpp_scale_prior_check", (DL_FUNC) &_tulpaRatio_cpp_scale_prior_check, 4},
     {"_tulpaRatio_cpp_scale_conditional_draws", (DL_FUNC) &_tulpaRatio_cpp_scale_conditional_draws, 5},
     {"_tulpaRatio_cpp_gradient_dispatch", (DL_FUNC) &_tulpaRatio_cpp_gradient_dispatch, 6},
     {"_tulpaRatio_cpp_gradient_check", (DL_FUNC) &_tulpaRatio_cpp_gradient_check, 16},
     {"_tulpaRatio_cpp_gradient_race", (DL_FUNC) &_tulpaRatio_cpp_gradient_race, 10},
-    {"_tulpaRatio_cpp_time_gradient", (DL_FUNC) &_tulpaRatio_cpp_time_gradient, 7},
     {"_tulpaRatio_cpp_logpost_at", (DL_FUNC) &_tulpaRatio_cpp_logpost_at, 8},
     {"_tulpaRatio_cpp_st_gp_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_st_gp_nc_coordinate_spread, 3},
     {"_tulpaRatio_cpp_st_collapsed_exactness", (DL_FUNC) &_tulpaRatio_cpp_st_collapsed_exactness, 6},

@@ -7,22 +7,13 @@
 gpu_available()
 }
 \value{
-Logical; TRUE if GPU acceleration is available, FALSE otherwise.
+Logical; TRUE if a driver library can be loaded, FALSE otherwise.
 }
 \description{
-Checks whether tulpaRatio was compiled with GPU support (CUDA or OpenCL)
-and whether compatible GPU hardware is detected.
+Checks whether a CUDA or OpenCL driver library can be loaded at runtime.
 }
 \details{
-GPU support requires:
-\enumerate{
-\item tulpaRatio compiled with GPU support (\code{-DUSE_CUDA} or \code{-DUSE_OPENCL})
-\item Compatible GPU hardware (NVIDIA for CUDA, any GPU for OpenCL)
-\item Appropriate drivers installed
-}
-
-The \code{solver = "gpu"} option in \code{\link[=spatial_gp]{spatial_gp()}} will automatically fall back
-to PCG if GPU support is unavailable.
+This reports driver-library availability. Model fitting uses CPU solvers.
 }
 \examples{
 # Check if GPU is available
@@ -35,5 +26,5 @@ if (gpu_available()) {
 
 }
 \seealso{
-\code{\link[=spatial_gp]{spatial_gp()}} for using GPU-accelerated GP models
+\code{\link[=gpu_info]{gpu_info()}}
 }

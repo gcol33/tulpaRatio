@@ -1,7 +1,6 @@
 #' GPU Support Utilities
 #'
-#' Functions to check GPU availability and capabilities for accelerated
-#' GP computations.
+#' Functions to check whether CUDA or OpenCL driver libraries can be loaded.
 #'
 #' @examples
 #' gpu_available()
@@ -12,19 +11,12 @@ NULL
 #' Check Whether GPU Support Is Available
 #'
 #' @description
-#' Checks whether tulpaRatio was compiled with GPU support (CUDA or OpenCL)
-#' and whether compatible GPU hardware is detected.
+#' Checks whether a CUDA or OpenCL driver library can be loaded at runtime.
 #'
-#' @return Logical; TRUE if GPU acceleration is available, FALSE otherwise.
+#' @return Logical; TRUE if a driver library can be loaded, FALSE otherwise.
 #'
 #' @details
-#' GPU support requires:
-#' 1. tulpaRatio compiled with GPU support (`-DUSE_CUDA` or `-DUSE_OPENCL`)
-#' 2. Compatible GPU hardware (NVIDIA for CUDA, any GPU for OpenCL)
-#' 3. Appropriate drivers installed
-#'
-#' The `solver = "gpu"` option in [spatial_gp()] will automatically fall back
-#' to PCG if GPU support is unavailable.
+#' This reports driver-library availability. Model fitting uses CPU solvers.
 #'
 #' @examples
 #' # Check if GPU is available
@@ -35,7 +27,7 @@ NULL
 #'   gpu_info()
 #' }
 #'
-#' @seealso [spatial_gp()] for using GPU-accelerated GP models
+#' @seealso [gpu_info()]
 #' @export
 gpu_available <- function() {
   # Check if compiled with GPU support
@@ -49,8 +41,9 @@ gpu_available <- function() {
 #' GPU Device Information
 #'
 #' @description
-#' Returns information about available GPU devices including name, memory,
-#' compute capability, and backend (CUDA or OpenCL).
+#' Reports the loadable driver backend (CUDA or OpenCL). Device details are
+#' placeholders: a loadable driver is reported as one device with unknown
+#' memory and compute capability.
 #'
 #' @return A list with GPU information, or NULL if no GPU is available.
 #'   \describe{

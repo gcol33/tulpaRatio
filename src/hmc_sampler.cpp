@@ -2121,39 +2121,6 @@ void reference_gradient(
 // Unified gradient interface
 // =====================================================================
 
-// Debug: compare analytical vs numerical gradients
-bool verify_gradient(
-    const std::vector<double>& params,
-    const ModelData& data,
-    const ParamLayout& layout,
-    double tol = 1e-4
-) {
-  std::vector<double> grad_analytical, grad_numerical;
-  compute_gradient_analytical(params, data, layout, grad_analytical);
-  reference_gradient(params, data, layout, grad_numerical, false);
-
-  double max_diff = 0.0;
-  int worst_idx = -1;
-  for (size_t i = 0; i < grad_analytical.size(); i++) {
-    double diff = std::abs(grad_analytical[i] - grad_numerical[i]);
-    double scale = std::max(1.0, std::max(std::abs(grad_analytical[i]), std::abs(grad_numerical[i])));
-    double rel_diff = diff / scale;
-    if (rel_diff > max_diff) {
-      max_diff = rel_diff;
-      worst_idx = i;
-    }
-  }
-
-  if (max_diff > tol) {
-    Rcpp::Rcerr << "Gradient mismatch! Max rel diff: " << max_diff
-                << " at param " << worst_idx
-                << " (analytical: " << grad_analytical[worst_idx]
-                << ", numerical: " << grad_numerical[worst_idx] << ")\n";
-    return false;
-  }
-  return true;
-}
-
 // Move every structured field off zero, deterministically.
 //
 // initialize_hmc_params_full() starts each field block at exactly 0.0, and a
@@ -7365,29 +7332,6 @@ LeapfrogResult leapfrog_step(const std::vector<double>& q, const std::vector<dou
 // Find reasonable initial step size
 // =====================================================================
 
-// Compute diagonal mass matrix from gradient magnitudes
-// This provides automatic scaling for poorly-conditioned posteriors
-std::vector<double> compute_diagonal_mass(
-    const std::vector<double>& q,
-    const ModelData& data,
-    const ParamLayout& layout
-) {
-  int n = q.size();
-  std::vector<double> grad(n);
-  compute_gradient(q, data, layout, grad);
-
-  std::vector<double> mass(n);
-  for (int i = 0; i < n; i++) {
-    // Use gradient magnitude as rough estimate of curvature
-    // Mass ~ 1/variance, so larger gradient -> larger mass -> smaller step in that direction
-    double abs_grad = std::abs(grad[i]);
-    // Clamp to reasonable range [1, 1000]
-    mass[i] = std::max(1.0, std::min(abs_grad, 1000.0));
-  }
-
-  return mass;
-}
-
 LeapfrogResult leapfrog_step_mass(const std::vector<double>& q,
     const std::vector<double>& p, double epsilon, const std::vector<double>& inv_mass,
     const ModelData& data, const ParamLayout& layout) {
@@ -7412,39 +7356,6 @@ double find_reasonable_epsilon(const std::vector<double>& q, const ModelData& da
 // =====================================================================
 
 
-
-double nuts_compute_hamiltonian(double log_prob, const std::vector<double>& p,
-                                const std::vector<double>& inv_mass, int n) {
-  double kinetic = 0.0;
-  for (int i = 0; i < n; i++) {
-    kinetic += p[i] * p[i] * inv_mass[i];
-  }
-  return -log_prob + 0.5 * kinetic;
-}
-
-bool nuts_check_uturn(const std::vector<double>& q_minus, const std::vector<double>& q_plus,
-                      const std::vector<double>& p_minus, const std::vector<double>& p_plus,
-                      const std::vector<double>& inv_mass, int n) {
-  // Generalized U-turn criterion (Betancourt 2017, Section 3.2)
-  // Check both directions: (q+ - q-) . (M^-1 p-) and (q+ - q-) . (M^-1 p+)
-  double dot_fwd = 0.0, dot_bwd = 0.0;
-  for (int i = 0; i < n; i++) {
-    double dq = q_plus[i] - q_minus[i];
-    dot_fwd += dq * (inv_mass[i] * p_plus[i]);
-    dot_bwd += dq * (inv_mass[i] * p_minus[i]);
-  }
-  return (dot_fwd < 0.0) || (dot_bwd < 0.0);
-}
-
-LeapfrogResultWithGrad leapfrog_step_with_grad(
-    const std::vector<double>& q, const std::vector<double>& p,
-    const std::vector<double>& grad,
-    double epsilon, const std::vector<double>& inv_mass,
-    bool use_mass, const ModelData& data, const ParamLayout& layout) {
-
-  if (use_mass) return integrate_copy(q,p,epsilon,DiagonalMetric{inv_mass},data,layout,&grad);
-  return integrate_copy(q,p,epsilon,IdentityMetric{int(q.size())},data,layout,&grad);
-}
 
 // One leapfrog leaf of a NUTS tree. A non-finite energy error means the step
 // left the posterior's support: the leaf is divergent, has weight zero and
@@ -7473,108 +7384,6 @@ static inline LeafEnergy leaf_energy(bool lf_divergent, double H_new, double H0,
   return {lf_divergent || delta_H > delta_max,
           metropolis_accept_prob(delta_H),
           -delta_H};
-}
-
-NUTSTreeResult build_tree(const NUTSNode& node, int direction, int depth,
-                          double epsilon, const std::vector<double>& inv_mass,
-                          bool use_mass, double H0, double delta_max,
-                          const ModelData& data, const ParamLayout& layout,
-                          std::mt19937& rng) {
-  int n = node.q.size();
-  NUTSTreeResult result;
-
-  if (depth == 0) {
-    // Base case: single leapfrog step
-    LeapfrogResultWithGrad lf = leapfrog_step_with_grad(
-      node.q, node.p, node.grad,
-      direction * epsilon, inv_mass, use_mass, data, layout
-    );
-
-    double H_new = nuts_compute_hamiltonian(lf.log_prob, lf.p, inv_mass, n);
-    const LeafEnergy leaf = leaf_energy(lf.divergent, H_new, H0, delta_max);
-
-    result.left.q = lf.q;
-    result.left.p = lf.p;
-    result.left.grad = lf.grad;
-    result.left.log_prob = lf.log_prob;
-    result.right = result.left;
-
-    result.q_proposal = std::move(lf.q);
-    result.grad_proposal = std::move(lf.grad);
-    result.log_prob_proposal = lf.log_prob;
-
-    // Multinomial weight: log(weight) = -H_new (proportional to exp(-H))
-    result.sum_log_weight = leaf.log_weight - H0;
-
-    result.divergent = leaf.divergent;
-    result.stop = result.divergent;
-    result.n_valid = result.divergent ? 0 : 1;
-    result.sum_accept_prob = leaf.accept_stat;
-    result.n_leapfrog = 1;
-
-    return result;
-  }
-
-  // Recursive case: build inner subtree
-  NUTSTreeResult inner = build_tree(node, direction, depth - 1,
-                                     epsilon, inv_mass, use_mass, H0, delta_max,
-                                     data, layout, rng);
-  result = std::move(inner);
-
-  if (result.stop) return result;
-
-  // Build outer subtree from the appropriate endpoint
-  // (read from result, since inner is moved-from)
-  NUTSNode outer_start;
-  if (direction == 1) {
-    outer_start = result.right;
-  } else {
-    outer_start = result.left;
-  }
-
-  NUTSTreeResult outer = build_tree(outer_start, direction, depth - 1,
-                                     epsilon, inv_mass, use_mass, H0, delta_max,
-                                     data, layout, rng);
-
-  // Combine results (use result.xxx since inner was moved into result)
-  result.n_leapfrog += outer.n_leapfrog;
-  result.sum_accept_prob += outer.sum_accept_prob;
-  result.divergent = result.divergent || outer.divergent;
-
-  // Multinomial sampling: accept outer proposal with probability
-  // exp(outer.sum_log_weight) / exp(log_sum_exp(result.sum_log_weight, outer.sum_log_weight))
-  double new_sum_log_weight = ratiod_linalg::log_sum_exp(result.sum_log_weight, outer.sum_log_weight);
-  double accept_prob_outer = std::exp(outer.sum_log_weight - new_sum_log_weight);
-  if (!std::isfinite(accept_prob_outer)) accept_prob_outer = 0.0;
-
-  std::uniform_real_distribution<double> unif(0.0, 1.0);
-  if (unif(rng) < accept_prob_outer) {
-    result.q_proposal = std::move(outer.q_proposal);
-    result.grad_proposal = std::move(outer.grad_proposal);
-    result.log_prob_proposal = outer.log_prob_proposal;
-  }
-  // else keep inner proposal (already in result from move)
-
-  result.sum_log_weight = new_sum_log_weight;
-  result.n_valid = result.n_valid + outer.n_valid;
-
-  // Update tree endpoints
-  // result already holds inner's data from the move above
-  if (direction == 1) {
-    // result.left is already inner.left (correct from move)
-    result.right = std::move(outer.right);
-  } else {
-    result.left = std::move(outer.left);
-    // result.right is already inner.right (correct from move)
-  }
-
-  // Check U-turn on the combined trajectory
-  result.stop = outer.stop ||
-    nuts_check_uturn(result.left.q, result.right.q,
-                     result.left.p, result.right.p,
-                     inv_mass, n);
-
-  return result;
 }
 
 // =====================================================================

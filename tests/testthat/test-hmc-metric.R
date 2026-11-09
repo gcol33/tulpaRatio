@@ -74,8 +74,6 @@ test_that("all gradient modes retain reversible metric trajectories after an are
     for (type in c("identity","diag","dense","block")) {
       for (block in c("none","precision","sparse","kronecker")) {
         paths <- c("copy","cached","inplace","tree","walnuts")
-        if (block=="none" && type %in% c("identity","diag") && mode!="reallocate")
-          paths <- c(paths,"tree_copy")
         for (path in paths) {
           epsilon <- 0.1
           steps <- 7L

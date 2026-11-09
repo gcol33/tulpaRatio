@@ -52,25 +52,5 @@ inline T dot_product(const std::vector<T>& x, const std::vector<T>& y) {
     return sum;
 }
 
-// Dot product with double design matrix and T coefficients
-template<typename T>
-inline T dot_product_mixed(const double* x, const std::vector<T>& y, int n) {
-    T sum = T(0.0);
-    for (int i = 0; i < n; i++) {
-        sum = sum + x[i] * y[i];
-    }
-    return sum;
-}
-
-// Simpler: dot product where x is double array, y is T vector starting at offset
-template<typename T>
-inline T dot_product_mixed(const double* x, const T* y, int n) {
-    T sum = T(0.0);
-    for (int i = 0; i < n; i++) {
-        sum = sum + x[i] * y[i];
-    }
-    return sum;
-}
-
 } }
 #endif

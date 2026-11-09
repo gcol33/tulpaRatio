@@ -5,14 +5,6 @@ cpp_flatten_3d_rowmajor <- function(arr, d1, d2, d3) {
     .Call(`_tulpaRatio_cpp_flatten_3d_rowmajor`, arr, d1, d2, d3)
 }
 
-cpp_sample_crt <- function(y, r) {
-    .Call(`_tulpaRatio_cpp_sample_crt`, y, r)
-}
-
-cpp_sample_crt_sum <- function(y, r) {
-    .Call(`_tulpaRatio_cpp_sample_crt_sum`, y, r)
-}
-
 cpp_crt_mean <- function(y, r) {
     .Call(`_tulpaRatio_cpp_crt_mean`, y, r)
 }
@@ -169,6 +161,10 @@ cpp_gradient_fields <- function() {
     .Call(`_tulpaRatio_cpp_gradient_fields`)
 }
 
+cpp_gradient_chain_fixture <- function(field, mode = "H", seed = 17192L, auto_coordinates = FALSE) {
+    .Call(`_tulpaRatio_cpp_gradient_chain_fixture`, field, mode, seed, auto_coordinates)
+}
+
 cpp_scale_prior_check <- function(field, x, U = 0.8, alpha = 0.15) {
     .Call(`_tulpaRatio_cpp_scale_prior_check`, field, x, U, alpha)
 }
@@ -187,10 +183,6 @@ cpp_gradient_check <- function(field, n_obs = 400L, n_units = 25L, n_times = 10L
 
 cpp_gradient_race <- function(field, n_points = 8L, n_threads = 4L, rounds = 8L, n_obs = 200L, n_units = 16L, n_times = 8L, seed = 42L, family = "binomial", prime_other_model = FALSE) {
     .Call(`_tulpaRatio_cpp_gradient_race`, field, n_points, n_threads, rounds, n_obs, n_units, n_times, seed, family, prime_other_model)
-}
-
-cpp_time_gradient <- function(field, n_rep = 50L, n_obs = 400L, n_units = 25L, n_times = 10L, seed = 42L, family = "poisson_gamma") {
-    .Call(`_tulpaRatio_cpp_time_gradient`, field, n_rep, n_obs, n_units, n_times, seed, family)
 }
 
 cpp_logpost_at <- function(field, n_obs = 400L, n_units = 25L, n_times = 10L, seed = 42L, family = "binomial", temporal_shared = TRUE, zi = "none") {

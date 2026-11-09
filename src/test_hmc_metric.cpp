@@ -146,12 +146,6 @@ Rcpp::List cpp_test_gradient_trajectory(std::string type, std::string block,
         q.assign(ws.q_at(0),ws.q_at(0)+n);
         p.assign(ws.p_at(0),ws.p_at(0)+n);
         g.assign(ws.grad_at(0),ws.grad_at(0)+n); lp=ws.logp_at(0);
-      } else if (path == "tree_copy") {
-        NUTSNode node; node.q=q; node.p=p; node.grad=g; node.log_prob=lp;
-        std::mt19937 rng(229);
-        auto out=build_tree(node,1,0,epsilon,mass.inv_mass_diag,type!="identity",
-                            -lp+metric.kinetic_energy(p.data()),1000.0,data,layout,rng);
-        q=out.left.q; p=out.left.p; g=out.left.grad; lp=out.left.log_prob;
       } else if (path == "walnuts") {
         auto& state=wws.step_state;
         state.theta=q; state.rho=p; state.grad=g;
