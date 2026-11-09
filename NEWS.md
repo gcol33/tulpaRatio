@@ -1,5 +1,11 @@
 # tulpaRatio 1.7.3
 
+* The constrained-field recovery tests check log precision against a dense
+  integration of each fixture's posterior under the PC prior and bound Monte
+  Carlo error across independent seeds; their sampler settings are stated
+  (noncentered zero-signal RW1, locally adaptive WALNUTS for the sampled ICAR
+  field) because the default centered NUTS does not mix there (#225) (#222).
+
 * Laplace HSGP and GP fields state their squared-exponential kernel and
   coefficient coordinates to the engine instead of relying on its default,
   which became Matern: the fitted field had been built under one kernel and

@@ -31,22 +31,104 @@ grid_adj <- function(S) {
   A
 }
 
-fit_one <- function(df, ...) {
+# Gaussian importance integration over the fixed effects and the constrained
+# field, followed by trapezoidal integration over log precision. Whitening by
+# the positive eigenvalues of Q keeps the dense solve conditioned as tau grows.
+constrained_field_reference <- function(df, Q, group, n_draws = 2048L,
+                                        seed = 222L) {
+  old_seed <- get0(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  on.exit({
+    if (is.null(old_seed)) rm(".Random.seed", envir = .GlobalEnv)
+    else assign(".Random.seed", old_seed, envir = .GlobalEnv)
+  }, add = TRUE)
+  set.seed(seed)
+  eigen_Q <- eigen(Q, symmetric = TRUE)
+  rank <- nrow(Q) - 1L
+  positive <- seq_len(rank)
+  field <- sweep(eigen_Q$vectors[group, positive, drop = FALSE],
+                  2, sqrt(eigen_Q$values[positive]), "/")
+  dimension <- rank + 2L
+  z <- matrix(0, dimension, n_draws)
+  odd <- seq.int(1L, n_draws, by = 2L)
+  z[, odd] <- matrix(rnorm(dimension * length(odd)), dimension)
+  z[, odd + 1L] <- -z[, odd]
+  softplus <- function(x) pmax(x, 0) + log1p(exp(-abs(x)))
+  x <- seq(-4, 50, by = 0.25)
+  log_marginal <- matrix(0, length(x), 4L)
+  at <- numeric(dimension)
+  precision <- c(rep(1 / 100, 2L), rep(1, rank))
+  lambda <- -log(0.01) / 3
+  for (i in seq_along(x)) {
+    design <- cbind(1, df$x, exp(-x[i] / 2) * field)
+    log_joint <- function(b) {
+      eta <- drop(design %*% b)
+      sum(df$y * eta - df$trials * softplus(eta)) - sum(precision * b^2) / 2
+    }
+    for (j in seq_len(30L)) {
+      p <- plogis(drop(design %*% at))
+      grad <- drop(crossprod(design, df$y - df$trials * p)) - precision * at
+      hessian <- crossprod(design, design * (df$trials * p * (1 - p))) +
+        diag(precision)
+      delta <- solve(hessian, grad)
+      fraction <- 1
+      current <- log_joint(at)
+      while (log_joint(at + fraction * delta) < current - 1e-10)
+        fraction <- fraction / 2
+      at <- at + fraction * delta
+      if (max(abs(grad)) < 1e-8 || max(abs(delta)) < 1e-12) break
+    }
+    p <- plogis(drop(design %*% at))
+    hessian <- crossprod(design, design * (df$trials * p * (1 - p))) +
+      diag(precision)
+    factor <- chol(hessian)
+    b <- at + backsolve(factor, z)
+    eta <- design %*% b
+    joint <- colSums(df$y * eta - df$trials * softplus(eta)) -
+      colSums(precision * b^2) / 2
+    correction <- exp(joint - log_joint(at) + colSums(z^2) / 2)
+    log_prior <- log(lambda / 2) - x[i] / 2 - lambda * exp(-x[i] / 2)
+    log_marginal[i, ] <- log_joint(at) - sum(log(diag(factor))) +
+      log_prior + log(colMeans(matrix(correction, ncol = 4L)))
+  }
+  moments <- function(logp, index = seq_along(x)) {
+    w <- exp(logp[index] - max(logp[index]))
+    w[c(1L, length(w))] <- w[c(1L, length(w))] / 2
+    w <- w / sum(w)
+    mean <- sum(w * x[index])
+    c(mean = mean, sd = sqrt(sum(w * (x[index] - mean)^2)))
+  }
+  logp <- log(rowMeans(exp(log_marginal - max(log_marginal))))
+  reference <- moments(logp)
+  batch_means <- apply(log_marginal, 2, function(a) moments(a)["mean"])
+  list(mean = unname(reference["mean"]), sd = unname(reference["sd"]),
+       mcse = sd(batch_means) / 2,
+       grid_error = abs(reference["mean"] -
+         moments(logp, seq.int(1L, length(x), by = 2L))["mean"]),
+       tail_slope = diff(tail(logp, 2L)) / diff(tail(x, 2L)))
+}
+
+fit_one <- function(df, ..., control = list()) {
+  control <- utils::modifyList(
+    list(iter = 1000, warmup = 500, chains = 4, verbose = FALSE), control)
   f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(), ...,
-              control = list(iter = 1000, warmup = 500, chains = 4, verbose = FALSE))
+              control = control)
   dr <- as.matrix(f$draws)
   per <- nrow(dr) / f$chains
-  summarise <- function(v) {
-    m <- matrix(dr[, v], nrow = per, ncol = f$chains)
-    list(mean = mean(dr[, v]),
-         lo = unname(quantile(dr[, v], 0.025)),
-         hi = unname(quantile(dr[, v], 0.975)),
+  summarise <- function(v, transform = identity) {
+    values <- transform(dr[, v])
+    m <- matrix(values, nrow = per, ncol = f$chains)
+    list(mean = mean(values),
+         lo = unname(quantile(values, 0.025)),
+         hi = unname(quantile(values, 0.975)),
          rhat = posterior::rhat(m),
-         ess = posterior::ess_bulk(m))
+         ess = posterior::ess_bulk(m),
+         mcse = posterior::mcse_mean(m))
   }
   list(backend = f$backend,
        intercept = summarise("beta_num[1]"),
-       slope = summarise("beta_num[2]"))
+       slope = summarise("beta_num[2]"),
+       log_tau_temporal = if ("tau_temporal" %in% colnames(dr))
+         summarise("tau_temporal", log) else NULL)
 }
 
 test_that("RW1 recovers the intercept and slope with calibrated intervals", {
@@ -56,13 +138,25 @@ test_that("RW1 recovers the intercept and slope with calibrated intervals", {
   seeds <- c(11, 22, 33)
   cover_i <- 0L; cover_s <- 0L
   for (s in seeds) {
-    r <- fit_one(sim_data(s), temporal = temporal_rw1("time"))
+    df <- sim_data(s)
+    # At zero temporal signal the PC scale prior reaches the neck of the
+    # centred funnel. Standard normal increments remove its scale dependence.
+    r <- fit_one(df, temporal = temporal_rw1("time", parameterization = "noncentered"),
+                 control = list(iter = 4000, warmup = 1000, adapt_delta = 0.95))
     expect_identical(r$backend, "hmc")
 
     # Convergence must hold before recovery means anything.
     expect_lt(r$intercept$rhat, 1.05)
     expect_lt(r$slope$rhat, 1.05)
     expect_gt(r$intercept$ess, 400)
+
+    reference <- constrained_field_reference(
+      df, crossprod(diff(diag(20))), as.integer(df$time))
+    expect_lt(reference$mcse / reference$sd, 0.001)
+    expect_lt(reference$grid_error / reference$sd, 0.001)
+    expect_lt(r$log_tau_temporal$rhat, 1.01)
+    expect_lt(r$log_tau_temporal$mcse, reference$sd / 30)
+    expect_lt(abs(r$log_tau_temporal$mean - reference$mean), 0.1 * reference$sd)
 
     # The intercept is the quantity a missing sum-to-zero constraint destroys.
     expect_equal(r$intercept$mean, TRUE_INTERCEPT, tolerance = 0.08)
@@ -384,59 +478,72 @@ test_that("an intrinsic field is reported as the field the likelihood saw", {
 })
 
 
-# The sampled ICAR block identifies the field by augment-and-centre and the
-# collapsed block keeps the soft pin (hmc_icar_collapsed.h). The two are claimed
-# to produce the same marginal: the freed constant is centred out of eta, so it
-# factors off as an independent N(0, 1/tau) integrating to 1, which turns the
-# augmented normalizer S/2 * log(tau) into the (S - 1)/2 * log(tau) the collapsed
-# prior carries. If that identity broke -- the collapsed rank counting the pinned
-# direction, or the pin picking up a tau it should not -- the prior would gain or
-# lose half a power of tau and the tau posterior would move.
-#
-# The intercept cannot see that. It is separately identified, so it tests only
-# the pin's residual leak, and a normalizer off by one rank leaves it where it
-# was. tau is the quantity that moves, and it moves by roughly
-# digamma(S/2) - digamma((S-1)/2), which is ~1/S: 0.133 at S = 9 against a
-# Monte Carlo error of ~0.04, but 0.021 at S = 50 against ~0.05, where it would
-# be invisible. So this asserts on a small field.
-
-test_that("the collapsed ICAR marginal agrees with the sampled one on tau", {
+# The PC prior's log-precision density has tail exp(-x/2). The likelihood
+# approaches a finite limit as the field shrinks to zero. Counting the constant
+# direction twice multiplies the marginal by exp(x/2), leaving an improper tail.
+test_that("sampled and collapsed ICAR recover the dense log-precision posterior", {
   skip_on_cran()
   skip_if_not_installed("posterior")
+  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true"))
+    skip("Set TULPA_SLOW_TESTS=true")
 
   S <- 9L
   df <- sim_data(11, N = 300, S = S)
   A <- grid_adj(S)
+  reference <- constrained_field_reference(
+    df, diag(rowSums(A)) - A, as.integer(df$site))
+  expect_lt(reference$mcse / reference$sd, 0.001)
+  expect_lt(reference$grid_error / reference$sd, 0.001)
+  expect_equal(reference$tail_slope, -0.5, tolerance = 1e-8)
 
-  fit_tau <- function(parameterization) {
-    set.seed(7)
+  fit_tau <- function(parameterization, seed, walnuts = FALSE) {
     f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
                 mode = "hmc",
                 spatial = spatial_car(A, spatial_level = "group", group_var = "site",
                                       parameterization = parameterization),
-                control = list(iter = 2000, warmup = 1000, chains = 4,
-                               verbose = FALSE))
+                control = list(iter = if (walnuts) 50000 else 22000,
+                               warmup = 2000, chains = 4, seed = seed,
+                               adapt_delta = if (walnuts) 0.8 else 0.99,
+                               walnuts = walnuts, verbose = FALSE))
     expect_identical(f$backend, "hmc")
+    if (walnuts) expect_identical(f$diagnostics$algorithm, "WALNUTS")
     dr <- as.matrix(f$draws)
     log_tau <- log(dr[, "tau_spatial"])
     m <- matrix(log_tau, nrow = nrow(dr) / f$chains, ncol = f$chains)
-    list(mean = mean(log_tau),
-         mcse = posterior::mcse_mean(m),
-         ess = posterior::ess_bulk(m),
-         intercept = mean(dr[, "beta_num[1]"]))
+    list(draws = m, intercept = mean(dr[, "beta_num[1]"]))
   }
 
-  standard <- fit_tau("standard")
-  collapsed <- fit_tau("collapsed")
+  summarise_tau <- function(fits) {
+    m <- do.call(cbind, lapply(fits, `[[`, "draws"))
+    list(mean = mean(m),
+         mcse = posterior::mcse_mean(m),
+         ess = posterior::ess_bulk(m),
+         rhat = posterior::rhat(m),
+         intercept = mean(vapply(fits, `[[`, numeric(1), "intercept")))
+  }
 
-  rank_error_shift <- digamma(S / 2) - digamma((S - 1) / 2)
-  diff <- collapsed$mean - standard$mean
-  mcse <- sqrt(standard$mcse^2 + collapsed$mcse^2)
+  # Local leapfrog subdivisions adapt to the field curvature at each precision.
+  sampled_fits <- lapply(c(7L, 17L), function(seed) fit_tau("standard", seed, TRUE))
+  standard <- summarise_tau(sampled_fits)
+  collapsed <- summarise_tau(list(fit_tau("collapsed", 7L)))
 
-  # Well inside Monte Carlo error, and comfortably below the shift a rank that
-  # counted the pinned direction would produce.
-  expect_lt(abs(diff), 4 * mcse)
-  expect_lt(abs(diff), 0.6 * rank_error_shift)
+  for (fit in sampled_fits) {
+    result <- summarise_tau(list(fit))
+    expect_lt(result$rhat, 1.01)
+    expect_lt(abs(result$mean - reference$mean), 0.1 * reference$sd)
+  }
+
+  # A mean accurate to 0.1 posterior SD at three Monte Carlo standard errors
+  # requires MCSE below SD/30. Each route is checked against the integrated
+  # posterior independently.
+  for (result in list(standard, collapsed)) {
+    error <- abs(result$mean - reference$mean)
+    expect_lt(result$rhat, 1.01)
+    expect_lt(result$mcse, reference$sd / 30)
+    expect_lt(error, 0.1 * reference$sd)
+    expect_lt(error, 3 * sqrt(result$mcse^2 + reference$mcse^2) +
+                reference$grid_error)
+  }
 
   # The pin holds the constant at fixed precision rather than exactly zero, so
   # the collapsed marginal is the hard-constrained one plus a leak. It shows up
