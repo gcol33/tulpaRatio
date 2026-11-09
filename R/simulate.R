@@ -17,8 +17,9 @@ NULL
 #' @param beta_denom Numeric vector of true denominator coefficients.
 #'   If NULL, drawn from prior.
 #' @param sigma_re Standard deviation of random effects. Default 0.5.
-#' @param phi_num Overdispersion for numerator (negbin/gamma families). Default 5.
-#' @param phi_denom Overdispersion for denominator (negbin/gamma families). Default 5.
+#' @param phi_num Numerator dispersion: negative-binomial size, gamma shape,
+#'   beta-binomial precision, or lognormal log-scale SD. Default 5.
+#' @param phi_denom Denominator dispersion in the same parameterisation. Default 5.
 #' @param n_groups Number of random effect groups. Default 10.
 #' @param n_per_group Observations per group. If NULL, groups are unbalanced.
 #' @param spatial Optional spatial structure specification.
@@ -101,7 +102,9 @@ sim_ratiod <- function(n = 100,
 
   if (!is.null(seed)) set.seed(seed)
 
-  family_name <- family$name
+  num_dist <- family$numerator$distribution
+  denom_dist <- family$denominator$distribution
+  probability <- num_dist %in% c("binomial", "beta_binomial")
   linkinv_num <- pp_linkinv(family$numerator$link %||% "log")
   linkinv_denom <- pp_linkinv(family$denominator$link %||% "log")
 
@@ -124,7 +127,7 @@ sim_ratiod <- function(n = 100,
   p_fixed <- 2  # intercept + x1
 
   if (is.null(beta_num)) {
-    if (identical(family_name, "binomial_fixed")) {
+    if (probability) {
       beta_num <- c(0, 0.5)  # logit scale
     } else {
       beta_num <- c(2, 0.3)  # log scale
@@ -132,7 +135,7 @@ sim_ratiod <- function(n = 100,
   }
 
   if (is.null(beta_denom)) {
-    if (identical(family_name, "binomial_fixed")) {
+    if (probability) {
       beta_denom <- NULL  # Not used for binomial
     } else {
       beta_denom <- c(1.5, 0.2)  # log scale
@@ -153,72 +156,25 @@ sim_ratiod <- function(n = 100,
     eta_denom <- as.numeric(X %*% beta_denom) + re[group]
   }
 
-  # Generate responses based on family
-  if (family_name == "negbin_negbin") {
-    mu_num <- linkinv_num(eta_num)
-    mu_denom <- linkinv_denom(eta_denom)
-
-    y_num <- rnbinom(n, size = phi_num, mu = mu_num)
-    y_denom <- rnbinom(n, size = phi_denom, mu = mu_denom)
-
-    # Ensure denominator > 0 for ratio
-    y_denom[y_denom == 0] <- 1
-
-  } else if (identical(family_name, "binomial_fixed")) {
-    p <- linkinv_num(eta_num)
-
-    # Generate trials (denominator)
-    if (family_name == "binomial_fixed") {
-      y_denom <- sample(10:50, n, replace = TRUE)
-    } else {
-      y_denom <- rpois(n, 30) + 10
-    }
-
-    y_num <- rbinom(n, size = y_denom, prob = p)
-
-  } else if (family_name == "poisson_gamma") {
-    mu_num <- linkinv_num(eta_num)
-    mu_denom <- linkinv_denom(eta_denom)
-
-    y_num <- rpois(n, mu_num)
-
-    # Gamma: shape = phi, rate = phi / mu
-    y_denom <- rgamma(n, shape = phi_denom, rate = phi_denom / mu_denom)
-    y_denom[y_denom < 0.01] <- 0.01  # Avoid division by zero
-
-  } else if (family_name == "negbin_gamma") {
-    mu_num <- linkinv_num(eta_num)
-    mu_denom <- linkinv_denom(eta_denom)
-
-    y_num <- rnbinom(n, size = phi_num, mu = mu_num)
-
-    # Gamma: shape = phi, rate = phi / mu
-    y_denom <- rgamma(n, shape = phi_denom, rate = phi_denom / mu_denom)
-    y_denom[y_denom < 0.01] <- 0.01  # Avoid division by zero
-
-  } else if (family_name == "gamma_gamma") {
-    mu_num <- linkinv_num(eta_num)
-    mu_denom <- linkinv_denom(eta_denom)
-
-    y_num <- rgamma(n, shape = phi_num, rate = phi_num / mu_num)
-    y_denom <- rgamma(n, shape = phi_denom, rate = phi_denom / mu_denom)
-
-    y_num[y_num < 0.001] <- 0.001
-    y_denom[y_denom < 0.001] <- 0.001
-
-  } else if (family_name %in% c("lognormal_fixed", "lognormal_lognormal")) {
-    sigma_obs <- 0.5  # Observation SD
-
-    y_num <- exp(eta_num + rnorm(n, 0, sigma_obs))
-
-    if (family_name == "lognormal_lognormal") {
-      y_denom <- exp(eta_denom + rnorm(n, 0, sigma_obs))
-    } else {
-      y_denom <- rep(1, n)
-    }
-
+  mu_num <- linkinv_num(eta_num)
+  if (probability) {
+    y_denom <- sample(10:50, n, replace = TRUE)
+    y_num <- pp_rdist(num_dist, mu_num, phi_num, trials = y_denom)
   } else {
-    stop("Simulation not implemented for family: ", family_name, call. = FALSE)
+    y_num <- pp_rdist(num_dist, mu_num, phi_num)
+    if (denom_dist == "fixed") {
+      y_denom <- rep(1, n)
+    } else {
+      mu_denom <- linkinv_denom(eta_denom)
+      y_denom <- pp_rdist(denom_dist, mu_denom, phi_denom)
+    }
+
+    if (denom_dist == "neg_binomial_2") y_denom[y_denom == 0] <- 1
+    if (denom_dist == "gamma") {
+      minimum <- if (num_dist == "gamma") 0.001 else 0.01
+      y_denom[y_denom < minimum] <- minimum
+    }
+    if (num_dist == "gamma") y_num[y_num < 0.001] <- 0.001
   }
 
   # Create data frame
@@ -238,10 +194,8 @@ sim_ratiod <- function(n = 100,
     re = re
   )
 
-  if (family_name %in% c("negbin_negbin", "negbin_gamma", "poisson_gamma", "gamma_gamma")) {
-    true_params$phi_num <- phi_num
-    true_params$phi_denom <- phi_denom
-  }
+  true_params$phi_num <- phi_num
+  true_params$phi_denom <- phi_denom
 
   structure(
     list(
@@ -367,7 +321,8 @@ sim_ratiod_sbc <- function(n_sims = 100,
 
   priors <- fill_priors(priors, get_hmc_model_type(family))
 
-  family_name <- family$name
+  num_dist <- family$numerator$distribution
+  denom_dist <- family$denominator$distribution
 
   sims <- vector("list", n_sims)
 
@@ -377,14 +332,8 @@ sim_ratiod_sbc <- function(n_sims = 100,
     beta_denom <- pp_draw_prior(priors$beta, 2)
     sigma_re <- pp_draw_prior(priors$sigma, 1)
 
-    # Overdispersion
-    if (family_name %in% c("negbin_negbin", "negbin_gamma", "poisson_gamma", "gamma_gamma")) {
-      phi_num <- pp_draw_prior(priors$phi, 1)
-      phi_denom <- pp_draw_prior(priors$phi, 1)
-    } else {
-      phi_num <- 5
-      phi_denom <- 5
-    }
+    phi_num <- if (pp_has_dispersion(num_dist)) pp_draw_prior(priors$phi, 1) else NA_real_
+    phi_denom <- if (pp_has_dispersion(denom_dist)) pp_draw_prior(priors$phi, 1) else NA_real_
 
     # Simulate data with these parameters
     sims[[i]] <- sim_ratiod(

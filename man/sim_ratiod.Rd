@@ -44,9 +44,10 @@ If NULL, drawn from prior.}
 
 \item{sigma_re}{Standard deviation of random effects. Default 0.5.}
 
-\item{phi_num}{Overdispersion for numerator (negbin/gamma families). Default 5.}
+\item{phi_num}{Numerator dispersion: negative-binomial size, gamma shape,
+beta-binomial precision, or lognormal log-scale SD. Default 5.}
 
-\item{phi_denom}{Overdispersion for denominator (negbin/gamma families). Default 5.}
+\item{phi_denom}{Denominator dispersion in the same parameterisation. Default 5.}
 
 \item{n_groups}{Number of random effect groups. Default 10.}
 
