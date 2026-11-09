@@ -1,5 +1,22 @@
 # tulpaRatio 1.7.3
 
+* One naming scheme across the API (#208): zero / one inflation is stated only
+  through the family constructors (the separate `zi =` route is removed), family
+  names follow one spelling, fit accessors take `object` (`x` for print / plot),
+  interval probabilities are `probs`, `ratiod_benchmark()` takes the control-list
+  names and a `seed` it scopes instead of overwriting the caller's RNG state,
+  `verbose` replaces `quiet`, and the areal level argument no longer shares
+  `confint()`'s `level`. The OI-binomial pointwise likelihood no longer fails on
+  its unused zero-inflation predictor, and automatic backend selection sees the
+  family's inflation.
+* Point-fit printers name the family (#179); TVC posterior plots honour `type`
+  (#181); `sim_ratiod()` draws each arm through the shared distribution sampler
+  with the stated dispersion instead of a fixed lognormal sigma of 0.5 (#182).
+* GP coordinates are scaled by one isotropic distance unit, so a constant
+  coordinate column no longer divides by zero and unequal spreads no longer
+  stretch the metric by direction; lengthscale priors and predictions read the
+  same unit (#221).
+
 * The HMC samplers integrate through one metric concept (identity, diagonal,
   dense / block), one templated leapfrog and one step-size search. This also
   fixes the momentum factor orientation and kinetic energy under precision,

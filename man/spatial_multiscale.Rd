@@ -40,8 +40,10 @@ before the basis is built. Default 1.5.}
 \item{shared}{Logical; if TRUE (default), spatial effects enter both
 numerator and denominator.}
 
-\item{scale_coords}{Logical; if TRUE (default), coordinates are scaled to
-unit variance before computing distances.}
+\item{scale_coords}{Logical; if TRUE (default), centre coordinates and
+divide every axis by the root mean square of the coordinate standard
+deviations. Distances remain proportional in every direction. Range and
+lengthscale priors use these scaled distance units.}
 
 \item{sampler}{Warmup mass-matrix adaptation for the two GP blocks:
 \code{"auto"} (default) leaves the sampler's own adaptation in place, \code{"lbfgs"}

@@ -158,7 +158,7 @@ test_that("validate_gp errors for NA coordinates", {
 })
 
 test_that("validate_gp scales coordinates when requested", {
-  gp <- spatial_gp(~ x + y, scale = TRUE)
+  gp <- spatial_gp(~ x + y, scale_coords = TRUE)
 
   df <- data.frame(
     x = c(0, 100, 200, 300),
@@ -167,13 +167,14 @@ test_that("validate_gp scales coordinates when requested", {
 
   validated <- validate_gp(gp, df)
 
-  # Scaled coordinates should have mean ~0 and sd ~1
-  expect_equal(mean(validated$coords_matrix[, 1]), 0, tolerance = 0.01)
-  expect_equal(sd(validated$coords_matrix[, 1]), 1, tolerance = 0.01)
+  unit <- sqrt(mean(vapply(df, var, 1.0)))
+  expect_equal(colMeans(validated$coords_matrix), c(0, 0))
+  expect_equal(as.numeric(dist(validated$coords_matrix)),
+               as.numeric(dist(df)) / unit)
 })
 
-test_that("validate_gp preserves coordinates when scale = FALSE", {
-  gp <- spatial_gp(~ x + y, scale = FALSE)
+test_that("validate_gp preserves coordinates when scale_coords = FALSE", {
+  gp <- spatial_gp(~ x + y, scale_coords = FALSE)
 
   df <- data.frame(
     x = c(100, 200, 300, 400),

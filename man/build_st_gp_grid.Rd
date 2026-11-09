@@ -17,8 +17,9 @@ List with the grid geometry and its NNGP neighbour sets.
 \description{
 One entry per grid cell, in the same flattening \code{st_flat} carries
 (\code{k = (s - 1) * T + t}): the spatial unit's coordinates repeated across its
-times, and the distinct time values repeated across units. Both axes are
-standardized, since the neighbour metric adds a spatial distance to a
-temporal one and the two ranges share a prior.
+times, and the distinct time values repeated across units. Spatial distances
+use one isotropic scale and time values use their sample standard deviation,
+since the neighbour metric adds a spatial distance to a temporal one and
+the two ranges share a prior.
 }
 \keyword{internal}

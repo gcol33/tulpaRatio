@@ -31,8 +31,10 @@ half the data range. Larger values improve approximation at boundaries.}
 numerator and denominator. Set to FALSE for process-specific spatial
 effects (triggers warning about potential confounding).}
 
-\item{scale_coords}{Logical; if TRUE (default), coordinates are scaled to
-unit variance before computing basis functions.}
+\item{scale_coords}{Logical; if TRUE (default), centre coordinates and
+divide every axis by the root mean square of the coordinate standard
+deviations. Distances remain proportional in every direction. Range and
+lengthscale priors use these scaled distance units.}
 
 \item{x}{A ratiod_hsgp object}
 

@@ -29,5 +29,9 @@ so the fitted field lives in those units. \code{gp_scale_coords()} scales the
 training coordinates and returns the centre and scale it used;
 \code{gp_scale_new_coords()} puts prediction coordinates, which arrive raw, in
 the same units. A fit made without scaling leaves them unchanged.
+One common scale is the root mean square of the per-axis sample standard
+deviations. Range and lengthscale priors are expressed in these units;
+multiplying a sampled lengthscale by this scale gives its raw distance.
+A coordinate set with zero spread uses one raw distance unit.
 }
 \keyword{internal}

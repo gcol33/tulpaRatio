@@ -588,8 +588,10 @@ is_connected <- function(adjacency) {
 #' @param shared Logical; if TRUE (default), spatial effect enters both
 #'   numerator and denominator. Set to FALSE for process-specific spatial
 #'   effects (triggers warning about potential confounding).
-#' @param scale_coords Logical; if TRUE (default), coordinates are scaled to
-#'   unit variance before computing distances.
+#' @param scale_coords Logical; if TRUE (default), centre coordinates and
+#'   divide every axis by the root mean square of the coordinate standard
+#'   deviations. Distances remain proportional in every direction. Range and
+#'   lengthscale priors use these scaled distance units.
 #' @param parameterization Parameterization of the latent field. One of
 #'   `"centered"` (default), `"noncentered"` (Matt trick, better for diffuse
 #'   prior regimes), or `"collapsed"` (marginalize spatial variance for
@@ -793,8 +795,7 @@ print.ratiod_gp <- function(x, ...) {
 #' @param shared Logical; if TRUE (default), spatial effect enters both
 #'   numerator and denominator. Set to FALSE for process-specific spatial
 #'   effects (triggers warning about potential confounding).
-#' @param scale_coords Logical; if TRUE (default), coordinates are scaled to
-#'   unit variance before computing basis functions.
+#' @inheritParams spatial_gp
 #'
 #' @return A `ratiod_hsgp` object
 #'
@@ -1000,8 +1001,10 @@ validate_hsgp <- function(spatial, data) {
 #'   before the basis is built. Default 1.5.
 #' @param shared Logical; if TRUE (default), spatial effects enter both
 #'   numerator and denominator.
-#' @param scale_coords Logical; if TRUE (default), coordinates are scaled to
-#'   unit variance before computing distances.
+#' @param scale_coords Logical; if TRUE (default), centre coordinates and
+#'   divide every axis by the root mean square of the coordinate standard
+#'   deviations. Distances remain proportional in every direction. Range and
+#'   lengthscale priors use these scaled distance units.
 #' @param sampler Warmup mass-matrix adaptation for the two GP blocks:
 #'   `"auto"` (default) leaves the sampler's own adaptation in place, `"lbfgs"`
 #'   runs an L-BFGS pass during warmup to initialize it.
@@ -1305,8 +1308,10 @@ svc_default_range <- function() c(0.3, 30)
 #' @param shared Logical; if TRUE (default), SVC effects enter both
 #'   numerator and denominator. Set to FALSE for process-specific SVCs
 #'   (triggers warning about potential confounding).
-#' @param scale_coords Logical; if TRUE (default), coordinates are scaled to
-#'   unit variance before computing distances.
+#' @param scale_coords Logical; if TRUE (default), centre coordinates and
+#'   divide every axis by the root mean square of the coordinate standard
+#'   deviations. Distances remain proportional in every direction. Range and
+#'   lengthscale priors use these scaled distance units.
 #' @param approx Spatial GP approximation. One of `"nngp"` (default,
 #'   Nearest Neighbor GP) or `"hsgp"` (Hilbert Space GP, basis-function
 #'   approximation suitable for moderate N with strong smoothness).
@@ -1600,10 +1605,10 @@ validate_svc <- function(svc, data, X) {
     stop("Coordinate columns contain missing values", call. = FALSE)
   }
 
-  # Scale coordinates if requested
-  if (svc$scale_coords) {
-    coords <- scale(coords)
-  }
+  scaled <- gp_scale_coords(coords, svc$scale_coords)
+  coords <- scaled$coords
+  svc$coord_center <- scaled$center
+  svc$coord_scale <- scaled$scale
 
   # Resolve SVC terms
   coef_names <- colnames(X)
@@ -1714,6 +1719,10 @@ cov_type_code <- function(cov) {
 #' training coordinates and returns the centre and scale it used;
 #' `gp_scale_new_coords()` puts prediction coordinates, which arrive raw, in
 #' the same units. A fit made without scaling leaves them unchanged.
+#' One common scale is the root mean square of the per-axis sample standard
+#' deviations. Range and lengthscale priors are expressed in these units;
+#' multiplying a sampled lengthscale by this scale gives its raw distance.
+#' A coordinate set with zero spread uses one raw distance unit.
 #'
 #' @param coords Matrix of coordinates.
 #' @param scale_coords Logical; scale the training coordinates.
@@ -1730,10 +1739,15 @@ gp_scale_coords <- function(coords, scale_coords) {
   if (!isTRUE(scale_coords)) {
     return(list(coords = coords, center = NULL, scale = NULL))
   }
-  s <- scale(coords)
-  list(coords = matrix(as.numeric(s), nrow(s), ncol(s)),
-       center = as.numeric(attr(s, "scaled:center")),
-       scale = as.numeric(attr(s, "scaled:scale")))
+  center <- colMeans(coords)
+  centered <- sweep(coords, 2L, center, "-")
+  # One distance unit preserves the isotropic covariance under rotations.
+  distance_scale <- sqrt(sum(centered^2) /
+                           (max(1L, nrow(coords) - 1L) * ncol(coords)))
+  if (distance_scale == 0) distance_scale <- 1
+  list(coords = unname(centered / distance_scale),
+       center = unname(center),
+       scale = rep(distance_scale, ncol(coords)))
 }
 
 #' @rdname gp_scale_coords
@@ -1783,7 +1797,7 @@ compute_nngp_neighbors <- function(coords, k) {
   # Phase 1.3: Precompute pairwise distances among neighbors
   nn_neighbor_dist <- array(0, dim = c(N, k, k))
 
-  for (i in 2:N) {
+  for (i in seq_len(N)) {
     # Only consider previous observations (in ordering) as potential neighbors
     n_candidates <- min(i - 1, k)
 

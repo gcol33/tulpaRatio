@@ -373,10 +373,7 @@ validate_spatiotemporal <- function(st, data) {
   if (inherits(st$spatial, "ratiod_hsgp")) {
     # HSGP spatial: validate coords, set n_spatial = m^2 (basis functions)
     st$spatial_is_hsgp <- TRUE
-    coord_vars <- st$spatial$coord_vars
-    coords <- as.matrix(data[, coord_vars, drop = FALSE])
-    st$spatial$coords_matrix <- coords
-    st$spatial$n_obs <- nrow(coords)
+    st$spatial <- validate_hsgp(st$spatial, data)
     m <- st$spatial$m %||% 6L
     st$n_spatial <- as.integer(m)^2  # m^2 basis functions replace S spatial units
   } else if (inherits(st$spatial, "ratiod_gp")) {
@@ -432,9 +429,10 @@ validate_spatiotemporal <- function(st, data) {
 #'
 #' One entry per grid cell, in the same flattening `st_flat` carries
 #' (`k = (s - 1) * T + t`): the spatial unit's coordinates repeated across its
-#' times, and the distinct time values repeated across units. Both axes are
-#' standardized, since the neighbour metric adds a spatial distance to a
-#' temporal one and the two ranges share a prior.
+#' times, and the distinct time values repeated across units. Spatial distances
+#' use one isotropic scale and time values use their sample standard deviation,
+#' since the neighbour metric adds a spatial distance to a temporal one and
+#' the two ranges share a prior.
 #'
 #' @param st Validated `ratiod_spatiotemporal` object of a GP type.
 #' @param data Data frame the coordinate columns are read from.
@@ -448,10 +446,8 @@ build_st_gp_grid <- function(st, data) {
   coords_unit <- st_unit_coords(st, data, S)
   times <- st_grid_time_values(st$temporal, T)
 
-  # Standardize each axis. validate_gp() may already have scaled the
-  # coordinates, in which case this is a no-op up to rounding.
-  coords_unit <- st_scale_axis(coords_unit)
-  times <- as.numeric(st_scale_axis(matrix(times, ncol = 1L)))
+  coords_unit <- gp_scale_coords(coords_unit, TRUE)$coords
+  times <- as.numeric(gp_scale_coords(matrix(times, ncol = 1L), TRUE)$coords)
 
   coords_grid <- coords_unit[rep(seq_len(S), each = T), , drop = FALSE]
   time_grid <- rep(times, times = S)
@@ -548,19 +544,6 @@ st_unit_coords <- function(st, data, S) {
       spread))
   }
   out
-}
-
-
-#' Centre and scale one axis, leaving a constant axis alone
-#' @keywords internal
-st_scale_axis <- function(x) {
-  x <- as.matrix(x)
-  for (j in seq_len(ncol(x))) {
-    s <- stats::sd(x[, j])
-    x[, j] <- x[, j] - mean(x[, j])
-    if (is.finite(s) && s > 0) x[, j] <- x[, j] / s
-  }
-  x
 }
 
 
