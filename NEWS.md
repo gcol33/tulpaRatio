@@ -1,5 +1,12 @@
 # tulpaRatio 1.7.3
 
+* The Polya-Gamma coefficient draws have the right conditional covariance: with
+  the precision factored as Q = L L', the noise is now L^-T z, whose covariance
+  is Q^-1, where L^-1 z had covariance L^-1 L^-T. On an exact two-coefficient
+  conditional the covariance error falls from 0.31 to 0.003 over 30,000 draws.
+  Every PG sampler except plain binomial (which runs in the engine) was affected
+  (#218).
+
 * Print methods share their title, `Shared:` line and point-fit table helpers,
   the spatially and temporally varying coefficient summaries share one per-term
   summary, and the HSGP boundary factor is `c_boundary` everywhere, including

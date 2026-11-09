@@ -1,0 +1,16 @@
+test_that("PG coefficient conditional has the exact Gaussian mean and covariance", {
+  skip_on_cran()
+  X <- cbind(1, seq(0, 2, length.out = 12))
+  omega <- seq(0.4, 1.6, length.out = 12)
+  kappa <- seq(-0.3, 0.5, length.out = 12)
+  offset <- rep(0.2, 12)
+  Q <- crossprod(X, omega * X) + diag(1 / 2^2, 2)
+  V <- solve(Q)
+  mu <- drop(solve(Q, crossprod(X, kappa - omega * offset)))
+  set.seed(191)
+  draws <- t(replicate(30000, tulpaRatio:::cpp_test_pg_update_beta(
+    kappa, omega, X, offset, 2)))
+  expect_lt(max(abs(colMeans(draws) - mu) / sqrt(diag(V) / nrow(draws))), 5)
+  covariance_se <- sqrt((V^2 + outer(diag(V), diag(V))) / (nrow(draws) - 1))
+  expect_lt(max(abs(cov(draws) - V) / covariance_se), 5)
+})

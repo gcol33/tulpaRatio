@@ -143,12 +143,12 @@ NumericVector update_beta_negbin(
     z[i] = R::rnorm(0.0, 1.0);
   }
 
-  // Solve L z_star = z
+  // Solve L' z_star = z
   NumericVector z_star(p);
-  for (int i = 0; i < p; i++) {
+  for (int i = p - 1; i >= 0; i--) {
     double sum = z[i];
-    for (int j = 0; j < i; j++) {
-      sum -= L(i, j) * z_star[j];
+    for (int j = i + 1; j < p; j++) {
+      sum -= L(j, i) * z_star[j];
     }
     z_star[i] = sum / L(i, i);
   }

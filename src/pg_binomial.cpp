@@ -173,20 +173,20 @@ NumericVector update_beta(
   // Sample from posterior
   // Need to sample from N(post_mean, XWX^{-1})
   // XWX^{-1} = (L L')^{-1} = L'^{-1} L^{-1}
-  // So sample z ~ N(0, I), compute L^{-1} z, add to mean
+  // Sample z ~ N(0, I) and add L^{-T} z to the mean.
 
-  // More efficient: solve L z_star = z for z_star, then x = mean + z_star
+  // Solve L' z_star = z for the precision-factor noise.
   NumericVector z(p);
   for (int i = 0; i < p; i++) {
     z[i] = R::rnorm(0.0, 1.0);
   }
 
-  // Solve L z_star = z (forward substitution only)
+  // Solve L' z_star = z by back substitution.
   NumericVector z_star(p);
-  for (int i = 0; i < p; i++) {
+  for (int i = p - 1; i >= 0; i--) {
     double sum = z[i];
-    for (int j = 0; j < i; j++) {
-      sum -= L(i, j) * z_star[j];
+    for (int j = i + 1; j < p; j++) {
+      sum -= L(j, i) * z_star[j];
     }
     z_star[i] = sum / L(i, i);
   }
