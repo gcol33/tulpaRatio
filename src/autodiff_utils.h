@@ -10,7 +10,7 @@
 #include <limits>
 #include <vector>
 #include <Rcpp.h>
-#include <tulpa/ad_scalar_math.h>
+#include "ratio_math.h"
 #include "link_function.h"
 #include <tulpa/count_math.h>
 
@@ -78,33 +78,16 @@ inline T dot_product_mixed(const double* x, const T* y, int n) {
 // ============================================================================
 
 // log(1 + exp(x)) without overflow at either end
-template<typename T>
-inline T log1p_exp(const T& x) {
-    if (get_value(x) > 0.0) return x + log1p_fn(safe_exp(-x));
-    return log1p_fn(safe_exp(x));
-}
+
 
 // log(inv_logit(x)) and log(1 - inv_logit(x)), finite for every finite x:
 // forming 1 - inv_logit(x) first rounds to zero once x > ~36.7
-template<typename T>
-inline T log_inv_logit(const T& x) {
-    return -log1p_exp(-x);
-}
 
-template<typename T>
-inline T log1m_inv_logit(const T& x) {
-    return -log1p_exp(x);
-}
+
+
 
 // log(exp(a) + exp(b))
-template<typename T>
-inline T log_add_exp(const T& a, const T& b) {
-    const bool a_hi = get_value(a) >= get_value(b);
-    const T& hi = a_hi ? a : b;
-    const T& lo = a_hi ? b : a;
-    if (get_value(hi) == -std::numeric_limits<double>::infinity()) return hi;
-    return hi + log1p_fn(safe_exp(lo - hi));
-}
+
 
 // The negative binomial's log zero mass phi log(phi / (phi + mu)), written as
 // -phi log1p(mu / phi) so it stays exact as phi outgrows mu, where the ratio
@@ -199,57 +182,29 @@ inline T log_lik_zoib(int y, int n, const T& q, const T& logit_zi, const T& logi
 // that P(sigma > U) = alpha. As a density of the sampled coordinate log tau,
 // lambda exp(-lambda sigma) |d sigma / d log tau| = lambda exp(-lambda sigma)
 // sigma / 2, which is proper at both ends.
-inline double pc_rate(double U, double alpha) {
-    return -std::log(alpha) / U;
-}
+
 
 // sigma = exp(slope * x). The Jacobian is |slope| * sigma.
-template<class T>
-inline T pc_sigma_log_density(const T& sigma, double lambda) {
-    return T(std::log(lambda)) - T(lambda) * sigma;
-}
 
-template<class T>
-inline T pc_log_density_rate(const T& x, double slope, double lambda) {
-    return pc_sigma_log_density(safe_exp(T(slope) * x), lambda)
-         + T(std::log(std::abs(slope))) + T(slope) * x;
-}
 
-template<class T>
-inline T pc_log_density(const T& x, double slope, double U, double alpha) {
-    return pc_log_density_rate(x, slope, pc_rate(U, alpha));
-}
 
-inline double pc_scale_gradient_rate(double sigma, double slope, double lambda) {
-    return slope * (1.0 - lambda * sigma);
-}
 
-inline double pc_scale_gradient(double sigma, double slope, double U, double alpha) {
-    return pc_scale_gradient_rate(sigma, slope, pc_rate(U, alpha));
-}
 
-template<typename T>
-inline T pc_log_prior_log_precision(const T& log_tau, double U, double alpha) {
-    return pc_log_density(log_tau, -0.5, U, alpha);
-}
+
+
+
+
+
+
 
 // Its derivative with respect to log tau: lambda sigma / 2 - 1 / 2.
-inline double pc_log_prior_log_precision_grad(double log_tau, double U, double alpha) {
-    return pc_scale_gradient(std::exp(-0.5 * log_tau), -0.5, U, alpha);
-}
+
 
 // log(1 - exp(x)) for x < 0, the log mass a zero-truncated distribution keeps.
 // Near x = 0, 1 - exp(x) rounds to zero long before it is zero; there
 // -expm1(x) = -x (1 + x/2 + x^2/6 + x^3/24 + ...), so the logarithm is
 // log(-x) + log1p(x/2 + x^2/6 + x^3/24), exact to ~1e-14 for |x| < 1e-3.
-template<typename T>
-inline T log1m_exp(const T& x) {
-    if (get_value(x) > -1e-3) {
-        return safe_log(-x)
-            + log1p_fn(x * T(0.5) + x * x * T(1.0 / 6.0) + x * x * x * T(1.0 / 24.0));
-    }
-    return log1p_fn(-safe_exp(x));
-}
+
 
 // Hurdle binomial: separate zero vs non-zero
 template<typename T>
@@ -307,17 +262,10 @@ inline T log_lik_beta_binomial(int y, int n, const T& q, const T& phi) {
 // ============================================================================
 
 // Normal prior: -0.5 * tau * x^2 (ignoring constants)
-template<typename T>
-inline T log_prior_normal(const T& x, double tau) {
-    return T(-0.5) * tau * x * x;
-}
+
 
 // Gamma prior on phi (log scale): (shape-1)*log(phi) - rate*phi + log(phi)
-template<typename T>
-inline T log_prior_gamma(const T& log_phi, double shape, double rate) {
-    T phi = safe_exp(log_phi);
-    return (shape - 1.0) * log_phi - rate * phi + log_phi;
-}
+
 
 }  // namespace math
 }  // namespace ratiod

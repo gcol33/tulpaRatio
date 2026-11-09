@@ -360,12 +360,6 @@ inline std::pair<double, double> icar_conditional(int s, const double* phi,
 // Hyperparameter priors, on the transformed scale the sampler moves on
 // =========================================================================
 
-// sigma ~ Half-Cauchy(0, scale), evaluated as a density in log(sigma).
-inline double half_cauchy_log_dens_log_scale(double sigma, double scale) {
-    const double ratio = sigma / scale;
-    return -std::log(1.0 + ratio * ratio) + std::log(sigma);
-}
-
 // rho ~ Uniform(0, 1), evaluated as a density in logit(rho).
 inline double unif01_log_dens_logit_scale(double rho) {
     return std::log(rho) + std::log(1.0 - rho);

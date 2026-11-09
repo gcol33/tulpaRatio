@@ -1779,6 +1779,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_ratio_prior
+Rcpp::NumericMatrix cpp_test_ratio_prior(std::string prior, double x);
+RcppExport SEXP _tulpaRatio_cpp_test_ratio_prior(SEXP priorSEXP, SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type prior(priorSEXP);
+    Rcpp::traits::input_parameter< double >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_ratio_prior(prior, x));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_scalar_math
 Rcpp::NumericMatrix cpp_test_scalar_math(std::string op, double value);
 RcppExport SEXP _tulpaRatio_cpp_test_scalar_math(SEXP opSEXP, SEXP valueSEXP) {
@@ -2054,6 +2066,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
+    {"_tulpaRatio_cpp_test_ratio_prior", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_prior, 2},
     {"_tulpaRatio_cpp_test_scalar_math", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_math, 2},
     {"_tulpaRatio_cpp_test_scalar_boundaries", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_boundaries, 1},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},

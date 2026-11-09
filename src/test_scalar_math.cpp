@@ -35,20 +35,30 @@ Rcpp::NumericMatrix cpp_test_scalar_math(std::string op, double value) {
 
 // [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_test_scalar_boundaries(double probability) {
-    Rcpp::NumericMatrix out(3,4);
+    Rcpp::NumericMatrix out(3,8);
     Rcpp::rownames(out) = Rcpp::CharacterVector::create("double","forward","arena");
     const double p = tulpa::math::clamp_prob(probability);
     const double ni = -std::numeric_limits<double>::infinity();
     out(0,0) = std::log(p/(1-p)); out(0,1) = NA_REAL;
     out(0,2) = ratiod::math::log_add_exp(ni,ni); out(0,3) = NA_REAL;
+    out(0,4)=out(0,2); out(0,5)=NA_REAL;
+    out(0,6)=ratiod::math::log_add_exp(-ni,-ni);out(0,7)=NA_REAL;
     const auto f = fwd::logit(fwd::Dual(probability,1));
     const auto g = fwd::log_sum_exp(fwd::Dual(ni,1),fwd::Dual(ni));
     out(1,0)=f.val; out(1,1)=f.grad; out(1,2)=g.val; out(1,3)=g.grad;
+    const auto gn=ratiod::math::log_add_exp(fwd::Dual(ni,1),fwd::Dual(ni));
+    const auto gp=ratiod::math::log_add_exp(fwd::Dual(-ni,1),fwd::Dual(-ni));
+    out(1,4)=gn.val;out(1,5)=gn.grad;out(1,6)=gp.val;out(1,7)=gp.grad;
     tulpa::arena::ArenaScope scope;
     tulpa::arena::Var x(probability), z(ni);
     auto a=tulpa::arena::logit(x); a.backward();
     out(2,0)=a.val(); out(2,1)=x.adj();
     auto b=tulpa::arena::log_sum_exp(z,z); b.backward();
     out(2,2)=b.val(); out(2,3)=z.adj();
+    auto bn=ratiod::math::log_add_exp(z,z);bn.backward();
+    out(2,4)=bn.val();out(2,5)=z.adj();
+    tulpa::arena::Var pos(-ni);
+    auto bp=ratiod::math::log_add_exp(pos,pos);bp.backward();
+    out(2,6)=bp.val();out(2,7)=pos.adj();
     return out;
 }

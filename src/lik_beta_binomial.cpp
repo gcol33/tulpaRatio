@@ -85,7 +85,7 @@ static T beta_binomial_log_likelihood(
 
     if (i == 0) {
         const auto& cfg = beta_binomial_cfg();
-        ll = ll + lik::log_prior_gamma_log(log_phi, cfg.phi_prior_shape, cfg.phi_prior_rate);
+        ll = ll + lik::log_prior_gamma(log_phi, cfg.phi_prior_shape, cfg.phi_prior_rate);
     }
     return ll;
 }

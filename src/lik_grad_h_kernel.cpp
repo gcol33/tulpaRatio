@@ -217,28 +217,10 @@ inline double run_obs_loop(
     return log_lik;
 }
 
-// ----- Helper: log Gamma(shape, rate) prior on log_phi (Jacobian-adjusted)
-inline double log_gamma_prior_log(double log_phi, double shape, double rate) {
-    const double phi = std::exp(log_phi);
-    return (shape - 1.0) * log_phi - rate * phi + log_phi;
-}
-inline double dlog_gamma_prior_log(double log_phi, double shape, double rate) {
-    // d/dlog_phi  = (shape-1) - rate*phi + 1 = shape - rate*phi.
-    return shape - rate * std::exp(log_phi);
-}
-
-// ----- Helper: half-Cauchy(0, scale) prior on log_sigma (Jacobian-adjusted)
-inline double log_half_cauchy_log(double log_sigma, double scale) {
-    const double s = std::exp(log_sigma);
-    const double r = s / scale;
-    return -std::log(1.0 + r * r) + log_sigma;
-}
-inline double dlog_half_cauchy_log(double log_sigma, double scale) {
-    const double s = std::exp(log_sigma);
-    const double r = s / scale;
-    const double r2 = r * r;
-    return -2.0 * r2 / (1.0 + r2) + 1.0;
-}
+using ratiod::math::log_prior_gamma;
+using ratiod::math::log_prior_gamma_grad;
+using tulpa::math::log_prior_half_cauchy;
+using ratiod::math::log_prior_half_cauchy_grad;
 
 using namespace margins;
 
@@ -298,11 +280,11 @@ inline double apply_extra(const Margin& margin, int e,
         const double log_p = params[j];
         if constexpr (!Margin::log_extra) grad[j] *= margin.phi;
         if constexpr (Margin::prior == Prior::Gamma) {
-            grad[j] += dlog_gamma_prior_log(log_p,data.phi_prior_shape,data.phi_prior_rate);
-            return log_gamma_prior_log(log_p,data.phi_prior_shape,data.phi_prior_rate);
+            grad[j] += log_prior_gamma_grad(log_p,data.phi_prior_shape,data.phi_prior_rate);
+            return log_prior_gamma(log_p,data.phi_prior_shape,data.phi_prior_rate);
         } else {
-            grad[j] += dlog_half_cauchy_log(log_p,data.sigma_re_scale);
-            return log_half_cauchy_log(log_p,data.sigma_re_scale);
+            grad[j] += log_prior_half_cauchy_grad(log_p,data.sigma_re_scale);
+            return log_prior_half_cauchy(log_p,data.sigma_re_scale);
         }
     }
 }

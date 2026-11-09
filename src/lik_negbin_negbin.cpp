@@ -98,8 +98,8 @@ static T negbin_negbin_log_likelihood(
 
     if (i == 0) {
         const auto& cfg = negbin_negbin_cfg();
-        ll = ll + lik::log_prior_gamma_log(log_phi_num,   cfg.phi_prior_shape, cfg.phi_prior_rate);
-        ll = ll + lik::log_prior_gamma_log(log_phi_denom, cfg.phi_prior_shape, cfg.phi_prior_rate);
+        ll = ll + lik::log_prior_gamma(log_phi_num,   cfg.phi_prior_shape, cfg.phi_prior_rate);
+        ll = ll + lik::log_prior_gamma(log_phi_denom, cfg.phi_prior_shape, cfg.phi_prior_rate);
     }
     return ll;
 }

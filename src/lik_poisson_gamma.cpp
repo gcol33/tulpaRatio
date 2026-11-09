@@ -115,7 +115,7 @@ static T poisson_gamma_log_likelihood(
     // to the total log posterior while still flowing through autodiff.
     if (i == 0) {
         const auto& cfg = poisson_gamma_cfg();
-        ll = ll + lik::log_prior_gamma_log(log_shape,
+        ll = ll + lik::log_prior_gamma(log_shape,
                                            cfg.phi_prior_shape,
                                            cfg.phi_prior_rate);
     }

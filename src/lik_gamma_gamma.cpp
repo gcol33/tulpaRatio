@@ -88,8 +88,8 @@ static T gamma_gamma_log_likelihood(
 
     if (i == 0) {
         const auto& cfg = gamma_gamma_cfg();
-        ll = ll + lik::log_prior_gamma_log(log_shape_num,   cfg.phi_prior_shape, cfg.phi_prior_rate);
-        ll = ll + lik::log_prior_gamma_log(log_shape_denom, cfg.phi_prior_shape, cfg.phi_prior_rate);
+        ll = ll + lik::log_prior_gamma(log_shape_num,   cfg.phi_prior_shape, cfg.phi_prior_rate);
+        ll = ll + lik::log_prior_gamma(log_shape_denom, cfg.phi_prior_shape, cfg.phi_prior_rate);
     }
     return ll;
 }

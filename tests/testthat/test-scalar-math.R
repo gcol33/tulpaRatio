@@ -22,5 +22,9 @@ test_that("logit endpoints and empty log sums have shared finite pullbacks", {
     expect_equal(unname(z[2:3,2]),rep(1/(clipped*(1-clipped)),2),tolerance=0)
     expect_identical(unname(z[,3]),rep(-Inf,3))
     expect_identical(unname(z[2:3,4]),c(0,0))
+    expect_identical(unname(z[,5]),rep(-Inf,3))
+    expect_identical(unname(z[2:3,6]),c(0,0))
+    expect_identical(unname(z[,7]),rep(Inf,3))
+    expect_identical(unname(z[2:3,8]),c(0,0))
   }
 })

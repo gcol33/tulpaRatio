@@ -169,6 +169,7 @@ utils::globalVariables(c(
   "cpp_test_scalar_math",
   "cpp_test_scalar_boundaries",
   "cpp_test_vi_math",
+  "cpp_test_ratio_prior",
   "cpp_test_metric_step",
   "cpp_test_metric_epsilon",
   "cpp_test_metric_geometry",

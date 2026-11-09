@@ -453,6 +453,10 @@ cpp_test_ratio_margin <- function(family, y, n, eta, phi, cached) {
     .Call(`_tulpaRatio_cpp_test_ratio_margin`, family, y, n, eta, phi, cached)
 }
 
+cpp_test_ratio_prior <- function(prior, x) {
+    .Call(`_tulpaRatio_cpp_test_ratio_prior`, prior, x)
+}
+
 cpp_test_scalar_math <- function(op, value) {
     .Call(`_tulpaRatio_cpp_test_scalar_math`, op, value)
 }

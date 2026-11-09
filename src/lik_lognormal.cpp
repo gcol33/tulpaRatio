@@ -84,8 +84,8 @@ static T lognormal_log_likelihood(
 
     if (i == 0) {
         const auto& cfg = lognormal_cfg();
-        ll = ll + lik::log_prior_half_cauchy_log(log_sigma_num,   cfg.sigma_prior_scale);
-        ll = ll + lik::log_prior_half_cauchy_log(log_sigma_denom, cfg.sigma_prior_scale);
+        ll = ll + lik::log_prior_half_cauchy(log_sigma_num,   cfg.sigma_prior_scale);
+        ll = ll + lik::log_prior_half_cauchy(log_sigma_denom, cfg.sigma_prior_scale);
     }
     return ll;
 }

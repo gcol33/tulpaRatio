@@ -23,6 +23,7 @@
 #ifndef TULPARATIO_LIK_HELPERS_H
 #define TULPARATIO_LIK_HELPERS_H
 
+#include "../ratio_math.h"
 #include <cmath>
 #include <vector>
 #include <tulpa/autodiff_arena.h>
@@ -33,6 +34,13 @@
 
 namespace tulpaRatio {
 namespace lik {
+using ratiod::math::log1p_exp;
+using ratiod::math::log1m_exp;
+using ratiod::math::log_inv_logit;
+using ratiod::math::log1m_inv_logit;
+using ratiod::math::log_prior_gamma;
+using tulpa::math::log_prior_half_cauchy;
+
 
 struct NegbinMath {
     static double value(double x) { return x; }
@@ -49,39 +57,16 @@ struct NegbinMath {
 // ============================================================================
 
 // log(1 + exp(x)) without overflow. Mirrors tulpaObs::safe_log1pexp.
-template <typename T>
-static inline T safe_log1pexp(const T& x) {
-    using std::exp;
-    using std::log1p;
-    if (x > 35.0) return x;
-    if (x < -10.0) return exp(x);
-    return log1p(exp(x));
-}
+
 
 // log(1 - exp(x)) for x < 0, the log mass a zero-truncated distribution
 // keeps. Near x = 0, 1 - exp(x) rounds to zero first; there
 // -expm1(x) = -x (1 + x/2 + x^2/6 + x^3/24 + ...).
-template <typename T>
-static inline T log1m_exp(const T& x) {
-    using std::log;
-    using std::log1p;
-    using std::exp;
-    if (x > -1e-3) {
-        return log(T(0.0) - x)
-            + log1p(T(0.5) * x + T(1.0 / 6.0) * x * x + T(1.0 / 24.0) * x * x * x);
-    }
-    return log1p(T(0.0) - exp(x));
-}
+
 
 // log(sigmoid(x)) and log(1 - sigmoid(x)).
-template <typename T>
-static inline T log_inv_logit(const T& x) {
-    return x - safe_log1pexp(x);
-}
-template <typename T>
-static inline T log1m_inv_logit(const T& x) {
-    return T(0.0) - safe_log1pexp(x);
-}
+
+
 
 // ----- log_lgamma ---------------------------------------------------------
 // Wrapper around lgamma that resolves to std::lgamma for double and the
@@ -408,24 +393,12 @@ static inline T hurdle_negbin_log_pmf(int y, const T& mu, const T& phi,
 // Gamma prior on a phi parameter, with the parameterization used in
 // log_post_impl.h:
 //   p(log_phi)  ∝  (shape-1)*log_phi - rate*phi + log_phi   (Jacobian-adjusted)
-template <typename T>
-static inline T log_prior_gamma_log(const T& log_phi, double shape, double rate) {
-    using std::exp;
-    T phi = exp(log_phi);
-    return T(shape - 1.0) * log_phi - T(rate) * phi + log_phi;
-}
+
 
 // Half-Cauchy prior on a sigma parameter on log-scale: matches
 // log_prior_half_cauchy in autodiff_utils.h:
 //   p(log_sigma) ∝ -log(1 + (sigma/scale)^2) + log_sigma
-template <typename T>
-static inline T log_prior_half_cauchy_log(const T& log_sigma, double scale) {
-    using std::exp;
-    using std::log;
-    T sigma = exp(log_sigma);
-    T ratio = sigma / T(scale);
-    return T(0.0) - log(T(1.0) + ratio * ratio) + log_sigma;
-}
+
 
 }  // namespace lik
 }  // namespace tulpaRatio

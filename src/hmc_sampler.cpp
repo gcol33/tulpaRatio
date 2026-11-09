@@ -1086,8 +1086,7 @@ static inline double read_temporal_rho_ar1(
 static inline void temporal_rho_prior_grad(
     const ModelData& data, const ParamLayout& layout,
     double rho_ar1, double* grad);
-static inline double gp_pc_prior_grad_log_sigma2(
-    double sigma2, double U, double alpha);
+
 static inline void spatial_gmrf_prior_grad(
     const ModelData& data, const ParamLayout& layout,
     const double* phi_spatial, const double* phi_spatial_prior,
@@ -2499,12 +2498,12 @@ static inline void phi_gradient_prior(
     double* grad
 ) {
     if (layout.has_phi_num) {
-        grad[layout.log_phi_num_idx] = data.phi_prior_shape
-                                       - data.phi_prior_rate * phi_num;
+        grad[layout.log_phi_num_idx] = ratiod::math::log_prior_gamma_score(
+            phi_num,data.phi_prior_shape,data.phi_prior_rate);
     }
     if (layout.has_phi_denom) {
-        grad[layout.log_phi_denom_idx] = data.phi_prior_shape
-                                         - data.phi_prior_rate * phi_denom;
+        grad[layout.log_phi_denom_idx] = ratiod::math::log_prior_gamma_score(
+            phi_denom,data.phi_prior_shape,data.phi_prior_rate);
     }
 }
 
@@ -2858,13 +2857,7 @@ static inline void temporal_gmrf_prior_grad(
 // Returns d log_prior / d log_sigma2 INCLUDING Jacobian for exp transform.
 // Formula: -0.5 * rate * sigma + 0.5  where rate = -log(alpha) / U
 // =====================================================================
-static inline double gp_pc_prior_grad_log_sigma2(
-    double sigma2, double U, double alpha
-) {
-    double sigma = std::sqrt(sigma2 + 1e-10);
-    double rate = -std::log(alpha + 1e-10) / (U + 1e-10);
-    return -0.5 * rate * sigma + 0.5;
-}
+
 
 
 // =====================================================================
@@ -3084,7 +3077,7 @@ void compute_gradient_gp_handcoded(
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
     // PC prior on GP variance
-    grad[layout.log_sigma2_gp_idx] = gp_pc_prior_grad_log_sigma2(
+    grad[layout.log_sigma2_gp_idx] = ratiod::math::pc_prior_grad_log_sigma2(
         sigma2_gp, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
 
     // Uniform prior on phi - just Jacobian for log transform
@@ -3276,7 +3269,7 @@ void compute_gradient_gp_collapsed(
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
     // GP hyperparameter priors
-    grad[layout.log_sigma2_gp_idx] = gp_pc_prior_grad_log_sigma2(
+    grad[layout.log_sigma2_gp_idx] = ratiod::math::pc_prior_grad_log_sigma2(
         sigma2_gp, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
     grad[layout.log_phi_gp_idx] = 1.0;  // Uniform prior Jacobian
 
@@ -4066,7 +4059,7 @@ void compute_gradient_gp_temporal_handcoded(
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
-    grad[layout.log_sigma2_gp_idx] = gp_pc_prior_grad_log_sigma2(
+    grad[layout.log_sigma2_gp_idx] = ratiod::math::pc_prior_grad_log_sigma2(
         sigma2_gp, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
     grad[layout.log_phi_gp_idx] = 1.0;
     tau_temporal_prior_grad(data, layout, tau_temporal, grad.data());
@@ -5456,16 +5449,16 @@ void compute_gradient_ms_temporal_handcoded(
 
     // PC priors on multiscale temporal variances + Jacobian (+1 for log_sigma2 = log(exp(·)))
     if (n_trend > 0) {
-        grad[layout.log_sigma2_trend_idx] = ratiod_temporal_grad::pc_prior_grad_log_sigma2(
-            sigma2_trend, data.ms_sigma2_trend_prior_U, data.ms_sigma2_trend_prior_alpha) + 1.0;
+        grad[layout.log_sigma2_trend_idx] = ratiod::math::pc_prior_grad_log_sigma2(
+            sigma2_trend, data.ms_sigma2_trend_prior_U, data.ms_sigma2_trend_prior_alpha);
     }
     if (n_seasonal > 0) {
-        grad[layout.log_sigma2_seasonal_idx] = ratiod_temporal_grad::pc_prior_grad_log_sigma2(
-            sigma2_seasonal, data.ms_sigma2_seasonal_prior_U, data.ms_sigma2_seasonal_prior_alpha) + 1.0;
+        grad[layout.log_sigma2_seasonal_idx] = ratiod::math::pc_prior_grad_log_sigma2(
+            sigma2_seasonal, data.ms_sigma2_seasonal_prior_U, data.ms_sigma2_seasonal_prior_alpha);
     }
     if (n_short > 0) {
-        grad[layout.log_sigma2_short_idx] = ratiod_temporal_grad::pc_prior_grad_log_sigma2(
-            sigma2_short, data.ms_sigma2_short_prior_U, data.ms_sigma2_short_prior_alpha) + 1.0;
+        grad[layout.log_sigma2_short_idx] = ratiod::math::pc_prior_grad_log_sigma2(
+            sigma2_short, data.ms_sigma2_short_prior_U, data.ms_sigma2_short_prior_alpha);
     }
     if (mst.short_term_type == TemporalType::AR1 && layout.logit_rho_short_idx >= 0) {
         // The rho prior in the coordinate the sampler moves
@@ -6398,7 +6391,7 @@ void compute_gradient_composite(
     // only). Under the non-centred parameterization the field's own prior is
     // N(0, I) on z and is seeded by nngp_nc_backward, so it is not added twice.
     if (has_nngp_gp) {
-        grad[layout.log_sigma2_gp_idx] += gp_pc_prior_grad_log_sigma2(
+        grad[layout.log_sigma2_gp_idx] += ratiod::math::pc_prior_grad_log_sigma2(
             gp_sigma2_comp, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
         grad[layout.log_phi_gp_idx] += 1.0;
         if (!gp_use_nc) {
@@ -6483,14 +6476,14 @@ void compute_gradient_composite(
     if (has_ms_temporal) {
         const auto& mst = data.multiscale_temporal_data;
         if (n_trend > 0)
-            grad[layout.log_sigma2_trend_idx] = ratiod_temporal_grad::pc_prior_grad_log_sigma2(
-                sigma2_trend, data.ms_sigma2_trend_prior_U, data.ms_sigma2_trend_prior_alpha) + 1.0;
+            grad[layout.log_sigma2_trend_idx] = ratiod::math::pc_prior_grad_log_sigma2(
+                sigma2_trend, data.ms_sigma2_trend_prior_U, data.ms_sigma2_trend_prior_alpha);
         if (n_seasonal > 0)
-            grad[layout.log_sigma2_seasonal_idx] = ratiod_temporal_grad::pc_prior_grad_log_sigma2(
-                sigma2_seasonal, data.ms_sigma2_seasonal_prior_U, data.ms_sigma2_seasonal_prior_alpha) + 1.0;
+            grad[layout.log_sigma2_seasonal_idx] = ratiod::math::pc_prior_grad_log_sigma2(
+                sigma2_seasonal, data.ms_sigma2_seasonal_prior_U, data.ms_sigma2_seasonal_prior_alpha);
         if (n_short > 0)
-            grad[layout.log_sigma2_short_idx] = ratiod_temporal_grad::pc_prior_grad_log_sigma2(
-                sigma2_short, data.ms_sigma2_short_prior_U, data.ms_sigma2_short_prior_alpha) + 1.0;
+            grad[layout.log_sigma2_short_idx] = ratiod::math::pc_prior_grad_log_sigma2(
+                sigma2_short, data.ms_sigma2_short_prior_U, data.ms_sigma2_short_prior_alpha);
         if (mst.short_term_type == TemporalType::AR1 && layout.logit_rho_short_idx >= 0) {
             double u = (rho_short + 1.0) / 2.0;
             grad[layout.logit_rho_short_idx] = ratiod_ar1::log_prior_logit_rho_grad(
@@ -7533,11 +7526,7 @@ double find_reasonable_epsilon(const std::vector<double>& q, const ModelData& da
 // NUTS (No-U-Turn Sampler) helper functions
 // =====================================================================
 
-double nuts_log_sum_exp(double a, double b) {
-  double m = std::max(a, b);
-  if (!std::isfinite(m)) return m;
-  return m + std::log(std::exp(a - m) + std::exp(b - m));
-}
+
 
 double nuts_compute_hamiltonian(double log_prob, const std::vector<double>& p,
                                 const std::vector<double>& inv_mass, int n) {
@@ -7669,7 +7658,7 @@ NUTSTreeResult build_tree(const NUTSNode& node, int direction, int depth,
 
   // Multinomial sampling: accept outer proposal with probability
   // exp(outer.sum_log_weight) / exp(log_sum_exp(result.sum_log_weight, outer.sum_log_weight))
-  double new_sum_log_weight = nuts_log_sum_exp(result.sum_log_weight, outer.sum_log_weight);
+  double new_sum_log_weight = ratiod_linalg::log_sum_exp(result.sum_log_weight, outer.sum_log_weight);
   double accept_prob_outer = std::exp(outer.sum_log_weight - new_sum_log_weight);
   if (!std::isfinite(accept_prob_outer)) accept_prob_outer = 0.0;
 
@@ -7884,7 +7873,7 @@ TreeStats build_tree_fast(
   stats.divergent = stats.divergent || outer.divergent;
 
   // Multinomial sampling
-  double new_sum_log_weight = nuts_log_sum_exp(stats.sum_log_weight, outer.sum_log_weight);
+  double new_sum_log_weight = ratiod_linalg::log_sum_exp(stats.sum_log_weight, outer.sum_log_weight);
   double accept_prob_outer = std::exp(outer.sum_log_weight - new_sum_log_weight);
   if (!std::isfinite(accept_prob_outer)) accept_prob_outer = 0.0;
 
@@ -8966,7 +8955,7 @@ HMCResultCpp run_hmc_chain_cpp(
         if (!subtree.stop) {
           // Multinomial acceptance
           double log_sum_weight_subtree = subtree.sum_log_weight;
-          double new_sum_log_weight = nuts_log_sum_exp(sum_log_weight, log_sum_weight_subtree);
+          double new_sum_log_weight = ratiod_linalg::log_sum_exp(sum_log_weight, log_sum_weight_subtree);
 
           double accept_prob_subtree;
           if (log_sum_weight_subtree > new_sum_log_weight) {
