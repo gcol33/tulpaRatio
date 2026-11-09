@@ -481,8 +481,7 @@ test_that("binomial with RW2 temporal runs correctly (row 43)", {
 
 test_that("negbin_negbin with MSGP runs correctly (row 44)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow MSGP test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_msgp_data_family(n = 40, seed = 4401, family = "negbin_negbin")
 
@@ -508,8 +507,7 @@ test_that("negbin_negbin with MSGP runs correctly (row 44)", {
 
 test_that("binomial with MSGP runs correctly (row 45)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow MSGP test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_msgp_data_family(n = 40, seed = 4501, family = "binomial")
 
@@ -534,8 +532,7 @@ test_that("binomial with MSGP runs correctly (row 45)", {
 
 test_that("negbin_negbin with GP + RW1 runs correctly (row 46)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow GP+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_gp_temporal_data(n_spatial = 25, n_times = 5, seed = 4601, family = "negbin_negbin")
 
@@ -556,8 +553,7 @@ test_that("negbin_negbin with GP + RW1 runs correctly (row 46)", {
 
 test_that("binomial with GP + RW1 runs correctly (row 47)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow GP+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_gp_temporal_data(n_spatial = 25, n_times = 5, seed = 4701, family = "binomial")
 
@@ -578,8 +574,7 @@ test_that("binomial with GP + RW1 runs correctly (row 47)", {
 
 test_that("poisson_gamma with GP + RW2 runs correctly (row 48)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow GP+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_gp_temporal_data(n_spatial = 25, n_times = 6, seed = 4801, family = "poisson_gamma")
 
@@ -600,8 +595,7 @@ test_that("poisson_gamma with GP + RW2 runs correctly (row 48)", {
 
 test_that("poisson_gamma with GP + AR1 runs correctly (row 49)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow GP+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_gp_temporal_data(n_spatial = 25, n_times = 6, seed = 4901, family = "poisson_gamma")
 
@@ -622,8 +616,7 @@ test_that("poisson_gamma with GP + AR1 runs correctly (row 49)", {
 
 test_that("negbin_negbin with GP + AR1 runs correctly (row 50)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow GP+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_gp_temporal_data(n_spatial = 25, n_times = 6, seed = 5001, family = "negbin_negbin")
 
@@ -644,8 +637,7 @@ test_that("negbin_negbin with GP + AR1 runs correctly (row 50)", {
 
 test_that("binomial with GP + AR1 runs correctly (row 51)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow GP+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_gp_temporal_data(n_spatial = 25, n_times = 6, seed = 5101, family = "binomial")
 
@@ -674,8 +666,7 @@ test_that("RW2 temporal basic functionality works", {
 
 test_that("poisson_gamma with BYM2 + ZI runs correctly (row 52)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow spatial+ZI test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_spatial_zi_data(n_sites = 25, seed = 5201, spatial_type = "bym2", family = "poisson_gamma")
 
@@ -698,8 +689,7 @@ test_that("poisson_gamma with BYM2 + ZI runs correctly (row 52)", {
 
 test_that("poisson_gamma with GP + ZI runs correctly (row 53)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow spatial+ZI test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_spatial_zi_data(n_sites = 30, seed = 5301, family = "poisson_gamma")
 
@@ -713,8 +703,7 @@ test_that("poisson_gamma with GP + ZI runs correctly (row 53)", {
 
 test_that("negbin_negbin with ICAR + ZI runs correctly (row 54)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow spatial+ZI test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_spatial_zi_data(n_sites = 25, seed = 5401, family = "negbin_negbin")
 
@@ -737,8 +726,7 @@ test_that("negbin_negbin with ICAR + ZI runs correctly (row 54)", {
 
 test_that("poisson_gamma with crossed RE + ICAR runs correctly (row 57)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow crossed+spatial test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(5701)
   n_sites <- 16
@@ -796,8 +784,7 @@ test_that("poisson_gamma with crossed RE + ICAR runs correctly (row 57)", {
 
 test_that("poisson_gamma with random slopes + RW1 runs correctly (row 60)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow slopes+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6001)
   n_sites <- 10
@@ -845,8 +832,7 @@ test_that("poisson_gamma with random slopes + RW1 runs correctly (row 60)", {
 
 test_that("poisson_gamma with ICAR + RW1 + ZI runs correctly (row 64)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow three-way test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6401)
   n_sites <- 16
@@ -907,8 +893,7 @@ test_that("poisson_gamma with ICAR + RW1 + ZI runs correctly (row 64)", {
 
 test_that("negbin_negbin with BYM2 + ZI runs correctly (row 55)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow spatial+ZI test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_spatial_zi_data(n_sites = 25, seed = 5501, spatial_type = "bym2", family = "negbin_negbin")
 
@@ -931,8 +916,7 @@ test_that("negbin_negbin with BYM2 + ZI runs correctly (row 55)", {
 
 test_that("binomial with ICAR + ZI runs correctly (row 56)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow spatial+ZI test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_spatial_zi_data(n_sites = 25, seed = 5601, family = "binomial")
 
@@ -955,8 +939,7 @@ test_that("binomial with ICAR + ZI runs correctly (row 56)", {
 
 test_that("poisson_gamma with crossed RE + BYM2 runs correctly (row 58)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow crossed+spatial test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(5801)
   n_sites <- 16
@@ -1014,8 +997,7 @@ test_that("poisson_gamma with crossed RE + BYM2 runs correctly (row 58)", {
 
 test_that("negbin_negbin with crossed RE + ICAR runs correctly (row 59)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow crossed+spatial test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(5901)
   n_sites <- 16
@@ -1074,8 +1056,7 @@ test_that("negbin_negbin with crossed RE + ICAR runs correctly (row 59)", {
 
 test_that("poisson_gamma with random slopes + AR1 runs correctly (row 61)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow slopes+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6101)
   n_sites <- 10
@@ -1127,8 +1108,7 @@ test_that("poisson_gamma with random slopes + AR1 runs correctly (row 61)", {
 
 test_that("negbin_negbin with random slopes + RW1 runs correctly (row 62)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow slopes+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6201)
   n_sites <- 10
@@ -1177,8 +1157,7 @@ test_that("negbin_negbin with random slopes + RW1 runs correctly (row 62)", {
 
 test_that("binomial with random slopes + AR1 runs correctly (row 63)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow slopes+temporal test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6301)
   n_sites <- 10
@@ -1230,8 +1209,7 @@ test_that("binomial with random slopes + AR1 runs correctly (row 63)", {
 
 test_that("poisson_gamma with BYM2 + RW1 + ZI runs correctly (row 65)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow three-way test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6501)
   n_sites <- 16
@@ -1292,8 +1270,7 @@ test_that("poisson_gamma with BYM2 + RW1 + ZI runs correctly (row 65)", {
 
 test_that("negbin_negbin with ICAR + RW1 + ZI runs correctly (row 66)", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow three-way test (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   set.seed(6601)
   n_sites <- 16

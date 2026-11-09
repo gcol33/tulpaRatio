@@ -98,8 +98,7 @@ test_that("all MSGP sampler options run without error", {
 # Benchmark test for divergence rates
 test_that("MSGP samplers have acceptable divergence rates", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow benchmark (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_msgp_data(n = 40, seed = 123)
 
@@ -130,8 +129,7 @@ test_that("MSGP samplers have acceptable divergence rates", {
 # Speed benchmark
 test_that("MSGP sampler speed comparison", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow benchmark (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   df <- generate_msgp_data(n = 50, seed = 456)
 
@@ -184,8 +182,7 @@ test_that("MSGP sampler speed comparison", {
 # Stress test with multiple seeds
 test_that("MSGP is robust across seeds", {
   skip_on_cran()
-  skip_if_not(Sys.getenv("RUN_SLOW_TESTS") == "true",
-              "Skipping slow benchmark (set RUN_SLOW_TESTS=true to run)")
+  skip_unless_slow()
 
   seeds <- c(111, 222, 333, 444, 555)
   all_ok <- TRUE

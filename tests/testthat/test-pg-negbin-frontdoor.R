@@ -93,7 +93,7 @@ test_that("an NB-NB PG fit carries an explicit independence specification", {
 
 test_that("NB-NB PG front-door coefficients match normalized dense NB2 references", {
   skip_on_cran()
-  skip_if(Sys.getenv("TULPA_SLOW_TESTS") != "true")
+  skip_unless_slow()
   d <- data.frame(y = c(0L, 1L, 2L, 1L, 1L, 0L, 1L, 2L),
     den = c(2L, 3L, 0L, 4L, 1L, 0L, 2L, 0L), x = rep(c(-1, 1), each = 4))
   for (prior_sd in c(0.1, 2)) {

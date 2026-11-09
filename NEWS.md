@@ -1,5 +1,10 @@
 # tulpaRatio 1.7.3
 
+* Every slow test reads one tier predicate, `skip_unless_slow()`
+  (`TULPA_SLOW_TESTS`); 23 sampler tests and the multiscale GP benchmarks
+  gated on a second variable, `RUN_SLOW_TESTS`, and were skipped by a slow-tier
+  run (#230).
+
 * The hand-coded multiscale temporal gradients (RW1, cyclic RW1, RW2, AR1,
   IID) divide by the variance their densities use instead of
   `sigma2 + 1e-10`; at log variance -30 the RW2 variance score had been

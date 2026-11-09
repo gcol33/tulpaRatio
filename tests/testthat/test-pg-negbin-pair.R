@@ -100,7 +100,7 @@ test_that("paired NB saves the predictor of the stored coefficients and effects"
 
 test_that("paired NB posterior intervals cover simulated parameters across seeds", {
   skip_on_cran()
-  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true")) skip("Set TULPA_SLOW_TESTS=true")
+  skip_unless_slow()
   records <- list()
   for (seed in 220:239) {
     elapsed <- system.time(fixture <- pg_pair_fixture(iter = 4000L, warmup = 1000L,

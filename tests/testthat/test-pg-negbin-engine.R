@@ -11,7 +11,7 @@ test_that("the dense NB grid likelihood retains the normalized R density", {
 
 test_that("NB engine hooks match dense NB2 coefficient priors", {
   skip_on_cran()
-  skip_if(Sys.getenv("TULPA_SLOW_TESTS") != "true")
+  skip_unless_slow()
   records <- list()
   for (prior_sd in c(0.1, 2)) {
     fixture <- pg_nb_engine_fixture(prior_sd, FALSE)
@@ -44,7 +44,7 @@ test_that("NB engine hooks match dense NB2 coefficient priors", {
 
 test_that("the spatial NB engine hook matches a dense two-unit ICAR posterior", {
   skip_on_cran()
-  skip_if(Sys.getenv("TULPA_SLOW_TESTS") != "true")
+  skip_unless_slow()
   records <- list()
   for (prior_sd in c(0.1, 2)) {
     fixture <- pg_nb_engine_fixture(prior_sd, TRUE)

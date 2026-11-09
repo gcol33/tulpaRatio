@@ -104,7 +104,7 @@ scale_temporal_reference <- function(n_eta = 121L, n_sigma = 161L, n_rho = 81L) 
 
 test_that("temporal spec and legacy quantiles agree with dense quadrature", {
   skip_on_cran()
-  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true")) skip("Set TULPA_SLOW_TESTS=true")
+  skip_unless_slow()
   d <- data.frame(y = c(5L, 35L), trials = 40L, time = 1:2)
   p <- ratiod_priors(beta = prior_normal(0, 0.5),
                     sigma_temporal = prior_pc(0.8, 0.15),

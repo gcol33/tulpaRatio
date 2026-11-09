@@ -25,7 +25,7 @@ test_that("RW2 PG conditional matches the dense second-difference precision", {
 
 test_that("PG RW2 posterior covers a simulated trend and innovation scale", {
   skip_on_cran()
-  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true")) skip("Set TULPA_SLOW_TESTS=true")
+  skip_unless_slow()
   set.seed(219)
   n <- 12L
   sigma <- 0.12

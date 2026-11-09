@@ -516,8 +516,7 @@ test_that("an intrinsic field is reported as the field the likelihood saw", {
 test_that("sampled and collapsed ICAR recover the dense log-precision posterior", {
   skip_on_cran()
   skip_if_not_installed("posterior")
-  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true"))
-    skip("Set TULPA_SLOW_TESTS=true")
+  skip_unless_slow()
 
   S <- 9L
   df <- sim_data(11, N = 300, S = S)
