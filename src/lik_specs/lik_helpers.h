@@ -28,9 +28,19 @@
 #include <tulpa/autodiff_arena.h>
 #include <tulpa/autodiff_fwd.h>
 #include <tulpa/portable_math.h>
+#include "../negbin_math.h"
 
 namespace tulpaRatio {
 namespace lik {
+
+struct NegbinMath {
+    static double value(double x) { return x; }
+    static double value(const fwd::Dual& x) { return x.val; }
+    static double value(const tulpa::arena::Var& x) { return x.val(); }
+    template <typename T> static T log(const T& x) { using std::log; return log(x); }
+    template <typename T> static T log1p(const T& x) { using std::log1p; return log1p(x); }
+    template <typename T> static T lgamma(const T& x) { using std::lgamma; return lgamma(x); }
+};
 
 // ============================================================================
 // Numerically stable scalar helpers
@@ -192,13 +202,7 @@ static inline T poisson_log_pmf(int y, const T& mu) {
 //            + phi*log(phi/(mu+phi)) + y*log(mu/(mu+phi)).
 template <typename T>
 static inline T negbin_log_pmf(int y, const T& mu, const T& phi) {
-    using std::log;
-    T y_T = T(double(y));
-    T ll  = log_lgamma(y_T + phi) - T(std::lgamma(double(y) + 1.0)) - log_lgamma(phi);
-    T mp  = mu + phi;
-    ll = ll + phi * log(phi / mp);
-    ll = ll + y_T * log(mu / mp);
-    return ll;
+    return count_math::log_pmf<T, NegbinMath>(y, mu, phi);
 }
 
 // ----- Gamma (shape / mean) ------------------------------------------------
@@ -379,7 +383,7 @@ static inline T zi_negbin_log_pmf(int y, const T& mu, const T& phi,
     T log_zi   = log_inv_logit(logit_zi);
     T log_1mzi = log1m_inv_logit(logit_zi);
     if (y == 0) {
-        T log_p0_count = phi * log(phi / (phi + mu));
+        T log_p0_count = count_math::log_p0<T, NegbinMath>(mu, phi);
         return log_sum_exp_pair(log_zi, log_1mzi + log_p0_count);
     }
     return log_1mzi + negbin_log_pmf(y, mu, phi);
@@ -396,7 +400,7 @@ static inline T hurdle_negbin_log_pmf(int y, const T& mu, const T& phi,
     if (y == 0) {
         return log1m_inv_logit(logit_zi);
     }
-    T log_norm = log1m_exp(phi * log(phi / (phi + mu)));
+    T log_norm = log1m_exp(count_math::log_p0<T, NegbinMath>(mu, phi));
     return log_inv_logit(logit_zi) + negbin_log_pmf(y, mu, phi) - log_norm;
 }
 

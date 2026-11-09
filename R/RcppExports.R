@@ -181,6 +181,18 @@ cpp_polygamma <- function(n, x) {
     .Call(`_tulpaRatio_cpp_polygamma`, n, x)
 }
 
+cpp_test_negbin_h_kernels <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_negbin_h_kernels`, y, mu, phi)
+}
+
+cpp_test_negbin_jet <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_negbin_jet`, y, mu, phi)
+}
+
+cpp_test_negbin_paths <- function(y, mu, phi, z, type = "zi_negbin") {
+    .Call(`_tulpaRatio_cpp_test_negbin_paths`, y, mu, phi, z, type)
+}
+
 cpp_test_leapfrog <- function(q_init, p_init, epsilon, L) {
     .Call(`_tulpaRatio_cpp_test_leapfrog`, q_init, p_init, epsilon, L)
 }
@@ -405,6 +417,10 @@ cpp_test_zi_negbin_lpmf_logit <- function(y, mu, phi, logit_zi) {
     .Call(`_tulpaRatio_cpp_test_zi_negbin_lpmf_logit`, y, mu, phi, logit_zi)
 }
 
+cpp_test_zi_negbin_grad_logit_zi <- function(y, mu, phi, logit_zi) {
+    .Call(`_tulpaRatio_cpp_test_zi_negbin_grad_logit_zi`, y, mu, phi, logit_zi)
+}
+
 cpp_test_truncated_poisson_lpmf <- function(y, mu) {
     .Call(`_tulpaRatio_cpp_test_truncated_poisson_lpmf`, y, mu)
 }
@@ -451,6 +467,14 @@ cpp_test_st_gp_margin_normalizer <- function(tau, phi_space, phi_time, n_spatial
 
 cpp_test_st_ar1_margin_normalizer <- function(rho, n_spatial, n_times, type = "II") {
     .Call(`_tulpaRatio_cpp_test_st_ar1_margin_normalizer`, rho, n_spatial, n_times, type)
+}
+
+cpp_test_negbin_math <- function(y, phi) {
+    .Call(`_tulpaRatio_cpp_test_negbin_math`, y, phi)
+}
+
+cpp_test_negbin_spec <- function(y, mu, phi, z, type = "zi_negbin") {
+    .Call(`_tulpaRatio_cpp_test_negbin_spec`, y, mu, phi, z, type)
 }
 
 cpp_tls_workspace_shrink <- function(cycles, work, n) {

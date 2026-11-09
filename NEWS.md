@@ -1,5 +1,13 @@
 # tulpaRatio 1.7.3
 
+* Negative-binomial densities, zero masses and size scores stay exact at a
+  large size `phi` on every path (spec, autodiff, H tables, collapsed spatial,
+  Gibbs, Polya-Gamma, CRT) through one shared count normalizer (#213): at
+  `y = 3`, `mu = 2`, `logit_zi = -0.3`, `phi = 1e17` the zero-inflated log
+  density read -117.9 against an exact -2.2667. The ZI, truncated and hurdle
+  C++ kernels are tested against exact references and finite differences
+  (#206).
+
 * `ratio_contrast(type = "ratio")` reports in `prob_positive` the posterior
   probability that the level's ratio exceeds the reference's, as
   `type = "difference"` does (#162); it was 1 whatever the data. The help

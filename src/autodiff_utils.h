@@ -14,6 +14,7 @@
 #include "autodiff_fwd.h"
 #include "autodiff_arena.h"
 #include "link_function.h"
+#include "negbin_math.h"
 
 namespace ratiod {
 namespace math {
@@ -463,9 +464,16 @@ inline T log_add_exp(const T& a, const T& b) {
 // The negative binomial's log zero mass phi log(phi / (phi + mu)), written as
 // -phi log1p(mu / phi) so it stays exact as phi outgrows mu, where the ratio
 // rounds to one
+struct NegbinMath {
+    template <typename T> static double value(const T& x) { return get_value(x); }
+    template <typename T> static T log(const T& x) { return safe_log(x); }
+    template <typename T> static T log1p(const T& x) { return log1p_fn(x); }
+    template <typename T> static T lgamma(const T& x) { return lgamma_fn(x); }
+};
+
 template<typename T>
 inline T negbin_log_p0(const T& mu, const T& phi) {
-    return -phi * log1p_fn(mu / phi);
+    return tulpaRatio::count_math::log_p0<T, NegbinMath>(mu, phi);
 }
 
 template<typename T>
@@ -485,12 +493,7 @@ inline T log_lik_gamma(double y, const T& shape, const T& mu) {
 
 template<typename T>
 inline T log_lik_negbin(int y, const T& mu, const T& phi) {
-    // Negative binomial with mean mu and overdispersion phi
-    // Using the Gamma-Poisson mixture parameterization
-    T log_lik = lgamma_fn(T(y) + phi) - lgamma_fn(T(y + 1.0)) - lgamma_fn(phi);
-    log_lik = log_lik + negbin_log_p0(mu, phi);
-    log_lik = log_lik + y * (safe_log(mu) - safe_log(mu + phi));
-    return log_lik;
+    return tulpaRatio::count_math::log_pmf<T, NegbinMath>(y, mu, phi);
 }
 
 // ============================================================================

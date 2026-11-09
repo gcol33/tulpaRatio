@@ -655,9 +655,7 @@ inline LocLikResult compute_loc_lik(
             case ModelType::NEGBIN_NEGBIN: {
                 // Numerator: NegBin
                 double r_num = phi_num;
-                res.ll += std::lgamma(y_num + r_num) - std::lgamma(r_num) - std::lgamma(y_num + 1)
-                          + y_num * eta_num_i - (y_num + r_num) * std::log(mu_num + r_num)
-                          + r_num * std::log(r_num);
+                res.ll += ratiod::math::log_lik_negbin(y_num, mu_num, r_num);
                 double resid_num = y_num - mu_num * (y_num + r_num) / (mu_num + r_num);
                 res.grad += resid_num;
                 res.neg_hess += mu_num * r_num * (y_num + r_num) / ((mu_num + r_num) * (mu_num + r_num));
@@ -667,9 +665,7 @@ inline LocLikResult compute_loc_lik(
                     double mu_denom = std::exp(eta_denom_i);
                     int y_denom = (int)data.y_denom[i];
                     double r_denom = phi_denom;
-                    res.ll += std::lgamma(y_denom + r_denom) - std::lgamma(r_denom) - std::lgamma(y_denom + 1)
-                              + y_denom * eta_denom_i - (y_denom + r_denom) * std::log(mu_denom + r_denom)
-                              + r_denom * std::log(r_denom);
+                    res.ll += ratiod::math::log_lik_negbin(y_denom, mu_denom, r_denom);
                     double resid_denom = y_denom - mu_denom * (y_denom + r_denom) / (mu_denom + r_denom);
                     res.grad += resid_denom;
                     res.neg_hess += mu_denom * r_denom * (y_denom + r_denom) / ((mu_denom + r_denom) * (mu_denom + r_denom));

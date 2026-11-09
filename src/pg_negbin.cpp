@@ -4,6 +4,7 @@
 // Reference: Zhou et al. (2012) "Lognormal and Gamma Mixed Negative Binomial Regression"
 
 #include "pg_negbin.h"
+#include "negbin_math.h"
 #include "pg_binomial.h"
 #include "pg_rng.h"
 #include "crt_rng.h"
@@ -226,13 +227,7 @@ static double negbin_loglik_eta(
     double mu_i = r * std::exp(eta_i);
     mu_i = std::max(1e-10, mu_i);
 
-    // R's prob = r / (r + mu)
-    double prob = r / (r + mu_i);
-    prob = std::max(1e-10, std::min(1.0 - 1e-10, prob));
-
-    ll += R::lgammafn(y[i] + r) - R::lgammafn(y[i] + 1) - R::lgammafn(r);
-    ll += r * std::log(prob);
-    ll += y[i] * std::log(1.0 - prob);
+    ll += tulpaRatio::count_math::log_pmf(y[i], mu_i, r);
   }
 
   return ll;

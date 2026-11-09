@@ -862,6 +862,47 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_negbin_h_kernels
+NumericMatrix cpp_test_negbin_h_kernels(int y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_negbin_h_kernels(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_h_kernels(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_negbin_jet
+NumericVector cpp_test_negbin_jet(int y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_negbin_jet(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_jet(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_negbin_paths
+List cpp_test_negbin_paths(int y, double mu, double phi, double z, std::string type);
+RcppExport SEXP _tulpaRatio_cpp_test_negbin_paths(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP zSEXP, SEXP typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< double >::type z(zSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_paths(y, mu, phi, z, type));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_leapfrog
 List cpp_test_leapfrog(NumericVector q_init, NumericVector p_init, double epsilon, int L);
 RcppExport SEXP _tulpaRatio_cpp_test_leapfrog(SEXP q_initSEXP, SEXP p_initSEXP, SEXP epsilonSEXP, SEXP LSEXP) {
@@ -1550,6 +1591,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_zi_negbin_grad_logit_zi
+double cpp_test_zi_negbin_grad_logit_zi(int y, double mu, double phi, double logit_zi);
+RcppExport SEXP _tulpaRatio_cpp_test_zi_negbin_grad_logit_zi(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP logit_ziSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< double >::type logit_zi(logit_ziSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_zi_negbin_grad_logit_zi(y, mu, phi, logit_zi));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_truncated_poisson_lpmf
 double cpp_test_truncated_poisson_lpmf(int y, double mu);
 RcppExport SEXP _tulpaRatio_cpp_test_truncated_poisson_lpmf(SEXP ySEXP, SEXP muSEXP) {
@@ -1723,6 +1778,33 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
     Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_st_ar1_margin_normalizer(rho, n_spatial, n_times, type));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_negbin_math
+Rcpp::NumericVector cpp_test_negbin_math(int y, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_negbin_math(SEXP ySEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_math(y, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_negbin_spec
+Rcpp::NumericMatrix cpp_test_negbin_spec(int y, double mu, double phi, double z, std::string type);
+RcppExport SEXP _tulpaRatio_cpp_test_negbin_spec(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP zSEXP, SEXP typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< double >::type z(zSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_spec(y, mu, phi, z, type));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1900,6 +1982,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_st_collapsed_exactness", (DL_FUNC) &_tulpaRatio_cpp_st_collapsed_exactness, 6},
     {"_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread, 6},
     {"_tulpaRatio_cpp_polygamma", (DL_FUNC) &_tulpaRatio_cpp_polygamma, 2},
+    {"_tulpaRatio_cpp_test_negbin_h_kernels", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_h_kernels, 3},
+    {"_tulpaRatio_cpp_test_negbin_jet", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_jet, 3},
+    {"_tulpaRatio_cpp_test_negbin_paths", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_paths, 5},
     {"_tulpaRatio_cpp_test_leapfrog", (DL_FUNC) &_tulpaRatio_cpp_test_leapfrog, 4},
     {"_tulpaRatio_cpp_test_hamiltonian", (DL_FUNC) &_tulpaRatio_cpp_test_hamiltonian, 2},
     {"_tulpaRatio_cpp_test_log_sum_exp", (DL_FUNC) &_tulpaRatio_cpp_test_log_sum_exp, 1},
@@ -1956,6 +2041,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_beta_binomial_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_beta_binomial_lpmf, 4},
     {"_tulpaRatio_cpp_test_zi_poisson_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_zi_poisson_lpmf_logit, 3},
     {"_tulpaRatio_cpp_test_zi_negbin_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_zi_negbin_lpmf_logit, 4},
+    {"_tulpaRatio_cpp_test_zi_negbin_grad_logit_zi", (DL_FUNC) &_tulpaRatio_cpp_test_zi_negbin_grad_logit_zi, 4},
     {"_tulpaRatio_cpp_test_truncated_poisson_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_truncated_poisson_lpmf, 2},
     {"_tulpaRatio_cpp_test_truncated_negbin_lpmf", (DL_FUNC) &_tulpaRatio_cpp_test_truncated_negbin_lpmf, 3},
     {"_tulpaRatio_cpp_test_hurdle_poisson_lpmf_logit", (DL_FUNC) &_tulpaRatio_cpp_test_hurdle_poisson_lpmf_logit, 3},
@@ -1968,6 +2054,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_st_gp_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_log_lik, 14},
     {"_tulpaRatio_cpp_test_st_gp_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_margin_normalizer, 13},
     {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},
+    {"_tulpaRatio_cpp_test_negbin_math", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_math, 2},
+    {"_tulpaRatio_cpp_test_negbin_spec", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_spec, 5},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},

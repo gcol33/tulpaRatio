@@ -18,6 +18,7 @@
 
 #include <Rcpp.h>
 #include "enum_names.h"
+#include "negbin_math.h"
 #include <vector>
 #include <cmath>
 #include <random>
@@ -215,16 +216,12 @@ inline double obs_log_lik(int i, double eta_num, double eta_denom,
         double mu_n = std::exp(std::min(eta_num, 20.0));
         double r_n = phi_num;
         int y_n = d.y_num[i];
-        ll += std::lgamma(y_n + r_n) - std::lgamma(r_n) - std::lgamma(y_n + 1.0)
-            + r_n * std::log(r_n / (mu_n + r_n))
-            + y_n * std::log(mu_n / (mu_n + r_n));
+        ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, r_n);
 
         double mu_d = std::exp(std::min(eta_denom, 20.0));
         double r_d = phi_denom;
         int y_d = d.y_denom[i];
-        ll += std::lgamma(y_d + r_d) - std::lgamma(r_d) - std::lgamma(y_d + 1.0)
-            + r_d * std::log(r_d / (mu_d + r_d))
-            + y_d * std::log(mu_d / (mu_d + r_d));
+        ll += tulpaRatio::count_math::log_pmf(y_d, mu_d, r_d);
         break;
     }
     case GibbsFamily::BINOMIAL: {
@@ -238,9 +235,7 @@ inline double obs_log_lik(int i, double eta_num, double eta_denom,
         double mu_n = std::exp(std::min(eta_num, 20.0));
         double r_n = phi_num;
         int y_n = d.y_num[i];
-        ll += std::lgamma(y_n + r_n) - std::lgamma(r_n) - std::lgamma(y_n + 1.0)
-            + r_n * std::log(r_n / (mu_n + r_n))
-            + y_n * std::log(mu_n / (mu_n + r_n));
+        ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, r_n);
 
         double alpha = phi_denom;
         double mu_d = std::exp(std::min(eta_denom, 20.0));

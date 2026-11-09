@@ -41,6 +41,9 @@ inline fwd::Dual coef_exp(const fwd::Dual& x) { return math::safe_exp(x); }
 inline double coef_log(double x) { return std::log(x); }
 inline fwd::Dual coef_log(const fwd::Dual& x) { return fwd::log(x); }
 
+inline double coef_log1p(double x) { return std::log1p(x); }
+inline fwd::Dual coef_log1p(const fwd::Dual& x) { return fwd::log1p(x); }
+
 inline double coef_sqrt(double x) { return std::sqrt(x); }
 inline fwd::Dual coef_sqrt(const fwd::Dual& x) { return fwd::sqrt(x); }
 
@@ -176,7 +179,7 @@ inline Jet3<S> log1p_fn(const Jet3<S>& x) {
   const S u = 1.0 + x.v;
   const S r = 1.0 / u;
   const S r2 = r * r;
-  return compose(x, coef_log(u), r, 0.0 - r2, 2.0 * r2 * r);
+  return compose(x, coef_log1p(x.v), r, 0.0 - r2, 2.0 * r2 * r);
 }
 
 // Whether the jet is constant along the line: its derivatives are all zero,

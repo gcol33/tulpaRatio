@@ -49,4 +49,7 @@ tulpa::diagnostics
 NULL
 
 # Suppress R CMD check notes about global variables
-utils::globalVariables(c(".", "value", "variable", ".data"))
+utils::globalVariables(c(".", "value", "variable", ".data",
+                        "cpp_test_negbin_paths", "cpp_test_negbin_spec",
+                        "cpp_test_negbin_math", "cpp_test_negbin_h_kernels",
+                        "cpp_test_negbin_jet", "cpp_test_zi_negbin_grad_logit_zi"))

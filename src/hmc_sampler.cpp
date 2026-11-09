@@ -812,6 +812,59 @@ int get_n_params(const ModelData& data) {
 
 #include "hmc_gradient_vectorized.h"
 
+Rcpp::NumericVector negbin_table_probe(int y, double mu, double phi) {
+  ModelData data;
+  data.N = 1;
+  data.y_num = {y};
+  data.y_denom = {0};
+  vectorized::VecGradWorkspace ws;
+  ws.init(1);
+  ws.max_y_num_val = y;
+  ws.max_y_denom_val = 0;
+  ws.lgamma_y_num_p1[0] = std::lgamma(y + 1.0);
+  ws.lgamma_y_denom_p1[0] = 0.0;
+  ws.build_digamma_tables(phi, 1.0, true);
+  double eta_n = std::log(mu), eta_d = 0.0;
+  double rn = 0.0, rd = 0.0, gn = 0.0, gd = 0.0, ll = 0.0;
+  vectorized::compute_residuals_impl(
+      vectorized::ModelTag<ModelType::NEGBIN_NEGBIN>{}, 1, &eta_n, &eta_d,
+      data, phi, 1.0, &rn, &rd, gn, gd, ll, true, ws);
+  return Rcpp::NumericVector::create(ll + std::log(2.0), rn, phi * gn);
+}
+
+Rcpp::NumericMatrix negbin_h_kernels(int y, double mu, double phi) {
+  ModelData data;
+  data.N = 1; data.p_num = 1; data.p_denom = 1;
+  data.y_num = {y}; data.y_denom = {0};
+  data.y_num_cont = {static_cast<double>(y)}; data.y_denom_cont = {1.0};
+  data.X_num_flat = {1.0}; data.X_denom_flat = {1.0};
+  data.unique_id = 1;
+  ParamLayout layout;
+  layout.beta_num_start = 0; layout.beta_denom_start = 1;
+  layout.has_phi_num = true; layout.log_phi_num_idx = 2;
+  layout.has_phi_denom = true; layout.log_phi_denom_idx = 3;
+  const std::vector<double> params = {std::log(mu), 0.0, std::log(phi), 0.0};
+  Rcpp::NumericMatrix out(4, 3);
+  rownames(out) = Rcpp::CharacterVector::create("vectorized_nb_nb", "fused_nb_nb",
+                                              "vectorized_nb_gamma", "fused_nb_gamma");
+  for (int k = 0; k < 4; ++k) {
+    vectorized::VecGradWorkspace ws;
+    std::vector<double> grad(4, 0.0), gt, gs;
+    double ll = 0.0;
+    if (k == 0) vectorized::compute_obs_gradients_vectorized<ModelType::NEGBIN_NEGBIN>(
+        params, data, layout, grad, ll, true, gt, gs, ws);
+    if (k == 1) vectorized::compute_gradient_fused<ModelType::NEGBIN_NEGBIN>(
+        params, data, layout, grad, ll, true, gt, gs, ws);
+    if (k == 2) vectorized::compute_obs_gradients_vectorized<ModelType::NEGBIN_GAMMA>(
+        params, data, layout, grad, ll, true, gt, gs, ws);
+    if (k == 3) vectorized::compute_gradient_fused<ModelType::NEGBIN_GAMMA>(
+        params, data, layout, grad, ll, true, gt, gs, ws);
+    out(k, 0) = ll + (k < 2 ? std::log(2.0) : 1.0);
+    out(k, 1) = grad[0]; out(k, 2) = grad[2];
+  }
+  return out;
+}
+
 // Thread-local vectorized gradient workspace (avoids per-call allocation)
 RATIOD_TLS_WORKSPACE_FN(vectorized::VecGradWorkspace, vec_grad_ws)
 
@@ -1610,14 +1663,10 @@ void compute_gradient_analytical(
         int y_denom_i = data.y_denom[i];
         double denom_d = mu_denom + phi_denom;
         resid_denom = y_denom_i - mu_denom * (y_denom_i + phi_denom) / denom_d;
-        grad_phi_denom_i = ratiod::math::portable_digamma(y_denom_i + phi_denom) - ratiod::math::portable_digamma(phi_denom)
-                           + std::log(phi_denom / denom_d)
-                           + (mu_denom - y_denom_i) / denom_d;
+        grad_phi_denom_i = tulpaRatio::count_math::size_score(y_denom_i, mu_denom, phi_denom);
         double denom_num = mu_num + phi_num;
         resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-        grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                         + std::log(phi_num / denom_num)
-                         + (mu_num - y_num_i) / denom_num;
+        grad_phi_num_i = tulpaRatio::count_math::size_score(y_num_i, mu_num, phi_num);
 
       } else if (data.model_type == ModelType::POISSON_GAMMA) {
         // ---- POISSON_GAMMA ----
@@ -1648,9 +1697,7 @@ void compute_gradient_analytical(
         }
         double denom_num = mu_num + phi_num;
         resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-        grad_phi_num_i = ratiod::math::portable_digamma(y_num_i + phi_num) - ratiod::math::portable_digamma(phi_num)
-                         + std::log(phi_num / denom_num)
-                         + (mu_num - y_num_i) / denom_num;
+        grad_phi_num_i = tulpaRatio::count_math::size_score(y_num_i, mu_num, phi_num);
 
       } else if (data.model_type == ModelType::GAMMA_GAMMA) {
         // ---- GAMMA_GAMMA ----
@@ -3529,18 +3576,14 @@ void compute_gradient_icar_collapsed(
                             double r = phi_num;
                             double y = data.y_num[i];
                             grad[layout.log_phi_num_idx] += r * (
-                                R::digamma(y + r) - R::digamma(r)
-                                + std::log(r) + 1.0
-                                - std::log(mu_num + r) - (y + r) / (mu_num + r));
+                                tulpaRatio::count_math::size_score(static_cast<int>(y), mu_num, r));
                         }
                         if (layout.has_phi_denom && !is_binomial) {
                             double mu_d = std::exp(std::min(eta_denom_i, 20.0));
                             double y_d = (double)data.y_denom[i];
                             double r_d = phi_denom;
                             grad[layout.log_phi_denom_idx] += r_d * (
-                                R::digamma(y_d + r_d) - R::digamma(r_d)
-                                + std::log(r_d) + 1.0
-                                - std::log(mu_d + r_d) - (y_d + r_d) / (mu_d + r_d));
+                                tulpaRatio::count_math::size_score(static_cast<int>(y_d), mu_d, r_d));
                         }
                         break;
                     }
@@ -3549,9 +3592,7 @@ void compute_gradient_icar_collapsed(
                             double r = phi_num;
                             double y = data.y_num[i];
                             grad[layout.log_phi_num_idx] += r * (
-                                R::digamma(y + r) - R::digamma(r)
-                                + std::log(r) + 1.0
-                                - std::log(mu_num + r) - (y + r) / (mu_num + r));
+                                tulpaRatio::count_math::size_score(static_cast<int>(y), mu_num, r));
                         }
                         if (layout.has_phi_denom) {
                             double mu_d = std::exp(std::min(eta_denom_i, 20.0));
@@ -3730,18 +3771,14 @@ void compute_gradient_icar_collapsed(
                             double r = phi_num;
                             double y = data.y_num[i];
                             grad[layout.log_phi_num_idx] += r * (
-                                R::digamma(y + r) - R::digamma(r)
-                                + std::log(r) + 1.0
-                                - std::log(mu_num + r) - (y + r) / (mu_num + r));
+                                tulpaRatio::count_math::size_score(static_cast<int>(y), mu_num, r));
                         }
                         if (layout.has_phi_denom && !is_binomial) {
                             double mu_d = std::exp(std::min(eta_denom_i, 20.0));
                             double y_d = (double)data.y_denom[i];
                             double r_d = phi_denom;
                             grad[layout.log_phi_denom_idx] += r_d * (
-                                R::digamma(y_d + r_d) - R::digamma(r_d)
-                                + std::log(r_d) + 1.0
-                                - std::log(mu_d + r_d) - (y_d + r_d) / (mu_d + r_d));
+                                tulpaRatio::count_math::size_score(static_cast<int>(y_d), mu_d, r_d));
                         }
                         break;
                     }
@@ -3750,9 +3787,7 @@ void compute_gradient_icar_collapsed(
                             double r = phi_num;
                             double y = data.y_num[i];
                             grad[layout.log_phi_num_idx] += r * (
-                                R::digamma(y + r) - R::digamma(r)
-                                + std::log(r) + 1.0
-                                - std::log(mu_num + r) - (y + r) / (mu_num + r));
+                                tulpaRatio::count_math::size_score(static_cast<int>(y), mu_num, r));
                         }
                         if (layout.has_phi_denom) {
                             double mu_d = std::exp(std::min(eta_denom_i, 20.0));

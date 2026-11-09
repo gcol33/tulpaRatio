@@ -8,8 +8,80 @@
 #include "autodiff.h"
 #include "pg_binomial.h"
 #include "omp_sum.h"
+#include "hmc_sampler.h"
+#include "ratio_obs_lik.h"
+#include "taylor_jet.h"
 
 using namespace Rcpp;
+
+namespace ratiod_hmc {
+Rcpp::NumericVector negbin_table_probe(int y, double mu, double phi);
+Rcpp::NumericMatrix negbin_h_kernels(int y, double mu, double phi);
+}
+
+// [[Rcpp::export]]
+NumericMatrix cpp_test_negbin_h_kernels(int y, double mu, double phi) {
+  return ratiod_hmc::negbin_h_kernels(y, mu, phi);
+}
+
+// [[Rcpp::export]]
+NumericVector cpp_test_negbin_jet(int y, double mu, double phi) {
+  using J = ratiod::jet::Jet3<double>;
+  const auto v = ratiod::math::log_lik_negbin(y,
+      ratiod::jet::safe_exp(J::line(std::log(mu), 1.0)), J(phi));
+  return NumericVector::create(v.v, v.d1, v.d2, v.d3);
+}
+
+template <typename T>
+T negbin_probe_density(int y, const T& eta, const T& log_phi, const T& z,
+                       const std::string& type) {
+  using std::exp;
+  const T mu = exp(eta), phi = exp(log_phi);
+  if (type == "zi_negbin") return ratiod_zi::zi_negbin_lpmf_logit(y, mu, phi, z);
+  if (type == "hurdle_negbin") return ratiod_zi::hurdle_negbin_lpmf_logit(y, mu, phi, z);
+  return ratiod::math::log_lik_negbin(y, mu, phi);
+}
+
+// [[Rcpp::export]]
+List cpp_test_negbin_paths(int y, double mu, double phi, double z,
+                           std::string type = "zi_negbin") {
+  const double eta = std::log(mu), lp = std::log(phi);
+  NumericMatrix out(3, 4);
+  rownames(out) = CharacterVector::create("legacy_forward", "legacy_arena", "legacy_tape");
+  colnames(out) = CharacterVector::create("value", "eta", "log_phi", "zi");
+  for (int j = 0; j < 3; ++j) {
+    const auto val = negbin_probe_density(y, fwd::Dual(eta, j == 0),
+        fwd::Dual(lp, j == 1), fwd::Dual(z, j == 2), type);
+    out(0, 0) = val.val;
+    out(0, j + 1) = val.grad;
+  }
+  {
+    ratiod::arena::ArenaScope scope;
+    ratiod::arena::Var a(eta), b(lp), c(z);
+    auto val = negbin_probe_density(y, a, b, c, type);
+    val.backward();
+    out(1, 0) = val.val(); out(1, 1) = a.adj(); out(1, 2) = b.adj(); out(1, 3) = c.adj();
+  }
+  {
+    ratiod::ad::TapeScope scope;
+    ratiod::ad::Var a(eta), b(lp), c(z);
+    auto val = negbin_probe_density(y, a, b, c, type);
+    val.backward();
+    out(2, 0) = val.val(); out(2, 1) = a.adj(); out(2, 2) = b.adj(); out(2, 3) = c.adj();
+  }
+  ratiod::ModelData data;
+  data.model_type = ratiod::ModelType::NEGBIN_NEGBIN;
+  data.y_num = {y}; data.y_denom = {0};
+  data.zi_type = ratiod_zi::parse_zi_type(type == "plain" ? "none" : type);
+  ratiod::ParamLayout layout;
+  layout.has_zi = type != "plain";
+  const auto h = ratiod::ratio_obs_derivs(data, layout, 0, eta, 0.0, phi, 1.0, z, 0.0,
+      ratiod::OBS_D_PHI_NUM | ratiod::OBS_D_ZI);
+  return List::create(_["autodiff"] = out,
+      _["legacy_double"] = negbin_probe_density(y, eta, lp, z, type),
+      _["H"] = NumericVector::create(h.ll + std::log(2.0), h.eta_num, phi * h.phi_num, h.logit_zi),
+      _["H_table"] = ratiod_hmc::negbin_table_probe(y, mu, phi));
+}
 
 // ---------------------------------------------------------------------------
 // Leapfrog integrator (standalone version for testing)
@@ -184,10 +256,7 @@ double cpp_test_binomial_loglik(IntegerVector y, IntegerVector n, NumericVector 
 double cpp_test_negbin_loglik(IntegerVector y, NumericVector mu, double phi) {
   double ll = 0.0;
   for (int i = 0; i < y.size(); i++) {
-    double r = phi;  // size parameter
-    double p = r / (r + mu[i]);  // success probability
-    ll += std::lgamma(y[i] + r) - std::lgamma(r) - std::lgamma(y[i] + 1);
-    ll += r * std::log(p) + y[i] * std::log(1 - p);
+    ll += ratiod::math::log_lik_negbin(y[i], mu[i], phi);
   }
   return ll;
 }
@@ -630,14 +699,7 @@ List cpp_test_autodiff_negbin_loglik(IntegerVector y, NumericVector mu, double p
 
   Var ll = Var(0.0);
   for (int i = 0; i < n; i++) {
-    // lgamma terms (y and phi are treated as constants for gradient purposes)
-    ll = ll + ratiod::ad::lgamma(Var((double)y[i]) + phi_ad);
-    ll = ll - ratiod::ad::lgamma(phi_ad);
-
-    // phi * log(phi/(phi+mu)) + y * log(mu/(phi+mu))
-    Var rate = phi_ad + mu_ad[i];
-    ll = ll + phi_ad * ratiod::ad::log(phi_ad / rate);
-    ll = ll + Var((double)y[i]) * ratiod::ad::log(mu_ad[i] / rate);
+    ll = ll + ratiod::math::log_lik_negbin(y[i], mu_ad[i], phi_ad);
   }
 
   ll.backward();
@@ -936,6 +998,12 @@ double cpp_test_zi_poisson_lpmf_logit(int y, double mu, double logit_zi) {
 // [[Rcpp::export]]
 double cpp_test_zi_negbin_lpmf_logit(int y, double mu, double phi, double logit_zi) {
   return ratiod_zi::zi_negbin_lpmf_logit(y, mu, phi, logit_zi);
+}
+
+// [[Rcpp::export]]
+double cpp_test_zi_negbin_grad_logit_zi(int y, double mu, double phi, double logit_zi) {
+  return ratiod_zi::zi_negbin_lpmf_logit(y, fwd::Dual(mu), fwd::Dual(phi),
+                                       fwd::Dual(logit_zi, 1.0)).grad;
 }
 
 // [[Rcpp::export]]

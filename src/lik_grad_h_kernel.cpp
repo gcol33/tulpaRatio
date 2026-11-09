@@ -319,7 +319,6 @@ struct NegbinGammaFn {
     double phi_num;       // == exp(log_phi_num)
     double phi_denom;     // == exp(log_phi_denom)   == "shape"
     int N;
-    double dig_phi_num;
     double dig_phi_denom;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
         const double eta_n = eta[i];
@@ -333,10 +332,7 @@ struct NegbinGammaFn {
         const double denom_n = mu_n + phi_num;
         resid[0] = static_cast<double>(y_n)
                    - mu_n * (static_cast<double>(y_n) + phi_num) / denom_n;
-        const double dlog_phi_num_i = tulpa::math::portable_digamma(y_n + phi_num)
-                                       - dig_phi_num
-                                       + std::log(phi_num / denom_n)
-                                       + (mu_n - static_cast<double>(y_n)) / denom_n;
+        const double dlog_phi_num_i = count_math::size_score(y_n, mu_n, phi_num);
 
         // Denominator: Gamma(shape=phi_denom, rate=phi_denom/mu_d). Only if y_d > 0.
         double dlog_phi_denom_i = 0.0;
@@ -369,7 +365,6 @@ struct NegbinNegbinFn {
     const lik::NegbinNegbinResponseData* resp;
     double phi_num, phi_denom;
     int N;
-    double dig_phi_num, dig_phi_denom;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
         const double eta_n = eta[i];
         const double eta_d = eta[N + i];
@@ -385,12 +380,8 @@ struct NegbinNegbinFn {
         resid[1] = static_cast<double>(y_d)
                    - mu_d * (static_cast<double>(y_d) + phi_denom) / denom_d;
 
-        extra[0] += tulpa::math::portable_digamma(y_n + phi_num) - dig_phi_num
-                    + std::log(phi_num / denom_n)
-                    + (mu_n - static_cast<double>(y_n)) / denom_n;
-        extra[1] += tulpa::math::portable_digamma(y_d + phi_denom) - dig_phi_denom
-                    + std::log(phi_denom / denom_d)
-                    + (mu_d - static_cast<double>(y_d)) / denom_d;
+        extra[0] += count_math::size_score(y_n, mu_n, phi_num);
+        extra[1] += count_math::size_score(y_d, mu_d, phi_denom);
 
         const double ll_n = lik::negbin_log_pmf<double>(y_n, mu_n, phi_num);
         const double ll_d = lik::negbin_log_pmf<double>(y_d, mu_d, phi_denom);
@@ -573,13 +564,12 @@ void grad_h_negbin_gamma(
     const double log_phi_denom = params[layout.extra_offset + 1];
     const double phi_num       = std::exp(log_phi_num);
     const double phi_denom     = std::exp(log_phi_denom);
-    const double dig_phi_num   = tulpa::math::portable_digamma(phi_num);
     const double dig_phi_denom = tulpa::math::portable_digamma(phi_denom);
 
     const std::vector<double> eta = compute_eta_matrix(params, data, layout);
     const auto* resp = static_cast<const lik::NegbinGammaResponseData*>(
         data.model_response_data);
-    NegbinGammaFn fn{resp, phi_num, phi_denom, data.N, dig_phi_num, dig_phi_denom};
+    NegbinGammaFn fn{resp, phi_num, phi_denom, data.N, dig_phi_denom};
 
     const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
                                         grad, /*n_extra_grads=*/2);
@@ -619,13 +609,11 @@ void grad_h_negbin_negbin(
     const double log_phi_denom = params[layout.extra_offset + 1];
     const double phi_num       = std::exp(log_phi_num);
     const double phi_denom     = std::exp(log_phi_denom);
-    const double dig_phi_num   = tulpa::math::portable_digamma(phi_num);
-    const double dig_phi_denom = tulpa::math::portable_digamma(phi_denom);
 
     const std::vector<double> eta = compute_eta_matrix(params, data, layout);
     const auto* resp = static_cast<const lik::NegbinNegbinResponseData*>(
         data.model_response_data);
-    NegbinNegbinFn fn{resp, phi_num, phi_denom, data.N, dig_phi_num, dig_phi_denom};
+    NegbinNegbinFn fn{resp, phi_num, phi_denom, data.N};
 
     const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
                                         grad, /*n_extra_grads=*/2);
