@@ -1,5 +1,13 @@
 # tulpaRatio 1.7.3
 
+* Family metadata lives in one `MODEL_TYPES` table (distributions, responses,
+  dispersion names, samplers, default dispersion prior, labels) and every
+  exported family constructor is one `new_ratiod_family()` call (#198);
+  `tratio()` dispatches through one backend table (#197); proper CAR support is
+  declared in the backend support tables, so `mode = "auto"` never selects a
+  backend that would refuse the structure inside the fit (#200). Paired fits are
+  byte-identical.
+
 * One naming scheme across the API (#208): zero / one inflation is stated only
   through the family constructors (the separate `zi =` route is removed), family
   names follow one spelling, fit accessors take `object` (`x` for print / plot),

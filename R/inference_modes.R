@@ -234,11 +234,15 @@ laplace_spatial_support <- function(spatial, structures) {
 }
 
 
+proper_car_restriction <- paste0(
+  "proper CAR (`spatial_car(..., proper = TRUE)`) is implemented on HMC and Laplace only")
+
+
 #' Spatial support rule for the ESS, SGHMC, SGLD and VI samplers
 #'
 #' @description
-#' These samplers run on the HMC parameter vector of the areal fields: ICAR,
-#' BYM2 and proper CAR. Gaussian-process fields and spatially varying
+#' These samplers run on the HMC parameter vector of the ICAR and BYM2
+#' areal fields. Gaussian-process fields and spatially varying
 #' coefficients have their own blocks, which these samplers do not carry. A
 #' restricted field reaches the predictor projected onto the complement of the
 #' restricted covariates; a sampler that reads the field directly would fit the
@@ -248,6 +252,9 @@ laplace_spatial_support <- function(spatial, structures) {
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 areal_spatial_support <- function(spatial, structures) {
+  if (identical(spatial$type, "car_proper")) {
+    return(proper_car_restriction)
+  }
   if (inherits(spatial, "ratiod_rsr")) {
     return("restricted spatial regression (`spatial_rsr()`) is not implemented")
   }
@@ -320,7 +327,12 @@ gibbs_spatial_support <- function(spatial, structures) {
   if (!is.null(spatial$component)) {
     return(disconnected_graph_restriction)
   }
-  areal_spatial_support(spatial, structures)
+  verdict <- areal_spatial_support(spatial, structures)
+  if (!isTRUE(verdict)) return(verdict)
+  if (!is.null(spatial$type) && !spatial$type %in% c("icar", "car", "bym2")) {
+    return("only ICAR and BYM2 fields are implemented")
+  }
+  TRUE
 }
 
 
@@ -342,6 +354,9 @@ disconnected_graph_restriction <- paste0(
 #' @return `TRUE`, or a phrase naming the restriction
 #' @keywords internal
 pg_spatial_support <- function(spatial, structures) {
+  if (identical(spatial$type, "car_proper")) {
+    return(proper_car_restriction)
+  }
   if (!is.null(spatial$component)) {
     return(disconnected_graph_restriction)
   }

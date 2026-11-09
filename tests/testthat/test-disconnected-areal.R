@@ -74,7 +74,7 @@ test_that("samplers that centre over the whole graph refuse a disconnected map",
   expect_equal(selection$backend, "hmc")
 })
 
-test_that("ESS, SGHMC, SGLD and VI fit ICAR, proper CAR and BYM2 fields (#145)", {
+test_that("areal samplers fit the fields declared in their support table", {
   skip_on_cran()
   d <- disconnected_data()
   keep <- as.integer(d$df$region) <= 9
@@ -89,17 +89,15 @@ test_that("ESS, SGHMC, SGLD and VI fit ICAR, proper CAR and BYM2 fields (#145)",
   for (nm in names(fields)) {
     data <- if (nm == "bym2_disconnected") d$df else df
     for (m in c("ess", "sghmc", "sgld", "vi")) {
-      fit <- tryCatch(suppressWarnings(tratio(
+      run <- function() suppressWarnings(tratio(
         y | trials ~ x, data = data, family = ratiod_binomial(),
         spatial = fields[[nm]], mode = m,
-        control = list(iter = 300, chains = 1, seed = 1))),
-        error = function(e) e)
-      # A backend may refuse a structure by name; it may not fail on one it
-      # accepts
-      if (inherits(fit, "error")) {
-        expect_match(conditionMessage(fit), "is not supported by the",
-                     info = paste(nm, m))
+        control = list(iter = 300, chains = 1, seed = 1)))
+      reasons <- tulpaRatio:::unsupported_structures(m, list(spatial = fields[[nm]]))
+      if (length(reasons)) {
+        expect_error(run(), reasons[["spatial"]], fixed = TRUE, info = paste(nm, m))
       } else {
+        fit <- run()
         expect_true(all(is.finite(coef(fit))), info = paste(nm, m))
       }
     }

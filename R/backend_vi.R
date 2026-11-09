@@ -88,10 +88,7 @@ fit_vi <- function(formula,
                         spatiotemporal, zi, latent, priors, re_param = "centered")
   hmc_data <- inp$hmc_data
   model_type <- inp$model_type
-  if (identical(inp$spatial_info$type, "car_proper")) {
-    stop("Proper CAR (`spatial_car(..., proper = TRUE)`) is not supported by ",
-         "the VI backend. Use `mode = \"hmc\"`.", call. = FALSE)
-  }
+
   assert_single_random_intercept(hmc_data, "vi")
 
   # VI options

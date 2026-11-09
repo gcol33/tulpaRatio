@@ -80,10 +80,7 @@ fit_ess <- function(formula,
   inp <- sampler_inputs(formula, data, family, spatial, temporal,
                         spatiotemporal, zi, latent, priors, re_param = "centered")
   hmc_data <- inp$hmc_data
-  if (identical(inp$spatial_info$type, "car_proper")) {
-    stop("Proper CAR (`spatial_car(..., proper = TRUE)`) is not supported by ",
-         "the ESS backend. Use `mode = \"hmc\"`.", call. = FALSE)
-  }
+
   assert_single_random_intercept(hmc_data, "ess")
 
   # The sampler starts every chain at zero on the layout it computes

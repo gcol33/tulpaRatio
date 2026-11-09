@@ -285,3 +285,60 @@ test_that("PG fits a multi-scale temporal model", {
   expect_equal(ncol(fit$.internal$temporal_draws$trend), 6L)
   expect_true(all(is.finite(fit$.internal$temporal_draws$trend)))
 })
+
+test_that("proper CAR support is declared before backend dispatch", {
+  proper <- spatial_car(build_chain_adjacency(10), group_var = "region", proper = TRUE)
+  supported <- c("hmc", "laplace")
+  for (backend in names(tulpaRatio:::BACKEND_STRUCTURE_SUPPORT)) {
+    structures <- list(spatial = proper)
+    expect_identical(tulpaRatio:::backend_fits_structures(backend, structures),
+                     backend %in% supported, info = backend)
+    if (!backend %in% supported) {
+      expect_match(tulpaRatio:::unsupported_structures(backend, structures)[["spatial"]],
+                   "proper CAR", info = backend)
+      df <- structure_test_data()
+      expect_error(tratio(successes | trials ~ x, data = df,
+        family = ratiod_binomial(), spatial = proper, mode = backend,
+        control = list(iter = 20, warmup = 10, chains = 1, verbose = FALSE)),
+        paste0(backend, " backend cannot fit this model"))
+    }
+  }
+})
+
+test_that("auto respects every backend and structure capability pair", {
+  spatial_cases <- list(
+    car = car_spec(),
+    bym2 = spatial_bym2(build_chain_adjacency(10), group_var = "region"),
+    proper = spatial_car(build_chain_adjacency(10), group_var = "region", proper = TRUE),
+    disconnected = structure(list(type = "car", component = c(1L, 1L, 2L, 2L)), class = "ratiod_spatial"),
+    gp = structure(list(type = "gp"), class = c("ratiod_gp", "ratiod_spatial")),
+    hsgp = structure(list(type = "hsgp"), class = c("ratiod_hsgp", "ratiod_spatial")),
+    svc = structure(list(type = "svc"), class = c("ratiod_svc", "ratiod_spatial")),
+    restricted_car = structure(list(type = "car"), class = c("ratiod_rsr", "ratiod_spatial")),
+    restricted_bym2 = structure(list(type = "bym2"), class = c("ratiod_rsr", "ratiod_spatial")))
+  temporal_cases <- list(
+    rw1 = temporal_rw1("year"), rw2 = temporal_rw2("year"), ar1 = temporal_ar1("year"),
+    iid = temporal_iid("year"), gp = structure(list(type = "gp"), class = "ratiod_temporal_gp"),
+    tvc = temporal_tvc("year", terms = 1),
+    multiscale = temporal_multiscale("year", trend = "rw1", short_term = "none"),
+    restricted = structure(list(type = "rw1"), class = c("ratiod_rtr", "ratiod_temporal")))
+  cases <- c(lapply(spatial_cases, function(x) list(spatial = x)),
+             lapply(temporal_cases, function(x) list(temporal = x)),
+             list(list(spatiotemporal = structure(list(), class = "ratiod_spatiotemporal")),
+                  list(zi = structure(list(), class = "ratiod_zi")),
+                  list(latent = structure(list(), class = "ratiod_latent")),
+                  list(spatial = car_spec(), temporal = temporal_cases$multiscale)))
+  expect_setequal(unique(unlist(lapply(cases, names))), tulpaRatio:::MODEL_STRUCTURES)
+  for (backend in names(tulpaRatio:::BACKEND_STRUCTURE_SUPPORT)) {
+    for (structures in cases) {
+      allowed <- tulpaRatio:::backend_fits_structures(backend, structures)
+      for (family in list(ratiod_binomial(), ratiod_poisson_gamma(), ratiod_negbin_negbin())) {
+        for (n_obs in c(100, 20000, 60000)) {
+          selected <- tulpaRatio:::auto_select_mode(family, n_obs, structures)$backend
+          expect_true(tulpaRatio:::backend_fits_structures(selected, structures))
+          if (!allowed) expect_false(identical(selected, backend))
+        }
+      }
+    }
+  }
+})

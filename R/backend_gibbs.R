@@ -71,10 +71,7 @@ fit_gibbs <- function(formula,
          call. = FALSE)
   }
 
-  if (!is.null(spatial$type) && !spatial$type %in% c("icar", "car", "bym2")) {
-    stop(sprintf("Gibbs backend supports ICAR spatial only, got '%s'.",
-                 spatial$type), call. = FALSE)
-  }
+
 
   assert_backend_fits_structures(
     "gibbs",

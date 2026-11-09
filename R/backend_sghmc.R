@@ -71,14 +71,15 @@ fit_sghmc <- function(formula,
     seed <- sample.int(.Machine$integer.max, 1)
   }
 
+  assert_backend_fits_structures(
+    "sghmc", list(spatial = spatial, temporal = temporal, zi = zi)
+  )
+
   inp <- sampler_inputs(formula, data, family, spatial, temporal,
                         NULL, zi, NULL, priors, re_param = "centered")
   hmc_data <- inp$hmc_data
   model_type <- inp$model_type
-  if (identical(inp$spatial_info$type, "car_proper")) {
-    stop("Proper CAR (`spatial_car(..., proper = TRUE)`) is not supported by ",
-         "the SGHMC backend. Use `mode = \"hmc\"`.", call. = FALSE)
-  }
+
   assert_single_random_intercept(hmc_data, "sghmc")
 
   # Set default batch size
@@ -195,14 +196,15 @@ fit_sgld <- function(formula,
     seed <- sample.int(.Machine$integer.max, 1)
   }
 
+  assert_backend_fits_structures(
+    "sgld", list(spatial = spatial, temporal = temporal, zi = zi)
+  )
+
   inp <- sampler_inputs(formula, data, family, spatial, temporal,
                         NULL, zi, NULL, priors, re_param = "centered")
   hmc_data <- inp$hmc_data
   model_type <- inp$model_type
-  if (identical(inp$spatial_info$type, "car_proper")) {
-    stop("Proper CAR (`spatial_car(..., proper = TRUE)`) is not supported by ",
-         "the SGLD backend. Use `mode = \"hmc\"`.", call. = FALSE)
-  }
+
   assert_single_random_intercept(hmc_data, "sgld")
 
   # Set default batch size
