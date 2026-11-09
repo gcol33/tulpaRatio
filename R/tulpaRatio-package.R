@@ -157,5 +157,15 @@ utils::globalVariables(c(
   "cpp_tulpa_runtime_abi_version",
   "cpp_tulpa_pg_binomial_gibbs",
   "cpp_tulpaRatio_run_nuts_specs",
-  "cpp_vi_fit"
+  "cpp_vi_fit",
+  "cpp_ratio_precision_density",
+  "cpp_test_precision_h",
+  "cpp_test_precision_legacy",
+  "cpp_test_precision_gibbs",
+  "cpp_test_precision_beta_legacy",
+  "cpp_test_precision_jet",
+  "cpp_test_precision_spec_h",
+  "cpp_test_precision_spec",
+  "cpp_test_precision_beta_spec",
+  "cpp_test_precision_beta_spec_h"
 ))

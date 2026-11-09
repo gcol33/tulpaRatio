@@ -14,7 +14,23 @@
 #include "autodiff_fwd.h"
 #include "autodiff_arena.h"
 #include "link_function.h"
-#include "negbin_math.h"
+#include <tulpa/count_math.h>
+#include "precision_unary.h"
+
+namespace tulpa { namespace math {
+template<> struct PrecisionUnary<ratiod::arena::Var> : PrecisionArenaUnary<ratiod::arena::Var> {};
+template<> struct PrecisionUnary<ratiod::ad::Var> {
+    static ratiod::ad::Var apply(const ratiod::ad::Var& x, double value, double derivative) {
+        ratiod::ad::Var out(x.tape, value);
+        const size_t input=x.idx, result=out.idx;
+        x.tape->nodes[result].backward = [input,result,derivative](ratiod::ad::Tape* tape) {
+            const double adj=tape->nodes[result].adjoint;
+            if (adj != 0) tape->nodes[input].adjoint += adj*derivative;
+        };
+        return out;
+    }
+};
+} }
 
 namespace ratiod {
 namespace math {
@@ -468,12 +484,13 @@ struct NegbinMath {
     template <typename T> static double value(const T& x) { return get_value(x); }
     template <typename T> static T log(const T& x) { return safe_log(x); }
     template <typename T> static T log1p(const T& x) { return log1p_fn(x); }
+    template <typename T> static T log1pmx(const T& x) { using tulpa::math::log1pmx; return log1pmx(x); }
     template <typename T> static T lgamma(const T& x) { return lgamma_fn(x); }
 };
 
 template<typename T>
 inline T negbin_log_p0(const T& mu, const T& phi) {
-    return tulpaRatio::count_math::log_p0<T, NegbinMath>(mu, phi);
+    return tulpa::math::negbin_log_p0<T, NegbinMath>(mu, phi);
 }
 
 template<typename T>
@@ -485,15 +502,12 @@ inline T log_lik_poisson(int y, const T& mu) {
 
 template<typename T>
 inline T log_lik_gamma(double y, const T& shape, const T& mu) {
-    // Gamma(y | shape, rate) where rate = shape/mu (mean parameterization)
-    // = shape*log(rate) + (shape-1)*log(y) - rate*y - lgamma(shape)
-    T rate = shape / mu;
-    return shape * safe_log(rate) + (shape - 1.0) * std::log(y) - rate * y - lgamma_fn(shape);
+    return tulpa::math::gamma_log_density(y, mu, shape, std::log(y));
 }
 
 template<typename T>
 inline T log_lik_negbin(int y, const T& mu, const T& phi) {
-    return tulpaRatio::count_math::log_pmf<T, NegbinMath>(y, mu, phi);
+    return tulpa::math::negbin_log_pmf<T, NegbinMath>(y, mu, phi);
 }
 
 // ============================================================================
@@ -601,17 +615,8 @@ template<typename T>
 inline T log_lik_gamma_gamma(double y_num, double y_denom,
                              const T& mu_num, const T& mu_denom,
                              const T& shape_num, const T& shape_denom) {
-    // Numerator: Gamma(y_num | shape_num, shape_num/mu_num)
-    T rate_num = shape_num / mu_num;
-    T ll_num = shape_num * safe_log(rate_num) + (shape_num - T(1.0)) * std::log(y_num)
-               - rate_num * y_num - lgamma_fn(shape_num);
-
-    // Denominator: Gamma(y_denom | shape_denom, shape_denom/mu_denom)
-    T rate_denom = shape_denom / mu_denom;
-    T ll_denom = shape_denom * safe_log(rate_denom) + (shape_denom - T(1.0)) * std::log(y_denom)
-                 - rate_denom * y_denom - lgamma_fn(shape_denom);
-
-    return ll_num + ll_denom;
+    return log_lik_gamma(y_num, shape_num, mu_num)
+         + log_lik_gamma(y_denom, shape_denom, mu_denom);
 }
 
 // Lognormal: log(y) ~ Normal(mu, sigma^2)
@@ -638,19 +643,8 @@ inline T log_lik_lognormal_lognormal(double y_num, double y_denom,
 // So alpha = mu*phi, beta = (1-mu)*phi, mu taken through its logit q
 template<typename T>
 inline T log_lik_beta_binomial(int y, int n, const T& q, const T& phi) {
-    T alpha = safe_exp(log_inv_logit(q)) * phi;
-    T beta = safe_exp(log1m_inv_logit(q)) * phi;
-
-    // log P(y|n,alpha,beta) = log(B(y+alpha, n-y+beta)) - log(B(alpha, beta)) + log(C(n,y))
-    // = lgamma(y+alpha) + lgamma(n-y+beta) - lgamma(n+alpha+beta)
-    //   - lgamma(alpha) - lgamma(beta) + lgamma(alpha+beta)
-    //   + lgamma(n+1) - lgamma(y+1) - lgamma(n-y+1)
-
-    T ll = lgamma_fn(T(y) + alpha) + lgamma_fn(T(n - y) + beta) - lgamma_fn(T(n) + alpha + beta);
-    ll = ll - lgamma_fn(alpha) - lgamma_fn(beta) + lgamma_fn(alpha + beta);
-    ll = ll + portable_lchoose(n, y);  // constant w.r.t. parameters
-
-    return ll;
+    return tulpa::math::beta_binomial_log_pmf<T, NegbinMath>(y, n,
+        safe_exp(log_inv_logit(q)), safe_exp(log1m_inv_logit(q)), phi, portable_lchoose(n,y));
 }
 
 // ============================================================================

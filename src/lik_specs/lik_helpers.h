@@ -28,7 +28,12 @@
 #include <tulpa/autodiff_arena.h>
 #include <tulpa/autodiff_fwd.h>
 #include <tulpa/portable_math.h>
-#include "../negbin_math.h"
+#include <tulpa/count_math.h>
+#include "../precision_unary.h"
+
+namespace tulpa { namespace math {
+template<> struct PrecisionUnary<arena::Var> : PrecisionArenaUnary<arena::Var> {};
+} }
 
 namespace tulpaRatio {
 namespace lik {
@@ -39,6 +44,7 @@ struct NegbinMath {
     static double value(const tulpa::arena::Var& x) { return x.val(); }
     template <typename T> static T log(const T& x) { using std::log; return log(x); }
     template <typename T> static T log1p(const T& x) { using std::log1p; return log1p(x); }
+    template <typename T> static T log1pmx(const T& x) { using tulpa::math::log1pmx; return log1pmx(x); }
     template <typename T> static T lgamma(const T& x) { using std::lgamma; return lgamma(x); }
 };
 
@@ -171,15 +177,8 @@ static inline T beta_binomial_log_pmf(int y, int n, const T& eta, const T& phi) 
     T p       = exp(log_p);
     T one_mp  = exp(log_1mp);
 
-    T alpha = p      * phi;
-    T beta  = one_mp * phi;
-
-    T ll = log_lgamma(T(double(y)) + alpha)
-         + log_lgamma(T(double(n - y)) + beta)
-         - log_lgamma(T(double(n)) + alpha + beta);
-    ll = ll - log_lgamma(alpha) - log_lgamma(beta) + log_lgamma(alpha + beta);
-    ll = ll + T(tulpa::math::portable_lchoose(n, y));
-    return ll;
+    return tulpa::math::beta_binomial_log_pmf<T, NegbinMath>(y,n,p,one_mp,phi,
+        tulpa::math::portable_lchoose(n,y));
 }
 
 // ----- Poisson with offset --------------------------------------------------
@@ -202,7 +201,7 @@ static inline T poisson_log_pmf(int y, const T& mu) {
 //            + phi*log(phi/(mu+phi)) + y*log(mu/(mu+phi)).
 template <typename T>
 static inline T negbin_log_pmf(int y, const T& mu, const T& phi) {
-    return count_math::log_pmf<T, NegbinMath>(y, mu, phi);
+    return tulpa::math::negbin_log_pmf<T, NegbinMath>(y, mu, phi);
 }
 
 // ----- Gamma (shape / mean) ------------------------------------------------
@@ -211,12 +210,7 @@ static inline T negbin_log_pmf(int y, const T& mu, const T& phi) {
 // log(y) is constant w.r.t. parameters but kept for absolute parity.
 template <typename T>
 static inline T gamma_log_pdf(double y, const T& shape, const T& mu) {
-    using std::log;
-    T rate = shape / mu;
-    return shape * log(rate)
-         + (shape - T(1.0)) * T(std::log(y))
-         - rate * y
-         - log_lgamma(shape);
+    return tulpa::math::gamma_log_density(y, mu, shape, std::log(y));
 }
 
 // ----- Lognormal -----------------------------------------------------------
@@ -383,7 +377,7 @@ static inline T zi_negbin_log_pmf(int y, const T& mu, const T& phi,
     T log_zi   = log_inv_logit(logit_zi);
     T log_1mzi = log1m_inv_logit(logit_zi);
     if (y == 0) {
-        T log_p0_count = count_math::log_p0<T, NegbinMath>(mu, phi);
+        T log_p0_count = tulpa::math::negbin_log_p0<T, NegbinMath>(mu, phi);
         return log_sum_exp_pair(log_zi, log_1mzi + log_p0_count);
     }
     return log_1mzi + negbin_log_pmf(y, mu, phi);
@@ -400,7 +394,7 @@ static inline T hurdle_negbin_log_pmf(int y, const T& mu, const T& phi,
     if (y == 0) {
         return log1m_inv_logit(logit_zi);
     }
-    T log_norm = log1m_exp(count_math::log_p0<T, NegbinMath>(mu, phi));
+    T log_norm = log1m_exp(tulpa::math::negbin_log_p0<T, NegbinMath>(mu, phi));
     return log_inv_logit(logit_zi) + negbin_log_pmf(y, mu, phi) - log_norm;
 }
 

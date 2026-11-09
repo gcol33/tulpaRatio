@@ -111,8 +111,8 @@ struct VecGradWorkspace {
       lg_table_num.resize(tn);
     }
     for (int y = 0; y < tn; y++) {
-      dig_table_num[y] = tulpaRatio::count_math::polygamma_difference(0, y, phi_num);
-      lg_table_num[y] = tulpaRatio::count_math::lgamma_ratio_count(y, phi_num);
+      dig_table_num[y] = tulpa::math::polygamma_rising_difference(0, y, phi_num);
+      lg_table_num[y] = tulpa::math::lgamma_ratio_count(y, phi_num);
     }
     if (need_denom) {
       int td = max_y_denom_val + 1;
@@ -121,8 +121,8 @@ struct VecGradWorkspace {
         lg_table_denom.resize(td);
       }
       for (int y = 0; y < td; y++) {
-        dig_table_denom[y] = tulpaRatio::count_math::polygamma_difference(0, y, phi_denom);
-        lg_table_denom[y] = tulpaRatio::count_math::lgamma_ratio_count(y, phi_denom);
+        dig_table_denom[y] = tulpa::math::polygamma_rising_difference(0, y, phi_denom);
+        lg_table_denom[y] = tulpa::math::lgamma_ratio_count(y, phi_denom);
       }
     }
   }
@@ -325,13 +325,13 @@ inline void compute_residuals_impl(
     const double digamma_yd_phi = ws.dig_table_denom[y_d];
     const double lgamma_yd_phi = ws.lg_table_denom[y_d];
 
-    gpn += tulpaRatio::count_math::size_score(y_n, mu_num, phi_num, digamma_yn_phi);
-    gpd += tulpaRatio::count_math::size_score(y_d, mu_denom, phi_denom, digamma_yd_phi);
+    gpn += tulpa::math::negbin_size_score(y_n, mu_num, phi_num, digamma_yn_phi);
+    gpd += tulpa::math::negbin_size_score(y_d, mu_denom, phi_denom, digamma_yd_phi);
 
     if (compute_lp) {
       // The tables carry the count normalizers and their size derivatives.
-      ll += tulpaRatio::count_math::log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-      ll += tulpaRatio::count_math::log_pmf(y_d, mu_denom, phi_denom, lgamma_yd_phi, ws.lgamma_y_denom_p1[i]);
+      ll += tulpa::math::negbin_log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
+      ll += tulpa::math::negbin_log_pmf(y_d, mu_denom, phi_denom, lgamma_yd_phi, ws.lgamma_y_denom_p1[i]);
     }
   }
   grad_phi_num_lik += gpn;
@@ -340,7 +340,7 @@ inline void compute_residuals_impl(
 }
 
 // --- POISSON_GAMMA ---
-// Fused: hoists lgamma(phi), digamma(phi), log(phi); precomputes lgamma(y_num+1), log(y_denom).
+// Fused gamma precision constants and cached response logarithms.
 inline void compute_residuals_impl(
     ModelTag<ModelType::POISSON_GAMMA>,
     int N,
@@ -353,9 +353,7 @@ inline void compute_residuals_impl(
     const VecGradWorkspace& ws
 ) {
   // Hoist phi-dependent constants
-  const double digamma_phi = ratiod::math::portable_digamma(phi_denom);
-  const double log_phi = std::log(phi_denom);
-  const double lgamma_phi = compute_lp ? std::lgamma(phi_denom) : 0.0;
+  const tulpa::math::GammaPrecision gamma(phi_denom, compute_lp);
 
   double gpd = 0.0;
   double ll = 0.0;
@@ -373,13 +371,10 @@ inline void compute_residuals_impl(
       const double inv_mu_d = 1.0 / mu_denom;
       const double yd_over_mud = y_d * inv_mu_d;
       resid_denom[i] = phi_denom * (yd_over_mud - 1.0);
-      const double log_rate = log_phi - eta_denom[i];
-      gpd += log_rate + 1.0 + ws.log_y_denom_cont[i] - digamma_phi
-           - yd_over_mud;
+      gpd += gamma.derivative(y_d,mu_denom,ws.log_y_denom_cont[i]);
       if (compute_lp) {
         ll += y_n * eta_num[i] - mu_num - ws.lgamma_y_num_p1[i];
-        ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate
-            - phi_denom * yd_over_mud - lgamma_phi;
+        ll += gamma.log_density(y_d,mu_denom,ws.log_y_denom_cont[i]);
       }
     } else {
       resid_denom[i] = 0.0;
@@ -394,7 +389,7 @@ inline void compute_residuals_impl(
 }
 
 // --- NEGBIN_GAMMA ---
-// NB numerator (integer y, digamma/lgamma tables) + Gamma denominator (continuous y).
+// Count-normalizer tables for the numerator and cached gamma precision for the denominator.
 inline void compute_residuals_impl(
     ModelTag<ModelType::NEGBIN_GAMMA>,
     int N,
@@ -407,9 +402,7 @@ inline void compute_residuals_impl(
     const VecGradWorkspace& ws
 ) {
   // Hoist phi-dependent constants
-  const double digamma_phi_d = ratiod::math::portable_digamma(phi_denom);
-  const double log_phi_d = std::log(phi_denom);
-  const double lgamma_phi_d = compute_lp ? std::lgamma(phi_denom) : 0.0;
+  const tulpa::math::GammaPrecision gamma_d(phi_denom, compute_lp);
 
   double gpn = 0.0, gpd = 0.0;
   double ll = 0.0;
@@ -428,24 +421,22 @@ inline void compute_residuals_impl(
     // NB phi_num gradient (using digamma table)
     const double digamma_yn_phi = ws.dig_table_num[y_n];
     const double lgamma_yn_phi = ws.lg_table_num[y_n];
-    gpn += tulpaRatio::count_math::size_score(y_n, mu_num, phi_num, digamma_yn_phi);
+    gpn += tulpa::math::negbin_size_score(y_n, mu_num, phi_num, digamma_yn_phi);
 
     // Gamma denominator — skip if y <= 0
     if (y_d > 0.0) {
       const double inv_mu_d = 1.0 / mu_denom;
       const double yd_over_mud = y_d * inv_mu_d;
       resid_denom[i] = phi_denom * (yd_over_mud - 1.0);
-      const double log_rate = log_phi_d - eta_denom[i];
-      gpd += log_rate + 1.0 + ws.log_y_denom_cont[i] - digamma_phi_d - yd_over_mud;
+      gpd += gamma_d.derivative(y_d,mu_denom,ws.log_y_denom_cont[i]);
       if (compute_lp) {
-        ll += tulpaRatio::count_math::log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-        ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate
-            - phi_denom * yd_over_mud - lgamma_phi_d;
+        ll += tulpa::math::negbin_log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
+        ll += gamma_d.log_density(y_d,mu_denom,ws.log_y_denom_cont[i]);
       }
     } else {
       resid_denom[i] = 0.0;
       if (compute_lp) {
-        ll += tulpaRatio::count_math::log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
+        ll += tulpa::math::negbin_log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
         ll += -1e10;
       }
     }
@@ -456,7 +447,7 @@ inline void compute_residuals_impl(
 }
 
 // --- GAMMA_GAMMA ---
-// Fused: hoists lgamma(phi), digamma(phi), log(phi).
+// Fused gamma precision constants and cached response logarithms.
 inline void compute_residuals_impl(
     ModelTag<ModelType::GAMMA_GAMMA>,
     int N,
@@ -469,12 +460,8 @@ inline void compute_residuals_impl(
     const VecGradWorkspace& ws
 ) {
   // Hoist phi-dependent constants
-  const double digamma_phi_n = ratiod::math::portable_digamma(phi_num);
-  const double digamma_phi_d = ratiod::math::portable_digamma(phi_denom);
-  const double log_phi_n = std::log(phi_num);
-  const double log_phi_d = std::log(phi_denom);
-  const double lgamma_phi_n = compute_lp ? std::lgamma(phi_num) : 0.0;
-  const double lgamma_phi_d = compute_lp ? std::lgamma(phi_denom) : 0.0;
+  const tulpa::math::GammaPrecision gamma_n(phi_num, compute_lp);
+  const tulpa::math::GammaPrecision gamma_d(phi_denom, compute_lp);
 
   double gpn = 0.0, gpd = 0.0;
   double ll = 0.0;
@@ -490,11 +477,9 @@ inline void compute_residuals_impl(
       const double inv_mu_n = 1.0 / mu_num;
       const double yn_over_mun = y_n * inv_mu_n;
       resid_num[i] = phi_num * (yn_over_mun - 1.0);
-      const double log_rate_n = log_phi_n - eta_num[i];
-      gpn += log_rate_n + 1.0 + ws.log_y_num_cont[i] - digamma_phi_n - yn_over_mun;
+      gpn += gamma_n.derivative(y_n,mu_num,ws.log_y_num_cont[i]);
       if (compute_lp)
-        ll += (phi_num - 1.0) * ws.log_y_num_cont[i] + phi_num * log_rate_n
-            - phi_num * yn_over_mun - lgamma_phi_n;
+        ll += gamma_n.log_density(y_n,mu_num,ws.log_y_num_cont[i]);
     } else {
       resid_num[i] = 0.0;
       if (compute_lp) ll += -1e10;
@@ -503,11 +488,9 @@ inline void compute_residuals_impl(
       const double inv_mu_d = 1.0 / mu_denom;
       const double yd_over_mud = y_d * inv_mu_d;
       resid_denom[i] = phi_denom * (yd_over_mud - 1.0);
-      const double log_rate_d = log_phi_d - eta_denom[i];
-      gpd += log_rate_d + 1.0 + ws.log_y_denom_cont[i] - digamma_phi_d - yd_over_mud;
+      gpd += gamma_d.derivative(y_d,mu_denom,ws.log_y_denom_cont[i]);
       if (compute_lp)
-        ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate_d
-            - phi_denom * yd_over_mud - lgamma_phi_d;
+        ll += gamma_d.log_density(y_d,mu_denom,ws.log_y_denom_cont[i]);
     } else {
       resid_denom[i] = 0.0;
       if (compute_lp) ll += -1e10;
@@ -564,7 +547,7 @@ inline void compute_residuals_impl(
 }
 
 // --- BETA_BINOMIAL ---
-// Fused: hoists digamma(phi), lgamma(phi); precomputes lchoose(n,y).
+// Fused count corrections with cached binomial coefficients.
 inline void compute_residuals_impl(
     ModelTag<ModelType::BETA_BINOMIAL>,
     int N,
@@ -577,8 +560,6 @@ inline void compute_residuals_impl(
     const VecGradWorkspace& ws
 ) {
   // Hoist phi-dependent constants
-  const double psi_phi = ratiod::math::portable_digamma(phi_num);
-  const double lgamma_phi = compute_lp ? std::lgamma(phi_num) : 0.0;
 
   double gpn = 0.0;
   grad_phi_denom_lik = 0.0;
@@ -589,8 +570,8 @@ inline void compute_residuals_impl(
         data.y_num[i], data.y_denom[i], eta_num[i], phi_num);
     resid_num[i] = bb.d_eta;
     resid_denom[i] = 0.0;
-    gpn += bb.d_phi + psi_phi;
-    if (compute_lp) ll += bb.ll + lgamma_phi + ws.lchoose_cache[i];
+    gpn += bb.d_phi;
+    if (compute_lp) ll += bb.ll + ws.lchoose_cache[i];
   }
   grad_phi_num_lik += gpn;
   obs_ll += ll;
@@ -779,28 +760,11 @@ void compute_gradient_fused(
   double ll = 0.0;
 
   // --- Hoisted phi-dependent constants (model-specific, computed once) ---
-  double h_digamma_phi_n = 0.0, h_digamma_phi_d = 0.0;
-  double h_log_phi_n = 0.0, h_log_phi_d = 0.0;
-  double h_lgamma_phi_n = 0.0, h_lgamma_phi_d = 0.0;
-
-  if constexpr (MT == ModelType::POISSON_GAMMA) {
-    h_digamma_phi_d = ratiod::math::portable_digamma(phi_denom);
-    h_log_phi_d = std::log(phi_denom);
-    h_lgamma_phi_d = compute_lp ? std::lgamma(phi_denom) : 0.0;
-  }
-  if constexpr (MT == ModelType::NEGBIN_GAMMA) {
-    h_digamma_phi_d = ratiod::math::portable_digamma(phi_denom);
-    h_log_phi_d = std::log(phi_denom);
-    h_lgamma_phi_d = compute_lp ? std::lgamma(phi_denom) : 0.0;
-  }
-  if constexpr (MT == ModelType::GAMMA_GAMMA) {
-    h_digamma_phi_n = ratiod::math::portable_digamma(phi_num);
-    h_digamma_phi_d = ratiod::math::portable_digamma(phi_denom);
-    h_log_phi_n = std::log(phi_num);
-    h_log_phi_d = std::log(phi_denom);
-    h_lgamma_phi_n = compute_lp ? std::lgamma(phi_num) : 0.0;
-    h_lgamma_phi_d = compute_lp ? std::lgamma(phi_denom) : 0.0;
-  }
+  tulpa::math::GammaPrecision h_gamma_n, h_gamma_d;
+  if constexpr (MT == ModelType::POISSON_GAMMA || MT == ModelType::NEGBIN_GAMMA || MT == ModelType::GAMMA_GAMMA)
+    h_gamma_d = tulpa::math::GammaPrecision(phi_denom, compute_lp);
+  if constexpr (MT == ModelType::GAMMA_GAMMA)
+    h_gamma_n = tulpa::math::GammaPrecision(phi_num, compute_lp);
   double h_sigma_num_sq = 0.0, h_sigma_denom_sq = 0.0;
   double h_log_sigma_n = 0.0, h_log_sigma_d = 0.0;
   if constexpr (MT == ModelType::LOGNORMAL) {
@@ -809,11 +773,7 @@ void compute_gradient_fused(
     h_log_sigma_n = compute_lp ? std::log(phi_num) : 0.0;
     h_log_sigma_d = compute_lp ? std::log(phi_denom) : 0.0;
   }
-  double h_psi_phi_bb = 0.0, h_lgamma_phi_bb = 0.0;
-  if constexpr (MT == ModelType::BETA_BINOMIAL) {
-    h_psi_phi_bb = ratiod::math::portable_digamma(phi_num);
-    h_lgamma_phi_bb = compute_lp ? std::lgamma(phi_num) : 0.0;
-  }
+
 
   // BYM2 spatial parameters
   double sigma_s_bym2 = 0.0, sigma_u_bym2 = 0.0, bym2_scale = 0.0;
@@ -1012,11 +972,11 @@ void compute_gradient_fused(
         const double lgamma_yn_phi = ws.lg_table_num[y_n];
         const double digamma_yd_phi = ws.dig_table_denom[y_d];
         const double lgamma_yd_phi = ws.lg_table_denom[y_d];
-        grad_phi_num_lik += tulpaRatio::count_math::size_score(y_n, mu_n, phi_num, digamma_yn_phi);
-        grad_phi_denom_lik += tulpaRatio::count_math::size_score(y_d, mu_d, phi_denom, digamma_yd_phi);
+        grad_phi_num_lik += tulpa::math::negbin_size_score(y_n, mu_n, phi_num, digamma_yn_phi);
+        grad_phi_denom_lik += tulpa::math::negbin_size_score(y_d, mu_d, phi_denom, digamma_yd_phi);
         if (compute_lp) {
-          ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-          ll += tulpaRatio::count_math::log_pmf(y_d, mu_d, phi_denom, lgamma_yd_phi, ws.lgamma_y_denom_p1[i]);
+          ll += tulpa::math::negbin_log_pmf(y_n, mu_n, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
+          ll += tulpa::math::negbin_log_pmf(y_d, mu_d, phi_denom, lgamma_yd_phi, ws.lgamma_y_denom_p1[i]);
         }
       }
       else if constexpr (MT == ModelType::POISSON_GAMMA) {
@@ -1029,13 +989,10 @@ void compute_gradient_fused(
           const double inv_mu_d = 1.0 / mu_d;
           const double yd_over_mud = y_d * inv_mu_d;
           resid_d = phi_denom * (yd_over_mud - 1.0);
-          const double log_rate = h_log_phi_d - eta_d;
-          grad_phi_denom_lik += log_rate + 1.0 + ws.log_y_denom_cont[i] - h_digamma_phi_d
-                            - yd_over_mud;
+          grad_phi_denom_lik += h_gamma_d.derivative(y_d,mu_d,ws.log_y_denom_cont[i]);
           if (compute_lp) {
             ll += y_n * eta_n - mu_n - ws.lgamma_y_num_p1[i];
-            ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate
-                - phi_denom * yd_over_mud - h_lgamma_phi_d;
+            ll += h_gamma_d.log_density(y_d,mu_d,ws.log_y_denom_cont[i]);
           }
         } else {
           resid_d = 0.0;
@@ -1053,24 +1010,21 @@ void compute_gradient_fused(
         resid_n = y_n - mu_n * (y_n + phi_num) * inv_dn;
         const double digamma_yn_phi = ws.dig_table_num[y_n];
         const double lgamma_yn_phi = ws.lg_table_num[y_n];
-        grad_phi_num_lik += tulpaRatio::count_math::size_score(y_n, mu_n, phi_num, digamma_yn_phi);
+        grad_phi_num_lik += tulpa::math::negbin_size_score(y_n, mu_n, phi_num, digamma_yn_phi);
         // Gamma denominator (same as PG denom) — skip if y <= 0
         if (y_d > 0.0) {
           const double inv_mu_d = 1.0 / mu_d;
           const double yd_over_mud = y_d * inv_mu_d;
           resid_d = phi_denom * (yd_over_mud - 1.0);
-          const double log_rate = h_log_phi_d - eta_d;
-          grad_phi_denom_lik += log_rate + 1.0 + ws.log_y_denom_cont[i] - h_digamma_phi_d
-                            - yd_over_mud;
+          grad_phi_denom_lik += h_gamma_d.derivative(y_d,mu_d,ws.log_y_denom_cont[i]);
           if (compute_lp) {
-            ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-            ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate
-                - phi_denom * yd_over_mud - h_lgamma_phi_d;
+            ll += tulpa::math::negbin_log_pmf(y_n, mu_n, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
+            ll += h_gamma_d.log_density(y_d,mu_d,ws.log_y_denom_cont[i]);
           }
         } else {
           resid_d = 0.0;
           if (compute_lp) {
-            ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
+            ll += tulpa::math::negbin_log_pmf(y_n, mu_n, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
             ll += -1e10;
           }
         }
@@ -1083,11 +1037,9 @@ void compute_gradient_fused(
           const double inv_mu_n = 1.0 / mu_n;
           const double yn_over_mun = y_n * inv_mu_n;
           resid_n = phi_num * (yn_over_mun - 1.0);
-          const double log_rate_n = h_log_phi_n - eta_n;
-          grad_phi_num_lik += log_rate_n + 1.0 + ws.log_y_num_cont[i] - h_digamma_phi_n - yn_over_mun;
+          grad_phi_num_lik += h_gamma_n.derivative(y_n,mu_n,ws.log_y_num_cont[i]);
           if (compute_lp)
-            ll += (phi_num - 1.0) * ws.log_y_num_cont[i] + phi_num * log_rate_n
-                - phi_num * yn_over_mun - h_lgamma_phi_n;
+            ll += h_gamma_n.log_density(y_n,mu_n,ws.log_y_num_cont[i]);
         } else {
           resid_n = 0.0;
           if (compute_lp) ll += -1e10;
@@ -1096,11 +1048,9 @@ void compute_gradient_fused(
           const double inv_mu_d = 1.0 / mu_d;
           const double yd_over_mud = y_d * inv_mu_d;
           resid_d = phi_denom * (yd_over_mud - 1.0);
-          const double log_rate_d = h_log_phi_d - eta_d;
-          grad_phi_denom_lik += log_rate_d + 1.0 + ws.log_y_denom_cont[i] - h_digamma_phi_d - yd_over_mud;
+          grad_phi_denom_lik += h_gamma_d.derivative(y_d,mu_d,ws.log_y_denom_cont[i]);
           if (compute_lp)
-            ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate_d
-                - phi_denom * yd_over_mud - h_lgamma_phi_d;
+            ll += h_gamma_d.log_density(y_d,mu_d,ws.log_y_denom_cont[i]);
         } else {
           resid_d = 0.0;
           if (compute_lp) ll += -1e10;
@@ -1118,24 +1068,7 @@ void compute_gradient_fused(
 
       double resid_n = 0.0, resid_d = 0.0;
 
-      if constexpr (MT == ModelType::POISSON_GAMMA) {
-        // Dead code path (PG now uses multipass), kept for completeness
-        const int y_n = data.y_num[i];
-        const double y_d = data.y_denom_cont[i];
-        const double mu_n = std::exp(eta_n);
-        const double mu_d = std::exp(eta_d);
-        resid_n = y_n - mu_n;
-        resid_d = phi_denom * (y_d / mu_d - 1.0);
-        const double log_rate = h_log_phi_d - eta_d;
-        grad_phi_denom_lik += log_rate + 1.0 + ws.log_y_denom_cont[i] - h_digamma_phi_d
-                          - y_d / mu_d;
-        if (compute_lp) {
-          ll += y_n * eta_n - mu_n - ws.lgamma_y_num_p1[i];
-          ll += (phi_denom - 1.0) * ws.log_y_denom_cont[i] + phi_denom * log_rate
-              - (phi_denom / mu_d) * y_d - h_lgamma_phi_d;
-        }
-      }
-      else if constexpr (MT == ModelType::BINOMIAL) {
+      if constexpr (MT == ModelType::BINOMIAL) {
         const int n_trials = data.y_denom[i];
         const int y = data.y_num[i];
         // Numerically stable logistic: 1 exp + 1 log (was 3 exp + 2 log)
@@ -1176,8 +1109,8 @@ void compute_gradient_fused(
         const ratiod::math::BetaBinomialObs bb = ratiod::math::beta_binomial_obs(
             data.y_num[i], data.y_denom[i], eta_n, phi_num);
         resid_n = bb.d_eta;
-        grad_phi_num_lik += bb.d_phi + h_psi_phi_bb;
-        if (compute_lp) ll += bb.ll + h_lgamma_phi_bb + ws.lchoose_cache[i];
+        grad_phi_num_lik += bb.d_phi;
+        if (compute_lp) ll += bb.ll + ws.lchoose_cache[i];
       }
 
       scatter_gradients_i(i, resid_n, resid_d);

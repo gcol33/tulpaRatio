@@ -101,6 +101,10 @@ cpp_rpg <- function(b, z) {
     .Call(`_tulpaRatio_cpp_rpg`, b, z)
 }
 
+cpp_ratio_precision_density <- function(y, mu, phi, trials) {
+    .Call(`_tulpaRatio_cpp_ratio_precision_density`, y, mu, phi, trials)
+}
+
 cpp_sghmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose) {
     .Call(`_tulpaRatio_cpp_sghmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose)
 }
@@ -383,6 +387,42 @@ cpp_test_negbin_math <- function(y, phi) {
 
 cpp_test_negbin_spec <- function(y, mu, phi, z, type = "zi_negbin") {
     .Call(`_tulpaRatio_cpp_test_negbin_spec`, y, mu, phi, z, type)
+}
+
+cpp_test_precision_jet <- function(y, phi, beta) {
+    .Call(`_tulpaRatio_cpp_test_precision_jet`, y, phi, beta)
+}
+
+cpp_test_precision_h <- function(y, mu, phi, family) {
+    .Call(`_tulpaRatio_cpp_test_precision_h`, y, mu, phi, family)
+}
+
+cpp_test_precision_legacy <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_legacy`, y, mu, phi)
+}
+
+cpp_test_precision_gibbs <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_gibbs`, y, mu, phi)
+}
+
+cpp_test_precision_beta_legacy <- function(y, n, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_beta_legacy`, y, n, phi)
+}
+
+cpp_test_precision_spec_h <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_spec_h`, y, mu, phi)
+}
+
+cpp_test_precision_spec <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_spec`, y, mu, phi)
+}
+
+cpp_test_precision_beta_spec <- function(y, n, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_beta_spec`, y, n, phi)
+}
+
+cpp_test_precision_beta_spec_h <- function(y, n, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_beta_spec_h`, y, n, phi)
 }
 
 cpp_tls_workspace_shrink <- function(cycles, work, n) {

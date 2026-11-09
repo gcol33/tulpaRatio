@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <cmath>
+#include <tulpa/precision_math.h>
 
 namespace ratiod_car_proper {
 
@@ -192,8 +193,7 @@ inline double log_prior_rho(double rho, double lower, double upper,
 // Log prior for tau: Gamma(shape, rate)
 inline double log_prior_tau(double tau, double shape, double rate) {
   if (tau <= 0) return -INFINITY;
-  return (shape - 1.0) * std::log(tau) - rate * tau +
-         shape * std::log(rate) - std::lgamma(shape);
+  return tulpa::math::gamma_log_density(tau, shape / rate, shape, std::log(tau));
 }
 
 // -----------------------------------------------------------------------------

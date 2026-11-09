@@ -36,12 +36,12 @@ Imports:
     loo,
     methods,
     stats,
-    tulpa (>= 0.7.5),
+    tulpa (>= 0.7.6),
     Rcpp (>= 1.0.0)
 LinkingTo:
     Rcpp,
     RcppEigen,
-    tulpa (>= 0.7.5)
+    tulpa (>= 0.7.6)
 Additional_repositories: https://gcol33.r-universe.dev
 Suggests:
     patchwork,

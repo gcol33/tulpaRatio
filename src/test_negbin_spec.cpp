@@ -4,8 +4,8 @@
 // [[Rcpp::export]]
 Rcpp::NumericVector cpp_test_negbin_math(int y, double phi) {
   Rcpp::NumericVector out(5);
-  out[0] = tulpaRatio::count_math::lgamma_ratio_count(y, phi);
-  for (int k = 0; k < 4; ++k) out[k + 1] = tulpaRatio::count_math::polygamma_difference(k, y, phi);
+  out[0] = tulpa::math::lgamma_ratio_count(y, phi);
+  for (int k = 0; k < 4; ++k) out[k + 1] = tulpa::math::polygamma_rising_difference(k, y, phi);
   return out;
 }
 

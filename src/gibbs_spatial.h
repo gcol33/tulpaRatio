@@ -18,7 +18,8 @@
 
 #include <Rcpp.h>
 #include "enum_names.h"
-#include "negbin_math.h"
+#include <tulpa/count_math.h>
+#include <tulpa/precision_math.h>
 #include <vector>
 #include <cmath>
 #include <random>
@@ -206,22 +207,19 @@ inline double obs_log_lik(int i, double eta_num, double eta_denom,
         double alpha = phi_denom;
         double mu_d = std::exp(std::min(eta_denom, 20.0));
         double y_d = d.y_denom_cont[i];
-        ll += alpha * std::log(alpha) - std::lgamma(alpha)
-            + (alpha - 1.0) * std::log(y_d) - alpha * (y_d / mu_d + eta_denom);
-        // Gamma: alpha*log(alpha/mu) + (alpha-1)*log(y) - alpha*y/mu - lgamma(alpha)
-        // = alpha*log(alpha) - alpha*log(mu) + (alpha-1)*log(y) - alpha*y/mu - lgamma(alpha)
+        ll += tulpa::math::gamma_log_density(y_d, mu_d, alpha, std::log(y_d));
         break;
     }
     case GibbsFamily::NEGBIN_NEGBIN: {
         double mu_n = std::exp(std::min(eta_num, 20.0));
         double r_n = phi_num;
         int y_n = d.y_num[i];
-        ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, r_n);
+        ll += tulpa::math::negbin_log_pmf(y_n, mu_n, r_n);
 
         double mu_d = std::exp(std::min(eta_denom, 20.0));
         double r_d = phi_denom;
         int y_d = d.y_denom[i];
-        ll += tulpaRatio::count_math::log_pmf(y_d, mu_d, r_d);
+        ll += tulpa::math::negbin_log_pmf(y_d, mu_d, r_d);
         break;
     }
     case GibbsFamily::BINOMIAL: {
@@ -235,13 +233,12 @@ inline double obs_log_lik(int i, double eta_num, double eta_denom,
         double mu_n = std::exp(std::min(eta_num, 20.0));
         double r_n = phi_num;
         int y_n = d.y_num[i];
-        ll += tulpaRatio::count_math::log_pmf(y_n, mu_n, r_n);
+        ll += tulpa::math::negbin_log_pmf(y_n, mu_n, r_n);
 
         double alpha = phi_denom;
         double mu_d = std::exp(std::min(eta_denom, 20.0));
         double y_d = d.y_denom_cont[i];
-        ll += alpha * std::log(alpha) - std::lgamma(alpha)
-            + (alpha - 1.0) * std::log(y_d) - alpha * (y_d / mu_d + eta_denom);
+        ll += tulpa::math::gamma_log_density(y_d, mu_d, alpha, std::log(y_d));
         break;
     }
     }

@@ -4,7 +4,7 @@
 // Reference: Zhou et al. (2012) "Lognormal and Gamma Mixed Negative Binomial Regression"
 
 #include "pg_negbin.h"
-#include "negbin_math.h"
+#include <tulpa/count_math.h>
 #include "pg_binomial.h"
 #include "pg_rng.h"
 #include "crt_rng.h"
@@ -227,7 +227,7 @@ static double negbin_loglik_eta(
     double mu_i = r * std::exp(eta_i);
     mu_i = std::max(1e-10, mu_i);
 
-    ll += tulpaRatio::count_math::log_pmf(y[i], mu_i, r);
+    ll += tulpa::math::negbin_log_pmf(y[i], mu_i, r);
   }
 
   return ll;

@@ -644,9 +644,7 @@ inline LocLikResult compute_loc_lik(
                     double y_denom = data.y_denom_cont[i];
                     double shape = phi_denom;
                     double resid_denom = shape * (y_denom / mu_denom - 1.0);
-                    res.ll += shape * std::log(shape) - std::lgamma(shape)
-                              + (shape - 1.0) * std::log(y_denom)
-                              - shape * eta_denom_i - shape * y_denom / mu_denom;
+                    res.ll += tulpa::math::gamma_log_density(y_denom, mu_denom, shape, std::log(y_denom));
                     res.grad += resid_denom;
                     res.neg_hess += shape * y_denom / mu_denom;
                 }

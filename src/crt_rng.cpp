@@ -3,7 +3,7 @@
 // Reference: Zhou et al. (2012) "Lognormal and Gamma Mixed Negative Binomial Regression" ICML
 
 #include "crt_rng.h"
-#include "negbin_math.h"
+#include <tulpa/count_math.h>
 #include <Rcpp.h>
 #include <cmath>
 
@@ -72,7 +72,7 @@ IntegerVector sample_crt_vec2(IntegerVector y, NumericVector r) {
 double crt_mean(int y, double r) {
   if (y <= 0 || r <= 0.0) return 0.0;
 
-  return r * tulpaRatio::count_math::polygamma_difference(0, y, r);
+  return r * tulpa::math::polygamma_rising_difference(0, y, r);
 }
 
 // Sum of CRT draws (sufficient statistic for dispersion update)

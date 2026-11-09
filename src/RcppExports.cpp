@@ -529,6 +529,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_ratio_precision_density
+Rcpp::NumericVector cpp_ratio_precision_density(const Rcpp::NumericVector& y, const Rcpp::NumericVector& mu, const Rcpp::NumericVector& phi, const Rcpp::NumericVector& trials);
+RcppExport SEXP _tulpaRatio_cpp_ratio_precision_density(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP trialsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type trials(trialsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_ratio_precision_density(y, mu, phi, trials));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_sghmc_fit
 Rcpp::List cpp_sghmc_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List gp_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, int n_iter, int n_warmup, int batch_size, double epsilon, double alpha, int L, unsigned int seed, bool verbose);
 RcppExport SEXP _tulpaRatio_cpp_sghmc_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP gp_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP batch_sizeSEXP, SEXP epsilonSEXP, SEXP alphaSEXP, SEXP LSEXP, SEXP seedSEXP, SEXP verboseSEXP) {
@@ -1547,6 +1561,124 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_precision_jet
+Rcpp::NumericVector cpp_test_precision_jet(double y, double phi, bool beta);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_jet(SEXP ySEXP, SEXP phiSEXP, SEXP betaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< bool >::type beta(betaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_jet(y, phi, beta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_h
+Rcpp::NumericMatrix cpp_test_precision_h(double y, double mu, double phi, int family);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_h(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP familySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< int >::type family(familySEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_h(y, mu, phi, family));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_legacy
+Rcpp::NumericMatrix cpp_test_precision_legacy(double y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_legacy(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_legacy(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_gibbs
+Rcpp::NumericVector cpp_test_precision_gibbs(double y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_gibbs(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_gibbs(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_beta_legacy
+Rcpp::NumericMatrix cpp_test_precision_beta_legacy(int y, int n, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_beta_legacy(SEXP ySEXP, SEXP nSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_beta_legacy(y, n, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_spec_h
+Rcpp::NumericMatrix cpp_test_precision_spec_h(double y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_spec_h(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_spec_h(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_spec
+Rcpp::NumericMatrix cpp_test_precision_spec(double y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_spec(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_spec(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_beta_spec
+Rcpp::NumericMatrix cpp_test_precision_beta_spec(int y, int n, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_beta_spec(SEXP ySEXP, SEXP nSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_beta_spec(y, n, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_precision_beta_spec_h
+Rcpp::NumericVector cpp_test_precision_beta_spec_h(int y, int n, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_beta_spec_h(SEXP ySEXP, SEXP nSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_beta_spec_h(y, n, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_tls_workspace_shrink
 double cpp_tls_workspace_shrink(int cycles, int work, int n);
 RcppExport SEXP _tulpaRatio_cpp_tls_workspace_shrink(SEXP cyclesSEXP, SEXP workSEXP, SEXP nSEXP) {
@@ -1701,6 +1833,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_pg_negbin_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_gibbs_spatial, 21},
     {"_tulpaRatio_cpp_rpg1", (DL_FUNC) &_tulpaRatio_cpp_rpg1, 1},
     {"_tulpaRatio_cpp_rpg", (DL_FUNC) &_tulpaRatio_cpp_rpg, 2},
+    {"_tulpaRatio_cpp_ratio_precision_density", (DL_FUNC) &_tulpaRatio_cpp_ratio_precision_density, 4},
     {"_tulpaRatio_cpp_sghmc_fit", (DL_FUNC) &_tulpaRatio_cpp_sghmc_fit, 26},
     {"_tulpaRatio_cpp_sgld_fit", (DL_FUNC) &_tulpaRatio_cpp_sgld_fit, 28},
     {"_tulpaRatio_cpp_temporal_gp_field", (DL_FUNC) &_tulpaRatio_cpp_temporal_gp_field, 4},
@@ -1772,6 +1905,15 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},
     {"_tulpaRatio_cpp_test_negbin_math", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_math, 2},
     {"_tulpaRatio_cpp_test_negbin_spec", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_spec, 5},
+    {"_tulpaRatio_cpp_test_precision_jet", (DL_FUNC) &_tulpaRatio_cpp_test_precision_jet, 3},
+    {"_tulpaRatio_cpp_test_precision_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_h, 4},
+    {"_tulpaRatio_cpp_test_precision_legacy", (DL_FUNC) &_tulpaRatio_cpp_test_precision_legacy, 3},
+    {"_tulpaRatio_cpp_test_precision_gibbs", (DL_FUNC) &_tulpaRatio_cpp_test_precision_gibbs, 3},
+    {"_tulpaRatio_cpp_test_precision_beta_legacy", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_legacy, 3},
+    {"_tulpaRatio_cpp_test_precision_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec_h, 3},
+    {"_tulpaRatio_cpp_test_precision_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec, 3},
+    {"_tulpaRatio_cpp_test_precision_beta_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec, 3},
+    {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},

@@ -276,8 +276,8 @@ struct PoissonGammaFn {
     double shape;       // == exp(log_shape)
     double log_shape;
     int N;
-    // Cached digamma(shape) — independent of i.
-    double dig_shape;
+    // Precision-only normalizer and score, shared across observations.
+    tulpa::math::GammaPrecision gamma;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
         const double eta_n = eta[i];          // process 0
         const double eta_d = eta[N + i];      // process 1
@@ -295,14 +295,12 @@ struct PoissonGammaFn {
         double extra_i = 0.0;
         if (y_d > 0.0) {
             resid[1] = shape * (y_d / mu_d - 1.0);
-            const double rate = shape / mu_d;
             // ll_gamma = shape*log(rate) + (shape-1)*log(y) - rate*y - lgamma(shape)
             const double log_y = std::log(y_d);
-            ll_g = shape * std::log(rate) + (shape - 1.0) * log_y - rate * y_d
-                   - std::lgamma(shape);
+            ll_g = gamma.log_density(y_d,mu_d,log_y);
             // d/dshape per obs (chain-rule to d/dlog_shape applied outside):
             //   d/dshape = log(rate) + 1 + log(y) - digamma(shape) - rate*y/shape
-            extra_i = std::log(rate) + 1.0 + log_y - dig_shape - rate * y_d / shape;
+            extra_i = gamma.derivative(y_d,mu_d,log_y);
         } else {
             resid[1] = 0.0;
         }
@@ -319,7 +317,7 @@ struct NegbinGammaFn {
     double phi_num;       // == exp(log_phi_num)
     double phi_denom;     // == exp(log_phi_denom)   == "shape"
     int N;
-    double dig_phi_denom;
+    tulpa::math::GammaPrecision gamma_denom;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
         const double eta_n = eta[i];
         const double eta_d = eta[N + i];
@@ -332,20 +330,16 @@ struct NegbinGammaFn {
         const double denom_n = mu_n + phi_num;
         resid[0] = static_cast<double>(y_n)
                    - mu_n * (static_cast<double>(y_n) + phi_num) / denom_n;
-        const double dlog_phi_num_i = count_math::size_score(y_n, mu_n, phi_num);
+        const double dlog_phi_num_i = tulpa::math::negbin_size_score(y_n, mu_n, phi_num);
 
         // Denominator: Gamma(shape=phi_denom, rate=phi_denom/mu_d). Only if y_d > 0.
         double dlog_phi_denom_i = 0.0;
         double ll_g = 0.0;
         if (y_d > 0.0) {
             resid[1] = phi_denom * (y_d / mu_d - 1.0);
-            const double rate = phi_denom / mu_d;
             const double log_y = std::log(y_d);
-            ll_g = phi_denom * std::log(rate)
-                   + (phi_denom - 1.0) * log_y - rate * y_d
-                   - std::lgamma(phi_denom);
-            dlog_phi_denom_i = std::log(rate) + 1.0 + log_y - dig_phi_denom
-                               - rate * y_d / phi_denom;
+            ll_g = gamma_denom.log_density(y_d,mu_d,log_y);
+            dlog_phi_denom_i = gamma_denom.derivative(y_d,mu_d,log_y);
         } else {
             resid[1] = 0.0;
         }
@@ -380,8 +374,8 @@ struct NegbinNegbinFn {
         resid[1] = static_cast<double>(y_d)
                    - mu_d * (static_cast<double>(y_d) + phi_denom) / denom_d;
 
-        extra[0] += count_math::size_score(y_n, mu_n, phi_num);
-        extra[1] += count_math::size_score(y_d, mu_d, phi_denom);
+        extra[0] += tulpa::math::negbin_size_score(y_n, mu_n, phi_num);
+        extra[1] += tulpa::math::negbin_size_score(y_d, mu_d, phi_denom);
 
         const double ll_n = lik::negbin_log_pmf<double>(y_n, mu_n, phi_num);
         const double ll_d = lik::negbin_log_pmf<double>(y_d, mu_d, phi_denom);
@@ -393,7 +387,7 @@ struct GammaGammaFn {
     const lik::GammaGammaResponseData* resp;
     double phi_num, phi_denom;
     int N;
-    double dig_phi_num, dig_phi_denom;
+    tulpa::math::GammaPrecision gamma_num, gamma_denom;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
         const double eta_n = eta[i];
         const double eta_d = eta[N + i];
@@ -405,23 +399,17 @@ struct GammaGammaFn {
         double ll = 0.0;
         if (y_n > 0.0) {
             resid[0] = phi_num * (y_n / mu_n - 1.0);
-            const double rate_n = phi_num / mu_n;
             const double log_yn = std::log(y_n);
-            ll += phi_num * std::log(rate_n)
-                  + (phi_num - 1.0) * log_yn - rate_n * y_n
-                  - std::lgamma(phi_num);
-            extra[0] += std::log(rate_n) + 1.0 + log_yn - dig_phi_num - y_n / mu_n;
+            ll += gamma_num.log_density(y_n,mu_n,log_yn);
+            extra[0] += gamma_num.derivative(y_n,mu_n,log_yn);
         } else {
             resid[0] = 0.0;
         }
         if (y_d > 0.0) {
             resid[1] = phi_denom * (y_d / mu_d - 1.0);
-            const double rate_d = phi_denom / mu_d;
             const double log_yd = std::log(y_d);
-            ll += phi_denom * std::log(rate_d)
-                  + (phi_denom - 1.0) * log_yd - rate_d * y_d
-                  - std::lgamma(phi_denom);
-            extra[1] += std::log(rate_d) + 1.0 + log_yd - dig_phi_denom - y_d / mu_d;
+            ll += gamma_denom.log_density(y_d,mu_d,log_yd);
+            extra[1] += gamma_denom.derivative(y_d,mu_d,log_yd);
         } else {
             resid[1] = 0.0;
         }
@@ -465,7 +453,6 @@ struct BetaBinomialFn {
     const lik::BetaBinomialResponseData* resp;
     double phi;            // == exp(log_phi)
     int N;
-    double dig_phi;
     double operator()(int i, const double* eta, double* resid, double* extra) const {
         const int y = resp->y[i];
         const int n = resp->n[i];
@@ -473,12 +460,37 @@ struct BetaBinomialFn {
             ratiod::math::beta_binomial_obs(y, n, eta[i], phi);
         resid[0] = bb.d_eta;
         // d/dphi (will be multiplied by phi at the end of the loop)
-        extra[0] += bb.d_phi + dig_phi;
-        return bb.ll + std::lgamma(phi) + tulpa::math::portable_lchoose(n, y);
+        extra[0] += bb.d_phi;
+        return bb.ll + tulpa::math::portable_lchoose(n, y);
     }
 };
 
 }  // namespace
+Rcpp::NumericMatrix precision_spec_h_probe(double y, double mu, double phi) {
+  lik::PoissonGammaResponseData pg; pg.y_num={0}; pg.y_denom_cont={y};
+  lik::NegbinGammaResponseData ng; ng.y_num={0}; ng.y_denom_cont={y};
+  lik::GammaGammaResponseData gg; gg.y_num_cont={y}; gg.y_denom_cont={y};
+  double eta[2]={0,std::log(mu)}, resid[2], extra[2]={0,0};
+  Rcpp::NumericMatrix out(3,2);
+  PoissonGammaFn a{&pg,phi,std::log(phi),1,tulpa::math::GammaPrecision(phi)};
+  out(0,0)=a(0,eta,resid,extra)+1; out(0,1)=extra[0];
+  extra[0]=extra[1]=0;
+  NegbinGammaFn b{&ng,2,phi,1,tulpa::math::GammaPrecision(phi)};
+  out(1,0)=b(0,eta,resid,extra)+2*std::log1p(.5); out(1,1)=extra[1];
+  extra[0]=extra[1]=0; eta[0]=eta[1];
+  GammaGammaFn c{&gg,phi,phi,1,tulpa::math::GammaPrecision(phi),tulpa::math::GammaPrecision(phi)};
+  out(2,0)=c(0,eta,resid,extra); out(2,1)=extra[1];
+  return out;
+}
+
+Rcpp::NumericVector precision_spec_beta_h_probe(int y, int n, double phi) {
+  lik::BetaBinomialResponseData resp; resp.y={y};resp.n={n};
+  BetaBinomialFn fn{&resp,phi,1};
+  double eta=0, resid=0, extra=0;
+  const double ll=fn(0,&eta,&resid,&extra);
+  return Rcpp::NumericVector::create(ll,extra);
+}
+
 
 // =====================================================================
 // Public per-family entry points
@@ -524,7 +536,7 @@ void grad_h_poisson_gamma(
 
     const double log_shape = params[layout.extra_offset];
     const double shape     = std::exp(log_shape);
-    const double dig_shape = tulpa::math::portable_digamma(shape);
+    const tulpa::math::GammaPrecision dig_shape(shape);
 
     const std::vector<double> eta = compute_eta_matrix(params, data, layout);
     const auto* resp = static_cast<const lik::PoissonGammaResponseData*>(
@@ -564,7 +576,7 @@ void grad_h_negbin_gamma(
     const double log_phi_denom = params[layout.extra_offset + 1];
     const double phi_num       = std::exp(log_phi_num);
     const double phi_denom     = std::exp(log_phi_denom);
-    const double dig_phi_denom = tulpa::math::portable_digamma(phi_denom);
+    const tulpa::math::GammaPrecision dig_phi_denom(phi_denom);
 
     const std::vector<double> eta = compute_eta_matrix(params, data, layout);
     const auto* resp = static_cast<const lik::NegbinGammaResponseData*>(
@@ -651,8 +663,8 @@ void grad_h_gamma_gamma(
     const double log_phi_denom = params[layout.extra_offset + 1];
     const double phi_num       = std::exp(log_phi_num);
     const double phi_denom     = std::exp(log_phi_denom);
-    const double dig_phi_num   = tulpa::math::portable_digamma(phi_num);
-    const double dig_phi_denom = tulpa::math::portable_digamma(phi_denom);
+    const tulpa::math::GammaPrecision dig_phi_num(phi_num);
+    const tulpa::math::GammaPrecision dig_phi_denom(phi_denom);
 
     const std::vector<double> eta = compute_eta_matrix(params, data, layout);
     const auto* resp = static_cast<const lik::GammaGammaResponseData*>(
@@ -736,12 +748,11 @@ void grad_h_beta_binomial(
 
     const double log_phi = params[layout.extra_offset];
     const double phi     = std::exp(log_phi);
-    const double dig_phi = tulpa::math::portable_digamma(phi);
 
     const std::vector<double> eta = compute_eta_matrix(params, data, layout);
     const auto* resp = static_cast<const lik::BetaBinomialResponseData*>(
         data.model_response_data);
-    BetaBinomialFn fn{resp, phi, data.N, dig_phi};
+    BetaBinomialFn fn{resp, phi, data.N};
 
     const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
                                         grad, /*n_extra_grads=*/1);

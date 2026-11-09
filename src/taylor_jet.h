@@ -182,6 +182,37 @@ inline Jet3<S> log1p_fn(const Jet3<S>& x) {
   return compose(x, coef_log1p(x.v), r, 0.0 - r2, 2.0 * r2 * r);
 }
 
+template <typename S>
+inline Jet3<S> log(const Jet3<S>& x) { return safe_log(x); }
+
+template <typename S>
+inline double precision_value(const Jet3<S>& x) { return coef_value(x.v); }
+
+inline double coef_stirling(double x, int order) {
+  return tulpa::math::stirling_remainder_derivative(x, order);
+}
+inline fwd::Dual coef_stirling(const fwd::Dual& x, int order) {
+  return fwd::Dual(tulpa::math::stirling_remainder_derivative(x.val, order),
+    x.grad == 0 ? 0 : x.grad*tulpa::math::stirling_remainder_derivative(x.val, order+1));
+}
+
+template <typename S>
+inline Jet3<S> stirling_remainder(const Jet3<S>& x) {
+  return compose(x, coef_stirling(x.v,0), coef_stirling(x.v,1),
+    coef_stirling(x.v,2), coef_stirling(x.v,3));
+}
+
+inline double coef_deviance(double x) { return tulpa::math::log1pmx(x); }
+inline fwd::Dual coef_deviance(const fwd::Dual& x) {
+  return fwd::Dual(tulpa::math::log1pmx(x.val), x.grad == 0 ? 0 : x.val/(1+x.val)*x.grad);
+}
+
+template <typename S>
+inline Jet3<S> log1pmx(const Jet3<S>& x) {
+  const S r=1.0/(1.0+x.v), r2=r*r;
+  return compose(x, coef_deviance(x.v), x.v*r, r2, -2.0*r2*r);
+}
+
 // Whether the jet is constant along the line: its derivatives are all zero,
 // so a function of it needs only its value.
 template <typename S>

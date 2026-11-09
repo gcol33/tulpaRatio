@@ -710,9 +710,7 @@ inline UnitLikResult compute_unit_lik(
                     double mu_denom = std::exp(std::min(eta_denom_i, 20.0));
                     double y_denom = data.y_denom_cont[i];
                     double shape = phi_denom;
-                    res.ll += shape * std::log(shape) - std::lgamma(shape)
-                              + (shape - 1.0) * std::log(std::max(y_denom, 1e-10))
-                              - shape * eta_denom_i - shape * y_denom / mu_denom;
+                    res.ll += tulpa::math::gamma_log_density(y_denom, mu_denom, shape, std::log(y_denom));
                     res.grad += shape * (y_denom / mu_denom - 1.0);
                     res.neg_hess += shape * y_denom / mu_denom;
                 }
@@ -746,9 +744,7 @@ inline UnitLikResult compute_unit_lik(
                     double mu_denom = std::exp(std::min(eta_denom_i, 20.0));
                     double y_denom = data.y_denom_cont[i];
                     double shape = phi_denom;
-                    res.ll += shape * std::log(shape) - std::lgamma(shape)
-                              + (shape - 1.0) * std::log(std::max(y_denom, 1e-10))
-                              - shape * eta_denom_i - shape * y_denom / mu_denom;
+                    res.ll += tulpa::math::gamma_log_density(y_denom, mu_denom, shape, std::log(y_denom));
                     res.grad += shape * (y_denom / mu_denom - 1.0);
                     res.neg_hess += shape * y_denom / mu_denom;
                 }
