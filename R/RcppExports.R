@@ -49,10 +49,6 @@ cpp_kriging_predict <- function(coords_train, coords_new, w_train, sigma2, phi, 
     .Call(`_tulpaRatio_cpp_kriging_predict`, coords_train, coords_new, w_train, sigma2, phi, cov_type, nn)
 }
 
-cpp_pg_binomial_gibbs <- function(y, n, X, group, n_groups, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_scale = 2.5, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_pg_binomial_gibbs`, y, n, X, group, n_groups, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_scale, store_eta, verbose, n_threads)
-}
-
 cpp_pg_binomial_gibbs_spatial <- function(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_spatial_U = 3.0, prior_sigma_spatial_alpha = 0.01, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_spatial`, y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha, store_eta, verbose, n_threads)
 }

@@ -2,7 +2,7 @@
 // Pólya-Gamma Gibbs sampler for binomial models with random effects
 // Based on Polson, Scott & Windle (2013) JASA
 
-#include "pg_binomial.h"
+#include "pg_common.h"
 #include "pg_rng.h"
 #include "pg_spatial.h"
 #include "hmc_cov.h"
@@ -24,418 +24,6 @@
 #endif
 
 using namespace Rcpp;
-
-namespace ratiod {
-
-// ---------------------------------------------------------------------
-// Helper: solve linear system with diagonal covariance
-// For posterior: (X'WX + D^{-1})^{-1} X'W kappa
-// where W = diag(omega), D = prior precision
-// ---------------------------------------------------------------------
-
-// Compute X'WX + prior_prec * I and X'W * (kappa - offset)
-// Returns list with posterior mean and precision matrix
-List compute_posterior_normal(
-    const NumericMatrix& X,
-    const NumericVector& omega,
-    const NumericVector& kappa,
-    const NumericVector& offset,
-    double prior_prec
-) {
-  int n = X.nrow();
-  int p = X.ncol();
-
-  // X'WX + prior_prec * I
-  NumericMatrix XWX(p, p);
-  NumericVector XWkappa(p);
-
-  for (int j = 0; j < p; j++) {
-    for (int k = j; k < p; k++) {
-      double sum = 0.0;
-      for (int i = 0; i < n; i++) {
-        sum += X(i, j) * omega[i] * X(i, k);
-      }
-      XWX(j, k) = sum;
-      if (j != k) XWX(k, j) = sum;
-    }
-    // Add prior precision to diagonal
-    XWX(j, j) += prior_prec;
-
-    // X'W(kappa - offset)
-    double sum_kappa = 0.0;
-    for (int i = 0; i < n; i++) {
-      sum_kappa += X(i, j) * omega[i] * (kappa[i] / omega[i] - offset[i]);
-    }
-    XWkappa[j] = sum_kappa;
-  }
-
-  return List::create(
-    Named("XWX") = XWX,
-    Named("XWkappa") = XWkappa
-  );
-}
-
-// Cholesky solve: solve (L L') x = b
-NumericVector chol_solve(const NumericMatrix& L, const NumericVector& b) {
-  int p = L.ncol();
-  NumericVector y(p), x(p);
-
-  // Forward substitution: L y = b
-  for (int i = 0; i < p; i++) {
-    double sum = b[i];
-    for (int j = 0; j < i; j++) {
-      sum -= L(i, j) * y[j];
-    }
-    y[i] = sum / L(i, i);
-  }
-
-  // Back substitution: L' x = y
-  for (int i = p - 1; i >= 0; i--) {
-    double sum = y[i];
-    for (int j = i + 1; j < p; j++) {
-      sum -= L(j, i) * x[j];
-    }
-    x[i] = sum / L(i, i);
-  }
-
-  return x;
-}
-
-// Cholesky decomposition (lower triangular)
-NumericMatrix chol_decomp(const NumericMatrix& A) {
-  int n = A.nrow();
-  NumericMatrix L(n, n);
-
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j <= i; j++) {
-      double sum = 0.0;
-      for (int k = 0; k < j; k++) {
-        sum += L(i, k) * L(j, k);
-      }
-      if (i == j) {
-        L(i, j) = std::sqrt(std::max(A(i, i) - sum, 1e-10));
-      } else {
-        L(i, j) = (A(i, j) - sum) / L(j, j);
-      }
-    }
-  }
-  return L;
-}
-
-// Sample from multivariate normal using Cholesky
-NumericVector rmvnorm_chol(const NumericVector& mean, const NumericMatrix& L) {
-  int p = mean.size();
-  NumericVector z(p), x(p);
-
-  // Sample standard normal
-  for (int i = 0; i < p; i++) {
-    z[i] = R::rnorm(0.0, 1.0);
-  }
-
-  // x = mean + L * z
-  for (int i = 0; i < p; i++) {
-    x[i] = mean[i];
-    for (int j = 0; j <= i; j++) {
-      x[i] += L(i, j) * z[j];
-    }
-  }
-
-  return x;
-}
-
-// ---------------------------------------------------------------------
-// Update functions
-// ---------------------------------------------------------------------
-
-// Update beta (fixed effects)
-NumericVector update_beta(
-    const NumericVector& kappa,
-    const NumericVector& omega,
-    const NumericMatrix& X,
-    const NumericVector& re_contrib,
-    double prior_sd
-) {
-  int n = X.nrow();
-  int p = X.ncol();
-  double prior_prec = 1.0 / (prior_sd * prior_sd);
-
-  // Compute posterior parameters
-  List post = compute_posterior_normal(X, omega, kappa, re_contrib, prior_prec);
-  NumericMatrix XWX = post["XWX"];
-  NumericVector XWkappa = post["XWkappa"];
-
-  // Cholesky decomposition
-  NumericMatrix L = chol_decomp(XWX);
-
-  // Posterior mean: solve XWX * mean = XWkappa
-  NumericVector post_mean = chol_solve(L, XWkappa);
-
-  // Sample from posterior
-  // Need to sample from N(post_mean, XWX^{-1})
-  // XWX^{-1} = (L L')^{-1} = L'^{-1} L^{-1}
-  // Sample z ~ N(0, I) and add L^{-T} z to the mean.
-
-  // Solve L' z_star = z for the precision-factor noise.
-  NumericVector z(p);
-  for (int i = 0; i < p; i++) {
-    z[i] = R::rnorm(0.0, 1.0);
-  }
-
-  // Solve L' z_star = z by back substitution.
-  NumericVector z_star(p);
-  for (int i = p - 1; i >= 0; i--) {
-    double sum = z[i];
-    for (int j = i + 1; j < p; j++) {
-      sum -= L(j, i) * z_star[j];
-    }
-    z_star[i] = sum / L(i, i);
-  }
-
-  // x = mean + z_star
-  NumericVector beta(p);
-  for (int i = 0; i < p; i++) {
-    beta[i] = post_mean[i] + z_star[i];
-  }
-
-  return beta;
-}
-
-// Update random effects (blocked by group)
-NumericVector update_re(
-    const NumericVector& kappa,
-    const NumericVector& omega,
-    const NumericVector& X_beta,
-    const IntegerVector& group,
-    int n_groups,
-    double sigma_re
-) {
-  int n = kappa.size();
-  NumericVector re(n_groups);
-
-  // For each group, compute posterior
-  // Observations in group g: Y_g = X_beta_g + b_g + error
-  // With PG augmentation: kappa_g/omega_g = X_beta_g + b_g + N(0, 1/omega_g)
-  // Prior: b_g ~ N(0, sigma_re^2)
-  //
-  // Posterior: b_g | ... ~ N(m_g, v_g)
-  // v_g = (sum(omega_g) + 1/sigma_re^2)^{-1}
-  // m_g = v_g * sum(kappa_g - omega_g * X_beta_g)
-
-  double prior_prec = 1.0 / (sigma_re * sigma_re + 1e-10);
-
-  // Accumulate sufficient statistics by group
-  NumericVector sum_omega(n_groups);
-  NumericVector sum_resid(n_groups);
-
-  for (int i = 0; i < n; i++) {
-    int g = group[i] - 1;  // Convert to 0-based
-    sum_omega[g] += omega[i];
-    sum_resid[g] += kappa[i] - omega[i] * X_beta[i];
-  }
-
-  // Sample from posterior
-  for (int g = 0; g < n_groups; g++) {
-    double post_var = 1.0 / (sum_omega[g] + prior_prec);
-    double post_mean = post_var * sum_resid[g];
-    re[g] = R::rnorm(post_mean, std::sqrt(post_var));
-  }
-
-  return re;
-}
-
-double HalfCauchyScale::update(const NumericVector& effects, double scale) {
-  const int J = effects.size();
-  double ss = 0.0;
-  for (int j = 0; j < J; j++) ss += effects[j] * effects[j];
-
-  const double sigma_sq = 1.0 / R::rgamma((J + 1.0) / 2.0, 1.0 / (ss / 2.0 + 1.0 / aux));
-  aux = 1.0 / R::rgamma(1.0, 1.0 / (1.0 / (scale * scale) + 1.0 / sigma_sq));
-  sigma = std::sqrt(sigma_sq);
-  return sigma;
-}
-
-// ---------------------------------------------------------------------
-// Main Gibbs sampler
-// ---------------------------------------------------------------------
-
-List pg_binomial_gibbs_impl(
-    IntegerVector y,
-    IntegerVector n,
-    NumericMatrix X,
-    IntegerVector group,
-    int n_groups,
-    int n_iter,
-    int n_warmup,
-    int thin,
-    double prior_beta_sd,
-    double prior_sigma_scale,
-    bool store_eta,
-    bool verbose,
-    int n_threads
-) {
-  int N = y.size();
-  int p = X.ncol();
-  int n_save = (n_iter - n_warmup) / thin;
-
-  ratiod_omp::ScopedThreadCount thread_scope(n_threads);
-
-  // Storage
-  NumericMatrix beta_draws(n_save, p);
-  NumericMatrix re_draws(n_save, n_groups);
-  NumericVector sigma_draws(n_save);
-  NumericMatrix eta_draws;
-  if (store_eta) {
-    eta_draws = NumericMatrix(n_save, N);
-  }
-
-  // Initialize
-  NumericVector beta(p, 0.0);
-  NumericVector re(n_groups, 0.0);
-  double sigma_re = 1.0;
-  ratiod::HalfCauchyScale sigma_re_prior;
-  NumericVector omega(N, 1.0);  // PG draws
-  NumericVector kappa(N);       // y - n/2
-  NumericVector eta(N);         // Linear predictor
-  NumericVector X_beta(N);      // X * beta
-  NumericVector re_contrib(N);  // Random effects contribution
-
-  // Compute kappa = y - n/2
-  for (int i = 0; i < N; i++) {
-    kappa[i] = y[i] - n[i] / 2.0;
-  }
-
-  // The linear predictor of the current state. It is refreshed at the top of
-  // an iteration for the omega draw and again at the save, so the stored eta
-  // belongs to the parameters saved beside it.
-  auto refresh_eta = [&]() {
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-      // Only access re if we have random effects
-      if (n_groups > 0) {
-        re_contrib[i] = re[group[i] - 1];  // group is 1-based
-      } else {
-        re_contrib[i] = 0.0;
-      }
-      eta[i] = X_beta[i] + re_contrib[i];
-    }
-  };
-
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute linear predictor
-    refresh_eta();
-
-    // 2. Sample omega ~ PG(n, eta)
-    // Note: NOT parallelized - R's RNG is not thread-safe
-    for (int i = 0; i < N; i++) {
-      omega[i] = rpg_int(n[i], eta[i]);
-    }
-
-    // 3. Update beta | omega, re, y
-    beta = update_beta(kappa, omega, X, re_contrib, prior_beta_sd);
-
-    // 4. Recompute X_beta after beta update (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-    }
-
-    // 5. Update random effects | omega, beta, sigma_re
-    if (n_groups > 0) {
-      re = update_re(kappa, omega, X_beta, group, n_groups, sigma_re);
-
-      // 6. Update sigma_re | re
-      sigma_re = sigma_re_prior.update(re, prior_sigma_scale);
-    }
-
-    // Save draws (after warmup, respecting thinning)
-    if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
-      for (int j = 0; j < p; j++) {
-        beta_draws(save_idx, j) = beta[j];
-      }
-      for (int g = 0; g < n_groups; g++) {
-        re_draws(save_idx, g) = re[g];
-      }
-      sigma_draws[save_idx] = sigma_re;
-
-      if (store_eta) {
-        refresh_eta();
-        for (int i = 0; i < N; i++) {
-          eta_draws(save_idx, i) = eta[i];
-        }
-      }
-      save_idx++;
-    }
-
-    // Progress
-    if (verbose && (iter + 1) % 500 == 0) {
-      Rcpp::Rcout << "Iteration " << (iter + 1) << "/" << n_iter << std::endl;
-    }
-
-    // Check for user interrupt
-    if ((iter + 1) % 100 == 0) {
-      Rcpp::checkUserInterrupt();
-    }
-  }
-
-  List result = List::create(
-    Named("beta") = beta_draws,
-    Named("re") = re_draws,
-    Named("sigma_re") = sigma_draws
-  );
-
-  if (store_eta) {
-    result["eta"] = eta_draws;
-  }
-
-  return result;
-}
-
-} // namespace ratiod
-
-// ---------------------------------------------------------------------
-// R exports
-// ---------------------------------------------------------------------
-
-// [[Rcpp::export]]
-Rcpp::List cpp_pg_binomial_gibbs(
-    Rcpp::IntegerVector y,
-    Rcpp::IntegerVector n,
-    Rcpp::NumericMatrix X,
-    Rcpp::IntegerVector group,
-    int n_groups,
-    int n_iter = 2000,
-    int n_warmup = 1000,
-    int thin = 1,
-    double prior_beta_sd = 10.0,
-    double prior_sigma_scale = 2.5,
-    bool store_eta = false,
-    bool verbose = true,
-    int n_threads = 1
-) {
-  // CRITICAL: Must call GetRNGstate/PutRNGstate when using R's RNG from C++
-  GetRNGstate();
-  Rcpp::List result = ratiod::pg_binomial_gibbs_impl(
-    y, n, X, group, n_groups,
-    n_iter, n_warmup, thin,
-    prior_beta_sd, prior_sigma_scale,
-    store_eta, verbose, n_threads
-  );
-  PutRNGstate();
-  return result;
-}
 
 // Binomial Gibbs sampler with random effects AND spatial effects (ICAR)
 // [[Rcpp::export]]
@@ -465,7 +53,7 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
 
   int N = y.size();
   int p = X.ncol();
-  int n_save = (n_iter - n_warmup) / thin;
+  int n_save = ratiod::pg_n_save(n_iter, n_warmup, thin);
 
   ratiod_omp::ScopedThreadCount thread_scope(n_threads);
 
@@ -484,16 +72,13 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  ratiod::HalfCauchyScale sigma_re_prior;
   Rcpp::NumericVector phi(n_spatial_units, 0.0);  // Spatial effects
   double tau = 1.0;  // Spatial precision
   Rcpp::NumericVector omega(N, 1.0);
   Rcpp::NumericVector kappa(N);
-  Rcpp::NumericVector eta(N);
   Rcpp::NumericVector X_beta(N);
   Rcpp::NumericVector re_contrib(N);
   Rcpp::NumericVector spatial_contrib(N);
-  Rcpp::NumericVector offset(N);
 
   // Compute kappa = y - n/2
   for (int i = 0; i < N; i++) {
@@ -502,123 +87,30 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
 
   // The linear predictor of the current state, refreshed for the omega draw
   // and again at the save so the stored eta matches the saved parameters.
-  auto refresh_eta = [&]() {
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-      re_contrib[i] = (n_re_groups > 0) ? re[re_group[i] - 1] : 0.0;
-      spatial_contrib[i] = phi[spatial_group[i] - 1];
-      eta[i] = X_beta[i] + re_contrib[i] + spatial_contrib[i];
-    }
-  };
-
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute linear predictor
-    refresh_eta();
-
-    // 2. Sample omega ~ PG(n, eta)
-    // Note: NOT parallelized - R's RNG is not thread-safe
-    for (int i = 0; i < N; i++) {
-      omega[i] = ratiod::rpg_int(n[i], eta[i]);
-    }
-
-    // 3. Update beta | omega, re, phi, y
-    // Offset for beta update = re + phi (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      offset[i] = re_contrib[i] + spatial_contrib[i];
-    }
-    beta = ratiod::update_beta(kappa, omega, X, offset, prior_beta_sd);
-
-    // 4. Recompute X_beta (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-    }
-
-    // 5. Update random effects | omega, beta, phi, sigma_re
-    if (n_re_groups > 0) {
-      // Offset for RE update = X*beta + phi (parallelized)
-      #ifdef _OPENMP
-      #pragma omp parallel for schedule(static)
-      #endif
-      for (int i = 0; i < N; i++) {
-        offset[i] = X_beta[i] + spatial_contrib[i];
-      }
-      re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-
-      // Update sigma_re
-      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
-
-      // Update re_contrib (parallelized)
-      #ifdef _OPENMP
-      #pragma omp parallel for schedule(static)
-      #endif
-      for (int i = 0; i < N; i++) {
-        re_contrib[i] = re[re_group[i] - 1];
-      }
-    }
-
-    // 6. Update spatial effects | omega, beta, re, tau
-    // Offset for spatial update = X*beta + re (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      offset[i] = X_beta[i] + re_contrib[i];
-    }
+  ratiod::PGBeta fixed(X, beta, X_beta, beta_draws, prior_beta_sd);
+  ratiod::PGRe random(re_group, re, re_contrib, re_draws, sigma_re_draws,
+                       sigma_re, prior_sigma_re_scale);
+  ratiod::PGField field(spatial_contrib,
+    [&](const Rcpp::NumericVector&, const Rcpp::NumericVector&,
+        const Rcpp::NumericVector& offset) {
     phi = ratiod::update_spatial_icar(kappa, omega, offset, spatial_group, adj_list, n_neighbors, tau);
 
     // 7. Update tau (spatial precision)
     tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_sigma_spatial_U, prior_sigma_spatial_alpha, tau);
 
-    // Save draws
-    if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
-      for (int j = 0; j < p; j++) {
-        beta_draws(save_idx, j) = beta[j];
-      }
-      for (int g = 0; g < n_re_groups; g++) {
-        re_draws(save_idx, g) = re[g];
-      }
-      sigma_re_draws[save_idx] = sigma_re;
+    for (int i = 0; i < N; ++i)
+      spatial_contrib[i] = phi[spatial_group[i] - 1];
+    }, [&](int save_idx) {
+
       for (int s = 0; s < n_spatial_units; s++) {
         spatial_draws(save_idx, s) = phi[s];
       }
       tau_draws[save_idx] = tau;
 
-      if (store_eta) {
-        refresh_eta();
-        for (int i = 0; i < N; i++) {
-          eta_draws(save_idx, i) = eta[i];
-        }
-      }
-      save_idx++;
-    }
+    });
+  ratiod::pg_run_binomial(n, n_iter, n_warmup, thin, verbose,
+    {&fixed, &random, &field}, kappa, omega, eta_draws, store_eta);
 
-    // Progress
-    if (verbose && (iter + 1) % 500 == 0) {
-      Rcpp::Rcout << "Iteration " << (iter + 1) << "/" << n_iter << std::endl;
-    }
-
-    // Check for user interrupt
-    if ((iter + 1) % 100 == 0) {
-      Rcpp::checkUserInterrupt();
-    }
-  }
 
   Rcpp::List result = Rcpp::List::create(
     Rcpp::Named("beta") = beta_draws,
@@ -668,7 +160,7 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
 
   int N = y.size();
   int p = X.ncol();
-  int n_save = (n_iter - n_warmup) / thin;
+  int n_save = ratiod::pg_n_save(n_iter, n_warmup, thin);
 
   ratiod_omp::ScopedThreadCount thread_scope(n_threads);
 
@@ -690,17 +182,14 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  ratiod::HalfCauchyScale sigma_re_prior;
   ratiod::PGBym2 bym2(adj_list, scale_factor, prior_sigma_spatial_U, prior_sigma_spatial_alpha);
   Eigen::VectorXd u = bym2.effect();
   Eigen::VectorXd S(n_spatial_units), R(n_spatial_units);
   Rcpp::NumericVector omega(N, 1.0);
   Rcpp::NumericVector kappa(N);
-  Rcpp::NumericVector eta(N);
   Rcpp::NumericVector X_beta(N);
   Rcpp::NumericVector re_contrib(N);
   Rcpp::NumericVector spatial_contrib(N);
-  Rcpp::NumericVector offset(N);
 
   // Compute kappa = y - n/2
   for (int i = 0; i < N; i++) {
@@ -709,85 +198,12 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
 
   // The linear predictor of the current state, refreshed for the omega draw
   // and again at the save so the stored eta matches the saved parameters.
-  auto refresh_eta = [&]() {
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-      re_contrib[i] = (n_re_groups > 0) ? re[re_group[i] - 1] : 0.0;
-      spatial_contrib[i] = u[spatial_group[i] - 1];
-      eta[i] = X_beta[i] + re_contrib[i] + spatial_contrib[i];
-    }
-  };
-
-  // Gibbs iterations
-  int save_idx = 0;
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1. Compute linear predictor
-    refresh_eta();
-
-    // 2. Sample omega ~ PG(n, eta)
-    // Note: NOT parallelized - R's RNG is not thread-safe
-    for (int i = 0; i < N; i++) {
-      omega[i] = ratiod::rpg_int(n[i], eta[i]);
-    }
-
-    // 3. Update beta | omega, re, u, y
-    // Offset for beta update = re + u (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      offset[i] = re_contrib[i] + spatial_contrib[i];
-    }
-    beta = ratiod::update_beta(kappa, omega, X, offset, prior_beta_sd);
-
-    // 4. Recompute X_beta (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-    }
-
-    // 5. Update random effects | omega, beta, u, sigma_re
-    if (n_re_groups > 0) {
-      // Offset for RE update = X*beta + u (parallelized)
-      #ifdef _OPENMP
-      #pragma omp parallel for schedule(static)
-      #endif
-      for (int i = 0; i < N; i++) {
-        offset[i] = X_beta[i] + spatial_contrib[i];
-      }
-      re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-
-      // Update sigma_re
-      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
-
-      // Update re_contrib (parallelized)
-      #ifdef _OPENMP
-      #pragma omp parallel for schedule(static)
-      #endif
-      for (int i = 0; i < N; i++) {
-        re_contrib[i] = re[re_group[i] - 1];
-      }
-    }
-
-    // 6. Update the BYM2 field and its sigma and rho | omega, beta, re
-    // Offset for spatial update = X*beta + re (parallelized)
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      offset[i] = X_beta[i] + re_contrib[i];
-    }
+  ratiod::PGBeta fixed(X, beta, X_beta, beta_draws, prior_beta_sd);
+  ratiod::PGRe random(re_group, re, re_contrib, re_draws, sigma_re_draws,
+                       sigma_re, prior_sigma_re_scale);
+  ratiod::PGField field(spatial_contrib,
+    [&](const Rcpp::NumericVector&, const Rcpp::NumericVector&,
+        const Rcpp::NumericVector& offset) {
     S.setZero();
     R.setZero();
     for (int i = 0; i < N; i++) {
@@ -806,15 +222,8 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       spatial_contrib[i] = u[spatial_group[i] - 1];
     }
 
-    // Save draws
-    if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
-      for (int j = 0; j < p; j++) {
-        beta_draws(save_idx, j) = beta[j];
-      }
-      for (int g = 0; g < n_re_groups; g++) {
-        re_draws(save_idx, g) = re[g];
-      }
-      sigma_re_draws[save_idx] = sigma_re;
+    }, [&](int save_idx) {
+
       for (int s = 0; s < n_spatial_units; s++) {
         phi_scaled_draws(save_idx, s) = bym2.phi[s];
         theta_draws(save_idx, s) = bym2.theta[s];
@@ -823,25 +232,10 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
       sigma_spatial_draws[save_idx] = bym2.sigma;
       rho_draws[save_idx] = bym2.rho;
 
-      if (store_eta) {
-        refresh_eta();
-        for (int i = 0; i < N; i++) {
-          eta_draws(save_idx, i) = eta[i];
-        }
-      }
-      save_idx++;
-    }
+    });
+  ratiod::pg_run_binomial(n, n_iter, n_warmup, thin, verbose,
+    {&fixed, &random, &field}, kappa, omega, eta_draws, store_eta);
 
-    // Progress
-    if (verbose && (iter + 1) % 500 == 0) {
-      Rcpp::Rcout << "Iteration " << (iter + 1) << "/" << n_iter << std::endl;
-    }
-
-    // Check for user interrupt
-    if ((iter + 1) % 100 == 0) {
-      Rcpp::checkUserInterrupt();
-    }
-  }
 
   Rcpp::List result = Rcpp::List::create(
     Rcpp::Named("beta") = beta_draws,
@@ -1284,7 +678,7 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
 
   int N = y.size();
   int p = X.ncol();
-  int n_save = (n_iter - n_warmup) / thin;
+  int n_save = ratiod::pg_n_save(n_iter, n_warmup, thin);
 
   const PgNngpGraph graph{coords, nn_idx, nn_dist, nn_order, nn, n_spatial};
   pg_check_nngp_graph(graph, "cpp_pg_binomial_gibbs_gp");
@@ -1300,14 +694,13 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
   Rcpp::NumericVector sigma2_gp_draws(n_save);
   const ratiod_cov::CovType cov = ratiod_cov::cov_type_from_int(cov_type);
   Rcpp::NumericVector phi_gp_draws(n_save);
-  Rcpp::NumericMatrix eta_draws_gp;
-  if (store_eta) eta_draws_gp = Rcpp::NumericMatrix(n_save, N);
+  Rcpp::NumericMatrix eta_draws;
+  if (store_eta) eta_draws = Rcpp::NumericMatrix(n_save, N);
 
   // Initialize
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  ratiod::HalfCauchyScale sigma_re_prior;
   std::vector<double> w(n_spatial, 0.0);
   double sigma2_gp = sigma2_gp_init;
   double phi_gp = phi_gp_init;
@@ -1315,11 +708,9 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
   // Working vectors
   Rcpp::NumericVector omega(N);
   Rcpp::NumericVector kappa(N);
-  Rcpp::NumericVector eta(N);
   Rcpp::NumericVector X_beta(N);
   Rcpp::NumericVector re_contrib(N);
   Rcpp::NumericVector gp_contrib(N);
-  Rcpp::NumericVector offset(N);
   std::vector<double> sum_omega_gp(n_spatial, 0.0);
   std::vector<double> sum_resid_gp(n_spatial, 0.0);
 
@@ -1331,62 +722,16 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
     gp_contrib[i] = 0.0;
   }
 
-  int save_idx = 0;
 
   // The contributions are kept current through the sweep; eta is refreshed
   // from them for the omega draw and again at the save, so the stored eta
   // matches the saved parameters.
-  auto refresh_eta = [&]() {
-    for (int i = 0; i < N; i++) {
-      eta[i] = X_beta[i] + re_contrib[i] + gp_contrib[i];
-    }
-  };
-
-  for (int iter = 0; iter < n_iter; iter++) {
-    if (verbose && (iter + 1) % 200 == 0) {
-      Rcpp::Rcout << "  Iteration " << (iter + 1) << "/" << n_iter << "\n";
-    }
-
-    // 1. Compute eta
-    refresh_eta();
-
-    // 2. Update omega | eta
-    for (int i = 0; i < N; i++) {
-      omega[i] = ratiod::rpg_int(n[i], eta[i]);
-    }
-
-    // 3. Update beta
-    for (int i = 0; i < N; i++) {
-      offset[i] = re_contrib[i] + gp_contrib[i];
-    }
-    beta = ratiod::update_beta(kappa, omega, X, offset, prior_beta_sd);
-
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-    }
-
-    // 4. Update random effects
-    if (n_re_groups > 0) {
-      for (int i = 0; i < N; i++) {
-        offset[i] = X_beta[i] + gp_contrib[i];
-      }
-      re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
-
-      for (int i = 0; i < N; i++) {
-        re_contrib[i] = re[re_group[i] - 1];
-      }
-    }
-
-    // 5. Update GP effects (sequential NNGP Gibbs)
-    for (int i = 0; i < N; i++) {
-      offset[i] = X_beta[i] + re_contrib[i];
-    }
-
-    // Aggregate likelihood info per spatial location
+  ratiod::PGBeta fixed(X, beta, X_beta, beta_draws, prior_beta_sd);
+  ratiod::PGRe random(re_group, re, re_contrib, re_draws, sigma_re_draws,
+                       sigma_re, prior_sigma_re_scale);
+  ratiod::PGField field(gp_contrib,
+    [&](const Rcpp::NumericVector&, const Rcpp::NumericVector&,
+        const Rcpp::NumericVector& offset) {
     pg_accumulate_by_location(N, obs_to_loc, omega, kappa, offset,
                               sum_omega_gp, sum_resid_gp);
 
@@ -1402,32 +747,18 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
                        prior_sigma_gp_U, prior_sigma_gp_alpha,
                        prior_phi_lower, prior_phi_upper, 0.1);
 
-    // Save draws
-    if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
-      for (int j = 0; j < p; j++) {
-        beta_draws(save_idx, j) = beta[j];
-      }
-      for (int g = 0; g < n_re_groups; g++) {
-        re_draws(save_idx, g) = re[g];
-      }
-      sigma_re_draws[save_idx] = sigma_re;
+    }, [&](int save_idx) {
+
       for (int s = 0; s < n_spatial; s++) {
         gp_draws(save_idx, s) = w[s];
       }
       sigma2_gp_draws[save_idx] = sigma2_gp;
       phi_gp_draws[save_idx] = phi_gp;
 
-      if (store_eta) {
-        refresh_eta();
-        for (int i = 0; i < N; i++) {
-          eta_draws_gp(save_idx, i) = eta[i];
-        }
-      }
-      save_idx++;
-    }
+    });
+  ratiod::pg_run_binomial(n, n_iter, n_warmup, thin, verbose,
+    {&fixed, &random, &field}, kappa, omega, eta_draws, store_eta);
 
-    if ((iter + 1) % 100 == 0) Rcpp::checkUserInterrupt();
-  }
 
   Rcpp::List result = Rcpp::List::create(
     Rcpp::Named("beta") = beta_draws,
@@ -1439,7 +770,7 @@ Rcpp::List cpp_pg_binomial_gibbs_gp(
   );
 
   if (store_eta) {
-    result["eta"] = eta_draws_gp;
+    result["eta"] = eta_draws;
   }
 
   PutRNGstate();
@@ -1481,7 +812,7 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
 
   int N = y.size();
   int p = X.ncol();
-  int n_save = (n_iter - n_warmup) / thin;
+  int n_save = ratiod::pg_n_save(n_iter, n_warmup, thin);
 
   int n_trend = (trend_type > 0) ? n_times : 0;
   int n_seasonal = (seasonal_period > 0) ? seasonal_period : 0;
@@ -1500,14 +831,13 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
   Rcpp::NumericVector sigma_seasonal_draws(n_save);
   Rcpp::NumericVector sigma_short_draws(n_save);
   Rcpp::NumericVector rho_short_draws(n_save);
-  Rcpp::NumericMatrix eta_draws_temp;
-  if (store_eta) eta_draws_temp = Rcpp::NumericMatrix(n_save, N);
+  Rcpp::NumericMatrix eta_draws;
+  if (store_eta) eta_draws = Rcpp::NumericMatrix(n_save, N);
 
   // Initialize
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  ratiod::HalfCauchyScale sigma_re_prior;
   Rcpp::NumericVector trend(n_trend, 0.0);
   Rcpp::NumericVector seasonal(n_seasonal, 0.0);
   Rcpp::NumericVector short_term(n_short, 0.0);
@@ -1519,11 +849,9 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
   // Working vectors
   Rcpp::NumericVector omega(N);
   Rcpp::NumericVector kappa(N);
-  Rcpp::NumericVector eta(N);
   Rcpp::NumericVector X_beta(N);
   Rcpp::NumericVector re_contrib(N);
   Rcpp::NumericVector temp_contrib(N);
-  Rcpp::NumericVector offset(N);
 
   for (int i = 0; i < N; i++) {
     omega[i] = 0.5;
@@ -1533,69 +861,16 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
     temp_contrib[i] = 0.0;
   }
 
-  int save_idx = 0;
 
   // The temporal contributions and eta of the current state, refreshed for the
   // omega draw and again at the save so the stored eta matches the saved
   // parameters.
-  auto refresh_eta = [&]() {
-    for (int i = 0; i < N; i++) {
-      int t = time_idx[i] - 1;
-      double temp_eff = 0.0;
-      if (t >= 0 && t < n_times) {
-        if (n_trend > 0 && t < n_trend) temp_eff += trend[t];
-        if (n_seasonal > 0) temp_eff += seasonal[t % seasonal_period];
-        if (n_short > 0 && t < n_short) temp_eff += short_term[t];
-      }
-      temp_contrib[i] = temp_eff;
-      eta[i] = X_beta[i] + re_contrib[i] + temp_contrib[i];
-    }
-  };
-
-  for (int iter = 0; iter < n_iter; iter++) {
-    if (verbose && (iter + 1) % 200 == 0) {
-      Rcpp::Rcout << "  Iteration " << (iter + 1) << "/" << n_iter << "\n";
-    }
-
-    // 1. Compute eta and temporal contributions
-    refresh_eta();
-
-    // 2. Update omega
-    for (int i = 0; i < N; i++) {
-      omega[i] = ratiod::rpg_int(n[i], eta[i]);
-    }
-
-    // 3. Update beta
-    for (int i = 0; i < N; i++) {
-      offset[i] = re_contrib[i] + temp_contrib[i];
-    }
-    beta = ratiod::update_beta(kappa, omega, X, offset, prior_beta_sd);
-
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-    }
-
-    // 4. Update random effects
-    if (n_re_groups > 0) {
-      for (int i = 0; i < N; i++) {
-        offset[i] = X_beta[i] + temp_contrib[i];
-      }
-      re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
-
-      for (int i = 0; i < N; i++) {
-        re_contrib[i] = re[re_group[i] - 1];
-      }
-    }
-
-    // 5. Update temporal effects
-    for (int i = 0; i < N; i++) {
-      offset[i] = X_beta[i] + re_contrib[i];
-    }
-
+  ratiod::PGBeta fixed(X, beta, X_beta, beta_draws, prior_beta_sd);
+  ratiod::PGRe random(re_group, re, re_contrib, re_draws, sigma_re_draws,
+                       sigma_re, prior_sigma_re_scale);
+  ratiod::PGField field(temp_contrib,
+    [&](const Rcpp::NumericVector&, const Rcpp::NumericVector&,
+        const Rcpp::NumericVector& offset) {
     // Aggregate for trend
     std::vector<double> sum_omega_t(n_times, 0.0);
     std::vector<double> sum_resid_t(n_times, 0.0);
@@ -1743,15 +1018,18 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
       sigma_short = 1.0 / std::sqrt(R::rgamma(shape, 1.0 / rate));
     }
 
-    // Save draws
-    if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
-      for (int j = 0; j < p; j++) {
-        beta_draws(save_idx, j) = beta[j];
+    for (int i = 0; i < N; ++i) {
+      const int t = time_idx[i] - 1;
+      double value = 0.0;
+      if (t >= 0 && t < n_times) {
+        if (n_trend > 0 && t < n_trend) value += trend[t];
+        if (n_seasonal > 0) value += seasonal[t % seasonal_period];
+        if (n_short > 0 && t < n_short) value += short_term[t];
       }
-      for (int g = 0; g < n_re_groups; g++) {
-        re_draws(save_idx, g) = re[g];
-      }
-      sigma_re_draws[save_idx] = sigma_re;
+      temp_contrib[i] = value;
+    }
+    }, [&](int save_idx) {
+
       for (int t = 0; t < n_trend; t++) {
         trend_draws(save_idx, t) = trend[t];
       }
@@ -1766,17 +1044,10 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
       sigma_short_draws[save_idx] = sigma_short;
       rho_short_draws[save_idx] = rho_short;
 
-      if (store_eta) {
-        refresh_eta();
-        for (int i = 0; i < N; i++) {
-          eta_draws_temp(save_idx, i) = eta[i];
-        }
-      }
-      save_idx++;
-    }
+    });
+  ratiod::pg_run_binomial(n, n_iter, n_warmup, thin, verbose,
+    {&fixed, &random, &field}, kappa, omega, eta_draws, store_eta);
 
-    if ((iter + 1) % 100 == 0) Rcpp::checkUserInterrupt();
-  }
 
   Rcpp::List result = Rcpp::List::create(
     Rcpp::Named("beta") = beta_draws,
@@ -1792,7 +1063,7 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
   );
 
   if (store_eta) {
-    result["eta"] = eta_draws_temp;
+    result["eta"] = eta_draws;
   }
 
   PutRNGstate();
@@ -1839,7 +1110,7 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
 
   int N = y.size();
   int p = X.ncol();
-  int n_save = (n_iter - n_warmup) / thin;
+  int n_save = ratiod::pg_n_save(n_iter, n_warmup, thin);
 
   ratiod_omp::ScopedThreadCount thread_scope(n_threads);
 
@@ -1856,7 +1127,6 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
   Rcpp::NumericVector beta(p, 0.0);
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
-  ratiod::HalfCauchyScale sigma_re_prior;
   Rcpp::NumericVector phi(n_spatial_units, 0.0);
   double tau = 1.0;
 
@@ -1898,8 +1168,6 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
 
   // Working vectors
   Rcpp::NumericVector omega(N, 0.1);
-  Rcpp::NumericVector offset(N);
-  Rcpp::NumericVector eta(N);
   Rcpp::NumericVector X_beta(N);
   Rcpp::NumericVector re_contrib(N, 0.0);
   Rcpp::NumericVector spatial_contrib(N, 0.0);
@@ -1912,69 +1180,16 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
     }
   }
 
-  int save_idx = 0;
 
   // The restricted field at the observations and eta of the current state,
   // refreshed for the omega draw and again at the save so the stored field
   // and eta match the saved parameters.
-  auto refresh_eta = [&]() {
-    field_obs.noalias() = A * phi_e;
-    for (int i = 0; i < N; i++) {
-      spatial_contrib[i] = field_obs[i];
-      eta[i] = X_beta[i] + re_contrib[i] + spatial_contrib[i];
-    }
-  };
-
-  for (int iter = 0; iter < n_iter; iter++) {
-    // 1-3. The restricted field and eta
-    refresh_eta();
-
-    // 4. Sample omega ~ PG(n, eta)
-    // Note: NOT parallelized - R's RNG is not thread-safe
-    for (int i = 0; i < N; i++) {
-      omega[i] = ratiod::rpg_int(n[i], eta[i]);
-    }
-
-    // 5. Update beta | omega, re, phi_proj, y
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      offset[i] = re_contrib[i] + spatial_contrib[i];
-    }
-    beta = ratiod::update_beta(kappa, omega, X, offset, prior_beta_sd);
-
-    // 6. Recompute X_beta
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
-    for (int i = 0; i < N; i++) {
-      X_beta[i] = 0.0;
-      for (int j = 0; j < p; j++) {
-        X_beta[i] += X(i, j) * beta[j];
-      }
-    }
-
-    // 7. Update random effects | omega, beta, phi_proj, sigma_re
-    if (n_re_groups > 0) {
-      #ifdef _OPENMP
-      #pragma omp parallel for schedule(static)
-      #endif
-      for (int i = 0; i < N; i++) {
-        offset[i] = X_beta[i] + spatial_contrib[i];
-      }
-      re = ratiod::update_re(kappa, omega, offset, re_group, n_re_groups, sigma_re);
-
-      sigma_re = sigma_re_prior.update(re, prior_sigma_re_scale);
-
-      #ifdef _OPENMP
-      #pragma omp parallel for schedule(static)
-      #endif
-      for (int i = 0; i < N; i++) {
-        re_contrib[i] = re[re_group[i] - 1];
-      }
-    }
-
+  ratiod::PGBeta fixed(X, beta, X_beta, beta_draws, prior_beta_sd);
+  ratiod::PGRe random(re_group, re, re_contrib, re_draws, sigma_re_draws,
+                       sigma_re, prior_sigma_re_scale);
+  ratiod::PGField field(spatial_contrib,
+    [&](const Rcpp::NumericVector&, const Rcpp::NumericVector&,
+        const Rcpp::NumericVector& offset) {
     // 8. phi | omega, beta, re, tau from its Gaussian conditional.
     for (int i = 0; i < N; i++) {
       resid[i] = kappa[i] - omega[i] * (X_beta[i] + re_contrib[i]);
@@ -1986,7 +1201,6 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
     if (level_removed) M.array() += 1.0;
     Eigen::LLT<Eigen::MatrixXd> llt(M);
     if (llt.info() != Eigen::Success) {
-      PutRNGstate();
       Rcpp::stop("The conditional precision of the restricted field is not "
                  "positive definite; the restricted covariates leave a "
                  "direction of the field unidentified.");
@@ -2000,18 +1214,12 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
     // 9. Update tau (spatial precision)
     tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_sigma_spatial_U, prior_sigma_spatial_alpha, tau);
 
-    // Save draws
-    if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
-      for (int j = 0; j < p; j++) {
-        beta_draws(save_idx, j) = beta[j];
-      }
-      for (int g = 0; g < n_re_groups; g++) {
-        re_draws(save_idx, g) = re[g];
-      }
-      sigma_re_draws[save_idx] = sigma_re;
+    field_obs.noalias() = A * phi_e;
+    for (int i = 0; i < N; ++i) spatial_contrib[i] = field_obs[i];
+    }, [&](int save_idx) {
+
 
       // The field, and the restricted field at the observations.
-      refresh_eta();
       for (int s = 0; s < n_spatial_units; s++) {
         spatial_raw_draws(save_idx, s) = phi[s];
       }
@@ -2020,24 +1228,10 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
       }
       tau_draws[save_idx] = tau;
 
-      if (store_eta) {
-        for (int i = 0; i < N; i++) {
-          eta_draws(save_idx, i) = eta[i];
-        }
-      }
-      save_idx++;
-    }
+    });
+  ratiod::pg_run_binomial(n, n_iter, n_warmup, thin, verbose,
+    {&fixed, &random, &field}, kappa, omega, eta_draws, store_eta);
 
-    // Progress
-    if (verbose && (iter + 1) % 500 == 0) {
-      Rcpp::Rcout << "Iteration " << (iter + 1) << "/" << n_iter << std::endl;
-    }
-
-    // Check for user interrupt
-    if ((iter + 1) % 100 == 0) {
-      Rcpp::checkUserInterrupt();
-    }
-  }
 
   Rcpp::List result = Rcpp::List::create(
     Rcpp::Named("beta") = beta_draws,

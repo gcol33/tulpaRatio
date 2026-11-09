@@ -56,7 +56,7 @@ test_that("PG Gibbs sampler recovers parameters", {
   y <- rbinom(N, trials, plogis(eta))
 
   # Fit
-  fit <- tulpaRatio:::cpp_pg_binomial_gibbs(
+  fit <- tulpaRatio:::cpp_tulpa_pg_binomial_gibbs(
     y = as.integer(y),
     n = trials,
     X = X,

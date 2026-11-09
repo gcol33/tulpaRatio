@@ -13,12 +13,12 @@ fixture <- function() {
     y = as.numeric(rbinom(m, 20, 0.4)),
     n = rep(20, m),
     X = cbind(1, rnorm(m)),
-    group = as.integer(rep(0:9, length.out = m))
+    group = as.integer(rep(1:10, length.out = m))
   )
 }
 
 pg_binomial_fit <- function(d, n_threads) {
-  invisible(tulpaRatio:::cpp_pg_binomial_gibbs(
+  invisible(tulpaRatio:::cpp_tulpa_pg_binomial_gibbs(
     y = d$y, n = d$n, X = d$X, group = d$group, n_groups = 10L,
     n_iter = 60L, n_warmup = 30L, thin = 1L, verbose = FALSE,
     n_threads = as.integer(n_threads)

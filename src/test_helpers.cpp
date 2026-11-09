@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 #include <random>
-#include "pg_binomial.h"
+#include "pg_common.h"
 #include "omp_sum.h"
 #include "hmc_sampler.h"
 #include "ratio_obs_lik.h"

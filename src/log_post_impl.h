@@ -15,6 +15,7 @@
 #include "ar1_shared.h"  // AR1 rho: the floored 1 - rho^2 and its prior
 #include <tulpa/soft_sum_to_zero.h>
 #include "spatial_field_constraint.h"
+#include "icar_quadratic.h"
 #include "hmc_re.h"  // Templated random-effect prior and effects
 #include "hmc_spatiotemporal.h"  // Templated spatiotemporal interaction priors
 #include "hmc_hsgp.h"  // Templated HSGP spectral density
@@ -75,26 +76,16 @@ inline const char* log_post_impl_gap(const ModelData& data,
 // arms of the spatial prior and for the analytic gradient paths.
 template<typename T>
 inline T icar_quadratic_form_t(const T* phi, int J, const ModelData& data) {
-    // Q_ii = c_i n_i (c_i for an island), Q_ij = -c_i for i ~ j, with c_i the
-    // unit's precision multiplier (one on a connected graph; constant within
-    // a component, so Q stays symmetric)
     const bool weighted = !data.areal_node_prec.empty();
-    T quad_form = T(0.0);
-    for (int i = 0; i < J; i++) {
-        const double c = weighted ? data.areal_node_prec[i] : 1.0;
-        const int n_i = data.n_neighbors[i];
-        const double diag = (n_i > 0 ? n_i : (weighted ? 1 : 0)) * c;
-        quad_form = quad_form + T(diag) * phi[i] * phi[i];
-        const int row_start = data.adj_row_ptr[i];
-        const int row_end = data.adj_row_ptr[i + 1];
-        for (int k = row_start; k < row_end; k++) {
-            const int j = data.adj_col_idx[k];
-            if (j > i) {
-                quad_form = quad_form - T(2.0 * c) * phi[i] * phi[j];
-            }
-        }
-    }
-    return quad_form;
+    auto weight = [&](int i) { return weighted ? data.areal_node_prec[i] : 1.0; };
+    return ratiod_icar::quadratic(phi, J,
+      [&](int i) { return data.adj_row_ptr[i + 1] - data.adj_row_ptr[i]; },
+      [&](int i, int k) { return data.adj_col_idx[data.adj_row_ptr[i] + k]; },
+      [&](int i) {
+        const int degree = data.n_neighbors[i];
+        return (degree > 0 ? degree : (weighted ? 1 : 0)) * weight(i);
+      },
+      [&](int i, int j) { return j > i ? 2.0 * weight(i) : 0.0; });
 }
 
 // (Q phi)_i for the ICAR precision of icar_quadratic_form_t

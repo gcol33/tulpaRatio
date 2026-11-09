@@ -65,7 +65,6 @@ utils::globalVariables(c(
   "cpp_hmc_fit",
   "cpp_get_max_threads",
   "cpp_kriging_predict",
-  "cpp_pg_binomial_gibbs",
   "cpp_pg_get_max_threads",
   "cpp_pg_binomial_gibbs_spatial",
   "cpp_pg_binomial_gibbs_bym2",

@@ -1,3 +1,4 @@
+#include "icar_quadratic.h"
 // pg_spatial.cpp
 // Spatial random effects for PG Gibbs sampler
 // Implements ICAR (Intrinsic CAR) prior for areal data
@@ -115,23 +116,13 @@ double update_tau_icar(
 ) {
   int J = phi.size();
 
-  // Compute phi' Q phi = sum_i n_i * phi_i^2 - 2 * sum_{i~j} phi_i * phi_j
-  // = sum_i n_i * phi_i^2 - sum_i phi_i * sum_{j~i} phi_j
-  double quad_form = 0.0;
-
-  for (int i = 0; i < J; i++) {
-    // Diagonal contribution: n_i * phi_i^2
-    quad_form += n_neighbors[i] * phi[i] * phi[i];
-
-    // Off-diagonal contribution: -2 * sum over neighbors (count each edge once)
-    std::vector<int> neighbors = Rcpp::as<std::vector<int>>(adj_list[i]);
-    for (int k = 0; k < n_neighbors[i]; k++) {
-      int j = neighbors[k] - 1;
-      if (j > i) {  // Count each edge once
-        quad_form -= 2.0 * phi[i] * phi[j];
-      }
-    }
-  }
+  std::vector<std::vector<int>> neighbors(J);
+  for (int i = 0; i < J; ++i) neighbors[i] = Rcpp::as<std::vector<int>>(adj_list[i]);
+  const double quad_form = ratiod_icar::quadratic(phi.begin(), J,
+    [&](int i) { return n_neighbors[i]; },
+    [&](int i, int k) { return neighbors[i][k] - 1; },
+    [&](int i) { return n_neighbors[i]; },
+    [](int i, int j) { return j > i ? 2.0 : 0.0; });
 
   // The connected, sum-to-zero ICAR field has rank J - 1.
   return ratiod_scale::sample_tau(tau, quad_form, J - 1,

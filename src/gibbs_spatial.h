@@ -20,6 +20,7 @@
 #include "enum_names.h"
 #include "scale_prior.h"
 #include <tulpa/count_math.h>
+#include "icar_quadratic.h"
 #include <tulpa/precision_math.h>
 #include <vector>
 #include <cmath>
@@ -322,14 +323,11 @@ inline double icar_quadratic_form(const double* phi, int S,
                                   const int* adj_row_ptr,
                                   const int* adj_col_idx,
                                   const int* n_neighbors) {
-    double quad = 0.0;
-    for (int s = 0; s < S; s++) {
-        quad += n_neighbors[s] * phi[s] * phi[s];
-        for (int k = adj_row_ptr[s]; k < adj_row_ptr[s + 1]; k++) {
-            quad -= phi[s] * phi[adj_col_idx[k]];
-        }
-    }
-    return quad;
+    return ratiod_icar::quadratic(phi, S,
+      [&](int i) { return adj_row_ptr[i + 1] - adj_row_ptr[i]; },
+      [&](int i, int k) { return adj_col_idx[adj_row_ptr[i] + k]; },
+      [&](int i) { return n_neighbors[i]; },
+      [](int, int) { return 1.0; });
 }
 
 inline double icar_quadratic_form(const double* phi, const GibbsData& d) {

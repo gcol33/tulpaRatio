@@ -5,6 +5,7 @@
 #include <string>
 #include <tulpa/nuts_api.h>
 #include <tulpa/pg_api.h>
+#include "pg_engine.h"
 #include <tulpa/likelihood.h>
 #include <tulpa/model_data.h>
 #include <tulpa/param_layout.h>
@@ -211,15 +212,7 @@ Rcpp::List cpp_tulpa_pg_binomial_gibbs(
     bool verbose = true,
     int n_threads = 1
 ) {
-  tulpa::PGShimResult result{};
-  result.beta = nullptr;
-  result.re = nullptr;
-  result.sigma_re = nullptr;
-  result.eta = nullptr;
-  result.r_disp = nullptr;
-  result.spatial = nullptr;
-  result.tau_spatial = nullptr;
-
+  ratiod::PGEngineResult result;
   tulpa::get_pg_binomial_fn()(
     INTEGER(y),
     INTEGER(n),
@@ -236,21 +229,10 @@ Rcpp::List cpp_tulpa_pg_binomial_gibbs(
     store_eta ? 1 : 0,
     verbose ? 1 : 0,
     n_threads,
-    &result
+    &result.value
   );
 
-  Rcpp::List out = Rcpp::List::create(
-    Rcpp::Named("beta") = row_major_matrix(result.beta, result.n_save, result.n_beta),
-    Rcpp::Named("re") = row_major_matrix(result.re, result.n_save, result.n_re),
-    Rcpp::Named("sigma_re") = buffer_vector(result.sigma_re, result.n_save)
-  );
-
-  if (store_eta) {
-    out["eta"] = row_major_matrix(result.eta, result.n_save, result.n_obs);
-  }
-
-  result.free_buffers();
-  return out;
+  return ratiod::pg_engine_fit(result.value, store_eta);
 }
 
 // ============================================================================
