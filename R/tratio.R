@@ -213,21 +213,7 @@ tratio <- function(formula,
   mode <- match.arg(mode)
   ctrl <- .tratio_control(control)
 
-  chains        <- ctrl$chains
-  iter          <- ctrl$iter
-  warmup        <- ctrl$warmup
-  thin          <- ctrl$thin
-  cores         <- ctrl$cores
-  seed          <- ctrl$seed
-  verbose       <- ctrl$verbose
-  vi_variant    <- ctrl$vi_variant
-  gradient_mode <- ctrl$gradient_mode
-  re_param      <- ctrl$re_param
-  metric        <- ctrl$metric
-  adapt_delta   <- ctrl$adapt_delta
-  max_treedepth <- ctrl$max_treedepth
-  walnuts       <- ctrl$walnuts
-  L             <- as.integer(ctrl$L %||% 0L)
+  verbose <- ctrl$verbose
 
   # Validate temporal specification
   if (!is.null(temporal)) {
@@ -418,316 +404,96 @@ tratio <- function(formula,
     message(sprintf("  Observations: %d", nrow(data)))
   }
 
-  # Store mode info for the result
-  mode_info <- list(
-    mode = selected_mode,
-    tier = selected_tier,
-    tier_name = selected_tier_name,
-    backend = selected_backend,
-    reason = mode_selection$reason
-  )
+  backend <- TRATIO_BACKENDS[[selected_backend]]
+  if (is.null(backend)) stop(sprintf("Unknown backend: '%s'", selected_backend), call. = FALSE)
+  inputs <- list(formula = formula_spec, data = data, family = family,
+                 spatial = spatial, temporal = temporal, spatiotemporal = spatiotemporal,
+                 zi = zi, latent = latent, priors = priors)
+  context <- list(inputs = inputs, control = ctrl)
+  args <- backend$args(context)
+  if (verbose) tratio_backend_message(selected_backend, args)
+  result <- do.call(get(backend$fit, mode = "function"), args)
+  result$inference_mode <- selected_mode
+  result$inference_tier <- selected_tier
+  result$inference_tier_name <- selected_tier_name
+  result$mode_info <- list(mode = selected_mode, tier = selected_tier,
+                           tier_name = selected_tier_name, backend = selected_backend,
+                           reason = mode_selection$reason)
+  result
+}
 
-  # -------------------------------------------------------------------------
-  # Dispatch to Gibbs backend (Tier 1: Exact)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "gibbs") {
-    if (verbose) {
-      message(sprintf("  Iterations: %d (warmup: %d)", iter, warmup))
-    }
+tratio_backend_args <- function(context, controls, structures = character()) {
+  c(context$inputs[c("formula", "data", "family", "spatial", "temporal", "priors", structures)],
+    context$control[c(controls, "seed", "verbose")])
+}
 
-    result <- fit_gibbs(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      priors = priors,
-      iter = iter,
-      warmup = warmup,
-      thin = thin,
-      chains = chains,
-      cores = cores,
-      seed = seed,
-      verbose = verbose
-    )
+tratio_sg_backend_args <- function(context, backend) {
+  args <- tratio_backend_args(context, c("iter", "warmup"), "zi")
+  args$batch_size <- context$control$batch_size %||% ceiling(sqrt(nrow(args$data)))
+  c(args, .tratio_sg_args(context$control, backend))
+}
 
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
+TRATIO_BACKENDS <- list(
+  gibbs = list(fit = "fit_gibbs", args = function(x) {
+    tratio_backend_args(x, c("iter", "warmup", "thin", "chains", "cores"))
+  }),
+  pg = list(fit = "fit_pg_binomial", args = function(x) {
+    args <- tratio_backend_args(x, c("iter", "warmup", "chains", "thin", "cores"))
+    args$priors <- NULL
+    priors <- sampler_priors(x$inputs$priors, get_hmc_model_type(x$inputs$family))
+    c(args, list(prior_beta_sd = priors$sigma_beta, prior_sigma_scale = priors$sigma_re_scale,
+                 prior_sigma_spatial_U = priors$spatial_sigma_prior_U,
+                 prior_sigma_spatial_alpha = priors$spatial_sigma_prior_alpha))
+  }),
+  laplace = list(fit = "fit_laplace", args = function(x) {
+    args <- tratio_backend_args(x, "cores")
+    args$seed <- NULL
+    c(args, list(n_samples = x$control$iter - x$control$warmup))
+  }),
+  hmc = list(fit = "fit_hmc", args = function(x) {
+    args <- tratio_backend_args(x, c("iter", "warmup", "chains", "cores", "L", "adapt_delta",
+      "max_treedepth", "gradient_mode", "re_param", "metric", "walnuts"),
+      c("spatiotemporal", "zi", "latent"))
+    args$L <- as.integer(x$control$L %||% 0L)
+    args
+  }),
+  vi = list(fit = "fit_vi", args = function(x) {
+    c(tratio_backend_args(x, character(), c("spatiotemporal", "zi", "latent")),
+      list(variant = x$control$vi_variant, max_iter = x$control$iter))
+  }),
+  ess = list(fit = "fit_ess", args = function(x) {
+    tratio_backend_args(x, c("iter", "warmup", "chains"), c("spatiotemporal", "zi", "latent"))
+  }),
+  sghmc = list(fit = "fit_sghmc", args = function(x) tratio_sg_backend_args(x, "sghmc")),
+  sgld = list(fit = "fit_sgld", args = function(x) tratio_sg_backend_args(x, "sgld"))
+)
 
-    return(result)
+tratio_backend_message <- function(backend, args) {
+  if (!is.null(args$iter)) {
+    message(sprintf("  Iterations: %d (warmup: %d)", args$iter, args$warmup))
   }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to PG backend (Tier 1: Exact)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "pg") {
-    if (verbose) {
-      message(sprintf("  Iterations: %d (warmup: %d)", iter, warmup))
-      message(sprintf("  Cores: %d", cores))
+  if (!is.null(args$n_samples)) message(sprintf("  Posterior samples: %d", args$n_samples))
+  if (backend %in% c("pg", "laplace")) message(sprintf("  Cores: %d", args$cores))
+  if (backend == "hmc") {
+    if (!is.null(args$temporal)) {
+      message(sprintf("  Temporal: %s (%d time points)", args$temporal$type, args$temporal$n_times))
     }
-
-    pg_priors <- sampler_priors(priors, get_hmc_model_type(family))
-    result <- fit_pg_binomial(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      iter = iter,
-      warmup = warmup,
-      chains = chains,
-      thin = thin,
-      cores = cores,
-      seed = seed,
-      prior_beta_sd = pg_priors$sigma_beta,
-      prior_sigma_scale = pg_priors$sigma_re_scale,
-      prior_sigma_spatial_U = pg_priors$spatial_sigma_prior_U,
-      prior_sigma_spatial_alpha = pg_priors$spatial_sigma_prior_alpha,
-      verbose = verbose
-    )
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
-  }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to Laplace backend (Tier 2: Structured)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "laplace") {
-    if (verbose) {
-      message(sprintf("  Posterior samples: %d", iter - warmup))
-      message(sprintf("  Cores: %d", cores))
+    if (!is.null(args$spatiotemporal)) {
+      message(sprintf("  Spatiotemporal: %s (%d x %d)", args$spatiotemporal$type,
+                      args$spatiotemporal$n_spatial, args$spatiotemporal$n_times))
     }
-
-    result <- fit_laplace(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      priors = priors,
-      n_samples = iter - warmup,
-      cores = cores,
-      verbose = verbose
-    )
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
   }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to HMC/NUTS backend (Tier 1: Exact)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "hmc") {
-    if (verbose) {
-      message(sprintf("  Iterations: %d (warmup: %d)", iter, warmup))
-      if (!is.null(temporal)) {
-        message(sprintf("  Temporal: %s (%d time points)", temporal$type, temporal$n_times))
-      }
-      if (!is.null(spatiotemporal)) {
-        message(sprintf("  Spatiotemporal: %s (%d x %d)",
-                        spatiotemporal$type, spatiotemporal$n_spatial, spatiotemporal$n_times))
-      }
-    }
-
-    result <- fit_hmc(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      spatiotemporal = spatiotemporal,
-      zi = zi,
-      latent = latent,
-      priors = priors,
-      iter = iter,
-      warmup = warmup,
-      chains = chains,
-      cores = cores,
-      L = L,
-      adapt_delta = adapt_delta,
-      max_treedepth = max_treedepth,
-      seed = seed,
-      verbose = verbose,
-      gradient_mode = gradient_mode,
-      re_param = re_param,
-      metric = metric,
-      walnuts = walnuts
-    )
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
+  if (backend == "vi") {
+    message(sprintf("  VI variant: %s", args$variant))
+    message("  Note: Tier 3 (Optimized) - uncertainty may be underestimated")
   }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to VI backend (Tier 3: Optimized)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "vi") {
-    if (verbose) {
-      message(sprintf("  VI variant: %s", vi_variant))
-      message("  Note: Tier 3 (Optimized) - uncertainty may be underestimated")
-    }
-
-    result <- fit_vi(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      spatiotemporal = spatiotemporal,
-      zi = zi,
-      latent = latent,
-      priors = priors,
-      variant = vi_variant,
-      max_iter = iter,
-      seed = seed,
-      verbose = verbose
-    )
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
+  if (!is.null(args$batch_size)) {
+    message(sprintf("  Batch size: %d (%.1f%% of data)", args$batch_size,
+                    100 * args$batch_size / nrow(args$data)))
+    message(switch(backend,
+      sghmc = "  Note: SGHMC uses minibatch gradients for scalability",
+      sgld = "  Note: SGLD uses Langevin dynamics with minibatch gradients"))
   }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to ESS backend (Tier 1: Exact)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "ess") {
-    if (verbose) {
-      message(sprintf("  Iterations: %d (warmup: %d)", iter, warmup))
-    }
-
-    result <- fit_ess(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      spatiotemporal = spatiotemporal,
-      zi = zi,
-      latent = latent,
-      priors = priors,
-      iter = iter,
-      warmup = warmup,
-      chains = chains,
-      seed = seed,
-      verbose = verbose
-    )
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
-  }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to SGHMC backend (Tier 3: Optimized, large-scale)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "sghmc") {
-    # Default batch size: sqrt(n) for good variance/speed tradeoff
-    batch_size <- ctrl$batch_size %||% ceiling(sqrt(nrow(data)))
-    extra_args <- .tratio_sg_args(ctrl, "sghmc")
-
-    if (verbose) {
-      message(sprintf("  Iterations: %d (warmup: %d)", iter, warmup))
-      message(sprintf("  Batch size: %d (%.1f%% of data)", batch_size,
-                      100 * batch_size / nrow(data)))
-      message("  Note: SGHMC uses minibatch gradients for scalability")
-    }
-
-    result <- do.call(fit_sghmc, c(list(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      zi = zi,
-      priors = priors,
-      iter = iter,
-      warmup = warmup,
-      batch_size = batch_size,
-      seed = seed,
-      verbose = verbose
-    ), extra_args))
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
-  }
-
-  # -------------------------------------------------------------------------
-  # Dispatch to SGLD backend (Tier 3: Optimized, large-scale)
-  # -------------------------------------------------------------------------
-  if (selected_backend == "sgld") {
-    # Default batch size: sqrt(n) for good variance/speed tradeoff
-    batch_size <- ctrl$batch_size %||% ceiling(sqrt(nrow(data)))
-    extra_args <- .tratio_sg_args(ctrl, "sgld")
-
-    if (verbose) {
-      message(sprintf("  Iterations: %d (warmup: %d)", iter, warmup))
-      message(sprintf("  Batch size: %d (%.1f%% of data)", batch_size,
-                      100 * batch_size / nrow(data)))
-      message("  Note: SGLD uses Langevin dynamics with minibatch gradients")
-    }
-
-    result <- do.call(fit_sgld, c(list(
-      formula = formula_spec,
-      data = data,
-      family = family,
-      spatial = spatial,
-      temporal = temporal,
-      zi = zi,
-      priors = priors,
-      iter = iter,
-      warmup = warmup,
-      batch_size = batch_size,
-      seed = seed,
-      verbose = verbose
-    ), extra_args))
-
-    # Add mode information
-    result$inference_mode <- selected_mode
-    result$inference_tier <- selected_tier
-    result$inference_tier_name <- selected_tier_name
-    result$mode_info <- mode_info
-
-    return(result)
-  }
-
-  # If we get here, no valid backend was selected
-  stop(
-    sprintf("Unknown backend: '%s'", selected_backend),
-    call. = FALSE
-  )
 }
 
 
