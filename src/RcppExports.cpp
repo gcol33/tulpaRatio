@@ -203,6 +203,30 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_ratio_family_entries
+Rcpp::List cpp_ratio_family_entries();
+RcppExport SEXP _tulpaRatio_cpp_ratio_family_entries() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_ratio_family_entries());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_family_likelihood
+Rcpp::NumericVector cpp_test_family_likelihood(std::string family, double shape, double rate, double scale);
+RcppExport SEXP _tulpaRatio_cpp_test_family_likelihood(SEXP familySEXP, SEXP shapeSEXP, SEXP rateSEXP, SEXP scaleSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< double >::type shape(shapeSEXP);
+    Rcpp::traits::input_parameter< double >::type rate(rateSEXP);
+    Rcpp::traits::input_parameter< double >::type scale(scaleSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_family_likelihood(family, shape, rate, scale));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_pg_binomial_gibbs_spatial
 Rcpp::List cpp_pg_binomial_gibbs_spatial(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_spatial_U, double prior_sigma_spatial_alpha, bool store_eta, bool verbose, int n_threads);
 RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_spatial(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_spatial_USEXP, SEXP prior_sigma_spatial_alphaSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
@@ -2031,6 +2055,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_hmc_fit", (DL_FUNC) &_tulpaRatio_cpp_hmc_fit, 31},
     {"_tulpaRatio_cpp_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_get_max_threads, 0},
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
+    {"_tulpaRatio_cpp_ratio_family_entries", (DL_FUNC) &_tulpaRatio_cpp_ratio_family_entries, 0},
+    {"_tulpaRatio_cpp_test_family_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_family_likelihood, 4},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_spatial, 19},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_bym2", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_bym2, 19},
     {"_tulpaRatio_cpp_pg_nngp_conditional_probe", (DL_FUNC) &_tulpaRatio_cpp_pg_nngp_conditional_probe, 10},

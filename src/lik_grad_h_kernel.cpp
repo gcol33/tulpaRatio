@@ -238,36 +238,6 @@ Ratio<Num,Den> bind_ratio(const YN& yn, const YD& yd, int N,
     return {Num(pn),Den(pd),n,d,N};
 }
 
-template<class Margin, class ResponseData>
-Ratio<Margin> bind_single(const ResponseData& r, int N,
-                          const std::vector<double>& params, int offset) {
-    double p = 1.0;
-    if constexpr (Margin::n_extra) p = std::exp(params[offset]);
-    return {Margin(p),NoMargin(),{r.y.data(),nullptr,r.n.data()},{},N};
-}
-
-inline auto bind_family(const lik::BinomialResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_single<Binomial>(r,n,p,e);
-}
-inline auto bind_family(const lik::BetaBinomialResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_single<BetaBinomial>(r,n,p,e);
-}
-inline auto bind_family(const lik::PoissonGammaResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_ratio<Poisson,Gamma>(r.y_num,r.y_denom_cont,n,p,e);
-}
-inline auto bind_family(const lik::NegbinGammaResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_ratio<NegBin,Gamma>(r.y_num,r.y_denom_cont,n,p,e);
-}
-inline auto bind_family(const lik::NegbinNegbinResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_ratio<NegBin,NegBin>(r.y_num,r.y_denom,n,p,e);
-}
-inline auto bind_family(const lik::GammaGammaResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_ratio<Gamma,Gamma>(r.y_num_cont,r.y_denom_cont,n,p,e);
-}
-inline auto bind_family(const lik::LognormalResponseData& r, int n, const std::vector<double>& p, int e) {
-    return bind_ratio<Lognormal,Lognormal>(r.y_num_cont,r.y_denom_cont,n,p,e);
-}
-
 template<class Margin>
 inline double apply_extra(const Margin& margin, int e,
                            const std::vector<double>& params,
@@ -289,7 +259,7 @@ inline double apply_extra(const Margin& margin, int e,
     }
 }
 
-template<class ResponseData>
+template<class Num, class Den = NoMargin>
 void grad_h(const std::vector<double>& params, const tulpa::ModelData& data,
              const tulpa::ParamLayout& layout, std::vector<double>& grad,
              double* log_post_out) {
@@ -297,8 +267,18 @@ void grad_h(const std::vector<double>& params, const tulpa::ModelData& data,
     grad.assign(params.size(),0.0);
     if (log_post_out) *log_post_out = 0.0;
     apply_beta_prior(params,data,layout,grad,log_post_out);
-    const auto fn = bind_family(*static_cast<const ResponseData*>(data.model_response_data),
-                                 data.N,params,layout.extra_offset);
+    const auto& r = *static_cast<const lik::ResponseData*>(data.model_response_data);
+    const auto fn = [&]() {
+        if constexpr (std::is_same<Den,NoMargin>::value) {
+            double p = 1.0;
+            if constexpr (Num::n_extra) p = std::exp(params[layout.extra_offset]);
+            return Ratio<Num>{Num(p),NoMargin(),{r.y_num.data(),nullptr,r.y_denom.data()},{},data.N};
+        } else if constexpr (std::is_same<Num,Gamma>::value || std::is_same<Num,Lognormal>::value) {
+            return bind_ratio<Num,Den>(r.y_num_cont,r.y_denom_cont,data.N,params,layout.extra_offset);
+        } else if constexpr (std::is_same<Den,Gamma>::value) {
+            return bind_ratio<Num,Den>(r.y_num,r.y_denom_cont,data.N,params,layout.extra_offset);
+        } else return bind_ratio<Num,Den>(r.y_num,r.y_denom,data.N,params,layout.extra_offset);
+    }();
     const auto eta = compute_eta_matrix(params,data,layout);
     const double ll = run_obs_loop(params,data,layout,eta.data(),fn,grad,decltype(fn)::n_extra);
     double lp = ll;
@@ -329,37 +309,37 @@ Rcpp::NumericVector precision_spec_beta_h_probe(int y, int n, double phi) {
 }
 void grad_h_beta_binomial(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::BetaBinomialResponseData>(params,data,layout,grad,lp);
+ grad_h<BetaBinomial>(params,data,layout,grad,lp);
 }
 
 void grad_h_binomial(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::BinomialResponseData>(params,data,layout,grad,lp);
+ grad_h<Binomial>(params,data,layout,grad,lp);
 }
 
 void grad_h_negbin_gamma(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::NegbinGammaResponseData>(params,data,layout,grad,lp);
+ grad_h<NegBin,Gamma>(params,data,layout,grad,lp);
 }
 
 void grad_h_lognormal(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::LognormalResponseData>(params,data,layout,grad,lp);
+ grad_h<Lognormal,Lognormal>(params,data,layout,grad,lp);
 }
 
 void grad_h_gamma_gamma(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::GammaGammaResponseData>(params,data,layout,grad,lp);
+ grad_h<Gamma,Gamma>(params,data,layout,grad,lp);
 }
 
 void grad_h_poisson_gamma(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::PoissonGammaResponseData>(params,data,layout,grad,lp);
+ grad_h<Poisson,Gamma>(params,data,layout,grad,lp);
 }
 
 void grad_h_negbin_negbin(const std::vector<double>& params, const tulpa::ModelData& data,
  const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
- grad_h<lik::NegbinNegbinResponseData>(params,data,layout,grad,lp);
+ grad_h<NegBin,NegBin>(params,data,layout,grad,lp);
 }
 
 } // namespace tulpaRatio

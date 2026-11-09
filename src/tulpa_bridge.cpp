@@ -10,7 +10,7 @@
 #include <tulpa/model_data.h>
 #include <tulpa/param_layout.h>
 
-#include "lik_specs/ratio_config.h"
+#include "lik_specs/family_registry.h"
 #include "lik_specs/lik_helpers.h"
 
 namespace tulpaRatio {
@@ -69,102 +69,25 @@ std::vector<double> rmajor_from_rmatrix(const Rcpp::NumericMatrix& X) {
   return out;
 }
 
-// ----- Per-family payload builder ------------------------------------------
-// Each family has its own POD struct. We build the right one based on
-// cfg.family, returning a `void*` plus a `unique_ptr<void, ...>` for cleanup.
-// Centralising the construction here keeps the family files pure (no Rcpp
-// in lik_*.cpp) and the bridge a single switch — no per-family allocation
-// boilerplate sprinkled around.
-struct ResponsePayload {
-  void* ptr = nullptr;
-  std::function<void(void*)> deleter;
-  ~ResponsePayload() { if (ptr) deleter(ptr); }
-  ResponsePayload() = default;
-  ResponsePayload(const ResponsePayload&) = delete;
-  ResponsePayload& operator=(const ResponsePayload&) = delete;
-  ResponsePayload(ResponsePayload&& o) noexcept
-      : ptr(o.ptr), deleter(std::move(o.deleter)) { o.ptr = nullptr; }
-};
-
-template <typename Payload>
-ResponsePayload make_payload(Payload* obj) {
-  ResponsePayload r;
-  r.ptr = obj;
-  r.deleter = [](void* p) { delete static_cast<Payload*>(p); };
-  return r;
-}
-
-ResponsePayload build_response_payload(
-    const std::string& family,
-    const Rcpp::IntegerVector& y_num_int,
-    const Rcpp::IntegerVector& y_denom_int,
-    const Rcpp::NumericVector& y_num_cont,
-    const Rcpp::NumericVector& y_denom_cont,
-    int N
-) {
-  using namespace tulpaRatio::lik;
-
-  if (family == "binomial") {
-    auto* p = new BinomialResponseData;
-    p->y.assign(N, 0); p->n.assign(N, 0);
-    for (int i = 0; i < N; ++i) { p->y[i] = y_num_int[i]; p->n[i] = y_denom_int[i]; }
-    return make_payload(p);
-  }
-  if (family == "beta_binomial") {
-    auto* p = new BetaBinomialResponseData;
-    p->y.assign(N, 0); p->n.assign(N, 0);
-    for (int i = 0; i < N; ++i) { p->y[i] = y_num_int[i]; p->n[i] = y_denom_int[i]; }
-    return make_payload(p);
-  }
-  if (family == "poisson_gamma") {
-    auto* p = new PoissonGammaResponseData;
-    p->y_num.assign(N, 0);
-    p->y_denom_cont.assign(N, 0.0);
-    for (int i = 0; i < N; ++i) {
-      p->y_num[i]        = y_num_int[i];
-      p->y_denom_cont[i] = y_denom_cont[i];
+std::unique_ptr<tulpaRatio::lik::ResponseData> build_response_payload(
+    const std::string& family, const Rcpp::IntegerVector& yn,
+    const Rcpp::IntegerVector& yd, const Rcpp::NumericVector& cn,
+    const Rcpp::NumericVector& cd, int N) {
+  const auto& entry = tulpaRatio::family_entry(family);
+  auto p = std::make_unique<tulpaRatio::lik::ResponseData>();
+  const auto copy = [N](tulpaRatio::ResponseShape shape, const Rcpp::IntegerVector& counts,
+      const Rcpp::NumericVector& continuous, std::vector<int>& ints, std::vector<double>& reals) {
+    if (shape == tulpaRatio::ResponseShape::Positive) {
+      if (continuous.size() != N) Rcpp::stop("Continuous response length must equal N");
+      reals.assign(continuous.begin(),continuous.end());
+    } else {
+      if (counts.size() != N) Rcpp::stop("Count response length must equal N");
+      ints.assign(counts.begin(),counts.end());
     }
-    return make_payload(p);
-  }
-  if (family == "negbin_gamma") {
-    auto* p = new NegbinGammaResponseData;
-    p->y_num.assign(N, 0);
-    p->y_denom_cont.assign(N, 0.0);
-    for (int i = 0; i < N; ++i) {
-      p->y_num[i]        = y_num_int[i];
-      p->y_denom_cont[i] = y_denom_cont[i];
-    }
-    return make_payload(p);
-  }
-  if (family == "negbin_negbin") {
-    auto* p = new NegbinNegbinResponseData;
-    p->y_num.assign(N, 0); p->y_denom.assign(N, 0);
-    for (int i = 0; i < N; ++i) { p->y_num[i] = y_num_int[i]; p->y_denom[i] = y_denom_int[i]; }
-    return make_payload(p);
-  }
-  if (family == "gamma_gamma") {
-    auto* p = new GammaGammaResponseData;
-    p->y_num_cont.assign(N, 0.0);
-    p->y_denom_cont.assign(N, 0.0);
-    for (int i = 0; i < N; ++i) {
-      p->y_num_cont[i]   = y_num_cont[i];
-      p->y_denom_cont[i] = y_denom_cont[i];
-    }
-    return make_payload(p);
-  }
-  if (family == "lognormal") {
-    auto* p = new LognormalResponseData;
-    p->y_num_cont.assign(N, 0.0);
-    p->y_denom_cont.assign(N, 0.0);
-    for (int i = 0; i < N; ++i) {
-      p->y_num_cont[i]   = y_num_cont[i];
-      p->y_denom_cont[i] = y_denom_cont[i];
-    }
-    return make_payload(p);
-  }
-
-  Rcpp::stop("build_response_payload: unknown family '%s'", family.c_str());
-  return ResponsePayload();  // unreachable
+  };
+  copy(entry.num_response,yn,cn,p->y_num,p->y_num_cont);
+  copy(entry.denom_response,yd,cd,p->y_denom,p->y_denom_cont);
+  return p;
 }
 
 } // namespace
@@ -285,9 +208,6 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   if (cfg_list.containsElementNamed("zi"))         cfg.zi         = Rcpp::as<std::string>(cfg_list["zi"]);
   if (cfg_list.containsElementNamed("num_link"))   cfg.num_link   = Rcpp::as<std::string>(cfg_list["num_link"]);
   if (cfg_list.containsElementNamed("denom_link")) cfg.denom_link = Rcpp::as<std::string>(cfg_list["denom_link"]);
-  cfg.phi_prior_shape   = phi_prior_shape;
-  cfg.phi_prior_rate    = phi_prior_rate;
-  cfg.sigma_prior_scale = sigma_prior_scale;
 
   // Map cfg.zi (string) to tulpa::ZIType. The legacy distribution-specific
   // values match what the engine uses to build the X_zi / X_oi blocks in the
@@ -323,7 +243,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
 
   // ---- Build LikelihoodSpec & response payload via dispatcher ------------
   tulpa::LikelihoodSpec spec = tulpaRatio::build_ratio_likelihood_spec(cfg);
-  ResponsePayload response = build_response_payload(
+  auto response = build_response_payload(
       cfg.family, y_num, y_denom, y_num_cont, y_denom_cont, N);
 
   if (n_proc_input != spec.n_processes) {
@@ -337,13 +257,9 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   data.N = N;
   data.n_processes = spec.n_processes;
   data.sigma_beta  = sigma_beta;
-  data.model_response_data = response.ptr;
+  data.model_response_data = response.get();
   data.likelihood_spec     = &spec;
 
-  // Hyperprior knobs read by the hand-coded H-kernel (B2). The AD path
-  // doesn't read these — it gets the same values from the per-family
-  // static cfg set inside each build_*_spec — but the H kernel uses
-  // ModelData fields so the entire ratio_config is present in one place.
   data.phi_prior_shape = phi_prior_shape;
   data.phi_prior_rate  = phi_prior_rate;
   data.sigma_re_scale  = sigma_prior_scale;

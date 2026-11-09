@@ -1,96 +1,113 @@
-// lik_dispatch.cpp
-// Table-driven family dispatcher for tulpaRatio LikelihoodSpec.
-//
-// B1b registered the 7 base ratio families. B1c adds ZI / hurdle / OI / ZOIB
-// variants — the family builder itself stays single-source, branching on
-// cfg.zi inside the templated likelihood callback. We only validate here that
-// the requested cfg.zi is compatible with cfg.family (so the templated
-// switch never falls into the default branch silently).
-
 #include <Rcpp.h>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <tulpa/likelihood.h>
-
-#include "lik_specs/ratio_config.h"
+#include <algorithm>
+#include "lik_specs/family_registry.h"
+#include "lik_specs/family_kernel.h"
+#include "lik_specs/lik_grad_h_kernel.h"
 
 namespace tulpaRatio {
 
-// Forward declarations of per-family builders.
-tulpa::LikelihoodSpec build_binomial_spec     (const RatioConfig& cfg);
-tulpa::LikelihoodSpec build_poisson_gamma_spec(const RatioConfig& cfg);
-tulpa::LikelihoodSpec build_negbin_gamma_spec (const RatioConfig& cfg);
-tulpa::LikelihoodSpec build_negbin_negbin_spec(const RatioConfig& cfg);
-tulpa::LikelihoodSpec build_gamma_gamma_spec  (const RatioConfig& cfg);
-tulpa::LikelihoodSpec build_lognormal_spec    (const RatioConfig& cfg);
-tulpa::LikelihoodSpec build_beta_binomial_spec(const RatioConfig& cfg);
+template<class Num, class Den = margins::NoMargin>
+FamilyEntry make_family_entry(const char* name, const char* spec_name,
+    const char* link, std::vector<std::string> zi, tulpa::FullGradFn gradient) {
+    constexpr bool single = std::is_same<Den,margins::NoMargin>::value;
+    return {name,spec_name,single ? 1 : 2,Num::n_extra+Den::n_extra,link,"log",std::move(zi),
+        lik::continuous_response<Num> ? ResponseShape::Positive : ResponseShape::Count,
+        single ? ResponseShape::Trials : lik::continuous_response<Den> ? ResponseShape::Positive : ResponseShape::Count,
+        &lik::family_likelihood<Num,Den,double>,
+        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient};
+}
 
-namespace {
-
-using FamilyBuilder = tulpa::LikelihoodSpec(*)(const RatioConfig&);
-
-const std::unordered_map<std::string, FamilyBuilder>& family_table() {
-    static const std::unordered_map<std::string, FamilyBuilder> kFamilyTable = {
-        {"binomial",      &build_binomial_spec},
-        {"poisson_gamma", &build_poisson_gamma_spec},
-        {"negbin_gamma",  &build_negbin_gamma_spec},
-        {"negbin_negbin", &build_negbin_negbin_spec},
-        {"gamma_gamma",   &build_gamma_gamma_spec},
-        {"lognormal",     &build_lognormal_spec},
-        {"beta_binomial", &build_beta_binomial_spec},
+const std::vector<FamilyEntry>& family_entries() {
+    using namespace margins;
+    static const std::vector<FamilyEntry> entries = {
+        make_family_entry<Binomial>("binomial","tulpaRatio_binomial","logit",
+            {"none","zi_binomial","hurdle_binomial","oi_binomial","zoib"},&grad_h_binomial),
+        make_family_entry<Poisson,Gamma>("poisson_gamma","tulpaRatio_poisson_gamma","log",
+            {"none","zi_poisson","hurdle_poisson"},&grad_h_poisson_gamma),
+        make_family_entry<NegBin,Gamma>("negbin_gamma","tulpaRatio_negbin_gamma","log",
+            {"none","zi_negbin","hurdle_negbin"},&grad_h_negbin_gamma),
+        make_family_entry<NegBin,NegBin>("negbin_negbin","tulpaRatio_negbin_negbin","log",
+            {"none","zi_negbin","hurdle_negbin"},&grad_h_negbin_negbin),
+        make_family_entry<Gamma,Gamma>("gamma_gamma","tulpaRatio_gamma_gamma","log",
+            {"none"},&grad_h_gamma_gamma),
+        make_family_entry<Lognormal,Lognormal>("lognormal","tulpaRatio_lognormal","log",
+            {"none"},&grad_h_lognormal),
+        make_family_entry<BetaBinomial>("beta_binomial","tulpaRatio_beta_binomial","logit",
+            {"none"},&grad_h_beta_binomial)
     };
-    return kFamilyTable;
+    return entries;
 }
 
-// Per-family compatibility table for cfg.zi. "none" is always valid. Adding a
-// new family or ZI variant: one line here + matching switch case in the
-// family's templated likelihood.
-const std::unordered_map<std::string, std::unordered_set<std::string>>&
-zi_compat_table() {
-    static const std::unordered_map<std::string, std::unordered_set<std::string>>
-        kZiCompat = {
-            {"binomial",      {"none", "zi_binomial", "hurdle_binomial",
-                               "oi_binomial", "zoib"}},
-            {"poisson_gamma", {"none", "zi_poisson", "hurdle_poisson"}},
-            {"negbin_gamma",  {"none", "zi_negbin", "hurdle_negbin"}},
-            {"negbin_negbin", {"none", "zi_negbin", "hurdle_negbin"}},
-            {"gamma_gamma",   {"none"}},
-            {"lognormal",     {"none"}},
-            {"beta_binomial", {"none"}},
-        };
-    return kZiCompat;
+const FamilyEntry& family_entry(const std::string& name) {
+    for (const auto& entry : family_entries()) if (name == entry.name) return entry;
+    Rcpp::stop("Unknown likelihood family '%s'",name.c_str());
 }
-
-}  // namespace
 
 tulpa::LikelihoodSpec build_ratio_likelihood_spec(const RatioConfig& cfg) {
-    const auto& table = family_table();
-    auto it = table.find(cfg.family);
-    if (it == table.end()) {
-        Rcpp::stop("tulpaRatio LikelihoodSpec dispatcher: family='%s' not "
-                   "registered. Disable tulpaRatio.use_specs to fall back to "
-                   "the legacy backend.",
-                   cfg.family.c_str());
-    }
-
-    const auto& compat = zi_compat_table();
-    auto cit = compat.find(cfg.family);
-    if (cit == compat.end() || cit->second.find(cfg.zi) == cit->second.end()) {
-        Rcpp::stop("tulpaRatio LikelihoodSpec dispatcher: family='%s' does not "
-                   "support zi='%s' on the spec path. Disable "
-                   "tulpaRatio.use_specs to fall back to the legacy backend.",
-                   cfg.family.c_str(), cfg.zi.c_str());
-    }
-
-    tulpa::LikelihoodSpec spec = it->second(cfg);
-    if (spec.ll_double == nullptr) {
-        Rcpp::stop("tulpaRatio LikelihoodSpec dispatcher: family='%s' with "
-                   "num_link='%s' / denom_link='%s' has no registered "
-                   "implementation.",
-                   cfg.family.c_str(), cfg.num_link.c_str(), cfg.denom_link.c_str());
-    }
+    const auto& entry = family_entry(cfg.family);
+    if (std::find(entry.zi.begin(),entry.zi.end(),cfg.zi) == entry.zi.end())
+        Rcpp::stop("Family '%s' does not support inflation '%s'",cfg.family.c_str(),cfg.zi.c_str());
+    if (cfg.num_link != entry.num_link || (entry.processes > 1 && cfg.denom_link != entry.denom_link))
+        Rcpp::stop("Unsupported likelihood links for family '%s'",cfg.family.c_str());
+    tulpa::LikelihoodSpec spec;
+    spec.name=entry.spec_name;
+    spec.n_processes=entry.processes;
+    spec.n_extra_params=entry.n_extra;
+    spec.ll_double=entry.likelihood;
+    spec.ll_arena=entry.likelihood_arena;
+    if (cfg.zi == "none") spec.gradient_fn=entry.gradient;
     return spec;
 }
 
-}  // namespace tulpaRatio
+}
+
+// [[Rcpp::export]]
+Rcpp::List cpp_ratio_family_entries() {
+    const auto& entries = tulpaRatio::family_entries();
+    Rcpp::List out(entries.size());
+    Rcpp::CharacterVector names(entries.size());
+    const auto domain = [](tulpaRatio::ResponseShape shape) {
+        return shape == tulpaRatio::ResponseShape::Positive ? "positive" :
+               shape == tulpaRatio::ResponseShape::Trials ? "trials" : "count";
+    };
+    for (size_t k=0;k<entries.size();++k) {
+        const auto& e=entries[k]; names[k]=e.name;
+        out[k]=Rcpp::List::create(Rcpp::Named("n_processes")=e.processes,
+            Rcpp::Named("n_extra")=e.n_extra,Rcpp::Named("num_link")=e.num_link,
+            Rcpp::Named("denom_link")=e.denom_link,Rcpp::Named("spec_inflation")=e.zi,
+            Rcpp::Named("responses")=Rcpp::CharacterVector::create(
+                Rcpp::Named("num")=domain(e.num_response),Rcpp::Named("denom")=domain(e.denom_response)));
+    }
+    out.attr("names")=names;
+    return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_family_likelihood(std::string family, double shape,
+                                              double rate, double scale) {
+    using namespace tulpaRatio;
+    const auto& entry=family_entry(family);
+    RatioConfig cfg;
+    cfg.family=family; cfg.num_link=entry.num_link;
+    const auto spec=build_ratio_likelihood_spec(cfg);
+    lik::ResponseData response{{3},{8},{3.0},{4.0}};
+    tulpa::ModelData data;
+    data.phi_prior_shape=shape; data.phi_prior_rate=rate; data.sigma_re_scale=scale;
+    tulpa::ParamLayout layout;
+    layout.extra_offset=0;
+    const double eta[2]={-.35,.2};
+    std::vector<double> params;
+    for (int k=0;k<entry.n_extra;++k) params.push_back(std::log(k==0 ? 2.4 : 1.7));
+    const double ll=spec.ll_double(0,eta,0.,0.,params,data,layout,&response);
+    tulpa::arena::ArenaScope scope;
+    tulpa::arena::Var en(-.35),ed(.2),zero(0.);
+    const tulpa::arena::Var ae[2]={en,ed};
+    std::vector<tulpa::arena::Var> ap;
+    for (double p : params) ap.emplace_back(p);
+    auto al=spec.ll_arena(0,ae,zero,zero,ap,data,layout,&response);
+    al.backward();
+    Rcpp::NumericVector out(4+entry.n_extra);
+    out[0]=ll; out[1]=al.val(); out[2]=en.adj(); out[3]=ed.adj();
+    for (int k=0;k<entry.n_extra;++k) out[4+k]=ap[k].adj();
+    return out;
+}
