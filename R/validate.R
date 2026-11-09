@@ -148,7 +148,7 @@ pp_check_single <- function(y, yrep, type, stat, ndraws, title_suffix, ...) {
 # ============================================================================
 
 # Model types this engine supports: every pair the samplers fit.
-.ratiod_supported_model_types <- names(MODEL_TYPE_RESPONSES)
+.ratiod_supported_model_types <- names(MODEL_TYPES)
 
 # Resolve a fit's model type regardless of which backend produced it (hmc /
 # laplace store it in `.internal`, others at the top level; fall back to the

@@ -491,7 +491,7 @@ assert_backend_fits_likelihood <- function(backend, family, structures = list())
   links <- family_links(family, model_type)
   odd_links <- unique(setdiff(unlist(links[c("num", "denom", "zi", "oi")]),
                               LINKS_CANONICAL))
-  what <- if (!model_type %in% HANDCODED_MODEL_TYPES) {
+  what <- if (!isTRUE(MODEL_TYPES[[model_type]]$handcoded)) {
     sprintf("the %s likelihood", model_type)
   } else {
     sprintf("the %s link", paste(odd_links, collapse = ", "))
@@ -637,7 +637,8 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
     reason_parts <- c(reason_parts, "spatial model with large n")
   }
 
-  if (use_structured && handcoded && backend_fits_structures("laplace", structures)) {
+  if (use_structured && handcoded && "laplace" %in% MODEL_TYPES[[get_hmc_model_type(family)]]$samplers &&
+      backend_fits_structures("laplace", structures)) {
     return(list(
       mode = "structured",
       backend = "laplace",

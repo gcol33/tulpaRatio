@@ -209,7 +209,7 @@ dispersion_draws <- function(object, arm = c("num", "denom")) {
   model_type <- fit_model_type(object)
   n_draws <- object$n_save %||% nrow(object$draws)
 
-  names_for_type <- MODEL_DISPERSION_NAMES[[model_type]]
+  names_for_type <- MODEL_TYPES[[model_type]]$dispersion
   name <- if (!is.null(names_for_type)) unname(names_for_type[arm]) else NULL
   if (is.null(name) || is.na(name)) return(rep(NA_real_, n_draws))
 

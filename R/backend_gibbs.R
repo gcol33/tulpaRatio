@@ -302,7 +302,7 @@ fit_gibbs <- function(formula,
 #' @return The draw matrix with transformed, renamed columns.
 #' @keywords internal
 gibbs_natural_draws <- function(draws, model_type) {
-  disp <- MODEL_DISPERSION_NAMES[[model_type]]
+  disp <- MODEL_TYPES[[model_type]]$dispersion
   disp_name <- function(arm) if (arm %in% names(disp)) disp[[arm]] else NA
   map <- list(
     log_phi_num = c(disp_name("num"), "exp"),
@@ -326,9 +326,6 @@ gibbs_natural_draws <- function(draws, model_type) {
 }
 
 
-# The numerator and denominator pairs the Gibbs sampler has a likelihood for.
-GIBBS_MODEL_TYPES <- c("poisson_gamma", "negbin_negbin", "negbin_gamma", "binomial")
-
 #' The model type the Gibbs sampler fits for a family
 #'
 #' The same pair the HMC samplers read (`get_hmc_model_type()`), or `NA` when
@@ -338,7 +335,7 @@ GIBBS_MODEL_TYPES <- c("poisson_gamma", "negbin_negbin", "negbin_gamma", "binomi
 gibbs_model_type <- function(family) {
   if (is_zi_family(family)) return(NA_character_)
   type <- tryCatch(get_hmc_model_type(family), error = function(e) NA_character_)
-  if (type %in% GIBBS_MODEL_TYPES) type else NA_character_
+  if ("gibbs" %in% MODEL_TYPES[[type]]$samplers) type else NA_character_
 }
 
 #' Map family to Gibbs family string

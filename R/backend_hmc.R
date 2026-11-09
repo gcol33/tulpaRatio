@@ -198,24 +198,10 @@ fit_hmc <- function(formula,
   # variants flow through the same path when the family supports them. Off
   # by default; enabled only for the narrowest scope so the legacy backend
   # stays the default for every other config.
-  SUPPORTED_SPEC_FAMILIES <- c("binomial", "poisson_gamma", "negbin_gamma",
-                               "negbin_negbin", "gamma_gamma", "lognormal",
-                               "beta_binomial")
-  SPEC_ZI_COMPAT <- list(
-    binomial      = c("none", "zi_binomial", "hurdle_binomial",
-                      "oi_binomial", "zoib"),
-    poisson_gamma = c("none", "zi_poisson", "hurdle_poisson"),
-    negbin_gamma  = c("none", "zi_negbin", "hurdle_negbin"),
-    negbin_negbin = c("none", "zi_negbin", "hurdle_negbin"),
-    gamma_gamma   = "none",
-    lognormal     = "none",
-    beta_binomial = "none"
-  )
   use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", FALSE)) ||
     identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
   zi_type_str <- zi_info$type %||% "none"
-  zi_supported <- (model_type %in% SUPPORTED_SPEC_FAMILIES) &&
-    (zi_type_str %in% (SPEC_ZI_COMPAT[[model_type]] %||% "none"))
+  zi_supported <- zi_type_str %in% MODEL_TYPES[[model_type]]$spec_inflation
   # B1d-1: allow single-grouping-factor RE on the spec path — random
   # intercepts AND uncorrelated random slopes (n_coefs >= 1, correlated
   # off). Multi-term (crossed/nested) and correlated slopes (LKJ) still
@@ -278,8 +264,7 @@ fit_hmc <- function(formula,
     # X_denom. Adding a 3-process family is a list element, not a new arg.
     # NOTE: this set must mirror the n_processes value each builder returns
     # in lik_dispatch.cpp. The bridge cross-checks and errors on mismatch.
-    ONE_PROCESS_FAMILIES <- c("binomial", "beta_binomial")
-    X_list <- if (model_type %in% ONE_PROCESS_FAMILIES) {
+    X_list <- if (MODEL_TYPES[[model_type]]$responses[["denom"]] == "trials") {
       list(hmc_data$X_num)
     } else {
       list(hmc_data$X_num, hmc_data$X_denom)
@@ -294,13 +279,9 @@ fit_hmc <- function(formula,
     # i.e. every middle block keeps its position; only `extras` moves to the
     # tail. Slicing by known block sizes reconstructs the right ordering
     # without parsing the engine's ParamLayout struct.
-    n_extra_per_family <- switch(model_type,
-      binomial = 0L, beta_binomial = 1L, poisson_gamma = 1L,
-      negbin_gamma = 2L, negbin_negbin = 2L, gamma_gamma = 2L,
-      lognormal = 2L, 0L
-    )
+    n_extra_per_family <- length(MODEL_TYPES[[model_type]]$dispersion)
     p_total_design <- (hmc_data$p_num %||% 0L) +
-      (if (model_type %in% ONE_PROCESS_FAMILIES) 0L else (hmc_data$p_denom %||% 0L))
+      (if (MODEL_TYPES[[model_type]]$responses[["denom"]] == "trials") 0L else (hmc_data$p_denom %||% 0L))
     # RE block size on the engine's layout. With slopes, each group carries
     # n_coefs values (intercept + slope coefficients) and there is one
     # log_sigma per coefficient; without slopes the legacy single-term
@@ -1060,53 +1041,8 @@ get_hmc_model_type <- function(family) {
     num
   )
   den <- family$denominator$distribution
-  key <- paste(num, den)
-  type <- hmc_model_types[[key]]
-  if (is.null(type)) {
-    stop(sprintf("No sampler fits a %s numerator with a %s denominator.",
-                 num, den), call. = FALSE)
-  }
-  type
+  model_type_for_distributions(num, den)
 }
-
-# Numerator and denominator distribution pairs the samplers fit, each with
-# its own likelihood.
-hmc_model_types <- list(
-  "binomial fixed" = "binomial",
-  "beta_binomial fixed" = "beta_binomial",
-  "poisson gamma" = "poisson_gamma",
-  "poisson neg_binomial_2" = "poisson_negbin",
-  "poisson fixed" = "poisson_fixed",
-  "neg_binomial_2 neg_binomial_2" = "negbin_negbin",
-  "neg_binomial_2 gamma" = "negbin_gamma",
-  "neg_binomial_2 fixed" = "negbin_fixed",
-  "gamma gamma" = "gamma_gamma",
-  "lognormal lognormal" = "lognormal",
-  "lognormal fixed" = "lognormal_fixed"
-)
-
-
-#' What the numerator and denominator responses of each model type are
-#'
-#' `count` an integer response, `positive` a positive continuous one,
-#' `trials` the trial counts of a binomial numerator, `exposure` a known
-#' positive exposure that scales the numerator mean. The data preparation and
-#' the response transforms read this table.
-#'
-#' @keywords internal
-MODEL_TYPE_RESPONSES <- list(
-  binomial        = c(num = "count",    denom = "trials"),
-  beta_binomial   = c(num = "count",    denom = "trials"),
-  negbin_negbin   = c(num = "count",    denom = "count"),
-  poisson_negbin  = c(num = "count",    denom = "count"),
-  poisson_gamma   = c(num = "count",    denom = "positive"),
-  negbin_gamma    = c(num = "count",    denom = "positive"),
-  gamma_gamma     = c(num = "positive", denom = "positive"),
-  lognormal       = c(num = "positive", denom = "positive"),
-  poisson_fixed   = c(num = "count",    denom = "exposure"),
-  negbin_fixed    = c(num = "count",    denom = "exposure"),
-  lognormal_fixed = c(num = "positive", denom = "exposure")
-)
 
 
 #' Prepare data for HMC sampler
@@ -1122,7 +1058,7 @@ prepare_hmc_data <- function(formula, data, family, model_type) {
 
   # A denominator that is data (trials or a known exposure) has no
   # coefficients
-  responses <- MODEL_TYPE_RESPONSES[[model_type]]
+  responses <- MODEL_TYPES[[model_type]]$responses
   if (responses[["denom"]] %in% c("trials", "exposure")) {
     X_denom <- matrix(numeric(0), nrow = nrow(data), ncol = 0)
   } else if (is.null(X_denom) || ncol(X_denom) == 0) {
@@ -1824,7 +1760,7 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
   # so the sampler does not begin at a mean of one when the data's is far
   # from it. Over trial counts that mean is the success proportion, over a
   # known exposure the rate.
-  responses <- MODEL_TYPE_RESPONSES[[model_type]]
+  responses <- MODEL_TYPES[[model_type]]$responses
   start_mean <- function(y, scale = NULL) {
     keep <- is.finite(y) & y > 0
     if (!any(keep)) return(NA_real_)
@@ -1885,7 +1821,7 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
   # Overdispersion / shape / sigma parameters, numerator then denominator, on
   # the log scale: a moderate overdispersion or shape of 2, a log-scale SD of
   # 0.5, a beta-binomial precision of 10
-  dispersion <- MODEL_DISPERSION_NAMES[[model_type]]
+  dispersion <- MODEL_TYPES[[model_type]]$dispersion
   dispersion <- dispersion[intersect(c("num", "denom"), names(dispersion))]
   dispersion_start <- c(phi_num = log(2), phi_denom = log(2), shape = log(2),
                         shape_num = log(2), shape_denom = log(2),

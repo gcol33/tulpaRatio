@@ -102,9 +102,10 @@ sim_ratiod <- function(n = 100,
 
   if (!is.null(seed)) set.seed(seed)
 
+  spec <- MODEL_TYPES[[get_hmc_model_type(family)]]
   num_dist <- family$numerator$distribution
-  denom_dist <- family$denominator$distribution
-  probability <- num_dist %in% c("binomial", "beta_binomial")
+  denom_dist <- spec$distributions[["denom"]]
+  probability <- identical(spec$responses[["denom"]], "trials")
   linkinv_num <- pp_linkinv(family$numerator$link %||% "log")
   linkinv_denom <- pp_linkinv(family$denominator$link %||% "log")
 

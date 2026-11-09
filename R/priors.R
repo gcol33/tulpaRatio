@@ -409,13 +409,7 @@ default_prior <- function(component, model_type = NULL) {
     component,
     beta = prior_normal(0, 10),
     sigma = prior_half_cauchy(2.5),
-    phi = switch(
-      model_type %||% "",
-      lognormal = prior_gamma(2, 2),
-      gamma_gamma = ,
-      poisson_gamma = prior_gamma(2, 0.5),
-      prior_gamma(2, 0.1)
-    ),
+    phi = do.call(prior_gamma, as.list(MODEL_TYPES[[model_type %||% "negbin_negbin"]]$phi_prior)),
     rho_temporal = prior_beta(2, 2),
     rho_spatial = prior_beta(1, 1),
     stop(sprintf("Unknown prior component '%s'", component), call. = FALSE)
@@ -602,15 +596,14 @@ priors_default <- function(family = NULL, spatial = FALSE, temporal = FALSE) {
 
   cat("Dispersion (phi):\n")
   if (is.null(family)) {
-    groups <- list(
-      "lognormal" = "lognormal",
-      "gamma_gamma, poisson_gamma" = "poisson_gamma",
-      "negbin_negbin, negbin_gamma, beta_binomial" = "negbin_negbin")
-    for (nm in names(groups)) {
-      cat(sprintf("  %s: ", nm))
-      print_prior(default_prior("phi", groups[[nm]]))
+    dispersed <- Filter(function(spec) length(spec$dispersion) > 0L, MODEL_TYPES)
+    rates <- vapply(dispersed, function(spec) spec$phi_prior[["rate"]], 0)
+    groups <- split(names(dispersed), rates)
+    for (types in groups) {
+      cat(sprintf("  %s: ", paste(types, collapse = ", ")))
+      print_prior(default_prior("phi", types[[1L]]))
     }
-  } else if (is.null(MODEL_DISPERSION_NAMES[[model_type]])) {
+  } else if (is.null(MODEL_TYPES[[model_type]]$dispersion)) {
     cat(sprintf("  none (%s)\n", family$name))
   } else {
     print_prior(defaults$phi, indent = "  ")

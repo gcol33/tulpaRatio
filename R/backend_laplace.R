@@ -30,16 +30,6 @@
 NULL
 
 
-# One engine family per process. A process whose family carries a dispersion
-# (a negative-binomial size, a gamma shape) integrates it on the outer grid.
-LAPLACE_ARMS <- list(
-  binomial      = list(num = "binomial"),
-  poisson_gamma = list(num = "poisson", denom = "gamma"),
-  negbin_gamma  = list(num = "neg_binomial_2", denom = "gamma"),
-  negbin_negbin = list(num = "neg_binomial_2", denom = "neg_binomial_2"),
-  gamma_gamma   = list(num = "gamma", denom = "gamma")
-)
-
 LAPLACE_DISPERSION <- c(neg_binomial_2 = "phi", gamma = "shape")
 
 
@@ -100,14 +90,14 @@ fit_laplace <- function(formula,
 # The arms and latent blocks a model hands to the engine.
 laplace_model <- function(formula, data, family, spatial, temporal) {
   model_type <- get_hmc_model_type(family)
-  arm_families <- LAPLACE_ARMS[[model_type]]
-  if (is.null(arm_families)) {
+  spec <- MODEL_TYPES[[model_type]]
+  if (!"laplace" %in% spec$samplers) {
     stop(sprintf("The Laplace backend does not fit the `%s` family. Use `mode = \"hmc\"`.",
                  model_type), call. = FALSE)
   }
 
   N <- length(formula$numerator$response)
-  n_arms <- length(arm_families)
+  n_arms <- sum(spec$distributions != "fixed")
 
   parts <- laplace_re_parts(formula, first_block = 1L)
   temporal_spec <- NULL
@@ -161,7 +151,8 @@ laplace_integration <- function(parts) {
 # Likelihood arms of the engine call, with the dispersion axes of the arms that
 # carry one.
 laplace_arms <- function(formula, model_type) {
-  spec <- LAPLACE_ARMS[[model_type]]
+  spec <- as.list(MODEL_TYPES[[model_type]]$distributions)
+  if (identical(spec$denom, "fixed")) spec$denom <- NULL
   N <- length(formula$numerator$response)
   binomial <- identical(model_type, "binomial")
 

@@ -85,10 +85,10 @@ NULL
 #' @export
 ratiod_zi_negbin <- function(link_num = "log", link_denom = "log",
                            link_zi = "logit", denom_family = "negbin", zi_formula = NULL) {
-  zi_count_family("neg_binomial_2", "mixture", denom_family,
-                  link_num, link_denom, link_zi, zi_formula)
+  new_ratiod_family(count_model_type("neg_binomial_2", denom_family),
+                    list(num = link_num, denom = link_denom, zi = link_zi),
+                    list(type = "mixture", zi_formula = zi_formula))
 }
-
 
 #' Zero-Inflated Poisson Family
 #'
@@ -141,10 +141,10 @@ ratiod_zi_negbin <- function(link_num = "log", link_denom = "log",
 #' @export
 ratiod_zi_poisson <- function(link_num = "log", link_denom = "log",
                          link_zi = "logit", denom_family = "gamma", zi_formula = NULL) {
-  zi_count_family("poisson", "mixture", denom_family,
-                  link_num, link_denom, link_zi, zi_formula)
+  new_ratiod_family(count_model_type("poisson", denom_family),
+                    list(num = link_num, denom = link_denom, zi = link_zi),
+                    list(type = "mixture", zi_formula = zi_formula))
 }
-
 
 #' Hurdle Negative Binomial Family
 #'
@@ -207,10 +207,10 @@ ratiod_zi_poisson <- function(link_num = "log", link_denom = "log",
 #' @export
 ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
                                 link_hurdle = "logit", denom_family = "negbin", zi_formula = NULL) {
-  zi_count_family("neg_binomial_2", "hurdle", denom_family,
-                  link_num, link_denom, link_hurdle, zi_formula)
+  new_ratiod_family(count_model_type("neg_binomial_2", denom_family),
+                    list(num = link_num, denom = link_denom, hurdle = link_hurdle),
+                    list(type = "hurdle", zi_formula = zi_formula))
 }
-
 
 #' Hurdle Poisson Family
 #'
@@ -230,86 +230,10 @@ ratiod_hurdle_negbin <- function(link_num = "log", link_denom = "log",
 #' @export
 ratiod_hurdle_poisson <- function(link_num = "log", link_denom = "log",
                               link_hurdle = "logit", denom_family = "gamma", zi_formula = NULL) {
-  zi_count_family("poisson", "hurdle", denom_family,
-                  link_num, link_denom, link_hurdle, zi_formula)
+  new_ratiod_family(count_model_type("poisson", denom_family),
+                    list(num = link_num, denom = link_denom, hurdle = link_hurdle),
+                    list(type = "hurdle", zi_formula = zi_formula))
 }
-
-
-# Denominators each count numerator is fitted with, inflated or not; every
-# pair is one likelihood of the samplers (get_hmc_model_type()).
-count_denominators <- list(
-  poisson = c(gamma = "gamma", negbin = "neg_binomial_2", fixed = "fixed"),
-  neg_binomial_2 = c(negbin = "neg_binomial_2", gamma = "gamma", fixed = "fixed")
-)
-
-#' Build a zero-inflated or hurdle count family
-#'
-#' @param base Count distribution: "poisson" or "neg_binomial_2".
-#' @param type "mixture" (zero-inflated) or "hurdle".
-#' @param denom_family Name of the denominator distribution.
-#' @param link_num,link_denom,link_inflation Links of the count mean, the
-#'   denominator mean and the zero or hurdle probability.
-#' @return A `ratiod_family_zi` object
-#' @keywords internal
-zi_count_family <- function(base, type, denom_family, link_num, link_denom,
-                            link_inflation, zi_formula) {
-  validate_link(link_num, "log")
-  validate_link(link_inflation, LINKS_PROBABILITY)
-  denominator <- count_denominator(base, denom_family, link_denom)
-  hurdle <- identical(type, "hurdle")
-  short <- c(poisson = "poisson", neg_binomial_2 = "negbin")[[base]]
-  label <- c(poisson = "Poisson", neg_binomial_2 = "negative binomial")[[base]]
-  denom_label <- c(gamma = "Gamma", negbin = "negative binomial",
-                   fixed = "known exposure")[[denom_family]]
-
-  numerator <- list(
-    distribution = paste0(if (hurdle) "hurdle_" else "zero_inflated_",
-                          if (base == "poisson") "poisson" else "neg_binomial"),
-    base_distribution = base,
-    link = link_num
-  )
-  numerator[[if (hurdle) "link_hurdle" else "link_zi"]] <- link_inflation
-
-  structure(
-    list(
-      name = paste(if (hurdle) "hurdle" else "zi", short, denom_family, sep = "_"),
-      zi_formula = zi_formula,
-      numerator = numerator,
-      denominator = denominator,
-      zero_inflated = TRUE,
-      zi_type = type,
-      description = sprintf("%s %s numerator, %s denominator",
-                            if (hurdle) "Hurdle" else "Zero-inflated",
-                            label, denom_label)
-    ),
-    class = c("ratiod_family_zi", "ratiod_family", "list")
-  )
-}
-
-
-#' The denominator of a count family
-#'
-#' @param base Count distribution of the numerator: "poisson" or
-#'   "neg_binomial_2".
-#' @param denom_family One of the names of `count_denominators[[base]]`.
-#' @param link_denom Link of the denominator mean; unread for a known exposure.
-#' @return The `denominator` element of a `ratiod_family`.
-#' @keywords internal
-count_denominator <- function(base, denom_family, link_denom) {
-  allowed <- count_denominators[[base]]
-  if (!(length(denom_family) == 1L && denom_family %in% names(allowed))) {
-    stop(sprintf("`denom_family` must be one of %s.",
-                 paste0('"', names(allowed), '"', collapse = ", ")),
-         call. = FALSE)
-  }
-  fixed <- identical(denom_family, "fixed")
-  if (!fixed) {
-    validate_link(link_denom,
-                  if (identical(allowed[[denom_family]], "gamma")) LINKS_GAMMA else "log")
-  }
-  list(distribution = allowed[[denom_family]], link = if (fixed) NULL else link_denom)
-}
-
 
 #' Check if family is zero-inflated
 #'
@@ -358,9 +282,7 @@ print.ratiod_family_zi <- function(x, ...) {
         "(", x$numerator$link_oi, ")\n", sep = "")
   }
 
-  cat("Denominator:", x$denominator$distribution,
-      if (!is.null(x$denominator$link)) paste0("(", x$denominator$link, ")") else "(fixed)",
-      "\n")
+  print_family_denominator(x)
 
   invisible(x)
 }
@@ -397,32 +319,9 @@ print.ratiod_family_zi <- function(x, ...) {
 #' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
 ratiod_zi_binomial <- function(link_num = "logit", link_zi = "logit", zi_formula = NULL) {
-
-  validate_link(link_num, LINKS_PROBABILITY)
-  validate_link(link_zi, LINKS_PROBABILITY)
-
-  structure(
-    list(
-      name = "zi_binomial",
-      zi_formula = zi_formula,
-      numerator = list(
-        distribution = "zero_inflated_binomial",
-        base_distribution = "binomial",
-        link = link_num,
-        link_zi = link_zi
-      ),
-      denominator = list(
-        distribution = "fixed",
-        link = NULL
-      ),
-      zero_inflated = TRUE,
-      zi_type = "mixture",
-      description = "Zero-inflated binomial numerator, fixed trials denominator"
-    ),
-    class = c("ratiod_family_zi", "ratiod_family", "list")
-  )
+  new_ratiod_family("binomial", list(num = link_num, zi = link_zi),
+                    list(type = "mixture", zi_formula = zi_formula))
 }
-
 
 #' One-Inflated Binomial Family
 #'
@@ -452,33 +351,9 @@ ratiod_zi_binomial <- function(link_num = "logit", link_zi = "logit", zi_formula
 #' @param oi_formula Optional one-sided formula for the one-inflation probability; NULL uses an intercept.
 #' @export
 ratiod_oi_binomial <- function(link_num = "logit", link_oi = "logit", oi_formula = NULL) {
-
-  validate_link(link_num, LINKS_PROBABILITY)
-  validate_link(link_oi, LINKS_PROBABILITY)
-
-  structure(
-    list(
-      name = "oi_binomial",
-      oi_formula = oi_formula,
-      numerator = list(
-        distribution = "one_inflated_binomial",
-        base_distribution = "binomial",
-        link = link_num,
-        link_oi = link_oi
-      ),
-      denominator = list(
-        distribution = "fixed",
-        link = NULL
-      ),
-      zero_inflated = FALSE,  # One-inflated, not zero-inflated
-      one_inflated = TRUE,
-      zi_type = "one_inflated",
-      description = "One-inflated binomial numerator, fixed trials denominator"
-    ),
-    class = c("ratiod_family_zi", "ratiod_family", "list")
-  )
+  new_ratiod_family("binomial", list(num = link_num, oi = link_oi),
+                    list(type = "one_inflated", oi_formula = oi_formula))
 }
-
 
 #' Zero-and-One-Inflated Binomial Family
 #'
@@ -511,36 +386,9 @@ ratiod_oi_binomial <- function(link_num = "logit", link_oi = "logit", oi_formula
 #' @export
 ratiod_zoi_binomial <- function(link_num = "logit", link_zi = "logit",
                                link_oi = "logit", zi_formula = NULL, oi_formula = NULL) {
-
-  validate_link(link_num, LINKS_PROBABILITY)
-  validate_link(link_zi, LINKS_PROBABILITY)
-  validate_link(link_oi, LINKS_PROBABILITY)
-
-  structure(
-    list(
-      name = "zoi_binomial",
-      zi_formula = zi_formula,
-      oi_formula = oi_formula,
-      numerator = list(
-        distribution = "zero_one_inflated_binomial",
-        base_distribution = "binomial",
-        link = link_num,
-        link_zi = link_zi,
-        link_oi = link_oi
-      ),
-      denominator = list(
-        distribution = "fixed",
-        link = NULL
-      ),
-      zero_inflated = TRUE,
-      one_inflated = TRUE,
-      zi_type = "zoib",
-      description = "Zero-and-one inflated binomial, fixed trials denominator"
-    ),
-    class = c("ratiod_family_zi", "ratiod_family", "list")
-  )
+  new_ratiod_family("binomial", list(num = link_num, zi = link_zi, oi = link_oi),
+                    list(type = "zoib", zi_formula = zi_formula, oi_formula = oi_formula))
 }
-
 
 #' Hurdle Binomial Family
 #'
@@ -560,32 +408,9 @@ ratiod_zoi_binomial <- function(link_num = "logit", link_zi = "logit",
 #' @param zi_formula Optional one-sided formula for the zero-inflation or hurdle probability; NULL uses an intercept.
 #' @export
 ratiod_hurdle_binomial <- function(link_num = "logit", link_hurdle = "logit", zi_formula = NULL) {
-
-  validate_link(link_num, LINKS_PROBABILITY)
-  validate_link(link_hurdle, LINKS_PROBABILITY)
-
-  structure(
-    list(
-      name = "hurdle_binomial",
-      zi_formula = zi_formula,
-      numerator = list(
-        distribution = "hurdle_binomial",
-        base_distribution = "binomial",
-        link = link_num,
-        link_hurdle = link_hurdle
-      ),
-      denominator = list(
-        distribution = "fixed",
-        link = NULL
-      ),
-      zero_inflated = TRUE,
-      zi_type = "hurdle",
-      description = "Hurdle binomial numerator, fixed trials denominator"
-    ),
-    class = c("ratiod_family_zi", "ratiod_family", "list")
-  )
+  new_ratiod_family("binomial", list(num = link_num, hurdle = link_hurdle),
+                    list(type = "hurdle", zi_formula = zi_formula))
 }
-
 
 #' Check if family is one-inflated
 #'

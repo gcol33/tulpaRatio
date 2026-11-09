@@ -55,26 +55,8 @@ NULL
 #'
 #' @export
 ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, c("log"))
-  validate_link(link_denom, c("log"))
-
-  structure(
-    list(
-      name = "negbin_negbin",
-      numerator = list(
-        distribution = "neg_binomial_2",
-        link = link_num
-      ),
-      denominator = list(
-        distribution = "neg_binomial_2",
-        link = link_denom
-      ),
-      description = "Negative binomial numerator, negative binomial denominator"
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family("negbin_negbin", list(num = link_num, denom = link_denom))
 }
-
 #' Binomial Family for Trial-Based Ratios
 #'
 #' @description
@@ -118,25 +100,8 @@ ratiod_negbin_negbin <- function(link_num = "log", link_denom = "log") {
 #'
 #' @export
 ratiod_binomial <- function(link = "logit") {
-  validate_link(link, LINKS_PROBABILITY)
-
-  structure(
-    list(
-      name = "binomial_fixed",
-      numerator = list(
-        distribution = "binomial",
-        link = link
-      ),
-      denominator = list(
-        distribution = "fixed",
-        link = NULL
-      ),
-      description = "Binomial numerator with fixed denominator"
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family("binomial", list(num = link))
 }
-
 #' Poisson-Gamma Family for Count/Effort Ratios
 #'
 #' @description
@@ -187,26 +152,8 @@ ratiod_binomial <- function(link = "logit") {
 #'
 #' @export
 ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, "log")
-  validate_link(link_denom, LINKS_GAMMA)
-
-  structure(
-    list(
-      name = "poisson_gamma",
-      numerator = list(
-        distribution = "poisson",
-        link = link_num
-      ),
-      denominator = list(
-        distribution = "gamma",
-        link = link_denom
-      ),
-      description = "Poisson numerator, Gamma denominator (CPUE-type)"
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family("poisson_gamma", list(num = link_num, denom = link_denom))
 }
-
 #' Negative Binomial-Gamma Family for Overdispersed Count/Effort Ratios
 #'
 #' @description
@@ -254,26 +201,8 @@ ratiod_poisson_gamma <- function(link_num = "log", link_denom = "log") {
 #'
 #' @export
 ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, "log")
-  validate_link(link_denom, LINKS_GAMMA)
-
-  structure(
-    list(
-      name = "negbin_gamma",
-      numerator = list(
-        distribution = "neg_binomial_2",
-        link = link_num
-      ),
-      denominator = list(
-        distribution = "gamma",
-        link = link_denom
-      ),
-      description = "Negative binomial numerator, Gamma denominator (overdispersed CPUE-type)"
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family("negbin_gamma", list(num = link_num, denom = link_denom))
 }
-
 #' Count Families by Denominator
 #'
 #' @description
@@ -318,46 +247,16 @@ ratiod_negbin_gamma <- function(link_num = "log", link_denom = "log") {
 #' @export
 ratiod_poisson <- function(link_num = "log", link_denom = "log",
                            denom_family = "fixed") {
-  validate_link(link_num, "log")
-  if (identical(denom_family, "gamma")) {
-    return(ratiod_poisson_gamma(link_num, link_denom))
-  }
-  count_family("poisson", denom_family, link_num, link_denom)
+  new_ratiod_family(count_model_type("poisson", denom_family),
+                    list(num = link_num, denom = link_denom))
 }
-
 #' @rdname ratiod_poisson
 #' @export
 ratiod_negbin <- function(link_num = "log", link_denom = "log",
                           denom_family = "fixed") {
-  validate_link(link_num, "log")
-  if (identical(denom_family, "negbin")) {
-    return(ratiod_negbin_negbin(link_num, link_denom))
-  }
-  if (identical(denom_family, "gamma")) {
-    return(ratiod_negbin_gamma(link_num, link_denom))
-  }
-  count_family("neg_binomial_2", denom_family, link_num, link_denom)
+  new_ratiod_family(count_model_type("neg_binomial_2", denom_family),
+                    list(num = link_num, denom = link_denom))
 }
-
-#' A count family over a denominator of `count_denominators`
-#' @keywords internal
-count_family <- function(base, denom_family, link_num, link_denom) {
-  denominator <- count_denominator(base, denom_family, link_denom)
-  short <- c(poisson = "poisson", neg_binomial_2 = "negbin")[[base]]
-  label <- c(poisson = "Poisson", neg_binomial_2 = "Negative binomial")[[base]]
-  denom_label <- c(gamma = "Gamma", negbin = "negative binomial",
-                   fixed = "known exposure")[[denom_family]]
-  structure(
-    list(
-      name = paste0(short, "_", denom_family),
-      numerator = list(distribution = base, link = link_num),
-      denominator = denominator,
-      description = sprintf("%s numerator, %s denominator", label, denom_label)
-    ),
-    class = c("ratiod_family", "list")
-  )
-}
-
 #' Links of probabilities and of gamma means
 #'
 #' A success, zero-inflation, one-inflation or hurdle probability takes any
@@ -378,6 +277,135 @@ LINKS_GAMMA <- c("log", "identity", "inverse")
 LINKS_CANONICAL <- c("log", "logit")
 
 
+# Labels and links of each response distribution.
+FAMILY_DISTRIBUTIONS <- list(
+  poisson = list(short = "poisson", label = "Poisson", links = "log"),
+  neg_binomial_2 = list(short = "negbin", label = "Negative binomial", links = "log",
+                        inflated = "neg_binomial"),
+  binomial = list(short = "binomial", label = "Binomial", links = LINKS_PROBABILITY),
+  beta_binomial = list(short = "beta_binomial", label = "Beta-binomial", links = LINKS_PROBABILITY),
+  gamma = list(short = "gamma", label = "Gamma", links = LINKS_GAMMA),
+  lognormal = list(short = "lognormal", label = "Log-normal", links = "log"),
+  fixed = list(short = "fixed", label = "Fixed", links = NULL)
+)
+
+model_type_spec <- function(num, denom, responses, dispersion = NULL,
+                            samplers = character(), phi_rate = 0.1, name = NULL,
+                            spec_inflation = NULL, handcoded = FALSE) {
+  list(distributions = c(num = num, denom = denom), responses = responses,
+       dispersion = dispersion,
+       samplers = c("hmc", "ess", "sghmc", "sgld", "vi", samplers),
+       phi_prior = c(shape = 2, rate = phi_rate), name = name,
+       labels = vapply(FAMILY_DISTRIBUTIONS[c(num, denom)], `[[`, "", "label"),
+       handcoded = handcoded,
+       spec_inflation = spec_inflation)
+}
+
+# Each model's distributions, response domains, draw names and inference support.
+MODEL_TYPES <- list(
+  binomial = model_type_spec("binomial", "fixed", c(num = "count", denom = "trials"),
+    samplers = c("laplace", "gibbs", "pg"), name = "binomial_fixed", handcoded = TRUE,
+    spec_inflation = c("none", "zi_binomial", "hurdle_binomial", "oi_binomial", "zoib")),
+  beta_binomial = model_type_spec("beta_binomial", "fixed", c(num = "count", denom = "trials"),
+    c(num = "phi"), name = "beta_binomial_fixed", spec_inflation = "none", handcoded = TRUE),
+  negbin_negbin = model_type_spec("neg_binomial_2", "neg_binomial_2", c(num = "count", denom = "count"),
+    c(num = "phi_num", denom = "phi_denom"), c("laplace", "gibbs"), handcoded = TRUE,
+    spec_inflation = c("none", "zi_negbin", "hurdle_negbin")),
+  poisson_negbin = model_type_spec("poisson", "neg_binomial_2", c(num = "count", denom = "count"),
+    c(denom = "phi_denom")),
+  poisson_gamma = model_type_spec("poisson", "gamma", c(num = "count", denom = "positive"),
+    c(denom = "shape"), c("laplace", "gibbs"), phi_rate = 0.5, handcoded = TRUE,
+    spec_inflation = c("none", "zi_poisson", "hurdle_poisson")),
+  negbin_gamma = model_type_spec("neg_binomial_2", "gamma", c(num = "count", denom = "positive"),
+    c(num = "phi_num", denom = "phi_denom"), c("laplace", "gibbs"), handcoded = TRUE,
+    spec_inflation = c("none", "zi_negbin", "hurdle_negbin")),
+  gamma_gamma = model_type_spec("gamma", "gamma", c(num = "positive", denom = "positive"),
+    c(num = "shape_num", denom = "shape_denom"), "laplace", phi_rate = 0.5, handcoded = TRUE,
+    spec_inflation = "none"),
+  lognormal = model_type_spec("lognormal", "lognormal", c(num = "positive", denom = "positive"),
+    c(num = "sigma_num", denom = "sigma_denom"), phi_rate = 2, handcoded = TRUE,
+    name = "lognormal_lognormal", spec_inflation = "none"),
+  poisson_fixed = model_type_spec("poisson", "fixed", c(num = "count", denom = "exposure")),
+  negbin_fixed = model_type_spec("neg_binomial_2", "fixed", c(num = "count", denom = "exposure"),
+    c(num = "phi_num")),
+  lognormal_fixed = model_type_spec("lognormal", "fixed", c(num = "positive", denom = "exposure"),
+    c(num = "sigma_num"))
+)
+
+model_type_for_distributions <- function(num, denom) {
+  matches <- vapply(MODEL_TYPES, function(spec) {
+    identical(unname(spec$distributions), c(num, denom))
+  }, logical(1))
+  if (!any(matches)) {
+    stop(sprintf("No sampler fits a %s numerator with a %s denominator.", num, denom),
+         call. = FALSE)
+  }
+  names(MODEL_TYPES)[matches][[1L]]
+}
+
+count_model_type <- function(base, denom_family) {
+  candidates <- Filter(function(spec) identical(spec$distributions[["num"]], base), MODEL_TYPES)
+  denominators <- vapply(candidates, function(spec) spec$distributions[["denom"]], "")
+  aliases <- vapply(FAMILY_DISTRIBUTIONS[denominators], `[[`, "", "short")
+  if (!(length(denom_family) == 1L && denom_family %in% aliases)) {
+    stop(sprintf("`denom_family` must be one of %s.",
+                 paste0('"', aliases, '"', collapse = ", ")), call. = FALSE)
+  }
+  names(candidates)[match(denom_family, aliases)]
+}
+
+new_ratiod_family <- function(model_type, links, inflation = NULL) {
+  spec <- MODEL_TYPES[[model_type]]
+  if (is.null(spec)) stop(sprintf("Unknown model type: '%s'", model_type), call. = FALSE)
+  distributions <- spec$distributions
+  num <- FAMILY_DISTRIBUTIONS[[distributions[["num"]]]]
+  denom <- FAMILY_DISTRIBUTIONS[[distributions[["denom"]]]]
+  validate_link(links$num, num$links)
+  if (!identical(distributions[["denom"]], "fixed")) validate_link(links$denom, denom$links)
+  family <- list(name = spec$name %||% model_type,
+                 numerator = list(distribution = distributions[["num"]], link = links$num),
+                 denominator = list(distribution = distributions[["denom"]],
+                   link = if (identical(distributions[["denom"]], "fixed")) NULL else links$denom))
+  if (identical(model_type, "beta_binomial")) family$overdispersed <- TRUE
+  description <- sprintf("%s numerator, %s denominator", spec$labels[[1L]], spec$labels[[2L]])
+  classes <- c("ratiod_family", "list")
+  if (!is.null(inflation)) {
+    types <- list(
+      mixture = list(prefix = "zi", distribution = "zero_inflated", label = "Zero-inflated", links = "zi"),
+      hurdle = list(prefix = "hurdle", distribution = "hurdle", label = "Hurdle", links = "hurdle"),
+      one_inflated = list(prefix = "oi", distribution = "one_inflated", label = "One-inflated", links = "oi"),
+      zoib = list(prefix = "zoi", distribution = "zero_one_inflated", label = "Zero-and-one inflated", links = c("zi", "oi")))
+    inf <- types[[inflation$type]]
+    if (is.null(inf)) stop("Unknown inflation type.", call. = FALSE)
+    if (!distributions[["num"]] %in% c("binomial", "poisson", "neg_binomial_2") ||
+        (inflation$type %in% c("one_inflated", "zoib") && model_type != "binomial")) {
+      stop("This model type does not support the requested inflation.", call. = FALSE)
+    }
+    for (nm in inf$links) {
+      validate_link(links[[nm]], LINKS_PROBABILITY)
+      family$numerator[[paste0("link_", nm)]] <- links[[nm]]
+    }
+    family$name <- paste(c(inf$prefix, num$short,
+                           if (model_type != "binomial") denom$short), collapse = "_")
+    family$numerator$base_distribution <- distributions[["num"]]
+    family$numerator$distribution <- paste(inf$distribution, num$inflated %||% num$short, sep = "_")
+    family <- c(family, inflation[intersect(c("zi_formula", "oi_formula"), names(inflation))])
+    family$zero_inflated <- inflation$type != "one_inflated"
+    if (inflation$type %in% c("one_inflated", "zoib")) family$one_inflated <- TRUE
+    family$zi_type <- inflation$type
+    description <- paste(inf$label, description)
+    classes <- c("ratiod_family_zi", classes)
+  }
+  family$description <- description
+  structure(family, class = classes)
+}
+
+print_family_denominator <- function(x) {
+  cat("Denominator:", x$denominator$distribution,
+      if (!is.null(x$denominator$link)) paste0("(", x$denominator$link, ")") else "(fixed)",
+      "\n")
+}
+
 #' Links of a fitted family
 #'
 #' @param family A `ratiod_family` object
@@ -389,8 +417,8 @@ LINKS_CANONICAL <- c("log", "logit")
 #'   denominator is a known exposure
 #' @keywords internal
 family_links <- function(family, model_type) {
-  probability <- model_type %in% c("binomial", "beta_binomial")
-  exposure <- identical(MODEL_TYPE_RESPONSES[[model_type]][["denom"]], "exposure")
+  probability <- identical(MODEL_TYPES[[model_type]]$responses[["denom"]], "trials")
+  exposure <- identical(MODEL_TYPES[[model_type]]$responses[["denom"]], "exposure")
   num <- family$numerator
   list(
     probability = probability,
@@ -414,14 +442,6 @@ family_canonical_links <- function(family, model_type) {
 }
 
 
-#' Model types the Gibbs, Polya-Gamma and Laplace samplers and the collapsed
-#' fields carry likelihoods for
-#' @keywords internal
-HANDCODED_MODEL_TYPES <- c("binomial", "beta_binomial", "negbin_negbin",
-                           "poisson_gamma", "negbin_gamma", "gamma_gamma",
-                           "lognormal")
-
-
 #' Whether a family's likelihood is one the hand-written samplers carry
 #'
 #' Its model type has a hand-coded likelihood and every link is canonical.
@@ -430,7 +450,7 @@ HANDCODED_MODEL_TYPES <- c("binomial", "beta_binomial", "negbin_negbin",
 #' @return `TRUE` or `FALSE`
 #' @keywords internal
 family_handcoded <- function(family, model_type) {
-  model_type %in% HANDCODED_MODEL_TYPES && family_canonical_links(family, model_type)
+  isTRUE(MODEL_TYPES[[model_type]]$handcoded) && family_canonical_links(family, model_type)
 }
 
 
@@ -516,26 +536,8 @@ validate_link <- function(link, allowed) {
 #'
 #' @export
 ratiod_beta_binomial <- function(link = "logit") {
-  validate_link(link, LINKS_PROBABILITY)
-
-  structure(
-    list(
-      name = "beta_binomial_fixed",
-      numerator = list(
-        distribution = "beta_binomial",
-        link = link
-      ),
-      denominator = list(
-        distribution = "fixed",
-        link = NULL
-      ),
-      overdispersed = TRUE,
-      description = "Beta-binomial numerator with fixed denominator (overdispersed proportions)"
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family("beta_binomial", list(num = link))
 }
-
 
 #' Gamma-Gamma Family for Continuous Ratio Data
 #'
@@ -590,26 +592,8 @@ ratiod_beta_binomial <- function(link = "logit") {
 #'
 #' @export
 ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
-  validate_link(link_num, LINKS_GAMMA)
-  validate_link(link_denom, LINKS_GAMMA)
-
-  structure(
-    list(
-      name = "gamma_gamma",
-      numerator = list(
-        distribution = "gamma",
-        link = link_num
-      ),
-      denominator = list(
-        distribution = "gamma",
-        link = link_denom
-      ),
-      description = "Gamma numerator, Gamma denominator (continuous ratios)"
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family("gamma_gamma", list(num = link_num, denom = link_denom))
 }
-
 
 #' Log-Normal Family for Multiplicative Processes
 #'
@@ -670,30 +654,9 @@ ratiod_gamma_gamma <- function(link_num = "log", link_denom = "log") {
 #' @export
 ratiod_lognormal <- function(link_num = "log", link_denom = "log",
                              denom_fixed = FALSE) {
-  validate_link(link_num, "log")
-  if (!denom_fixed) validate_link(link_denom, "log")
-
-  structure(
-    list(
-      name = if (denom_fixed) "lognormal_fixed" else "lognormal_lognormal",
-      numerator = list(
-        distribution = "lognormal",
-        link = link_num
-      ),
-      denominator = list(
-        distribution = if (denom_fixed) "fixed" else "lognormal",
-        link = if (denom_fixed) NULL else link_denom
-      ),
-      description = if (denom_fixed) {
-        "Log-normal numerator over a known exposure"
-      } else {
-        "Log-normal numerator and denominator (multiplicative processes)"
-      }
-    ),
-    class = c("ratiod_family", "list")
-  )
+  new_ratiod_family(if (denom_fixed) "lognormal_fixed" else "lognormal",
+                    list(num = link_num, denom = link_denom))
 }
-
 
 #' @rdname ratiod_families
 #' @param x A ratiod_family object
@@ -705,8 +668,6 @@ print.ratiod_family <- function(x, ...) {
   cat(x$description, "\n\n")
   cat("Numerator:  ", x$numerator$distribution,
       "(", x$numerator$link, ")\n", sep = "")
-  cat("Denominator:", x$denominator$distribution,
-      if (!is.null(x$denominator$link)) paste0("(", x$denominator$link, ")") else "(fixed)",
-      "\n")
+  print_family_denominator(x)
   invisible(x)
 }

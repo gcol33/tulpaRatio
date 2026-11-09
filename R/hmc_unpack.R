@@ -43,35 +43,6 @@ layout_cursor <- function() {
 }
 
 
-#' Draw names for the dispersion parameters of each model type
-#'
-#' A model type with a `num` entry carries a numerator dispersion parameter,
-#' one with a `denom` entry a denominator one; the parameter layout reads both
-#' off this table.
-#'
-#' @keywords internal
-MODEL_DISPERSION_NAMES <- list(
-  negbin_negbin   = c(num = "phi_num", denom = "phi_denom"),
-  negbin_gamma    = c(num = "phi_num", denom = "phi_denom"),
-  poisson_gamma   = c(denom = "shape"),
-  poisson_negbin  = c(denom = "phi_denom"),
-  negbin_fixed    = c(num = "phi_num"),
-  gamma_gamma     = c(num = "shape_num", denom = "shape_denom"),
-  lognormal       = c(num = "sigma_num", denom = "sigma_denom"),
-  lognormal_fixed = c(num = "sigma_num"),
-  beta_binomial   = c(num = "phi")
-)
-
-#' Model types carrying a numerator dispersion parameter
-#' @keywords internal
-MODEL_TYPES_PHI_NUM <- names(Filter(function(x) "num" %in% names(x),
-                                    MODEL_DISPERSION_NAMES))
-
-#' Model types carrying a denominator dispersion parameter
-#' @keywords internal
-MODEL_TYPES_PHI_DENOM <- names(Filter(function(x) "denom" %in% names(x),
-                                      MODEL_DISPERSION_NAMES))
-
 #' Temporal types the sampler allocates a temporal block for
 #' @keywords internal
 TEMPORAL_TYPES_SAMPLED <- c("rw1", "rw2", "ar1", "iid", "gp")
@@ -116,9 +87,9 @@ hmc_param_layout <- function(hmc_data, spatial_info, temporal_info, zi_info,
   L$re <- layout_re_block(cur, hmc_data)
 
   # Dispersion
-  disp_names <- MODEL_DISPERSION_NAMES[[model_type]]
-  L$phi_num <- if (model_type %in% MODEL_TYPES_PHI_NUM) cur$one() else NULL
-  L$phi_denom <- if (model_type %in% MODEL_TYPES_PHI_DENOM) cur$one() else NULL
+  disp_names <- MODEL_TYPES[[model_type]]$dispersion
+  L$phi_num <- if ("num" %in% names(disp_names)) cur$one() else NULL
+  L$phi_denom <- if ("denom" %in% names(disp_names)) cur$one() else NULL
   L$dispersion_names <- disp_names
 
   # Areal spatial (ICAR / proper CAR / BYM2)
@@ -476,10 +447,6 @@ block_draws <- function(samples, idx) {
   if (length(idx) == 0L) return(NULL)
   samples[, idx, drop = FALSE]
 }
-
-#' Inverse logit
-#' @keywords internal
-
 
 #' Unpack the sampler's parameter vector into per-structure draws
 #'
@@ -1454,7 +1421,7 @@ hmc_response_draws <- function(eta, links, type = "response", exposure = NULL) {
 #' @return The exposure, for a model type over a known one; `NULL` otherwise
 #' @keywords internal
 hmc_exposure <- function(hmc_data, model_type) {
-  if (!identical(MODEL_TYPE_RESPONSES[[model_type]][["denom"]], "exposure")) return(NULL)
+  if (!identical(MODEL_TYPES[[model_type]]$responses[["denom"]], "exposure")) return(NULL)
   hmc_data$y_denom_cont
 }
 
