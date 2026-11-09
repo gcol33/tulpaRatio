@@ -1,0 +1,14 @@
+c(
+  "tulpaRatio formula specification",
+  "================================",
+  "",
+  "Numerator: y ",
+  "  Fixed effects: 2 coefficients",
+  "  Random effects: 0 terms",
+  "",
+  "Denominator: e ",
+  "  Fixed effects: 2 coefficients",
+  "  Random effects: 0 terms",
+  "",
+  "Shared structure: none "
+)

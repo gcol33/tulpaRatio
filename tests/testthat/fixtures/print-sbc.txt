@@ -1,0 +1,9 @@
+c(
+  "tulpaRatio SBC simulations",
+  "==========================",
+  "",
+  "Simulations: 1 ",
+  "Family: binomial_fixed ",
+  "Observations per sim: 3 ",
+  "Groups per sim: 1 "
+)

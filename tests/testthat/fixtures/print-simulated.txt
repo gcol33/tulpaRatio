@@ -1,0 +1,16 @@
+c(
+  "Simulated tulpaRatio data",
+  "=========================",
+  "",
+  "Family: binomial_fixed ",
+  "Observations: 3 ",
+  "Groups: 1 ",
+  "Seed: 12 ",
+  "",
+  "True parameters:",
+  "  beta_num: 1, 0.3 ",
+  "  beta_denom: 2 ",
+  "  sigma_re: 0.5 ",
+  "",
+  "Data columns: y, n "
+)

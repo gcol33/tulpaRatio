@@ -162,8 +162,7 @@ ratiod_benchmark <- function(
 #'
 #' @export
 print.ratiod_benchmark <- function(x, ...) {
-  cat("tulpaRatio Benchmark Results\n")
-  cat("=======================\n\n")
+  cat_title("tulpaRatio Benchmark Results")
 
   cat("Configuration:\n")
   cat(sprintf("  Observations:   %d\n", x$config$N))

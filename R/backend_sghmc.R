@@ -275,35 +275,7 @@ fit_sgld <- function(formula,
 #'
 #' @export
 print.ratiod_sghmc <- function(x, digits = 3, ...) {
-  cat("Stochastic Gradient HMC Fit\n")
-  cat("Family:", class(x$family)[1], "\n")
-  cat("Observations:", x$n_obs, "\n")
-  cat("Parameters:", x$n_params, "\n")
-  cat("Batch size:", x$batch_size, "(", round(100 * x$batch_size / x$n_obs, 1), "%)\n\n")
-
-  cat("Sampling:\n")
-  cat("  Iterations:", x$iter, "(warmup:", x$warmup, ")\n")
-  cat("  Final epsilon:", round(x$final_epsilon, 6), "\n\n")
-
-  # Coefficient summary
-  cat("Posterior means:\n")
-  draws <- x$draws
-  means <- colMeans(draws)
-  sds <- apply(draws, 2, sd)
-
-  coef_summary <- data.frame(
-    parameter = colnames(draws),
-    mean = means,
-    sd = sds
-  )
-
-  n_show <- min(10, nrow(coef_summary))
-  print(coef_summary[1:n_show, ], digits = digits, row.names = FALSE)
-  if (nrow(coef_summary) > n_show) {
-    cat("... and", nrow(coef_summary) - n_show, "more parameters\n")
-  }
-
-  invisible(x)
+  print_stochastic_fit(x, "Stochastic Gradient HMC Fit", digits, epsilon = TRUE)
 }
 
 
@@ -311,33 +283,5 @@ print.ratiod_sghmc <- function(x, digits = 3, ...) {
 #'
 #' @export
 print.ratiod_sgld <- function(x, digits = 3, ...) {
-  cat("Stochastic Gradient Langevin Dynamics Fit\n")
-  cat("Family:", class(x$family)[1], "\n")
-  cat("Observations:", x$n_obs, "\n")
-  cat("Parameters:", x$n_params, "\n")
-  cat("Batch size:", x$batch_size, "(", round(100 * x$batch_size / x$n_obs, 1), "%)\n\n")
-
-  cat("Sampling:\n")
-  cat("  Iterations:", x$iter, "(warmup:", x$warmup, ")\n\n")
-
-  # Coefficient summary
-  cat("Posterior means:\n")
-  draws <- x$draws
-  means <- colMeans(draws)
-  sds <- apply(draws, 2, sd)
-
-  coef_summary <- data.frame(
-    parameter = colnames(draws),
-    mean = means,
-    sd = sds
-  )
-
-  n_show <- min(10, nrow(coef_summary))
-  print(coef_summary[1:n_show, ], digits = digits, row.names = FALSE)
-  if (nrow(coef_summary) > n_show) {
-    cat("... and", nrow(coef_summary) - n_show, "more parameters\n")
-  }
-
-  invisible(x)
+  print_stochastic_fit(x, "Stochastic Gradient Langevin Dynamics Fit", digits)
 }
-

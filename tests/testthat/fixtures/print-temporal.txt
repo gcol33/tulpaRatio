@@ -1,0 +1,8 @@
+c(
+  "tulpaRatio temporal specification",
+  "=================================",
+  "",
+  "Type: RW1 (First-order Random Walk) ",
+  "Time variable: year ",
+  "Shared: Yes (enters both processes) "
+)

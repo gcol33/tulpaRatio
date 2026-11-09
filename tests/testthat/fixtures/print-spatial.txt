@@ -1,0 +1,11 @@
+c(
+  "tulpaRatio spatial specification",
+  "================================",
+  "",
+  "Type: ICAR (Intrinsic CAR) ",
+  "Level: group ",
+  "Spatial units: 2 ",
+  "Shared: Yes (enters both processes) ",
+  "Group variable: site ",
+  "  (rho fixed at 1, sum-to-zero constraint applied)"
+)

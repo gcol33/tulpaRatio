@@ -1,0 +1,12 @@
+c(
+  "tulpaRatio Multi-Scale temporal specification",
+  "=============================================",
+  "",
+  "Time variable: year ",
+  "",
+  "Components:",
+  "  Trend: RW2 (second-order random walk, smooth) ",
+  "  Short-term: AR(1) (autocorrelated residuals) ",
+  "",
+  "Shared: Yes (enters both processes) "
+)

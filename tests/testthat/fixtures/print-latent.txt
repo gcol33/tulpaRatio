@@ -1,0 +1,12 @@
+c(
+  "Latent factor specification",
+  "===========================",
+  "",
+  "Number of factors: 2 ",
+  "Shared: Yes (loads on both num and denom) ",
+  "Constraint: sum_to_zero ",
+  "",
+  "Diagonal loading prior:",
+  "  PC prior: P(x > 1.00) = 0.010",
+  "    => Exponential(4.605)"
+)

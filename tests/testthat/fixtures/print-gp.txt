@@ -1,0 +1,9 @@
+c(
+  "tulpaRatio Gaussian Process spatial specification",
+  "=================================================",
+  "",
+  "Coordinates: lon, lat ",
+  "Covariance: exponential ",
+  "Neighbors (NNGP): 15 ",
+  "Shared: Yes (enters both processes) "
+)

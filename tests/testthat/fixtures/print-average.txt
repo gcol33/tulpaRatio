@@ -1,0 +1,18 @@
+c(
+  "ratio model averaging",
+  "=====================",
+  "",
+  "Method: stacking ",
+  "Models: 2 ",
+  "Prediction type: ratio ",
+  "",
+  "Model weights:",
+  "  a: 0.300",
+  "  b: 0.700",
+  "",
+  "Predictions summary (first 6 rows):",
+  "  mean",
+  "1    1",
+  "2    2",
+  "3    3"
+)

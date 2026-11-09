@@ -10350,7 +10350,7 @@ static void apply_gp_params(ModelData& data, const Rcpp::List& gp) {
 
     // Both scales on one Hilbert-space basis
     ratiod_hsgp::setup_hsgp_2d(coords, data.N, Rcpp::as<int>(gp["hsgp_m"]),
-                                Rcpp::as<double>(gp["hsgp_c"]), shared,
+                                Rcpp::as<double>(gp["c_boundary"]), shared,
                                 data.msgp_hsgp_data);
     data.multiscale_gp_data.shared = shared;
     data.multiscale_gp_data.n_obs = data.N;
@@ -10374,7 +10374,7 @@ static void apply_gp_params(ModelData& data, const Rcpp::List& gp) {
     data.spatial_type = SpatialType::HSGP;
     data.has_hsgp = true;
     const int m = Rcpp::as<int>(gp["hsgp_m"]);
-    const double c = Rcpp::as<double>(gp["hsgp_c"]);
+    const double c = Rcpp::as<double>(gp["c_boundary"]);
     ratiod_hsgp::setup_hsgp_2d(coords, data.N, m, c, shared, data.hsgp_data);
     data.hsgp_m_per_dim = m;
     data.hsgp_boundary_factor = c;

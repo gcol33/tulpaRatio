@@ -1,0 +1,12 @@
+c(
+  "tulpaRatio spatially-varying coefficients",
+  "=========================================",
+  "",
+  "Coordinates: lon, lat ",
+  "Covariance: exponential ",
+  "Neighbors (NNGP): 15 ",
+  "Shared: Yes (enters both processes) ",
+  "Range prior: [0.3, 30]",
+  "",
+  "Terms: columns  1 "
+)

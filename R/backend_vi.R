@@ -203,48 +203,32 @@ print.ratiod_vi <- function(x, digits = 3, ...) {
     fullrank = "Full-Rank"
   )
 
-  cat("Variational Inference (", variant_names[x$vi_variant], ")\n", sep = "")
-  cat("Family:", class(x$family)[1], "\n")
-  cat("Observations:", x$n_obs, "\n")
-  cat("Parameters:", x$n_params)
-  if (x$vi_variant == "lowrank") {
-    cat(" (rank =", x$vi_rank, ")")
-  }
-  cat("\n\n")
+  print_point_fit(x, paste0("Variational Inference (", variant_names[x$vi_variant], ")"),
+                  extra = function() {
+    if (x$vi_variant == "lowrank") {
+      cat(" (rank =", x$vi_rank, ")")
+    }
+    cat("\n\n")
 
-  cat("ELBO:", round(x$elbo, 2), "\n")
-  cat("Iterations:", x$vi_iterations)
-  if (x$vi_converged) cat(" (converged)") else cat(" (not converged)")
-  cat("\n\n")
+    cat("ELBO:", round(x$elbo, 2), "\n")
+    cat("Iterations:", x$vi_iterations)
+    if (x$vi_converged) cat(" (converged)") else cat(" (not converged)")
+    cat("\n\n")
 
-  # PSIS diagnostic
-  cat("Diagnostic: ")
-  if (x$psis_k < 0) {
-    cat("PSIS k-hat not computed\n")
-  } else if (x$psis_k < 0.5) {
-    cat("PSIS k-hat =", round(x$psis_k, 2), "(good)\n")
-  } else if (x$psis_k < 0.7) {
-    cat("PSIS k-hat =", round(x$psis_k, 2), "(marginal)\n")
-  } else {
-    cat("PSIS k-hat =", round(x$psis_k, 2), "(WARNING: poor approximation)\n")
-  }
-  cat("\n")
-
-  # Coefficient summary
-  cat("Posterior means:\n")
-  coef_summary <- data.frame(
-    parameter = x$param_names,
-    mean = x$mu,
-    sd = sqrt(diag(x$Sigma))
-  )
-  # Show first 10 parameters
-  n_show <- min(10, nrow(coef_summary))
-  print(coef_summary[1:n_show, ], digits = digits, row.names = FALSE)
-  if (nrow(coef_summary) > n_show) {
-    cat("... and", nrow(coef_summary) - n_show, "more parameters\n")
-  }
-
-  invisible(x)
+    # PSIS diagnostic
+    cat("Diagnostic: ")
+    if (x$psis_k < 0) {
+      cat("PSIS k-hat not computed\n")
+    } else if (x$psis_k < 0.5) {
+      cat("PSIS k-hat =", round(x$psis_k, 2), "(good)\n")
+    } else if (x$psis_k < 0.7) {
+      cat("PSIS k-hat =", round(x$psis_k, 2), "(marginal)\n")
+    } else {
+      cat("PSIS k-hat =", round(x$psis_k, 2), "(WARNING: poor approximation)\n")
+    }
+    cat("\n")
+  }, means = x$mu, sds = sqrt(diag(x$Sigma)), digits = digits,
+  parameters = x$param_names)
 }
 
 

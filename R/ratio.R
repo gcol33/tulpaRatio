@@ -207,8 +207,7 @@ summary.ratiod_ratio <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
 #'
 #' @export
 print.ratiod_ratio <- function(x, ...) {
-  cat("tulpaRatio ratio posterior\n")
-  cat("=====================\n\n")
+  cat_title("tulpaRatio ratio posterior")
   cat("Scale:", x$type, "\n")
   cat("Observations:", x$n_obs, "\n")
   cat("Posterior draws:", x$n_draws, "\n")
@@ -225,8 +224,7 @@ print.ratiod_ratio <- function(x, ...) {
 #'
 #' @export
 print.ratiod_ratio_summary <- function(x, n = 10, ...) {
-  cat("tulpaRatio ratio summary (", attr(x, "type"), " scale)\n", sep = "")
-  cat("===========================================\n\n")
+  cat_title(paste0("tulpaRatio ratio summary (", attr(x, "type"), " scale)"))
 
   if (nrow(x) > n) {
     print.data.frame(head(x, n), row.names = FALSE, ...)
@@ -381,8 +379,7 @@ ratio_contrast <- function(object, contrast, type = c("difference", "ratio"),
 #'
 #' @export
 print.ratiod_contrast <- function(x, ...) {
-  cat("tulpaRatio ratio contrasts\n")
-  cat("=====================\n\n")
+  cat_title("tulpaRatio ratio contrasts")
   cat("Type:", attr(x, "type"), "\n")
   cat("Variable:", attr(x, "contrast_var"), "\n")
   cat("Reference:", attr(x, "ref"), "\n\n")
@@ -1059,8 +1056,8 @@ predict_spatial_hsgp <- function(object, coords.0, return_spatial) {
   if (is.null(gp$coords_matrix) || is.null(lay) || identical(lay$type, "none")) {
     stop("This fit carries no HSGP field to evaluate.", call. = FALSE)
   }
-  domain <- hsgp_domain_2d(gp$coords_matrix, gp$c)
-  basis <- hsgp_basis_2d(gp_scale_new_coords(gp, coords.0), gp$m, gp$c, domain)
+  domain <- hsgp_domain_2d(gp$coords_matrix, gp$c_boundary)
+  basis <- hsgp_basis_2d(gp_scale_new_coords(gp, coords.0), gp$m, gp$c_boundary, domain)
   w_pred <- hsgp_field(block_draws(samples, lay$beta),
                        exp(samples[, lay$log_sigma2]),
                        exp(samples[, lay$log_lengthscale]),
@@ -1639,8 +1636,7 @@ compute_predictions_hmc <- function(object, pred_data, type, w_pred = NULL,
 #'
 #' @export
 print.ratiod_fitted <- function(x, n = 10, ...) {
-  cat("tulpaRatio fitted values\n")
-  cat("===================\n\n")
+  cat_title("tulpaRatio fitted values")
   cat("Posterior draws:", attr(x, "n_draws"), "\n\n")
 
   if (nrow(x) > n) {
@@ -1659,8 +1655,7 @@ print.ratiod_fitted <- function(x, n = 10, ...) {
 #'
 #' @export
 print.ratiod_prediction <- function(x, n = 10, ...) {
-  cat("tulpaRatio predictions\n")
-  cat("=================\n\n")
+  cat_title("tulpaRatio predictions")
   cat("Posterior draws:", attr(x, "n_draws"), "\n")
   cat("New observations:", nrow(attr(x, "newdata")), "\n\n")
 

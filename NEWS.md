@@ -1,5 +1,10 @@
 # tulpaRatio 1.7.3
 
+* Print methods share their title, `Shared:` line and point-fit table helpers,
+  the spatially and temporally varying coefficient summaries share one per-term
+  summary, and the HSGP boundary factor is `c_boundary` everywhere, including
+  `spatial_hsgp()`'s argument (#202).
+
 * `coef()`, `confint()`, `summary()` and `tidy()` return the fixed effects of a
   Polya-Gamma fit; they had returned nothing because the PG draws name their
   variables by term while the accessors searched for `beta_num[j]`. Every

@@ -1298,8 +1298,7 @@ spectrum0_ar <- function(x) {
 #'
 #' @export
 print.ratiod_geweke <- function(x, ...) {
-  cat("Geweke Convergence Diagnostic\n")
-  cat("=============================\n\n")
+  cat_title("Geweke Convergence Diagnostic")
 
   x$z_score <- round(x$z_score, 3)
   x$p_value <- round(x$p_value, 4)

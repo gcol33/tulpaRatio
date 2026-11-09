@@ -1,0 +1,16 @@
+c(
+  "tulpaRatio Spatiotemporal Interaction Specification",
+  "===================================================",
+  "",
+  "Interaction type: Type I: Unstructured (IID) ",
+  "",
+  "Spatial component:",
+  "  Type: ratiod_spatial ",
+  "  Group variable: site ",
+  "",
+  "Temporal component:",
+  "  Type: rw1 ",
+  "  Time variable: year ",
+  "",
+  "Shared: Yes (enters both processes) "
+)

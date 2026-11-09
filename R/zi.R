@@ -274,8 +274,7 @@ print.ratiod_zi <- function(x, ...) {
     x$type
   )
 
-  cat("tulpaRatio Zero-Inflation Specification\n")
-  cat("==================================\n")
+  cat_title("tulpaRatio Zero-Inflation Specification", blank = FALSE)
   cat("Type:", type_label, "\n")
 
   if (identical(x$type, "zoib")) {

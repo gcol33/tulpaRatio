@@ -440,8 +440,7 @@ temporal_iid <- function(time_var, group_var = NULL, shared = TRUE) {
 #'
 #' @export
 print.ratiod_temporal <- function(x, ...) {
- cat("tulpaRatio temporal specification\n")
- cat("============================\n\n")
+ cat_title("tulpaRatio temporal specification")
 
  type_name <- switch(x$type,
    rw1 = "RW1 (First-order Random Walk)",
@@ -466,7 +465,7 @@ print.ratiod_temporal <- function(x, ...) {
    cat("Parameterization:", x$parameterization %||% "centered", "\n")
  }
 
- cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+ cat_shared(x$shared)
 
  if (!is.null(x$n_times)) {
    cat("Time points:", x$n_times, "\n")
@@ -895,8 +894,7 @@ temporal_multiscale <- function(time_var,
 #'
 #' @export
 print.ratiod_temporal_multiscale <- function(x, ...) {
-  cat("tulpaRatio Multi-Scale temporal specification\n")
-  cat("=========================================\n\n")
+  cat_title("tulpaRatio Multi-Scale temporal specification")
 
   cat("Time variable:", x$time_var, "\n")
   if (!is.null(x$group_var)) {
@@ -925,7 +923,7 @@ print.ratiod_temporal_multiscale <- function(x, ...) {
     cat("  Short-term:", short_name, "\n")
   }
 
-  cat("\nShared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared, prefix = "\n")
 
   if (!is.null(x$n_times)) {
     cat("Time points:", x$n_times, "\n")
@@ -1233,8 +1231,7 @@ temporal_gp <- function(time_var,
 #'
 #' @export
 print.ratiod_temporal_gp <- function(x, ...) {
-  cat("tulpaRatio Gaussian Process temporal specification\n")
-  cat("==============================================\n\n")
+  cat_title("tulpaRatio Gaussian Process temporal specification")
 
   cat("Time variable:", x$time_var, "\n")
   if (!is.null(x$group_var)) {
@@ -1248,7 +1245,7 @@ print.ratiod_temporal_gp <- function(x, ...) {
     cov_str <- sprintf("%s (period = %.1f)", x$cov, x$period)
   }
   cat("Covariance:", cov_str, "\n")
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared)
 
   if (!is.null(x$n_obs)) {
     cat("\nObservations:", x$n_obs, "\n")
@@ -1520,8 +1517,7 @@ temporal_tvc <- function(time_var,
 #'
 #' @export
 print.ratiod_tvc <- function(x, ...) {
-  cat("tulpaRatio temporally-varying coefficients\n")
-  cat("======================================\n\n")
+  cat_title("tulpaRatio temporally-varying coefficients")
 
   cat("Time variable:", x$time_var, "\n")
   if (!is.null(x$group_var)) {
@@ -1536,7 +1532,7 @@ print.ratiod_tvc <- function(x, ...) {
     gp = "GP (Gaussian process)"
   )
   cat("Structure:", struct_name, "\n")
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared)
 
   if (!is.null(x$n_tvc)) {
     cat("\nTVC terms:", x$n_tvc, "\n")
@@ -1764,17 +1760,7 @@ tvc.ratiod_fit <- function(object, terms = NULL, group = 1L, summary = FALSE,
 
   # Subset terms if requested
   if (!is.null(terms)) {
-    if (is.numeric(terms)) {
-      term_idx <- terms
-    } else if (is.character(terms)) {
-      term_idx <- match(terms, tvc_names)
-      if (any(is.na(term_idx))) {
-        stop("Terms not found: ", paste(terms[is.na(term_idx)], collapse = ", "),
-             call. = FALSE)
-      }
-    } else {
-      stop("`terms` must be numeric or character", call. = FALSE)
-    }
+    term_idx <- varying_coef_terms(terms, tvc_names)
     tvc_draws <- tvc_draws[, , term_idx, drop = FALSE]
     tvc_names <- tvc_names[term_idx]
     n_tvc <- length(term_idx)
@@ -1806,15 +1792,9 @@ tvc.ratiod_fit <- function(object, terms = NULL, group = 1L, summary = FALSE,
 #'
 #' @export
 print.ratiod_tvc_posterior <- function(x, ...) {
-  cat("Temporally-varying coefficient posterior\n")
-  cat("========================================\n\n")
-  cat("Terms:", paste(x$term_names, collapse = ", "), "\n")
-  cat("Time points:", x$n_times, "\n")
-  cat("Posterior draws:", x$n_draws, "\n")
-  cat("Structure:", x$structure, "\n")
-  cat("\nUse summary() for posterior summaries\n")
-  cat("Use plot() for temporal visualization\n")
-  invisible(x)
+  print_varying_coef(x, "Temporally-varying coefficient posterior",
+                    c("Time points", x$n_times), c("Structure", x$structure),
+                    "temporal")
 }
 
 
@@ -1823,30 +1803,11 @@ print.ratiod_tvc_posterior <- function(x, ...) {
 #' @export
 summary.ratiod_tvc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
 
-  n_times <- object$n_times
-  n_tvc <- object$n_tvc
-  draws <- object$draws
-
-  results <- list()
-
-  for (j in seq_len(n_tvc)) {
-    term_draws <- draws[, , j]
-
-    summaries <- data.frame(
-      time_idx = seq_len(n_times),
-      time = object$time_levels,
-      term = object$term_names[j],
-      mean = colMeans(term_draws),
-      sd = apply(term_draws, 2, sd),
-      t(apply(term_draws, 2, quantile, probs = probs))
-    )
-    names(summaries)[6:ncol(summaries)] <- paste0("q", probs * 100)
-    rownames(summaries) <- NULL
-
-    results[[j]] <- summaries
-  }
-
-  result <- do.call(rbind, results)
+  id_cols <- lapply(object$term_names, function(term) {
+    data.frame(time_idx = seq_len(object$n_times), time = object$time_levels,
+               term = term)
+  })
+  result <- varying_coef_summary(object$draws, id_cols, probs)
 
   structure(
     result,
@@ -1864,14 +1825,7 @@ summary.ratiod_tvc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), .
 #' @export
 plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
 
-  if (is.character(term)) {
-    term_idx <- match(term, x$term_names)
-    if (is.na(term_idx)) {
-      stop("Term not found: ", term, call. = FALSE)
-    }
-  } else {
-    term_idx <- term
-  }
+  term_idx <- varying_coef_term(x, term)
 
   term_name <- x$term_names[term_idx]
   draws <- x$draws[, , term_idx]
@@ -2175,8 +2129,7 @@ temporal.ratiod_fit <- function(object, component = "all", summary = FALSE,
 #'
 #' @export
 print.ratiod_temporal_posterior <- function(x, ...) {
-  cat("Temporal effect posterior\n")
-  cat("=========================\n\n")
+  cat_title("Temporal effect posterior")
 
   if (x$type == "multiscale") {
     cat("Type: Multi-scale decomposition\n")

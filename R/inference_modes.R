@@ -780,8 +780,7 @@ validate_mode <- function(fit, expected_mode, error = TRUE) {
 #'
 #' @export
 inference_mode_info <- function() {
-  cat("tulpaRatio Inference Modes\n")
-  cat("========================\n\n")
+  cat_title("tulpaRatio Inference Modes")
 
   cat("Modes encode EPISTEMIC GUARANTEES, not just runtime characteristics.\n\n")
 

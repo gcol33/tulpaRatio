@@ -96,8 +96,7 @@ gpu_info <- function() {
 #' @param ... Ignored
 #' @export
 print.tulpaRatio_gpu_info <- function(x, ...) {
-  cat("tulpaRatio GPU Support\n")
-  cat("====================\n\n")
+  cat_title("tulpaRatio GPU Support")
 
   if (!x$available) {
     cat("Status: Not available\n")

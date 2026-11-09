@@ -1,0 +1,7 @@
+c(
+  "Geweke Convergence Diagnostic",
+  "=============================",
+  "",
+  " parameter z_score p_value",
+  "      beta   0.125     0.9"
+)

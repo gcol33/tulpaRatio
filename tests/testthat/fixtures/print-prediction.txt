@@ -1,0 +1,10 @@
+c(
+  "tulpaRatio predictions",
+  "======================",
+  "",
+  "Posterior draws: 10 ",
+  "New observations: 1 ",
+  "",
+  " mean",
+  "    1"
+)

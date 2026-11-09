@@ -1,0 +1,8 @@
+c(
+  "tulpaRatio Gaussian Process temporal specification",
+  "==================================================",
+  "",
+  "Time variable: year ",
+  "Covariance: exponential ",
+  "Shared: Yes (enters both processes) "
+)

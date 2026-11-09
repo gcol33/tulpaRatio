@@ -1,0 +1,7 @@
+c(
+  "MCMC Diagnostics",
+  "================",
+  "",
+  " parameter rhat ess_bulk ess_tail",
+  "      beta    1      500      500"
+)

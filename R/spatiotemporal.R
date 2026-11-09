@@ -321,8 +321,7 @@ spatiotemporal <- function(spatial,
 #'
 #' @export
 print.ratiod_spatiotemporal <- function(x, ...) {
-  cat("tulpaRatio Spatiotemporal Interaction Specification\n")
-  cat("===============================================\n\n")
+  cat_title("tulpaRatio Spatiotemporal Interaction Specification")
 
   type_desc <- switch(x$type,
     "I" = "Type I: Unstructured (IID)",
@@ -350,7 +349,7 @@ print.ratiod_spatiotemporal <- function(x, ...) {
     cat("  Time points:", x$n_times, "\n")
   }
 
-  cat("\nShared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared, prefix = "\n")
 
   if (!is.null(x$n_params)) {
     cat("Total interaction parameters:", x$n_params, "\n")
@@ -720,7 +719,7 @@ prepare_spatiotemporal_for_hmc <- function(st, data) {
   if (isTRUE(st$spatial_is_hsgp)) {
     result$spatial_is_hsgp <- TRUE
     result$hsgp_m <- st$spatial$m %||% 6L
-    result$hsgp_c <- st$spatial$c %||% 1.5
+    result$c_boundary <- st$spatial$c_boundary %||% 1.5
     result$hsgp_coords <- st$spatial$coords_matrix
     result$hsgp_scale_coords <- st$spatial$scale_coords %||% TRUE
   }

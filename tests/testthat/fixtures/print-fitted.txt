@@ -1,0 +1,9 @@
+c(
+  "tulpaRatio fitted values",
+  "========================",
+  "",
+  "Posterior draws: 10 ",
+  "",
+  " mean",
+  "    1"
+)

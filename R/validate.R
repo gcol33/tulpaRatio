@@ -885,8 +885,7 @@ average_predictions <- function(predictions, weights, type, summary) {
 #'
 #' @export
 print.ratiod_average <- function(x, digits = 3, ...) {
-  cat("ratio model averaging\n")
-  cat("=====================\n\n")
+  cat_title("ratio model averaging")
   cat("Method:", x$weights_method, "\n")
   cat("Models:", x$n_models, "\n")
   cat("Prediction type:", x$type, "\n\n")

@@ -215,7 +215,7 @@ inline void apply_st_params(ModelData& data, const Rcpp::List& st_params) {
       data.st_is_hsgp = true;
       data.spatiotemporal_data.is_hsgp = true;
       int st_hsgp_m = Rcpp::as<int>(st_params["hsgp_m"]);
-      double st_hsgp_c = Rcpp::as<double>(st_params["hsgp_c"]);
+      double st_hsgp_c = Rcpp::as<double>(st_params["c_boundary"]);
       std::vector<double> st_hsgp_coords = Rcpp::as<std::vector<double>>(st_params["hsgp_coords"]);
       bool st_hsgp_scale = true;
       if (st_params.containsElementNamed("hsgp_scale_coords"))
@@ -319,12 +319,12 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
     if (data.svc_is_hsgp) {
       // HSGP-based SVC: set up basis functions
       int hsgp_m = Rcpp::as<int>(svc_params["hsgp_m"]);
-      double hsgp_c = Rcpp::as<double>(svc_params["hsgp_c"]);
+      double c_boundary = Rcpp::as<double>(svc_params["c_boundary"]);
       data.svc_hsgp_m_per_dim = hsgp_m;
-      data.svc_hsgp_boundary_factor = hsgp_c;
+      data.svc_hsgp_boundary_factor = c_boundary;
 
       // Set up HSGP basis (shared across all SVC terms)
-      ratiod_hsgp::setup_hsgp_2d(svc_coords, data.N, hsgp_m, hsgp_c,
+      ratiod_hsgp::setup_hsgp_2d(svc_coords, data.N, hsgp_m, c_boundary,
                                   svc_shared, data.svc_hsgp_data);
 
       // No NNGP data needed

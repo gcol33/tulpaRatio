@@ -1,0 +1,8 @@
+c(
+  "tulpaRatio ratio summary (response scale)",
+  "=========================================",
+  "",
+  " mean",
+  "    1",
+  "    2"
+)

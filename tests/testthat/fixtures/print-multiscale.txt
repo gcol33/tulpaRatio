@@ -1,0 +1,17 @@
+c(
+  "tulpaRatio Multi-Scale spatial specification",
+  "============================================",
+  "",
+  "Coordinates: lon, lat ",
+  "Scales: local + regional ",
+  "",
+  "Local scale:",
+  "  Range prior: [0.01, 1]",
+  "",
+  "Regional scale:",
+  "  Range prior: [1, 10]",
+  "",
+  "Approximation: HSGP, 10 basis functions per dim ( 100 per scale ), boundary factor 1.5 ",
+  "Covariance: squared exponential",
+  "Shared: Yes (enters both processes) "
+)

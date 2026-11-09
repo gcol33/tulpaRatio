@@ -1,0 +1,11 @@
+c(
+  "Temporal effect posterior",
+  "=========================",
+  "",
+  "Type: RW1 ",
+  "Time points: 6 ",
+  "Posterior draws: 10 ",
+  "",
+  "Use summary() for posterior summaries",
+  "Use plot() for visualization"
+)

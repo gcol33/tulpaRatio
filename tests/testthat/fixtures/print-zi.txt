@@ -1,0 +1,6 @@
+c(
+  "tulpaRatio Zero-Inflation Specification",
+  "=======================================",
+  "Type: Zero-Inflated Poisson ",
+  "Formula: ~ 1 (intercept only)"
+)

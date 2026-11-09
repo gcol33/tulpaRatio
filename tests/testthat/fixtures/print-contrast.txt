@@ -1,0 +1,11 @@
+c(
+  "tulpaRatio ratio contrasts",
+  "==========================",
+  "",
+  "Type: ratio ",
+  "Variable: site ",
+  "Reference: a ",
+  "",
+  " mean",
+  "    1"
+)

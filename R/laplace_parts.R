@@ -198,7 +198,7 @@ laplace_gp_parts <- function(spatial, data, first_block, n_arms,
                              projection = NULL) {
   field <- laplace_field_coords(spatial, data)
   basis <- hsgp_basis_2d(field$coords, m = as.integer(spatial$m %||% 6L),
-                         c_boundary = spatial$c %||% 1.5)
+                         c_boundary = spatial$c_boundary %||% 1.5)
   list(laplace_hsgp_part(first_block, "gp", "w_gp", basis, field$obs_to_loc,
                          n_arms, projection = projection))
 }

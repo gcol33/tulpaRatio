@@ -1,0 +1,11 @@
+c(
+  "tulpaRatio ratio posterior",
+  "==========================",
+  "",
+  "Scale: log ",
+  "Observations: 6 ",
+  "Posterior draws: 10 ",
+  "",
+  "Use summary() for posterior summaries",
+  "Use plot() for visualization"
+)

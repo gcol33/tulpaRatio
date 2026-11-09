@@ -1,0 +1,12 @@
+c(
+  "Temporally-varying coefficient posterior",
+  "========================================",
+  "",
+  "Terms: a, b ",
+  "Time points: 6 ",
+  "Posterior draws: 10 ",
+  "Structure: rw1 ",
+  "",
+  "Use summary() for posterior summaries",
+  "Use plot() for temporal visualization"
+)

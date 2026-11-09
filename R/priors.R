@@ -503,32 +503,17 @@ sampler_priors <- function(priors, model_type) {
 #'
 #' @export
 print.ratiod_priors <- function(x, ...) {
-  cat("tulpaRatio prior specification\n")
-  cat("=========================\n\n")
-
-  cat("Fixed effects (beta):\n")
-  print_prior(x$beta, indent = "  ")
-  cat("\n")
-
-  cat("Random effect SD (sigma):\n")
-  print_prior(x$sigma, indent = "  ")
-  cat("\n")
-
-  cat("Overdispersion (phi):\n")
-  print_prior(x$phi, indent = "  ")
-  cat("\n")
-
-  cat("Temporal autocorrelation (rho_temporal):\n")
-  print_prior(x$rho_temporal, indent = "  ")
-  cat("\n")
-
-  for (nm in names(FIELD_SCALE_PRIORS)) {
-    cat(FIELD_SCALE_PRIORS[[nm]]$label, " (", nm, "):\n", sep = "")
+  cat_title("tulpaRatio prior specification")
+  field_labels <- vapply(FIELD_SCALE_PRIORS, `[[`, character(1), "label")
+  labels <- c(beta = "Fixed effects", sigma = "Random effect SD",
+              phi = "Overdispersion", rho_temporal = "Temporal autocorrelation",
+              field_labels, rho_spatial = "Spatial proportion")
+  for (nm in names(labels)) {
+    cat(labels[[nm]], " (", nm, "):\n", sep = "")
     print_prior(x[[nm]], indent = "  ")
+    cat("\n")
   }
-  cat("Spatial proportion (rho_spatial):\n")
-  print_prior(x$rho_spatial, indent = "  ")
-  cat("\nComponents marked default take default_prior() when fitted.\n")
+  cat("Components marked default take default_prior() when fitted.\n")
 
   invisible(x)
 }
@@ -607,7 +592,7 @@ priors_default <- function(family = NULL, spatial = FALSE, temporal = FALSE) {
 
   title <- if (is.null(family)) "Default priors" else
     sprintf("Default priors for the %s family", family$name)
-  cat(title, "\n", strrep("=", nchar(title)), "\n\n", sep = "")
+  cat_title(title)
 
   cat("Fixed effects (beta):\n")
   print_prior(defaults$beta, indent = "  ")

@@ -1,0 +1,9 @@
+c(
+  "tulpaRatio Hilbert Space GP (HSGP) spatial specification",
+  "========================================================",
+  "",
+  "Coordinates: lon, lat ",
+  "Basis functions: 6 per dim ( 36 total )",
+  "Boundary factor: 1.5 ",
+  "Shared: Yes (enters both processes) "
+)

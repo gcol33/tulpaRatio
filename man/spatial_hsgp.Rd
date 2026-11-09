@@ -5,7 +5,13 @@
 \alias{print.ratiod_hsgp}
 \title{Hilbert Space Gaussian Process (HSGP) Spatial Structure}
 \usage{
-spatial_hsgp(coords, m = 6, c = 1.5, shared = TRUE, scale_coords = TRUE)
+spatial_hsgp(
+  coords,
+  m = 6,
+  c_boundary = 1.5,
+  shared = TRUE,
+  scale_coords = TRUE
+)
 
 \method{print}{ratiod_hsgp}(x, ...)
 }
@@ -17,7 +23,7 @@ spatial_hsgp(coords, m = 6, c = 1.5, shared = TRUE, scale_coords = TRUE)
 will be m^2. Default 6. Higher values give better approximation but
 slower computation. Recommended range: 5-15.}
 
-\item{c}{Boundary factor controlling domain extension beyond data range.
+\item{c_boundary}{Boundary factor controlling domain extension beyond data range.
 Default 1.5. The domain is extended to \eqn{[-cL, cL]} where \eqn{L} is
 half the data range. Larger values improve approximation at boundaries.}
 

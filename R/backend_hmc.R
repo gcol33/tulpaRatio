@@ -580,7 +580,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
       hsgp_basis <- hsgp_basis_2d(
         coords = matrix(gp_info$coords, ncol = 2, byrow = TRUE),
         m = as.integer(gp_info$hsgp_m %||% 6L),
-        c_boundary = gp_info$hsgp_c %||% 1.5
+        c_boundary = gp_info$c_boundary %||% 1.5
       )
     }
 
@@ -589,7 +589,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
                          adj_col_idx = integer(0), n_neighbors = integer(0),
                          bym2_scale = 1.0,
                          hsgp_m = gp_info$hsgp_m,  # HSGP: basis functions per dim
-                         hsgp_c = gp_info$hsgp_c,
+                         c_boundary = gp_info$c_boundary,
                          shared = gp_info$shared %||% TRUE,
                          msgp_hsgp_Phi = hsgp_basis$phi,
                          msgp_hsgp_eigenvalues = hsgp_basis$eigenvalues,
@@ -793,7 +793,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     # HSGP-ST fields (only used when spatial_is_hsgp = TRUE)
     st_is_hsgp = st_is_hsgp,
     hsgp_m = as.integer(spatiotemporal_info$hsgp_m %||% 0L),
-    hsgp_c = spatiotemporal_info$hsgp_c %||% 1.5,
+    c_boundary = spatiotemporal_info$c_boundary %||% 1.5,
     hsgp_coords = if (st_is_hsgp) as.numeric(t(spatiotemporal_info$hsgp_coords)) else numeric(0),
     hsgp_scale_coords = spatiotemporal_info$hsgp_scale_coords %||% TRUE,
     # GP interaction fields (type "separable" / "nonsep_gp"). Empty for every
@@ -858,7 +858,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     sigma_prior_alpha = sp$svc_sigma_prior_alpha,
     svc_approx = svc_info$svc_approx %||% "nngp",
     hsgp_m = as.integer(svc_info$hsgp_m %||% 0L),
-    hsgp_c = svc_info$hsgp_c %||% 0.0
+    c_boundary = svc_info$c_boundary %||% 0.0
   )
 
   # Populate spatial_info with SVC details for output conversion
@@ -869,7 +869,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     spatial_info$svc_names <- svc_info$svc_names
     spatial_info$svc_approx <- svc_info$svc_approx %||% "nngp"
     spatial_info$svc_hsgp_m <- svc_info$hsgp_m %||% 0L
-    spatial_info$svc_hsgp_c <- svc_info$hsgp_c %||% 1.5
+    spatial_info$c_boundary <- svc_info$c_boundary %||% 1.5
     spatial_info$svc_coords <- if (!is.null(svc_info$coords)) {
       matrix(svc_info$coords, ncol = 2, byrow = TRUE)
     } else {
@@ -988,7 +988,7 @@ gp_bundle <- function(gp_info, priors) {
     phi_prior_lower = priors$gp_phi_prior_lower %||% 0.01,
     phi_prior_upper = priors$gp_phi_prior_upper %||% 100.0,
     hsgp_m = as.integer(gp_info$hsgp_m %||% 8L),
-    hsgp_c = gp_info$hsgp_c %||% 1.5,
+    c_boundary = gp_info$c_boundary %||% 1.5,
     range_local_lower = gp_info$range_local_lower,
     range_local_upper = gp_info$range_local_upper,
     range_regional_lower = gp_info$range_regional_lower,
@@ -1696,7 +1696,7 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
       sigma_prior_U = 1.0,
       sigma_prior_alpha = 0.01,
       hsgp_m = as.integer(svc$m %||% 6L),
-      hsgp_c = svc$c_boundary %||% 1.5
+      c_boundary = svc$c_boundary %||% 1.5
     )
   } else {
     # Flatten neighbor indices and distances (N x nn matrices)
@@ -1726,7 +1726,7 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
       sigma_prior_U = 1.0,
       sigma_prior_alpha = 0.01,
       hsgp_m = 0L,
-      hsgp_c = 0.0
+      c_boundary = 0.0
     )
   }
 }
@@ -2316,7 +2316,7 @@ prepare_gp_for_hmc <- function(gp, data, N) {
       spec = validated,
       coords = coords_flat,
       hsgp_m = as.integer(gp$m),
-      hsgp_c = gp$c,
+      c_boundary = gp$c_boundary,
       shared = gp$shared,
       # Empty placeholders for standard GP fields
       nn_idx = integer(0),
@@ -2348,7 +2348,7 @@ prepare_gp_for_hmc <- function(gp, data, N) {
       gp_type = "multiscale_gp",
       spec = validated_hsgp,
       hsgp_m = as.integer(gp$m),
-      hsgp_c = gp$c_boundary,
+      c_boundary = gp$c_boundary,
       coords = coords_flat_hsgp,
       # Range constraints (used for lengthscale prior means)
       range_local_lower = gp$range_local[1],

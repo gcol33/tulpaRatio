@@ -916,8 +916,7 @@ warn_independence <- function() {
 #' @export
 #' @keywords internal
 print.ratiod_formula <- function(x, ...) {
-  cat("tulpaRatio formula specification\n")
-  cat("===========================\n\n")
+  cat_title("tulpaRatio formula specification")
 
   cat("Numerator:", x$numerator$response_var, "\n")
   cat("  Fixed effects:", ncol(x$numerator$X), "coefficients\n")

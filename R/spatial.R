@@ -493,8 +493,7 @@ areal_components <- function(adjacency) {
 #'
 #' @export
 print.ratiod_spatial <- function(x, ...) {
-  cat("tulpaRatio spatial specification\n")
-  cat("===========================\n\n")
+  cat_title("tulpaRatio spatial specification")
 
   # Format type name
   type_name <- switch(x$type,
@@ -506,7 +505,7 @@ print.ratiod_spatial <- function(x, ...) {
   cat("Type:", type_name, "\n")
   cat("Level:", x$level, "\n")
   cat("Spatial units:", x$n_spatial, "\n")
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared)
 
   if (!is.null(x$group_var)) {
     cat("Group variable:", x$group_var, "\n")
@@ -752,8 +751,7 @@ spatial_gp <- function(coords,
 #'
 #' @export
 print.ratiod_gp <- function(x, ...) {
-  cat("tulpaRatio Gaussian Process spatial specification\n")
-  cat("=============================================\n\n")
+  cat_title("tulpaRatio Gaussian Process spatial specification")
 
   cat("Coordinates:", paste(x$coord_vars, collapse = ", "), "\n")
   cov_str <- x$cov
@@ -763,7 +761,7 @@ print.ratiod_gp <- function(x, ...) {
   cat("Covariance:", cov_str, "\n")
   cat("Neighbors (NNGP):", x$nn, "\n")
 
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared)
 
   if (!is.null(x$n_obs)) {
     cat("\nObservations:", x$n_obs, "\n")
@@ -789,7 +787,7 @@ print.ratiod_gp <- function(x, ...) {
 #' @param m Number of basis functions per dimension. Total basis functions
 #'   will be m^2. Default 6. Higher values give better approximation but
 #'   slower computation. Recommended range: 5-15.
-#' @param c Boundary factor controlling domain extension beyond data range.
+#' @param c_boundary Boundary factor controlling domain extension beyond data range.
 #'   Default 1.5. The domain is extended to \eqn{[-cL, cL]} where \eqn{L} is
 #'   half the data range. Larger values improve approximation at boundaries.
 #' @param shared Logical; if TRUE (default), spatial effect enters both
@@ -867,7 +865,7 @@ print.ratiod_gp <- function(x, ...) {
 #' @export
 spatial_hsgp <- function(coords,
                          m = 6,
-                         c = 1.5,
+                         c_boundary = 1.5,
                          shared = TRUE,
                          scale_coords = TRUE) {
 
@@ -891,9 +889,9 @@ spatial_hsgp <- function(coords,
   }
   m <- as.integer(m)
 
-  # Validate c
-  if (!is.numeric(c) || length(c) != 1 || c < 1) {
-    stop("`c` (boundary factor) must be >= 1", call. = FALSE)
+  # Validate c_boundary
+  if (!is.numeric(c_boundary) || length(c_boundary) != 1 || c_boundary < 1) {
+    stop("`c_boundary` (boundary factor) must be >= 1", call. = FALSE)
   }
 
   # Warning for non-shared spatial effects
@@ -911,7 +909,7 @@ spatial_hsgp <- function(coords,
       type = "hsgp",
       coord_vars = coord_vars,
       m = m,
-      c = c,
+      c_boundary = c_boundary,
       shared = shared,
       scale_coords = scale_coords,
       # Filled in during validation
@@ -929,13 +927,12 @@ spatial_hsgp <- function(coords,
 #'
 #' @export
 print.ratiod_hsgp <- function(x, ...) {
-  cat("tulpaRatio Hilbert Space GP (HSGP) spatial specification\n")
-  cat("=====================================================\n\n")
+  cat_title("tulpaRatio Hilbert Space GP (HSGP) spatial specification")
 
   cat("Coordinates:", paste(x$coord_vars, collapse = ", "), "\n")
   cat("Basis functions:", x$m, "per dim (", x$m^2, "total )\n")
-  cat("Boundary factor:", x$c, "\n")
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat("Boundary factor:", x$c_boundary, "\n")
+  cat_shared(x$shared)
 
   if (!is.null(x$n_obs)) {
     cat("\nObservations:", x$n_obs, "\n")
@@ -1182,8 +1179,7 @@ spatial_multiscale <- function(coords,
 #'
 #' @export
 print.ratiod_multiscale <- function(x, ...) {
-  cat("tulpaRatio Multi-Scale spatial specification\n")
-  cat("========================================\n\n")
+  cat_title("tulpaRatio Multi-Scale spatial specification")
 
   cat("Coordinates:", paste(x$coord_vars, collapse = ", "), "\n")
   cat("Scales:", paste(x$scales, collapse = " + "), "\n\n")
@@ -1197,7 +1193,7 @@ print.ratiod_multiscale <- function(x, ...) {
   cat("\nApproximation: HSGP,", x$m, "basis functions per dim (",
       x$m^2, "per scale ), boundary factor", x$c_boundary, "\n")
   cat("Covariance: squared exponential\n")
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared)
 
   if (!is.null(x$n_obs)) {
     cat("\nObservations:", x$n_obs, "\n")
@@ -1533,13 +1529,12 @@ spatial_svc <- function(coords,
 #'
 #' @export
 print.ratiod_svc <- function(x, ...) {
-  cat("tulpaRatio spatially-varying coefficients\n")
-  cat("=====================================\n\n")
+  cat_title("tulpaRatio spatially-varying coefficients")
 
   cat("Coordinates:", paste(x$coord_vars, collapse = ", "), "\n")
   cat("Covariance:", x$cov, "\n")
   cat("Neighbors (NNGP):", x$nn, "\n")
-  cat("Shared:", if (x$shared) "Yes (enters both processes)" else "No", "\n")
+  cat_shared(x$shared)
   if (identical(x$approx %||% "nngp", "hsgp")) {
     cat("Lengthscale prior: LogNormal(0, 1)\n")
   } else {
@@ -1928,17 +1923,7 @@ svc.ratiod_fit <- function(object, terms = NULL, summary = FALSE,
 
   # Subset terms if requested
   if (!is.null(terms)) {
-    if (is.numeric(terms)) {
-      term_idx <- terms
-    } else if (is.character(terms)) {
-      term_idx <- match(terms, svc_names)
-      if (any(is.na(term_idx))) {
-        stop("Terms not found: ", paste(terms[is.na(term_idx)], collapse = ", "),
-             call. = FALSE)
-      }
-    } else {
-      stop("`terms` must be numeric or character", call. = FALSE)
-    }
+    term_idx <- varying_coef_terms(terms, svc_names)
     svc_draws <- svc_draws[, , term_idx, drop = FALSE]
     svc_names <- svc_names[term_idx]
     n_svc <- length(term_idx)
@@ -1972,31 +1957,11 @@ svc.ratiod_fit <- function(object, terms = NULL, summary = FALSE,
 #' @export
 summary.ratiod_svc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), ...) {
 
-  n_obs <- object$n_obs
-  n_svc <- object$n_svc
-  draws <- object$draws
-
-  results <- list()
-
-  for (j in seq_len(n_svc)) {
-    term_draws <- draws[, , j]
-
-    summaries <- data.frame(
-      obs = seq_len(n_obs),
-      term = object$term_names[j],
-      coord_1 = object$coords[, 1],
-      coord_2 = object$coords[, 2],
-      mean = colMeans(term_draws),
-      sd = apply(term_draws, 2, sd),
-      t(apply(term_draws, 2, quantile, probs = probs))
-    )
-    names(summaries)[7:ncol(summaries)] <- paste0("q", probs * 100)
-    rownames(summaries) <- NULL
-
-    results[[j]] <- summaries
-  }
-
-  result <- do.call(rbind, results)
+  id_cols <- lapply(object$term_names, function(term) {
+    data.frame(obs = seq_len(object$n_obs), term = term,
+               coord_1 = object$coords[, 1], coord_2 = object$coords[, 2])
+  })
+  result <- varying_coef_summary(object$draws, id_cols, probs)
 
   structure(
     result,
@@ -2012,15 +1977,9 @@ summary.ratiod_svc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), .
 #'
 #' @export
 print.ratiod_svc_posterior <- function(x, ...) {
-  cat("Spatially-varying coefficient posterior\n")
-  cat("=======================================\n\n")
-  cat("Terms:", paste(x$term_names, collapse = ", "), "\n")
-  cat("Locations:", x$n_obs, "\n")
-  cat("Posterior draws:", x$n_draws, "\n")
-  cat("Covariance function:", x$cov, "\n")
-  cat("\nUse summary() for posterior summaries\n")
-  cat("Use plot() for spatial visualization\n")
-  invisible(x)
+  print_varying_coef(x, "Spatially-varying coefficient posterior",
+                    c("Locations", x$n_obs), c("Covariance function", x$cov),
+                    "spatial")
 }
 
 
@@ -2031,14 +1990,7 @@ print.ratiod_svc_posterior <- function(x, ...) {
 #' @export
 plot.ratiod_svc_posterior <- function(x, term = 1, type = "mean", ...) {
 
-  if (is.character(term)) {
-    term_idx <- match(term, x$term_names)
-    if (is.na(term_idx)) {
-      stop("Term not found: ", term, call. = FALSE)
-    }
-  } else {
-    term_idx <- term
-  }
+  term_idx <- varying_coef_term(x, term)
 
   term_name <- x$term_names[term_idx]
   draws <- x$draws[, , term_idx]

@@ -1,0 +1,9 @@
+c(
+  "ratio model summary",
+  "===================",
+  "",
+  "Backend: hmc ",
+  "Family: binomial ",
+  "",
+  "No draws available"
+)

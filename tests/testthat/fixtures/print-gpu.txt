@@ -1,0 +1,10 @@
+c(
+  "tulpaRatio GPU Support",
+  "======================",
+  "",
+  "Status: Not available",
+  "",
+  "To enable GPU support:",
+  "  CUDA: Install CUDA toolkit, rebuild with -DUSE_CUDA",
+  "  OpenCL: Install OpenCL SDK, rebuild with -DUSE_OPENCL"
+)

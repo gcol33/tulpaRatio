@@ -1,0 +1,12 @@
+c(
+  "Spatially-varying coefficient posterior",
+  "=======================================",
+  "",
+  "Terms: a, b ",
+  "Locations: 6 ",
+  "Posterior draws: 10 ",
+  "Covariance function: matern ",
+  "",
+  "Use summary() for posterior summaries",
+  "Use plot() for spatial visualization"
+)

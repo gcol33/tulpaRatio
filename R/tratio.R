@@ -986,8 +986,7 @@ summary.ratiod_fit <- function(object, prob = 0.95, ...) {
 #' @rdname summary.ratiod_fit
 #' @export
 print.summary.ratiod_fit <- function(x, ...) {
-  cat("ratio model summary\n")
-  cat("===================\n\n")
+  cat_title("ratio model summary")
   if (!is.na(x$tier)) {
     cat(sprintf("Inference: %s (Tier %d) via %s\n", x$tier_name, x$tier, x$backend))
   } else {
@@ -1589,8 +1588,7 @@ diagnostics.ratiod_fit <- function(fit, pars = NULL, ...) {
 #'
 #' @export
 print.ratiod_diagnostics <- function(x, ...) {
-  cat("MCMC Diagnostics\n")
-  cat("================\n\n")
+  cat_title("MCMC Diagnostics")
 
   # Format for printing. A column subset of a diagnostics table keeps this
   # class, so round only the columns that are present.
@@ -1690,8 +1688,7 @@ check_diagnostics <- function(fit, quiet = FALSE) {
 
   # Print warnings if not quiet
   if (!quiet) {
-    cat("Diagnostic Check\n")
-    cat("================\n\n")
+    cat_title("Diagnostic Check")
 
     if (ok) {
       cat("All diagnostics OK.\n")

@@ -850,7 +850,7 @@ svc_hsgp_basis <- function(spatial_info) {
   coords <- spatial_info$svc_coords
   if (is.null(coords)) return(NULL)
   m <- as.integer(spatial_info$svc_hsgp_m)
-  c_val <- spatial_info$svc_hsgp_c %||% 1.5
+  c_val <- spatial_info$c_boundary %||% 1.5
   hsgp_basis_2d(coords, m, c_val)
 }
 
@@ -1336,7 +1336,7 @@ st_eta <- function(st, st_info, design) {
     t_idx <- as.integer(st_info$t_idx)
     if (is.null(coords) || is.null(t_idx)) return(NULL)
     Phi <- hsgp_basis_2d(coords, as.integer(st_info$hsgp_m %||% 6L),
-                         st_info$hsgp_c %||% 1.5)$phi
+                         st_info$c_boundary %||% 1.5)$phi
     T_st <- st_info$n_times
     M <- ncol(Phi)
     eta <- matrix(0, n_samples, N)

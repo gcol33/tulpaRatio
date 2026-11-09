@@ -1,0 +1,10 @@
+c(
+  "tulpaRatio temporally-varying coefficients",
+  "==========================================",
+  "",
+  "Time variable: year ",
+  "Structure: RW1 (first-order random walk) ",
+  "Shared: Yes (enters both processes) ",
+  "",
+  "Terms: columns  1 "
+)

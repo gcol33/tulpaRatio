@@ -263,8 +263,7 @@ sim_ratiod <- function(n = 100,
 #'
 #' @export
 print.ratiod_simdata <- function(x, ...) {
-  cat("Simulated tulpaRatio data\n")
-  cat("====================\n\n")
+  cat_title("Simulated tulpaRatio data")
 
   cat("Family:", x$family$name, "\n")
   cat("Observations:", x$n, "\n")
@@ -415,8 +414,7 @@ sim_ratiod_sbc <- function(n_sims = 100,
 #'
 #' @export
 print.ratiod_sbc_sims <- function(x, ...) {
-  cat("tulpaRatio SBC simulations\n")
-  cat("=====================\n\n")
+  cat_title("tulpaRatio SBC simulations")
 
   cat("Simulations:", attr(x, "n_sims"), "\n")
   cat("Family:", attr(x, "family")$name, "\n")

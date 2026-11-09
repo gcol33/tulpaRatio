@@ -190,11 +190,11 @@ latent_factor <- function(
 #'
 #' @export
 print.ratiod_latent <- function(x, ...) {
-  cat("Latent factor specification\n")
-  cat("===========================\n\n")
+  cat_title("Latent factor specification")
 
   cat("Number of factors:", x$n_factors, "\n")
-  cat("Shared:", ifelse(x$shared, "Yes (loads on both num and denom)", "No (numerator only)"), "\n")
+  cat_shared(x$shared, yes = "Yes (loads on both num and denom)",
+             no = "No (numerator only)")
   cat("Constraint:", x$constraint, "\n\n")
 
   cat("Diagonal loading prior:\n")
