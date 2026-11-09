@@ -46,7 +46,7 @@ while (i <= length(args)) {
 
 # ---- Shared helpers ----
 
-RSCRIPT <- "C:/Program Files/R/R-4.5.2/bin/Rscript.exe"
+RSCRIPT <- file.path(R.home("bin"), "Rscript.exe")
 
 run_subprocess <- function(script, script_args, cooldown_sec) {
   Sys.sleep(cooldown_sec)

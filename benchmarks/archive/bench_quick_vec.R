@@ -1,8 +1,6 @@
 # Quick benchmark: vectorized gradient paths
 # N=500, 500 iter, 1 chain, H mode
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all()
-
+library(tulpaRatio)
 cat("=== Quick Vectorized Gradient Benchmark ===\n")
 cat("Date:", format(Sys.time()), "\n\n")
 

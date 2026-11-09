@@ -1,7 +1,5 @@
 # Quick RE benchmark: vectorized gradient paths
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all()
-
+library(tulpaRatio)
 N <- 500; S <- 50
 set.seed(42)
 x <- rnorm(N)

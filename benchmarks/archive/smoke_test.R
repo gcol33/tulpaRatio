@@ -1,6 +1,5 @@
 # Quick smoke test
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all()
+library(tulpaRatio)
 cat("LOAD OK\n")
 
 set.seed(42)

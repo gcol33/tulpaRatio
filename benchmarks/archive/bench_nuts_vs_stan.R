@@ -4,7 +4,7 @@
 # Rows tested: 1, 2, 4, 31, 32, 34, 77
 # NO brms. Custom joint Stan models only.
 
-devtools::load_all()
+library(tulpaRatio)
 library(cmdstanr)
 library(posterior)
 

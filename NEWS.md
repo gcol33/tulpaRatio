@@ -1,5 +1,12 @@
 # tulpaRatio 1.7.3
 
+* The C++ unit tests exercise the shipped kernels (leapfrog, Hamiltonian,
+  Cholesky, inverse logit, densities) through thin probes instead of copies
+  written inside the test file; registered exports drop from 126 to 105 (#205).
+  Test fixtures are defined once in helper files (#207), and 248 archived
+  benchmark scripts that called the package by its old name are removed along
+  with stale ignore entries and header guards (#209).
+
 * Adjacency lists reach every spatial backend through one sparse conversion
   whose work is linear in nodes and edges: a 10,000-node lattice converts in
   0.002 s, against 5.1 s when the Gibbs path grew its neighbour vector edge by

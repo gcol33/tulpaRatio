@@ -9,8 +9,8 @@
 //
 // Enable with: #define RATIOD_ENABLE_CUDA before including gpu_backend.h
 
-#ifndef RATIOD_GPU_CUDA_H
-#define RATIOD_GPU_CUDA_H
+#ifndef TULPARATIO_GPU_CUDA_H
+#define TULPARATIO_GPU_CUDA_H
 
 #include <vector>
 #include <string>
@@ -585,4 +585,4 @@ inline bool cuda_batched_trsv(
 
 }  // namespace ratiod_gpu
 
-#endif  // RATIOD_GPU_CUDA_H
+#endif  // TULPARATIO_GPU_CUDA_H

@@ -1,7 +1,5 @@
 # test_gp_hsgp_consistency.R — Verify GP/HSGP prior consistency (H vs A_r)
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all(quiet = TRUE)
-
+library(tulpaRatio)
 cat("=== GP/HSGP Prior Consistency: H vs A_r ===\n\n")
 
 # Setup data with spatial structure

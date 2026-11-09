@@ -2,7 +2,7 @@
 # Focus: Models that CAN be validated against brms but haven't been yet
 # Standard parameters: N=500, iter=500, warmup=250, chains=1 (for timing)
 
-devtools::load_all(quiet = TRUE)
+library(tulpaRatio)
 library(brms)
 set.seed(42)
 

@@ -33,7 +33,7 @@ pp_linkinv <- function(link) {
     log     = exp,
     identity = function(eta) eta,
     inverse = function(eta) 1 / eta,
-    logit   = stats::plogis,
+    logit   = inv_logit,
     probit  = stats::pnorm,
     cloglog = function(eta) -expm1(-exp(eta)),
     stop(sprintf("Unsupported link '%s'", link), call. = FALSE)
@@ -68,7 +68,7 @@ pp_linkfun <- function(link) {
 pp_log_prob <- function(eta, link, lower = TRUE) {
   switch(
     link,
-    logit   = stats::plogis(eta, lower.tail = lower, log.p = TRUE),
+    logit   = inv_logit(eta, lower.tail = lower, log.p = TRUE),
     probit  = stats::pnorm(eta, lower.tail = lower, log.p = TRUE),
     cloglog = if (lower) log(-expm1(-exp(eta))) else -exp(eta),
     stop(sprintf("Unsupported link '%s'", link), call. = FALSE)

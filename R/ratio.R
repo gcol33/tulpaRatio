@@ -1118,7 +1118,7 @@ predict_spatial_areal <- function(object, newdata, return_spatial) {
     spatial_effect <- phi_spatial
   } else if (spatial_type == "bym2") {
     sigma_spatial <- exp(samples[, idx + 1])
-    rho <- 1 / (1 + exp(-samples[, idx + 2]))
+    rho <- inv_logit(samples[, idx + 2])
     phi_scaled <- samples[, (idx + 3):(idx + 2 + n_units), drop = FALSE]
     theta <- samples[, (idx + 3 + n_units):(idx + 2 + 2 * n_units), drop = FALSE]
 
@@ -1267,7 +1267,7 @@ compute_predictions_pg <- function(object, pred_data, type) {
   }
 
   # Response scale (binomial -> probability)
-  prob <- 1 / (1 + exp(-eta))
+  prob <- inv_logit(eta)
   list(
     numerator = prob,
     denominator = matrix(1, n_samples, N),
@@ -1355,7 +1355,7 @@ add_spatial_to_predictions_pg <- function(pred_draws, w_pred, type) {
     pred_draws$ratio <- pred_draws$numerator
   } else {
     eta <- log(pred_draws$numerator / (1 - pred_draws$numerator)) + w_pred
-    pred_draws$numerator <- 1 / (1 + exp(-eta))
+    pred_draws$numerator <- inv_logit(eta)
     pred_draws$ratio <- pred_draws$numerator
   }
   pred_draws
@@ -1474,7 +1474,7 @@ predict_gibbs <- function(object, newdata, type, re_formula, allow_new_levels,
     }
   } else {
     if (family_str == "binomial") {
-      prob <- 1 / (1 + exp(-eta_num))
+      prob <- inv_logit(eta_num)
       pred_draws <- list(
         numerator = prob,
         denominator = matrix(1, n_samples, n_new),

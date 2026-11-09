@@ -2,7 +2,7 @@
 # Focus: binomial remaining, gamma_gamma, lognormal, beta_binomial families
 # Standard parameters: N=500, iter=500, warmup=250, chains=1 (for timing)
 
-devtools::load_all(quiet = TRUE)
+library(tulpaRatio)
 library(brms)
 set.seed(42)
 

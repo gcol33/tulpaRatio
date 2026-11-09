@@ -1,7 +1,5 @@
 # bench_verify_bin.R — verify binomial is sampling correctly (not stuck at depth 0)
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all(quiet = TRUE)
-
+library(tulpaRatio)
 set.seed(42)
 N <- 500
 n_trials <- sample(10:50, N, replace = TRUE)

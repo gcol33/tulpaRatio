@@ -7,7 +7,7 @@
 #
 # Standard parameters: N=500, iter=500, warmup=250, chains=1
 
-devtools::load_all(quiet = TRUE)
+library(tulpaRatio)
 set.seed(42)
 
 # ============================================================

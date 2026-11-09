@@ -2,8 +2,8 @@
 // Temporal random effects support for HMC backend
 // Supports RW1, RW2, and AR1 temporal structures
 
-#ifndef RATIOD_HMC_TEMPORAL_H
-#define RATIOD_HMC_TEMPORAL_H
+#ifndef TULPARATIO_HMC_TEMPORAL_H
+#define TULPARATIO_HMC_TEMPORAL_H
 
 #define _USE_MATH_DEFINES  // For M_PI on Windows
 #include <vector>
@@ -282,4 +282,4 @@ inline double temporal_log_prior(
 
 } // namespace ratiod_temporal
 
-#endif // QUOTR_HMC_TEMPORAL_H
+#endif // TULPARATIO_HMC_TEMPORAL_H

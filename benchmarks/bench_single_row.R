@@ -9,7 +9,7 @@ if (length(args) < 1) stop("Usage: Rscript bench_single_row.R <row_number> [grad
 ROW_NUM <- as.integer(args[1])
 GRAD_MODE <- if (length(args) >= 2) args[2] else "H"
 
-suppressPackageStartupMessages(library(numdenom))
+suppressPackageStartupMessages(library(tulpaRatio))
 
 # Standard parameters
 N_OBS       <- 500L
@@ -439,18 +439,18 @@ ratiod_args <- list(
   zi               = nd_zi,
   spatiotemporal   = nd_spatiotemporal,
   latent           = nd_latent,
-  iter             = N_ITER,
+  control          = list(iter = N_ITER,
   warmup           = N_WARMUP,
   chains           = N_CHAINS,
   verbose          = FALSE,
-  gradient_mode    = GRAD_MODE
+  gradient_mode    = GRAD_MODE)
 )
 if (!is.null(nd_mode)) ratiod_args$mode <- nd_mode
 
 tryCatch({
   setTimeLimit(cpu = TIMEOUT_SEC, elapsed = TIMEOUT_SEC, transient = TRUE)
   on.exit(setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE))
-  elapsed <- system.time(do.call(ratiod, ratiod_args))["elapsed"]
+  elapsed <- system.time(do.call(tratio, ratiod_args))["elapsed"]
   cat(sprintf("RESULT:%d:%s:%.1f\n", ROW_NUM, GRAD_MODE, elapsed))
 }, error = function(e) {
   msg <- conditionMessage(e)

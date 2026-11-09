@@ -1,5 +1,5 @@
 # Direct Stan validation for hurdle_binomial (Row 77)
-devtools::load_all()
+library(tulpaRatio)
 library(cmdstanr)
 set.seed(123)
 

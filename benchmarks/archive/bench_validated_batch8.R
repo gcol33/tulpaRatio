@@ -9,7 +9,7 @@
 #   - Row 79: binomial + ZOIB (zero-one inflated)
 #   - Row 89: binomial + TVC (time-varying coefficients)
 
-devtools::load_all(quiet = TRUE)
+library(tulpaRatio)
 library(brms)
 library(cmdstanr)
 set.seed(42)

@@ -1,4 +1,4 @@
-library(numdenom)
+library(tulpaRatio)
 cat("loaded OK\n")
 
 # Binomial smoke test

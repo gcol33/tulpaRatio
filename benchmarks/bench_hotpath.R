@@ -2,7 +2,7 @@
 # Benchmark hot-path optimizations (updated 2026-03-06)
 # Baselines: v1.3.1 (before pointer views), Current: v1.3.2 (pointer views + unrolling)
 
-library(numdenom)
+library(tulpaRatio)
 
 set.seed(42)
 N <- 500

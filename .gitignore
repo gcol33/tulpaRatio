@@ -6,7 +6,6 @@
 *.Rproj
 
 # Compiled code
-inst/stan/*.rds
 src/*.o
 src/*.so
 src/*.dll
@@ -57,7 +56,8 @@ nul
 # Benchmark results (keep scripts, ignore output)
 *_results.rds
 *_results_partial.rds
-*.png
+benchmarks/*.png
+benchmarks/**/*.png
 
 # Planning docs (info moved to CLAUDE.md)
 *_plan.md
@@ -78,3 +78,5 @@ benchmarks/*.log
 # Graphics written by the default device during test runs
 tests/testthat/Rplots.pdf
 .run*
+
+/plan.md

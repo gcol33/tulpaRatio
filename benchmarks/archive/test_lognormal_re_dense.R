@@ -1,7 +1,5 @@
 # test_lognormal_re_dense.R — Test lognormal+RE mixing with dense mass matrix
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all(quiet = TRUE)
-
+library(tulpaRatio)
 cat("=== Lognormal + RE Mixing Test (Dense Mass Matrix) ===\n\n")
 
 # Setup data

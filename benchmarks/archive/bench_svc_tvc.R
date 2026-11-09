@@ -1,7 +1,5 @@
 # Benchmark SVC and TVC models (rows 26, 27, 56, 57, 88, 89)
-library(devtools)
-load_all(quiet = TRUE)
-
+library(tulpaRatio)
 # Standard benchmark parameters
 N_OBS <- 500
 N_ITER <- 500

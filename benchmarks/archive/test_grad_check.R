@@ -1,5 +1,5 @@
 # Check gradient correctness for the suspicious results
-devtools::load_all(quiet = TRUE)
+library(tulpaRatio)
 set.seed(42)
 
 check_grad <- function(label, fit_call) {

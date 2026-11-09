@@ -1,7 +1,7 @@
 # Benchmark helper functions
 # Used by run_all.R to validate gradient_methods.md speedups
 
-library(numdenom)
+library(tulpaRatio)
 
 # Check if brms is available for Stan comparison
 has_brms <- requireNamespace("brms", quietly = TRUE)
@@ -84,7 +84,7 @@ benchmark_config <- function(row, family, re, spatial, temporal, zi, grad,
   data <- generate_data(family, spatial = spatial, temporal = temporal)
   n_groups <- 15
 
-  # Build numdenom formula
+  # Build tulpaRatio formula
   if (re == "none") {
     nd_formula <- y_num | y_denom ~ x
   } else if (re == "intercept") {
@@ -136,13 +136,13 @@ benchmark_config <- function(row, family, re, spatial, temporal, zi, grad,
   } else if (zi == "Hurdle") {
     data$y_num <- ifelse(runif(nrow(data)) < 0.3, 0, data$y_num)
     if (family == "poisson_gamma") {
-      nd_zi <- numdenom::hurdle_poisson()
+      nd_zi <- tulpaRatio::hurdle_poisson()
     } else {
-      nd_zi <- numdenom::hurdle_negbin()
+      nd_zi <- tulpaRatio::hurdle_negbin()
     }
   }
 
-  # Benchmark numdenom
+  # Benchmark tulpaRatio
   nd_time <- tryCatch({
     t <- system.time({
       fit <- tratio(nd_formula, data = data,

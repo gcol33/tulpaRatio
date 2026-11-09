@@ -1,6 +1,5 @@
 set.seed(42)
-devtools::load_all(quiet = TRUE)
-
+library(tulpaRatio)
 # Test PG+HSGP at N=500 (the size that segfaulted)
 N <- 500
 df <- data.frame(

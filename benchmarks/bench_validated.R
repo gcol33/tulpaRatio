@@ -1,7 +1,7 @@
 # Integrated Benchmark + Stan Validation
 #
 # IMPORTANT: For poisson_gamma and negbin_negbin families, brms comparison is INVALID
-# because numdenom models BOTH numerator and denominator as random variables,
+# because tulpaRatio models BOTH numerator and denominator as random variables,
 # while brms with offset() treats the denominator as FIXED.
 #
 # Use bench_joint_validation.R for pg/nb families (custom Stan models)
@@ -9,7 +9,7 @@
 #
 # Standard parameters: N=500, iter=1000, warmup=500, chains=2
 
-library(numdenom)
+library(tulpaRatio)
 library(brms)
 set.seed(123)
 
@@ -52,7 +52,7 @@ df_bin_zi$y <- ifelse(runif(N) < 0.3, 0, df_bin_zi$y)
 
 # Validation function
 validate_against_stan <- function(nd_fit, brms_fit, param_name = "x") {
-  # Extract numdenom draws
+  # Extract tulpaRatio draws
   nd_draws <- as.matrix(nd_fit$draws)
   nd_col <- grep(paste0("beta_num\\[2\\]"), colnames(nd_draws), value = TRUE)[1]
   if (is.na(nd_col)) nd_col <- grep(param_name, colnames(nd_draws), value = TRUE)[1]
@@ -86,8 +86,8 @@ bench_validated <- function(name, row, nd_call, brms_call, true_x = 0.3,
 
   result <- list(row = row, name = name, true_x = true_x)
 
-  # Run numdenom
-  cat("Running numdenom... ")
+  # Run tulpaRatio
+  cat("Running tulpaRatio... ")
   flush.console()
   tryCatch({
     time_nd <- system.time({
@@ -127,7 +127,7 @@ bench_validated <- function(name, row, nd_call, brms_call, true_x = 0.3,
     result$speedup <- result$time_brms / result$time_nd
 
     cat(sprintf("\n=== VALIDATION ===\n"))
-    cat(sprintf("numdenom: x = %.4f (SD=%.4f)\n", val$nd_x, val$nd_sd))
+    cat(sprintf("tulpaRatio: x = %.4f (SD=%.4f)\n", val$nd_x, val$nd_sd))
     cat(sprintf("brms:     x = %.4f (SE=%.4f)\n", val$brms_x, val$brms_se))
     cat(sprintf("Diff: %.4f | Status: %s | Speedup: %.1fx\n",
                 val$diff, if(val$pass) "PASS" else "FAIL", result$speedup))
@@ -228,7 +228,7 @@ cat(paste(rep("=", 80), collapse = ""), "\n")
 cat("BINOMIAL FAMILY VALIDATION SUMMARY\n")
 cat(paste(rep("=", 80), collapse = ""), "\n")
 cat(sprintf("%-8s %-15s %8s %8s %8s %6s %s\n",
-            "Row", "Model", "numdenom", "Stan", "Speedup", "Diff", "Status"))
+            "Row", "Model", "tulpaRatio", "Stan", "Speedup", "Diff", "Status"))
 cat(paste(rep("-", 80), collapse = ""), "\n")
 
 n_pass <- 0

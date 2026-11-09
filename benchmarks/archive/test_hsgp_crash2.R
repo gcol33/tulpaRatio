@@ -1,6 +1,5 @@
 set.seed(42)
-devtools::load_all(quiet = TRUE)
-
+library(tulpaRatio)
 N <- 500
 df <- data.frame(
   y = rpois(N, 5),

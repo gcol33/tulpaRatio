@@ -1,7 +1,5 @@
 # test_ms_temporal_gradient.R — Verify H gradient matches A for multiscale temporal
-.libPaths(c("C:/Users/Gilles Colling/AppData/Local/R/win-library/4.5", .libPaths()))
-devtools::load_all(quiet = TRUE)
-
+library(tulpaRatio)
 set.seed(42)
 N <- 200
 T_times <- 24

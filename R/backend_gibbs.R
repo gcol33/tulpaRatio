@@ -316,7 +316,7 @@ gibbs_natural_draws <- function(draws, model_type) {
     target <- map[[raw]]
     if (is.na(target[1])) next
     j <- match(raw, cn)
-    draws[, j] <- if (target[2] == "exp") exp(draws[, j]) else stats::plogis(draws[, j])
+    draws[, j] <- if (target[2] == "exp") exp(draws[, j]) else inv_logit(draws[, j])
     cn[j] <- target[1]
   }
   colnames(draws) <- cn

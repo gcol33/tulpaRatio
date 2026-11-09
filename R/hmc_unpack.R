@@ -479,7 +479,6 @@ block_draws <- function(samples, idx) {
 
 #' Inverse logit
 #' @keywords internal
-inv_logit <- function(x) 1 / (1 + exp(-x))
 
 
 #' Unpack the sampler's parameter vector into per-structure draws

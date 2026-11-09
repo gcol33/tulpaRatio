@@ -1,7 +1,7 @@
 # Quick Batch 5b: Validate remaining easy binomial rows
 # Focus: rows 61, 62, 63, 65, 66, 71, 72, 73, 76, 77, 80, 81, 82
 
-devtools::load_all(quiet = TRUE)
+library(tulpaRatio)
 library(brms)
 set.seed(42)
 

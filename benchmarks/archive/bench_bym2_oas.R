@@ -3,8 +3,7 @@
 # Before fix: 5 divergences (dense mass never set, fell back to diagonal)
 # After fix: expect 0 divergences (OAS enables dense mass with n < p)
 
-devtools::load_all()
-
+library(tulpaRatio)
 set.seed(42)
 N_OBS <- 500
 N_SITES <- 50
