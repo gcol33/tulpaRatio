@@ -166,6 +166,8 @@ utils::globalVariables(c(
   "cpp_test_precision_jet",
   "cpp_test_precision_spec_h",
   "cpp_test_ratio_margin",
+  "cpp_test_scalar_math",
+  "cpp_test_scalar_boundaries",
   "cpp_test_vi_math",
   "cpp_test_metric_step",
   "cpp_test_metric_epsilon",

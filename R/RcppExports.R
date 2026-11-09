@@ -453,6 +453,14 @@ cpp_test_ratio_margin <- function(family, y, n, eta, phi, cached) {
     .Call(`_tulpaRatio_cpp_test_ratio_margin`, family, y, n, eta, phi, cached)
 }
 
+cpp_test_scalar_math <- function(op, value) {
+    .Call(`_tulpaRatio_cpp_test_scalar_math`, op, value)
+}
+
+cpp_test_scalar_boundaries <- function(probability) {
+    .Call(`_tulpaRatio_cpp_test_scalar_boundaries`, probability)
+}
+
 cpp_tls_workspace_shrink <- function(cycles, work, n) {
     .Call(`_tulpaRatio_cpp_tls_workspace_shrink`, cycles, work, n)
 }

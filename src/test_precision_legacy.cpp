@@ -23,8 +23,8 @@ Rcpp::NumericMatrix cpp_test_precision_legacy(double y, double mu, double phi) {
     out(0, 0) = precision_legacy_density(y, mu, phi);
     auto f = precision_legacy_density(y, fwd::Dual(mu), fwd::Dual(phi, 1));
     out(1, 0) = f.val; out(1, 1) = f.grad;
-    ratiod::arena::ArenaScope scope;
-    ratiod::arena::Var m(mu), p(phi);
+    tulpa::arena::ArenaScope scope;
+    tulpa::arena::Var m(mu), p(phi);
     auto a = precision_legacy_density(y, m, p); a.backward();
     out(2, 0) = a.val(); out(2, 1) = p.adj();
     return out;
@@ -49,8 +49,8 @@ Rcpp::NumericMatrix cpp_test_precision_beta_legacy(int y, int n, double phi) {
     out(0,0)=ratiod::math::log_lik_beta_binomial(y,n,0.,phi);
     auto f=ratiod::math::log_lik_beta_binomial(y,n,fwd::Dual(0),fwd::Dual(phi,1));
     out(1,0)=f.val; out(1,1)=f.grad;
-    ratiod::arena::ArenaScope scope;
-    ratiod::arena::Var p(phi), eta(0.);
+    tulpa::arena::ArenaScope scope;
+    tulpa::arena::Var p(phi), eta(0.);
     auto a=ratiod::math::log_lik_beta_binomial(y,n,eta,p);a.backward();
     out(2,0)=a.val();out(2,1)=p.adj();
     return out;

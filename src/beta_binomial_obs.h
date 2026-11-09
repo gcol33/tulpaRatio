@@ -7,7 +7,7 @@
 #define RATIOD_BETA_BINOMIAL_OBS_H
 
 #include <cmath>
-#include "portable_math.h"
+#include <tulpa/portable_math.h>
 #include <tulpa/count_math.h>
 
 namespace ratiod {

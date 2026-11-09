@@ -29,11 +29,7 @@
 #include <tulpa/autodiff_fwd.h>
 #include <tulpa/portable_math.h>
 #include <tulpa/count_math.h>
-#include "../precision_unary.h"
-
-namespace tulpa { namespace math {
-template<> struct PrecisionUnary<arena::Var> : PrecisionArenaUnary<arena::Var> {};
-} }
+#include <tulpa/ad_scalar_math.h>
 
 namespace tulpaRatio {
 namespace lik {

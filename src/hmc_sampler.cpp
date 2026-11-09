@@ -2302,7 +2302,7 @@ void compute_gradient_arena(
     std::vector<double>& grad,
     double* log_post_out = nullptr
 ) {
-    using namespace ratiod::arena;
+    using namespace tulpa::arena;
 
     int n_nodes_used = 0;
     {

@@ -1,6 +1,7 @@
 #ifndef TULPARATIO_RATIO_MARGINS_H
 #define TULPARATIO_RATIO_MARGINS_H
 
+#include <tulpa/ad_scalar_math.h>
 #include <cmath>
 #include <type_traits>
 #include <tulpa/count_math.h>

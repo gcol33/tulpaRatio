@@ -18,7 +18,7 @@
 #include <Rcpp.h>
 
 #include "autodiff_utils.h"
-#include "portable_math.h"
+#include <tulpa/portable_math.h>
 
 namespace ratiod {
 namespace jet {
@@ -272,11 +272,11 @@ inline Jet3<S> link_mean(const Jet3<S>& eta, ratiod_link::LinkType link) {
 
 }  // namespace jet
 
-namespace math {
-template <typename S>
-struct is_jet<jet::Jet3<S>> : std::true_type {};
-}  // namespace math
-
 }  // namespace ratiod
 
-#endif  // RATIOD_TAYLOR_JET_H
+namespace tulpa { namespace math {
+template <typename S>
+struct is_autodiff<ratiod::jet::Jet3<S>> : std::true_type {};
+} }
+
+#endif

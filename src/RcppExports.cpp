@@ -1779,6 +1779,29 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_scalar_math
+Rcpp::NumericMatrix cpp_test_scalar_math(std::string op, double value);
+RcppExport SEXP _tulpaRatio_cpp_test_scalar_math(SEXP opSEXP, SEXP valueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type op(opSEXP);
+    Rcpp::traits::input_parameter< double >::type value(valueSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_scalar_math(op, value));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_scalar_boundaries
+Rcpp::NumericMatrix cpp_test_scalar_boundaries(double probability);
+RcppExport SEXP _tulpaRatio_cpp_test_scalar_boundaries(SEXP probabilitySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type probability(probabilitySEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_scalar_boundaries(probability));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_tls_workspace_shrink
 double cpp_tls_workspace_shrink(int cycles, int work, int n);
 RcppExport SEXP _tulpaRatio_cpp_tls_workspace_shrink(SEXP cyclesSEXP, SEXP workSEXP, SEXP nSEXP) {
@@ -2031,6 +2054,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
+    {"_tulpaRatio_cpp_test_scalar_math", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_math, 2},
+    {"_tulpaRatio_cpp_test_scalar_boundaries", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_boundaries, 1},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
     {"_tulpaRatio_cpp_test_vi_math", (DL_FUNC) &_tulpaRatio_cpp_test_vi_math, 0},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},

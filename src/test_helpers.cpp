@@ -64,8 +64,8 @@ List cpp_test_negbin_paths(int y, double mu, double phi, double z,
     out(0, j + 1) = val.grad;
   }
   {
-    ratiod::arena::ArenaScope scope;
-    ratiod::arena::Var a(eta), b(lp), c(z);
+    tulpa::arena::ArenaScope scope;
+    tulpa::arena::Var a(eta), b(lp), c(z);
     auto val = negbin_probe_density(y, a, b, c, type);
     val.backward();
     out(1, 0) = val.val(); out(1, 1) = a.adj(); out(1, 2) = b.adj(); out(1, 3) = c.adj();
@@ -124,7 +124,7 @@ List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon) {
 
 // [[Rcpp::export]]
 List cpp_test_autodiff_unary(std::string op, double value, double parameter = 1.0) {
-  using namespace ratiod::arena;
+  using namespace tulpa::arena;
   ArenaScope scope;
   Var x(value), out(0.0);
   if (op == "exp_chain") out = exp(x * x);
@@ -143,7 +143,7 @@ List cpp_test_autodiff_unary(std::string op, double value, double parameter = 1.
 
 // [[Rcpp::export]]
 List cpp_test_autodiff_binary(std::string op, double first, double second) {
-  using namespace ratiod::arena;
+  using namespace tulpa::arena;
   ArenaScope scope;
   Var a(first), b(second), out(0.0);
   if (op == "division") out = a / b;
@@ -157,7 +157,7 @@ List cpp_test_autodiff_binary(std::string op, double first, double second) {
 // [[Rcpp::export]]
 List cpp_test_autodiff_vector(std::string op, NumericVector values,
                               IntegerVector y, double phi = 1.0) {
-  using namespace ratiod::arena;
+  using namespace tulpa::arena;
   ArenaScope scope;
   std::vector<Var> x;
   for (double value : values) x.emplace_back(value);
