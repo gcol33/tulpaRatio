@@ -235,348 +235,86 @@ inline void expand_temporal(
 
 template<ModelType MT> struct ModelTag {};
 
-// --- BINOMIAL ---
-// Fused: precomputes lchoose(n,y); uses log-sum-exp stable log-lik.
-inline void compute_residuals_impl(
-    ModelTag<ModelType::BINOMIAL>,
-    int N,
-    const double* eta_num, const double* /*eta_denom*/,
-    const ModelData& data,
-    double /*phi_num*/, double /*phi_denom*/,
-    double* resid_num, double* resid_denom,
-    double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
-) {
-  grad_phi_num_lik = 0.0;
-  grad_phi_denom_lik = 0.0;
-  double ll = 0.0;
+using tulpaRatio::margins::NoMargin;
+using tulpaRatio::margins::Poisson;
+using tulpaRatio::margins::NegBin;
+using tulpaRatio::margins::Gamma;
+using tulpaRatio::margins::Lognormal;
+using tulpaRatio::margins::Binomial;
+using tulpaRatio::margins::BetaBinomial;
 
-  for (int i = 0; i < N; i++) {
-    const double eta = eta_num[i];
-    const int n_trials = data.y_denom[i];
-    const int y = data.y_num[i];
+template<ModelType MT> struct ResidualFamily;
+#define RATIO_RESIDUAL_FAMILY(MT, NUM, DEN) \
+    template<> struct ResidualFamily<ModelType::MT> { using Num = NUM; using Den = DEN; };
+RATIO_RESIDUAL_FAMILY(BINOMIAL, Binomial, NoMargin)
+RATIO_RESIDUAL_FAMILY(NEGBIN_NEGBIN, NegBin, NegBin)
+RATIO_RESIDUAL_FAMILY(POISSON_GAMMA, Poisson, Gamma)
+RATIO_RESIDUAL_FAMILY(NEGBIN_GAMMA, NegBin, Gamma)
+RATIO_RESIDUAL_FAMILY(GAMMA_GAMMA, Gamma, Gamma)
+RATIO_RESIDUAL_FAMILY(LOGNORMAL, Lognormal, Lognormal)
+RATIO_RESIDUAL_FAMILY(BETA_BINOMIAL, BetaBinomial, NoMargin)
+#undef RATIO_RESIDUAL_FAMILY
 
-    // Numerically stable logistic: 1 exp + 1 log (was 3 exp + 2 log)
-    // Identity: log(1-p) = -eta + log(p) when eta >= 0
-    //           log(p) = eta + log(1-p) when eta < 0
-    double p, log_p, log_1mp;
-    if (eta >= 0.0) {
-      const double exp_neg = std::exp(-eta);
-      const double denom = 1.0 + exp_neg;
-      p = 1.0 / denom;
-      log_p = -std::log(denom);
-      log_1mp = -eta + log_p;
+template<class Margin>
+inline tulpaRatio::margins::Observation margin_observation(
+    int i, double eta, const ModelData& data, const VecGradWorkspace& ws, bool numerator) {
+    tulpaRatio::margins::Observation x{0.0,eta};
+    if constexpr (std::is_same<Margin,NoMargin>::value) return x;
+    if constexpr (std::is_same<Margin,Gamma>::value || std::is_same<Margin,Lognormal>::value) {
+        x.y = numerator ? data.y_num_cont[i] : data.y_denom_cont[i];
+        x.log_y = numerator ? ws.log_y_num_cont[i] : ws.log_y_denom_cont[i];
     } else {
-      const double exp_pos = std::exp(eta);
-      const double denom = 1.0 + exp_pos;
-      p = exp_pos / denom;
-      log_1mp = -std::log(denom);
-      log_p = eta + log_1mp;
+        x.y = numerator ? data.y_num[i] : data.y_denom[i];
+        x.log_factorial = numerator ? ws.lgamma_y_num_p1[i] : ws.lgamma_y_denom_p1[i];
+        if constexpr (std::is_same<Margin,NegBin>::value) {
+            x.digamma_difference = numerator ? ws.dig_table_num[int(x.y)] : ws.dig_table_denom[int(x.y)];
+            x.lgamma_difference = numerator ? ws.lg_table_num[int(x.y)] : ws.lg_table_denom[int(x.y)];
+        }
+        if constexpr (std::is_same<Margin,Binomial>::value || std::is_same<Margin,BetaBinomial>::value) {
+            x.trials = data.y_denom[i];
+            x.log_factorial = ws.lchoose_cache[i];
+        }
     }
-
-    resid_num[i] = y - n_trials * p;
-    resid_denom[i] = 0.0;
-
-    if (compute_lp) {
-      ll += y * log_p + (n_trials - y) * log_1mp + ws.lchoose_cache[i];
-    }
-  }
-  obs_ll += ll;
+    return x;
 }
 
-// --- NEGBIN_NEGBIN ---
-// Fused gradient + log-lik with hoisted phi-constants, precomputed lgamma(y+1),
-// and digamma/lgamma lookup tables indexed by integer y.
-// Per-obs transcendentals: 0 in multipass (exp/log via SIMD, digamma/lgamma via table).
+template<class Margin>
+inline double margin_extra_derivative(const Margin& m, double score) {
+    if constexpr (Margin::log_extra) return score / m.phi;
+    else return score;
+}
+
+template<ModelType MT>
 inline void compute_residuals_impl(
-    ModelTag<ModelType::NEGBIN_NEGBIN>,
-    int N,
-    const double* eta_num, const double* eta_denom,
-    const ModelData& data,
-    double phi_num, double phi_denom,
+    ModelTag<MT>, int N, const double* eta_num, const double* eta_denom,
+    const ModelData& data, double phi_num, double phi_denom,
     double* resid_num, double* resid_denom,
     double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
+    double& obs_ll, bool compute_lp, const VecGradWorkspace& ws
 ) {
-  double gpn = 0.0, gpd = 0.0;
-  double ll = 0.0;
-
-  for (int i = 0; i < N; i++) {
-    const double mu_num = std::exp(eta_num[i]);
-    const double mu_denom = std::exp(eta_denom[i]);
-    const int y_n = data.y_num[i];
-    const int y_d = data.y_denom[i];
-
-    // Shared intermediates (reciprocal: 1 div replaces 2 per component)
-    const double dn = mu_num + phi_num;
-    const double dd = mu_denom + phi_denom;
-    const double inv_dn = 1.0 / dn;
-    const double inv_dd = 1.0 / dd;
-
-    // Gradient residuals
-    resid_num[i] = y_n - mu_num * (y_n + phi_num) * inv_dn;
-    resid_denom[i] = y_d - mu_denom * (y_d + phi_denom) * inv_dd;
-
-    // Table lookup: digamma/lgamma indexed by integer y (table built per gradient call)
-    const double digamma_yn_phi = ws.dig_table_num[y_n];
-    const double lgamma_yn_phi = ws.lg_table_num[y_n];
-    const double digamma_yd_phi = ws.dig_table_denom[y_d];
-    const double lgamma_yd_phi = ws.lg_table_denom[y_d];
-
-    gpn += tulpa::math::negbin_size_score(y_n, mu_num, phi_num, digamma_yn_phi);
-    gpd += tulpa::math::negbin_size_score(y_d, mu_denom, phi_denom, digamma_yd_phi);
-
-    if (compute_lp) {
-      // The tables carry the count normalizers and their size derivatives.
-      ll += tulpa::math::negbin_log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-      ll += tulpa::math::negbin_log_pmf(y_d, mu_denom, phi_denom, lgamma_yd_phi, ws.lgamma_y_denom_p1[i]);
+    using Num = typename ResidualFamily<MT>::Num;
+    using Den = typename ResidualFamily<MT>::Den;
+    const Num num(phi_num,compute_lp);
+    const Den den(phi_denom,compute_lp);
+    double gpn = 0.0, gpd = 0.0, ll = 0.0;
+    for (int i = 0; i < N; ++i) {
+        const auto x = margin_observation<Num>(i,eta_num[i],data,ws,true);
+        const auto y = margin_observation<Den>(i,eta_denom ? eta_denom[i] : 0.0,data,ws,false);
+        const auto a = num.template operator()<true>(x,compute_lp);
+        const auto b = den.template operator()<true>(y,compute_lp);
+        resid_num[i] = a.residual;
+        resid_denom[i] = b.residual;
+        gpn += margin_extra_derivative(num,a.extra);
+        gpd += margin_extra_derivative(den,b.extra);
+        if (compute_lp) {
+            ll += a.ll;
+            if constexpr (!std::is_same<Den,NoMargin>::value) ll += b.ll;
+        }
     }
-  }
-  grad_phi_num_lik += gpn;
-  grad_phi_denom_lik += gpd;
-  obs_ll += ll;
+    grad_phi_num_lik += gpn;
+    grad_phi_denom_lik += gpd;
+    obs_ll += ll;
 }
-
-// --- POISSON_GAMMA ---
-// Fused gamma precision constants and cached response logarithms.
-inline void compute_residuals_impl(
-    ModelTag<ModelType::POISSON_GAMMA>,
-    int N,
-    const double* eta_num, const double* eta_denom,
-    const ModelData& data,
-    double /*phi_num*/, double phi_denom,
-    double* resid_num, double* resid_denom,
-    double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
-) {
-  // Hoist phi-dependent constants
-  const tulpa::math::GammaPrecision gamma(phi_denom, compute_lp);
-
-  double gpd = 0.0;
-  double ll = 0.0;
-  grad_phi_num_lik = 0.0;
-
-  for (int i = 0; i < N; i++) {
-    const double mu_num = std::exp(eta_num[i]);
-    const double mu_denom = std::exp(eta_denom[i]);
-    const int y_n = data.y_num[i];
-    const double y_d = data.y_denom_cont[i];
-
-    resid_num[i] = y_n - mu_num;
-    // Gamma requires y > 0; skip denom contribution for invalid obs
-    if (y_d > 0.0) {
-      const double inv_mu_d = 1.0 / mu_denom;
-      const double yd_over_mud = y_d * inv_mu_d;
-      resid_denom[i] = phi_denom * (yd_over_mud - 1.0);
-      gpd += gamma.derivative(y_d,mu_denom,ws.log_y_denom_cont[i]);
-      if (compute_lp) {
-        ll += y_n * eta_num[i] - mu_num - ws.lgamma_y_num_p1[i];
-        ll += gamma.log_density(y_d,mu_denom,ws.log_y_denom_cont[i]);
-      }
-    } else {
-      resid_denom[i] = 0.0;
-      if (compute_lp) {
-        ll += y_n * eta_num[i] - mu_num - ws.lgamma_y_num_p1[i];
-        ll += -1e10;
-      }
-    }
-  }
-  grad_phi_denom_lik += gpd;
-  obs_ll += ll;
-}
-
-// --- NEGBIN_GAMMA ---
-// Count-normalizer tables for the numerator and cached gamma precision for the denominator.
-inline void compute_residuals_impl(
-    ModelTag<ModelType::NEGBIN_GAMMA>,
-    int N,
-    const double* eta_num, const double* eta_denom,
-    const ModelData& data,
-    double phi_num, double phi_denom,
-    double* resid_num, double* resid_denom,
-    double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
-) {
-  // Hoist phi-dependent constants
-  const tulpa::math::GammaPrecision gamma_d(phi_denom, compute_lp);
-
-  double gpn = 0.0, gpd = 0.0;
-  double ll = 0.0;
-
-  for (int i = 0; i < N; i++) {
-    const double mu_num = std::exp(eta_num[i]);
-    const double mu_denom = std::exp(eta_denom[i]);
-    const int y_n = data.y_num[i];
-    const double y_d = data.y_denom_cont[i];
-
-    // NB numerator
-    const double dn = mu_num + phi_num;
-    const double inv_dn = 1.0 / dn;
-    resid_num[i] = y_n - mu_num * (y_n + phi_num) * inv_dn;
-
-    // NB phi_num gradient (using digamma table)
-    const double digamma_yn_phi = ws.dig_table_num[y_n];
-    const double lgamma_yn_phi = ws.lg_table_num[y_n];
-    gpn += tulpa::math::negbin_size_score(y_n, mu_num, phi_num, digamma_yn_phi);
-
-    // Gamma denominator — skip if y <= 0
-    if (y_d > 0.0) {
-      const double inv_mu_d = 1.0 / mu_denom;
-      const double yd_over_mud = y_d * inv_mu_d;
-      resid_denom[i] = phi_denom * (yd_over_mud - 1.0);
-      gpd += gamma_d.derivative(y_d,mu_denom,ws.log_y_denom_cont[i]);
-      if (compute_lp) {
-        ll += tulpa::math::negbin_log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-        ll += gamma_d.log_density(y_d,mu_denom,ws.log_y_denom_cont[i]);
-      }
-    } else {
-      resid_denom[i] = 0.0;
-      if (compute_lp) {
-        ll += tulpa::math::negbin_log_pmf(y_n, mu_num, phi_num, lgamma_yn_phi, ws.lgamma_y_num_p1[i]);
-        ll += -1e10;
-      }
-    }
-  }
-  grad_phi_num_lik += gpn;
-  grad_phi_denom_lik += gpd;
-  obs_ll += ll;
-}
-
-// --- GAMMA_GAMMA ---
-// Fused gamma precision constants and cached response logarithms.
-inline void compute_residuals_impl(
-    ModelTag<ModelType::GAMMA_GAMMA>,
-    int N,
-    const double* eta_num, const double* eta_denom,
-    const ModelData& data,
-    double phi_num, double phi_denom,
-    double* resid_num, double* resid_denom,
-    double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
-) {
-  // Hoist phi-dependent constants
-  const tulpa::math::GammaPrecision gamma_n(phi_num, compute_lp);
-  const tulpa::math::GammaPrecision gamma_d(phi_denom, compute_lp);
-
-  double gpn = 0.0, gpd = 0.0;
-  double ll = 0.0;
-
-  for (int i = 0; i < N; i++) {
-    const double mu_num = std::exp(eta_num[i]);
-    const double mu_denom = std::exp(eta_denom[i]);
-    const double y_n = data.y_num_cont[i];
-    const double y_d = data.y_denom_cont[i];
-
-    // Gamma requires y > 0
-    if (y_n > 0.0) {
-      const double inv_mu_n = 1.0 / mu_num;
-      const double yn_over_mun = y_n * inv_mu_n;
-      resid_num[i] = phi_num * (yn_over_mun - 1.0);
-      gpn += gamma_n.derivative(y_n,mu_num,ws.log_y_num_cont[i]);
-      if (compute_lp)
-        ll += gamma_n.log_density(y_n,mu_num,ws.log_y_num_cont[i]);
-    } else {
-      resid_num[i] = 0.0;
-      if (compute_lp) ll += -1e10;
-    }
-    if (y_d > 0.0) {
-      const double inv_mu_d = 1.0 / mu_denom;
-      const double yd_over_mud = y_d * inv_mu_d;
-      resid_denom[i] = phi_denom * (yd_over_mud - 1.0);
-      gpd += gamma_d.derivative(y_d,mu_denom,ws.log_y_denom_cont[i]);
-      if (compute_lp)
-        ll += gamma_d.log_density(y_d,mu_denom,ws.log_y_denom_cont[i]);
-    } else {
-      resid_denom[i] = 0.0;
-      if (compute_lp) ll += -1e10;
-    }
-  }
-  grad_phi_num_lik += gpn;
-  grad_phi_denom_lik += gpd;
-  obs_ll += ll;
-}
-
-// --- LOGNORMAL ---
-// Fused: hoists log(sigma) outside loop (no lgamma/digamma needed).
-inline void compute_residuals_impl(
-    ModelTag<ModelType::LOGNORMAL>,
-    int N,
-    const double* eta_num, const double* eta_denom,
-    const ModelData& data,
-    double phi_num, double phi_denom,
-    double* resid_num, double* resid_denom,
-    double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
-) {
-  const double sigma_num_sq = phi_num * phi_num;
-  const double sigma_denom_sq = phi_denom * phi_denom;
-  const double log_sigma_n = compute_lp ? std::log(phi_num) : 0.0;
-  const double log_sigma_d = compute_lp ? std::log(phi_denom) : 0.0;
-
-  double gpn = 0.0, gpd = 0.0;
-  double ll = 0.0;
-
-  for (int i = 0; i < N; i++) {
-    const double mu_num = eta_num[i];
-    const double mu_denom = eta_denom[i];
-    const double log_yn = ws.log_y_num_cont[i];
-    const double log_yd = ws.log_y_denom_cont[i];
-
-    resid_num[i] = (log_yn - mu_num) / sigma_num_sq;
-    resid_denom[i] = (log_yd - mu_denom) / sigma_denom_sq;
-
-    const double z_n = (log_yn - mu_num) / phi_num;
-    const double z_d = (log_yd - mu_denom) / phi_denom;
-    gpn += (-1.0 + z_n * z_n) / phi_num;
-    gpd += (-1.0 + z_d * z_d) / phi_denom;
-
-    if (compute_lp) {
-      ll += -log_yn - log_sigma_n - 0.5 * z_n * z_n;
-      ll += -log_yd - log_sigma_d - 0.5 * z_d * z_d;
-    }
-  }
-  grad_phi_num_lik += gpn;
-  grad_phi_denom_lik += gpd;
-  obs_ll += ll;
-}
-
-// --- BETA_BINOMIAL ---
-// Fused count corrections with cached binomial coefficients.
-inline void compute_residuals_impl(
-    ModelTag<ModelType::BETA_BINOMIAL>,
-    int N,
-    const double* eta_num, const double* /*eta_denom*/,
-    const ModelData& data,
-    double phi_num, double /*phi_denom*/,
-    double* resid_num, double* resid_denom,
-    double& grad_phi_num_lik, double& grad_phi_denom_lik,
-    double& obs_ll, bool compute_lp,
-    const VecGradWorkspace& ws
-) {
-  // Hoist phi-dependent constants
-
-  double gpn = 0.0;
-  grad_phi_denom_lik = 0.0;
-  double ll = 0.0;
-
-  for (int i = 0; i < N; i++) {
-    const ratiod::math::BetaBinomialObs bb = ratiod::math::beta_binomial_obs(
-        data.y_num[i], data.y_denom[i], eta_num[i], phi_num);
-    resid_num[i] = bb.d_eta;
-    resid_denom[i] = 0.0;
-    gpn += bb.d_phi;
-    if (compute_lp) ll += bb.ll + ws.lchoose_cache[i];
-  }
-  grad_phi_num_lik += gpn;
-  obs_ll += ll;
-}
-
 // ============================================================================
 // Pass 2 dispatcher
 // ============================================================================

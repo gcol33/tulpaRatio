@@ -1709,6 +1709,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_residual_accumulation
+Rcpp::NumericMatrix cpp_test_residual_accumulation();
+RcppExport SEXP _tulpaRatio_cpp_test_residual_accumulation() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_test_residual_accumulation());
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_ratio_margin
 Rcpp::NumericVector cpp_test_ratio_margin(std::string family, double y, int n, double eta, double phi, bool cached);
 RcppExport SEXP _tulpaRatio_cpp_test_ratio_margin(SEXP familySEXP, SEXP ySEXP, SEXP nSEXP, SEXP etaSEXP, SEXP phiSEXP, SEXP cachedSEXP) {
@@ -1962,6 +1972,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
+    {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},

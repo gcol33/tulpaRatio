@@ -1,6 +1,13 @@
 #include <Rcpp.h>
 #include "ratio_margins.h"
 
+namespace ratiod_hmc { Rcpp::NumericMatrix residual_accumulation_probe(); }
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix cpp_test_residual_accumulation() {
+    return ratiod_hmc::residual_accumulation_probe();
+}
+
 // [[Rcpp::export]]
 Rcpp::NumericVector cpp_test_ratio_margin(std::string family, double y, int n,
                                           double eta, double phi, bool cached) {

@@ -166,6 +166,7 @@ utils::globalVariables(c(
   "cpp_test_precision_jet",
   "cpp_test_precision_spec_h",
   "cpp_test_ratio_margin",
+  "cpp_test_residual_accumulation",
   "cpp_test_precision_spec",
   "cpp_test_precision_beta_spec",
   "cpp_test_precision_beta_spec_h",

@@ -21,3 +21,24 @@ test_that("ratio margins match normalized densities and their derivatives", {
     expect_equal(unname(r['extra']),extra,tolerance=1e-8,info=family)
   }
 })
+
+test_that("residual kernels accumulate every margin's extra score", {
+  z <- tulpaRatio:::cpp_test_residual_accumulation()
+  pairs <- list(c('binomial','none'),c('poisson','gamma'),c('negbin','gamma'),
+                c('negbin','negbin'),c('gamma','gamma'),c('lognormal','lognormal'),
+                c('beta_binomial','none'))
+  for (i in seq_along(pairs)) {
+    expected <- c(5,-7,13)
+    for (k in 1:2) {
+      family <- pairs[[i]][k]
+      if (family == 'none') next
+      p <- c(2.4,1.7)[k]
+      r <- tulpaRatio:::cpp_test_ratio_margin(family,c(3,8)[k],8L,c(-.35,.2)[k],p,TRUE)
+      score <- r['extra']
+      if (family == 'lognormal') score <- score/p
+      expected[k] <- expected[k] + score
+      expected[3] <- expected[3] + r['ll']
+    }
+    expect_equal(unname(z[i,]),unname(expected),tolerance=1e-14)
+  }
+})

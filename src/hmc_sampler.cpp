@@ -13,6 +13,7 @@
 #include "autodiff.h"
 #include "autodiff_utils.h"
 #include "beta_binomial_obs.h"
+#include "ratio_margins.h"
 #include "ar1_shared.h"
 #include "hmc_gp_autodiff.h"
 #include "hmc_gp_collapsed.h"
@@ -811,6 +812,30 @@ int get_n_params(const ModelData& data) {
 }
 
 #include "hmc_gradient_vectorized.h"
+
+Rcpp::NumericMatrix residual_accumulation_probe() {
+  ModelData data;
+  data.N = 1; data.y_num = {3}; data.y_denom = {8};
+  data.y_num_cont = {3.0}; data.y_denom_cont = {8.0};
+  vectorized::VecGradWorkspace ws;
+  ws.init(1); ws.precompute(data); ws.build_digamma_tables(2.4, 1.7, true);
+  Rcpp::NumericMatrix out(7,3);
+  double en = -0.35, ed = 0.2, rn, rd;
+  int row = 0;
+  const auto run = [&](auto tag) {
+    double gn = 5.0, gd = -7.0, ll = 13.0;
+    vectorized::compute_residuals_impl(tag,1,&en,&ed,data,2.4,1.7,&rn,&rd,gn,gd,ll,true,ws);
+    out(row,0) = gn; out(row,1) = gd; out(row++,2) = ll;
+  };
+  run(vectorized::ModelTag<ModelType::BINOMIAL>{});
+  run(vectorized::ModelTag<ModelType::POISSON_GAMMA>{});
+  run(vectorized::ModelTag<ModelType::NEGBIN_GAMMA>{});
+  run(vectorized::ModelTag<ModelType::NEGBIN_NEGBIN>{});
+  run(vectorized::ModelTag<ModelType::GAMMA_GAMMA>{});
+  run(vectorized::ModelTag<ModelType::LOGNORMAL>{});
+  run(vectorized::ModelTag<ModelType::BETA_BINOMIAL>{});
+  return out;
+}
 
 void compute_gradient_analytical(const std::vector<double>&, const ModelData&,
     const ParamLayout&, std::vector<double>&, double*);
