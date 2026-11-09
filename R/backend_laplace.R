@@ -258,7 +258,7 @@ prepare_spatial_for_laplace <- function(spatial, data, formula) {
 #' Column names of the fixed effects of one process
 #' @keywords internal
 laplace_beta_names <- function(X, prefix) {
-  paste0(prefix, "[", seq_len(ncol(X)), "]")
+  fixed_effect_variables(X, sub("^beta_", "", prefix))
 }
 
 

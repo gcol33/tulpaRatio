@@ -249,46 +249,8 @@ print.ratiod_vi <- function(x, digits = 3, ...) {
 
 
 #' @rdname summary.ratiod_fit
-#' @return An object of class `summary.ratiod_vi`.
+#' @return An object of class `summary.ratiod_fit`.
 #' @export
 summary.ratiod_vi <- function(object, prob = 0.95, ...) {
-  alpha <- (1 - prob) / 2
-
-  # Compute quantiles from samples
-  q_lower <- apply(object$samples, 2, quantile, probs = alpha)
-  q_upper <- apply(object$samples, 2, quantile, probs = 1 - alpha)
-
-  summary_df <- data.frame(
-    parameter = object$param_names,
-    mean = object$mu,
-    sd = sqrt(diag(object$Sigma)),
-    q_lower = q_lower,
-    q_upper = q_upper
-  )
-  names(summary_df)[4:5] <- paste0(c("q", "q"), c(alpha * 100, (1 - alpha) * 100))
-
-  structure(list(
-    summary = summary_df,
-    elbo = object$elbo,
-    vi_variant = object$vi_variant,
-    vi_rank = object$vi_rank,
-    vi_converged = object$vi_converged,
-    psis_k = object$psis_k,
-    prob = prob
-  ), class = "summary.ratiod_vi")
-}
-
-
-#' @rdname summary.ratiod_fit
-#' @return The input `x`, invisibly.
-#' @export
-print.summary.ratiod_vi <- function(x, digits = 3, ...) {
-  cat("Variational Inference Summary\n")
-  cat("ELBO:", round(x$elbo, 2), "\n")
-  cat("PSIS k-hat:", round(x$psis_k, 2), "\n\n")
-
-  cat("Posterior summary (", x$prob * 100, "% credible intervals):\n", sep = "")
-  print(x$summary, digits = digits, row.names = FALSE)
-
-  invisible(x)
+  summary.ratiod_fit(object, prob = prob, ...)
 }

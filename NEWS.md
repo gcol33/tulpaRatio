@@ -1,5 +1,15 @@
 # tulpaRatio 1.7.3
 
+* `coef()`, `confint()`, `summary()` and `tidy()` return the fixed effects of a
+  Polya-Gamma fit; they had returned nothing because the PG draws name their
+  variables by term while the accessors searched for `beta_num[j]`. Every
+  backend now answers to one variable-name contract, tested across all backends
+  `tratio()` dispatches to (#216).
+* Polya-Gamma fits share one chain runner and one fit assembly, with
+  `[iteration, chain, variable]` dimnames on every sampler; the temporal PG fit
+  reports the `sigma_trend` / `sigma_seasonal` / `sigma_short` fields the sampler
+  returns instead of requesting `sigma2_*` fields that do not exist (#196).
+
 * Every field scale (temporal, areal, TVC, SVC, and the HSGP spectral paths)
   carries one PC prior on its standard deviation, P(sigma > U) = alpha, on every
   sampler path, matching the engine: `ratiod_priors(sigma_temporal =,

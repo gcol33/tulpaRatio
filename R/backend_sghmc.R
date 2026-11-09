@@ -140,6 +140,8 @@ fit_sghmc <- function(formula,
     seed = seed
   ), class = c("ratiod_sghmc", "ratiod_fit"))
 
+  colnames(result$draws) <- result$param_names
+
   if (verbose) {
     message("SGHMC complete. Final epsilon: ", round(fit_raw$final_epsilon, 6))
   }
@@ -258,6 +260,8 @@ fit_sgld <- function(formula,
     backend = "sgld",
     seed = seed
   ), class = c("ratiod_sgld", "ratiod_fit"))
+
+  colnames(result$draws) <- result$param_names
 
   if (verbose) {
     message("SGLD complete.")

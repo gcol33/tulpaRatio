@@ -1737,36 +1737,7 @@ print.ratiod_prediction <- function(x, n = 10, ...) {
 #' @rdname as_draws
 #' @export
 as_draws.ratiod_fit <- function(x, ...) {
-  if (!requireNamespace("posterior", quietly = TRUE)) {
-    stop("Package 'posterior' is required. Install with:\n",
-         "  install.packages('posterior')", call. = FALSE)
-  }
-
-  draws <- x$draws
-  if (is.null(draws)) {
-    stop("No draws available in the fitted model", call. = FALSE)
-  }
-
-  # Get chain information if available
-  n_chains <- x$chains %||% 1
-  n_total <- nrow(draws)
-  n_per_chain <- n_total / n_chains
-
-  if (n_chains > 1) {
-    # Reconstruct chain structure
-    draws_array <- array(
-      as.matrix(draws),
-      dim = c(n_per_chain, n_chains, ncol(draws)),
-      dimnames = list(
-        iteration = seq_len(n_per_chain),
-        chain = seq_len(n_chains),
-        variable = colnames(draws)
-      )
-    )
-    posterior::as_draws_df(posterior::as_draws_array(draws_array), ...)
-  } else {
-    posterior::as_draws_df(draws, ...)
-  }
+  posterior::as_draws_df(posterior::as_draws_array(get_draws_array(x)$draws), ...)
 }
 
 
@@ -1831,7 +1802,7 @@ draws_wide <- function(object, ..., regex = FALSE, ndraws = NULL) {
 draws_wide.ratiod_fit <- function(object, ..., regex = FALSE, ndraws = NULL) {
 
   # Get all parameter names
-  all_pars <- colnames(object$draws)
+  all_pars <- draw_variables(object$draws)
 
   # Parse requested parameters
   dots <- as.character(substitute(list(...)))[-1]

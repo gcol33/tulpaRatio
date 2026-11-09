@@ -37,8 +37,8 @@ test_that("PG and HMC agree on a BYM2 binomial model", {
 
   draw <- function(fit, v) posterior::as_draws_df(fit$draws)[[v]]
   pairs <- list(
-    c("(Intercept)", "beta_num[1]"),
-    c("x1", "beta_num[2]"),
+    c("beta_num[1]", "beta_num[1]"),
+    c("beta_num[2]", "beta_num[2]"),
     c("sigma_spatial", "sigma_spatial"),
     c("rho", "rho_spatial")
   )

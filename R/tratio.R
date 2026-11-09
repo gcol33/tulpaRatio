@@ -1097,17 +1097,15 @@ formula.ratiod_fit <- function(x, ...) {
 #' @return A character vector of term labels named by draw column.
 #' @keywords internal
 fixed_effect_terms <- function(object) {
-  draw_names <- colnames(object$draws)
-  pieces <- list(c("beta_num", "num", "numerator"),
-                 c("beta_denom", "denom", "denominator"))
-  out <- lapply(pieces, function(pc) {
-    X <- object$formula[[pc[3]]]$X
-    if (is.null(X) || ncol(X) == 0L) return(character(0))
-    idx <- paste0(pc[1], "[", seq_len(ncol(X)), "]")
-    keep <- idx %in% draw_names
-    stats::setNames(paste0(pc[2], ":", colnames(X))[keep], idx[keep])
+  variables <- draw_variables(object$draws)
+  out <- lapply(c(num = "numerator", denom = "denominator"), function(process) {
+    arm <- if (process == "numerator") "num" else "denom"
+    X <- object$formula[[process]]$X
+    idx <- fixed_effect_variables(X, arm)
+    keep <- idx %in% variables
+    stats::setNames(paste0(arm, ":", colnames(X))[keep], idx[keep])
   })
-  unlist(out)
+  unlist(out, use.names = FALSE) |> stats::setNames(unlist(lapply(out, names)))
 }
 
 
@@ -1116,7 +1114,7 @@ fixed_effect_terms <- function(object) {
 #' @keywords internal
 fixed_effect_draws <- function(object) {
   terms <- fixed_effect_terms(object)
-  m <- as.matrix(object$draws)[, names(terms), drop = FALSE]
+  m <- draw_matrix(object$draws)[, names(terms), drop = FALSE]
   colnames(m) <- unname(terms)
   m
 }
@@ -1125,6 +1123,7 @@ fixed_effect_draws <- function(object) {
 #' Compute parameter summary statistics
 #' @keywords internal
 compute_param_summary <- function(draws, probs) {
+  draws <- draw_matrix(draws)
   par_names <- colnames(draws)
   n_pars <- ncol(draws)
 
@@ -1399,52 +1398,16 @@ plot.ratiod_fit <- function(x, pars = NULL, type = c("trace", "dens", "both"),
 #' @return A list with draws array and number of chains
 #' @keywords internal
 get_draws_array <- function(fit) {
-  backend <- fit$backend %||% "unknown"
-  chains <- fit$chains %||% 1
-
-  if (has_hmc_layout(fit) && chains > 1) {
-    # Multi-chain: need to reconstruct chain structure
-    # The raw samples per chain are stored in .internal or we split evenly
-    draws <- fit$draws
-    n_total <- nrow(draws)
-    n_per_chain <- n_total / chains
-    n_pars <- ncol(draws)
-
-    draws_array <- array(
-      dim = c(n_per_chain, chains, n_pars),
-      dimnames = list(
-        iteration = seq_len(n_per_chain),
-        chain = seq_len(chains),
-        parameter = colnames(draws)
-      )
-    )
-
-    for (c in seq_len(chains)) {
-      start_idx <- (c - 1) * n_per_chain + 1
-      end_idx <- c * n_per_chain
-      draws_array[, c, ] <- as.matrix(draws[start_idx:end_idx, ])
-    }
-
-    return(list(draws = draws_array, n_chains = chains))
-
-  } else {
-    # Single chain or non-HMC: treat as one chain
-    draws <- fit$draws
-    n_samples <- nrow(draws)
-    n_pars <- ncol(draws)
-
-    draws_array <- array(
-      as.matrix(draws),
-      dim = c(n_samples, 1, n_pars),
-      dimnames = list(
-        iteration = seq_len(n_samples),
-        chain = 1,
-        parameter = colnames(draws)
-      )
-    )
-
-    return(list(draws = draws_array, n_chains = 1))
+  draws <- fit$draws
+  if (length(dim(draws)) == 3L) {
+    return(list(draws = draws, n_chains = dim(draws)[2L]))
   }
+  chains <- fit$chains %||% 1L
+  m <- draw_matrix(draws)
+  out <- array(m, c(nrow(m) / chains, chains, ncol(m)),
+    dimnames = list(iteration = seq_len(nrow(m) / chains),
+                    chain = seq_len(chains), variable = colnames(m)))
+  list(draws = out, n_chains = chains)
 }
 
 

@@ -6,11 +6,8 @@ pg_run_chains <- function(n, seed, verbose, call) {
   })
 }
 
-pg_beta_block <- function(X, field = "beta", prefix = "") {
-  variables <- colnames(X)
-  if (is.null(variables)) variables <- paste0(field, "[", seq_len(ncol(X)), "]")
-  else variables <- paste0(prefix, variables)
-  stats::setNames(rep(field, ncol(X)), variables)
+pg_beta_block <- function(X, field = "beta", arm = "num") {
+  stats::setNames(rep(field, ncol(X)), fixed_effect_variables(X, arm))
 }
 
 pg_re_block <- function(re_info) {
@@ -1053,8 +1050,8 @@ fit_pg_negbin_negbin <- function(formula,
 
   # Convert to ratiod_fit
   fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
-    blocks = c(pg_beta_block(X_num, "beta_num", "num_"),
-               pg_beta_block(X_denom, "beta_denom", "denom_"),
+    blocks = c(pg_beta_block(X_num, "beta_num", "num"),
+               pg_beta_block(X_denom, "beta_denom", "denom"),
                c(r_num = "r_num", r_denom = "r_denom"), pg_re_block(re_info)),
     combined_fields = c("eta_num", "eta_denom", "beta_num", "beta_denom", "re"),
     internal_extra = list(X_num = X_num, X_denom = X_denom, re_info = re_info))
