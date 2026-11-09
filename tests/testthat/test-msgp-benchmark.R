@@ -102,7 +102,6 @@ test_that("MSGP samplers have acceptable divergence rates", {
 
   df <- generate_msgp_data(n = 40, seed = 123)
 
-  # Test non-centered (current default, known to work well)
   ms_nc <- spatial_multiscale(~ x + y, m = 6, sampler = "auto")
 
   fit_nc <- suppressWarnings(
@@ -112,17 +111,18 @@ test_that("MSGP samplers have acceptable divergence rates", {
       spatial = ms_nc,
       family = ratiod_poisson_gamma(),
       mode = "hmc",
-      control = list(chains = 1, iter = 150, warmup = 250, verbose = FALSE)
+      control = list(chains = 1, iter = 1250, warmup = 500, seed = 123,
+                     verbose = FALSE)
     )
   )
 
-  # Extract divergence info from fit (stored in fit$fit$diagnostics)
-  n_divergent <- fit_nc$fit$diagnostics$n_divergent %||% 0
-  n_samples <- fit_nc$fit$n_save %||% 250  # post-warmup samples
-
-  # The non-centered sampler should have very low divergence
-  # (Based on previous testing: 0% divergence rate)
-  expect_true(n_samples >= 200)  # Should have at least 200 post-warmup samples
+  divergent <- fit_nc$diagnostics$divergent
+  n_divergent <- sum(divergent)
+  n_samples <- nrow(as.matrix(fit_nc$draws))
+  expect_length(divergent, n_samples)
+  expect_true(all(divergent %in% c(0L, 1L)))
+  expect_equal(n_samples, 750L)
+  expect_equal(n_divergent, fit_nc$diagnostics$n_divergent)
   expect_true(n_divergent / n_samples < 0.05)  # Less than 5% divergence rate
 })
 
@@ -148,15 +148,20 @@ test_that("MSGP sampler speed comparison", {
         spatial = ms,
         family = ratiod_poisson_gamma(),
         mode = "hmc",
-        control = list(chains = 1, iter = 150, warmup = 150, verbose = FALSE)
+        control = list(chains = 1, iter = 800, warmup = 400, seed = 456,
+                       verbose = FALSE)
       )
     )
 
     end_time <- Sys.time()
     elapsed <- as.numeric(difftime(end_time, start_time, units = "secs"))
 
-    n_samples <- fit$fit$n_save %||% 150  # post-warmup samples
-    n_divergent <- fit$fit$diagnostics$n_divergent %||% 0
+    n_samples <- nrow(as.matrix(fit$draws))
+    n_divergent <- sum(fit$diagnostics$divergent)
+    expect_equal(n_samples, 400L)
+    expect_length(fit$diagnostics$divergent, n_samples)
+    expect_equal(n_divergent, fit$diagnostics$n_divergent)
+    expect_true(is.finite(elapsed) && elapsed > 0)
 
     results[[sampler]] <- list(
       time = elapsed,
@@ -176,7 +181,9 @@ test_that("MSGP sampler speed comparison", {
   }
   cat("=====================================\n\n")
 
-  expect_true(results[["auto"]]$n_samples > 0)
+  expect_true(all(vapply(results, function(x) {
+    is.finite(x$samples_per_sec) && x$samples_per_sec > 0
+  }, logical(1))))
 })
 
 # Stress test with multiple seeds
@@ -211,8 +218,11 @@ test_that("MSGP is robust across seeds", {
       all_ok <- FALSE
       cat(sprintf("Seed %d: FAILED (error)\n", seed))
     } else {
-      n_samples <- fit$fit$n_save %||% 100
-      n_divergent <- fit$fit$diagnostics$n_divergent %||% 0
+      n_samples <- nrow(as.matrix(fit$draws))
+      n_divergent <- sum(fit$diagnostics$divergent)
+      expect_equal(n_samples, 100L)
+      expect_length(fit$diagnostics$divergent, n_samples)
+      expect_equal(n_divergent, fit$diagnostics$n_divergent)
       div_pct <- 100 * n_divergent / n_samples
 
       if (div_pct > 50) {
