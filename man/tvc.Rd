@@ -30,7 +30,7 @@ tvc(
 
 \method{summary}{ratiod_tvc_posterior}(object, probs = c(0.025, 0.5, 0.975), ...)
 
-\method{plot}{ratiod_tvc_posterior}(x, term = 1, type = "ribbon", ...)
+\method{plot}{ratiod_tvc_posterior}(x, term = 1, type = c("ribbon", "line"), ...)
 }
 \arguments{
 \item{object}{A \code{ratiod_fit} object fitted with \code{tvc} argument}

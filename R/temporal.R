@@ -1823,7 +1823,9 @@ summary.ratiod_tvc_posterior <- function(object, probs = c(0.025, 0.5, 0.975), .
 #' @param type Plot type: "ribbon" (default) or "line"
 #'
 #' @export
-plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
+plot.ratiod_tvc_posterior <- function(x, term = 1, type = c("ribbon", "line"), ...) {
+
+  type <- match.arg(type)
 
   term_idx <- varying_coef_term(x, term)
 
@@ -1849,11 +1851,14 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
       upper = upper
     )
 
-    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$time, y = .data$mean)) +
-      ggplot2::geom_ribbon(
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$time, y = .data$mean))
+    if (type == "ribbon") {
+      p <- p + ggplot2::geom_ribbon(
         ggplot2::aes(ymin = .data$lower, ymax = .data$upper),
         alpha = 0.3, fill = "steelblue"
-      ) +
+      )
+    }
+    p <- p +
       ggplot2::geom_line(color = "steelblue", linewidth = 1) +
       ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
       ggplot2::labs(
@@ -1873,8 +1878,10 @@ plot.ratiod_tvc_posterior <- function(x, term = 1, type = "ribbon", ...) {
        ylim = ylim, xlab = "Time", ylab = "Time-Varying Effect",
        main = title, ...)
 
-  polygon(c(times, rev(times)), c(lower, rev(upper)),
-          col = adjustcolor("steelblue", alpha.f = 0.3), border = NA)
+  if (type == "ribbon") {
+    polygon(c(times, rev(times)), c(lower, rev(upper)),
+            col = adjustcolor("steelblue", alpha.f = 0.3), border = NA)
+  }
 
   abline(h = 0, lty = 2, col = "gray50")
   lines(times, means, col = "steelblue", lwd = 2)
