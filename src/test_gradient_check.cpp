@@ -1204,8 +1204,7 @@ Rcpp::CharacterVector cpp_gradient_fields() {
   return out;
 }
 
-// Returns the analytic gradient alongside a central-difference gradient of the
-// log posterior, both evaluated at the same random point.
+// Returns the resolved gradient implementation for a model structure.
 // [[Rcpp::export]]
 std::string cpp_gradient_dispatch(std::string field,
                                   int n_obs = 40,
@@ -1223,6 +1222,8 @@ std::string cpp_gradient_dispatch(std::string field,
       gradient_fn_name(resolve_gradient_fn(GradientMode::HANDCODED, data, layout)));
 }
 
+// Returns the analytic gradient alongside a central-difference gradient of the
+// log posterior, both evaluated at the same random point.
 // [[Rcpp::export]]
 Rcpp::List cpp_gradient_check(std::string field,
                               int n_obs = 400,

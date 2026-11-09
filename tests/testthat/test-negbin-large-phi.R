@@ -39,8 +39,8 @@ test_that("all negative binomial density and autodiff paths preserve large sizes
         vals <- c(p$legacy_double, p$autodiff[, "value"], p$H[1], s[, "value"])
         expect_lt(max(abs(vals - ref)), 1e-10)
         expect_lt(abs(p$H_table[1] - nb_count_reference(y, mu, phi)), 1e-10)
-        expect_lt(abs(tulpaRatio:::cpp_test_negbin_loglik(y, mu, phi) - nb_count_reference(y, mu, phi)), 1e-10)
-        expect_lt(abs(tulpaRatio:::cpp_test_autodiff_negbin_loglik(y, mu, phi)$value - nb_count_reference(y, mu, phi)), 1e-10)
+        expect_lt(abs(tulpaRatio:::cpp_test_zi_negbin_lpmf(y, mu, phi) - nb_count_reference(y, mu, phi)), 1e-10)
+        expect_lt(abs(tulpaRatio:::cpp_test_autodiff_vector("negbin", mu, y, phi)$value - nb_count_reference(y, mu, phi)), 1e-10)
       }
     }
   }

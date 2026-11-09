@@ -893,307 +893,78 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_leapfrog
-List cpp_test_leapfrog(NumericVector q_init, NumericVector p_init, double epsilon, int L);
-RcppExport SEXP _tulpaRatio_cpp_test_leapfrog(SEXP q_initSEXP, SEXP p_initSEXP, SEXP epsilonSEXP, SEXP LSEXP) {
+// cpp_test_cholesky
+NumericMatrix cpp_test_cholesky(NumericMatrix x);
+RcppExport SEXP _tulpaRatio_cpp_test_cholesky(SEXP xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type q_init(q_initSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type p_init(p_initSEXP);
-    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    Rcpp::traits::input_parameter< int >::type L(LSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_leapfrog(q_init, p_init, epsilon, L));
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_cholesky(x));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_hamiltonian
-double cpp_test_hamiltonian(NumericVector q, NumericVector p);
-RcppExport SEXP _tulpaRatio_cpp_test_hamiltonian(SEXP qSEXP, SEXP pSEXP) {
+// cpp_test_inverse_logit
+NumericVector cpp_test_inverse_logit(NumericVector x);
+RcppExport SEXP _tulpaRatio_cpp_test_inverse_logit(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_inverse_logit(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_integrator
+List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon);
+RcppExport SEXP _tulpaRatio_cpp_test_integrator(SEXP qSEXP, SEXP pSEXP, SEXP epsilonSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type q(qSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type p(pSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_hamiltonian(q, p));
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_integrator(q, p, epsilon));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_log_sum_exp
-double cpp_test_log_sum_exp(NumericVector log_vals);
-RcppExport SEXP _tulpaRatio_cpp_test_log_sum_exp(SEXP log_valsSEXP) {
+// cpp_test_autodiff_unary
+List cpp_test_autodiff_unary(std::string op, double value, double parameter);
+RcppExport SEXP _tulpaRatio_cpp_test_autodiff_unary(SEXP opSEXP, SEXP valueSEXP, SEXP parameterSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type log_vals(log_valsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_log_sum_exp(log_vals));
+    Rcpp::traits::input_parameter< std::string >::type op(opSEXP);
+    Rcpp::traits::input_parameter< double >::type value(valueSEXP);
+    Rcpp::traits::input_parameter< double >::type parameter(parameterSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_unary(op, value, parameter));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_softmax
-NumericVector cpp_test_softmax(NumericVector x);
-RcppExport SEXP _tulpaRatio_cpp_test_softmax(SEXP xSEXP) {
+// cpp_test_autodiff_binary
+List cpp_test_autodiff_binary(std::string op, double first, double second);
+RcppExport SEXP _tulpaRatio_cpp_test_autodiff_binary(SEXP opSEXP, SEXP firstSEXP, SEXP secondSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_softmax(x));
+    Rcpp::traits::input_parameter< std::string >::type op(opSEXP);
+    Rcpp::traits::input_parameter< double >::type first(firstSEXP);
+    Rcpp::traits::input_parameter< double >::type second(secondSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_binary(op, first, second));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_inv_logit
-NumericVector cpp_test_inv_logit(NumericVector x);
-RcppExport SEXP _tulpaRatio_cpp_test_inv_logit(SEXP xSEXP) {
+// cpp_test_autodiff_vector
+List cpp_test_autodiff_vector(std::string op, NumericVector values, IntegerVector y, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_autodiff_vector(SEXP opSEXP, SEXP valuesSEXP, SEXP ySEXP, SEXP phiSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_inv_logit(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_lgamma
-double cpp_test_lgamma(double x);
-RcppExport SEXP _tulpaRatio_cpp_test_lgamma(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_lgamma(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_poisson_loglik
-double cpp_test_poisson_loglik(IntegerVector y, NumericVector lambda);
-RcppExport SEXP _tulpaRatio_cpp_test_poisson_loglik(SEXP ySEXP, SEXP lambdaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type op(opSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type values(valuesSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_poisson_loglik(y, lambda));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_binomial_loglik
-double cpp_test_binomial_loglik(IntegerVector y, IntegerVector n, NumericVector p);
-RcppExport SEXP _tulpaRatio_cpp_test_binomial_loglik(SEXP ySEXP, SEXP nSEXP, SEXP pSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type n(nSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type p(pSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_binomial_loglik(y, n, p));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_negbin_loglik
-double cpp_test_negbin_loglik(IntegerVector y, NumericVector mu, double phi);
-RcppExport SEXP _tulpaRatio_cpp_test_negbin_loglik(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type mu(muSEXP);
     Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_loglik(y, mu, phi));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_normal_loglik
-double cpp_test_normal_loglik(NumericVector y, NumericVector mu, double sigma);
-RcppExport SEXP _tulpaRatio_cpp_test_normal_loglik(SEXP ySEXP, SEXP muSEXP, SEXP sigmaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_normal_loglik(y, mu, sigma));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_cholesky
-NumericMatrix cpp_test_cholesky(NumericMatrix A);
-RcppExport SEXP _tulpaRatio_cpp_test_cholesky(SEXP ASEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type A(ASEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_cholesky(A));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_matvec
-NumericVector cpp_test_matvec(NumericMatrix A, NumericVector x);
-RcppExport SEXP _tulpaRatio_cpp_test_matvec(SEXP ASEXP, SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type A(ASEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_matvec(A, x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_gradient
-List cpp_test_autodiff_gradient(NumericVector x_vals);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_gradient(SEXP x_valsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x_vals(x_valsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_gradient(x_vals));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_exp_chain
-List cpp_test_autodiff_exp_chain(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_exp_chain(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_exp_chain(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_log_likelihood
-List cpp_test_autodiff_log_likelihood(IntegerVector y, NumericVector eta);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_log_likelihood(SEXP ySEXP, SEXP etaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type eta(etaSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_log_likelihood(y, eta));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_division
-List cpp_test_autodiff_division(double a_val, double b_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_division(SEXP a_valSEXP, SEXP b_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type a_val(a_valSEXP);
-    Rcpp::traits::input_parameter< double >::type b_val(b_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_division(a_val, b_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_lgamma
-List cpp_test_autodiff_lgamma(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_lgamma(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_lgamma(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_softplus
-List cpp_test_autodiff_softplus(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_softplus(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_softplus(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_inv_logit
-List cpp_test_autodiff_inv_logit(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_inv_logit(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_inv_logit(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_log
-List cpp_test_autodiff_log(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_log(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_log(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_sqrt
-List cpp_test_autodiff_sqrt(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_sqrt(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_sqrt(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_pow
-List cpp_test_autodiff_pow(double x_val, double p);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_pow(SEXP x_valSEXP, SEXP pSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    Rcpp::traits::input_parameter< double >::type p(pSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_pow(x_val, p));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_log1p
-List cpp_test_autodiff_log1p(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_log1p(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_log1p(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_log_sum_exp
-List cpp_test_autodiff_log_sum_exp(double a_val, double b_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_log_sum_exp(SEXP a_valSEXP, SEXP b_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type a_val(a_valSEXP);
-    Rcpp::traits::input_parameter< double >::type b_val(b_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_log_sum_exp(a_val, b_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_logit
-List cpp_test_autodiff_logit(double x_val);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_logit(SEXP x_valSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x_val(x_valSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_logit(x_val));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_autodiff_negbin_loglik
-List cpp_test_autodiff_negbin_loglik(IntegerVector y, NumericVector mu, double phi);
-RcppExport SEXP _tulpaRatio_cpp_test_autodiff_negbin_loglik(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_negbin_loglik(y, mu, phi));
+    rcpp_result_gen = Rcpp::wrap(cpp_test_autodiff_vector(op, values, y, phi));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1688,18 +1459,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_parallel_independent
-NumericVector cpp_test_parallel_independent(int n, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_test_parallel_independent(SEXP nSEXP, SEXP n_threadsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_parallel_independent(n, n_threads));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_st_gp_log_lik
 double cpp_test_st_gp_log_lik(NumericVector w, double sigma2, double phi_space, double phi_time, NumericMatrix coords, NumericVector time_values, int nn, IntegerVector nn_idx, NumericVector nn_dist_space, NumericVector nn_dist_time, IntegerVector nn_order, std::string nonsep_type, std::string cov_space, std::string cov_time);
 RcppExport SEXP _tulpaRatio_cpp_test_st_gp_log_lik(SEXP wSEXP, SEXP sigma2SEXP, SEXP phi_spaceSEXP, SEXP phi_timeSEXP, SEXP coordsSEXP, SEXP time_valuesSEXP, SEXP nnSEXP, SEXP nn_idxSEXP, SEXP nn_dist_spaceSEXP, SEXP nn_dist_timeSEXP, SEXP nn_orderSEXP, SEXP nonsep_typeSEXP, SEXP cov_spaceSEXP, SEXP cov_timeSEXP) {
@@ -1964,32 +1723,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_negbin_h_kernels", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_h_kernels, 3},
     {"_tulpaRatio_cpp_test_negbin_jet", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_jet, 3},
     {"_tulpaRatio_cpp_test_negbin_paths", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_paths, 5},
-    {"_tulpaRatio_cpp_test_leapfrog", (DL_FUNC) &_tulpaRatio_cpp_test_leapfrog, 4},
-    {"_tulpaRatio_cpp_test_hamiltonian", (DL_FUNC) &_tulpaRatio_cpp_test_hamiltonian, 2},
-    {"_tulpaRatio_cpp_test_log_sum_exp", (DL_FUNC) &_tulpaRatio_cpp_test_log_sum_exp, 1},
-    {"_tulpaRatio_cpp_test_softmax", (DL_FUNC) &_tulpaRatio_cpp_test_softmax, 1},
-    {"_tulpaRatio_cpp_test_inv_logit", (DL_FUNC) &_tulpaRatio_cpp_test_inv_logit, 1},
-    {"_tulpaRatio_cpp_test_lgamma", (DL_FUNC) &_tulpaRatio_cpp_test_lgamma, 1},
-    {"_tulpaRatio_cpp_test_poisson_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_poisson_loglik, 2},
-    {"_tulpaRatio_cpp_test_binomial_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_binomial_loglik, 3},
-    {"_tulpaRatio_cpp_test_negbin_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_loglik, 3},
-    {"_tulpaRatio_cpp_test_normal_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_normal_loglik, 3},
     {"_tulpaRatio_cpp_test_cholesky", (DL_FUNC) &_tulpaRatio_cpp_test_cholesky, 1},
-    {"_tulpaRatio_cpp_test_matvec", (DL_FUNC) &_tulpaRatio_cpp_test_matvec, 2},
-    {"_tulpaRatio_cpp_test_autodiff_gradient", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_gradient, 1},
-    {"_tulpaRatio_cpp_test_autodiff_exp_chain", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_exp_chain, 1},
-    {"_tulpaRatio_cpp_test_autodiff_log_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_log_likelihood, 2},
-    {"_tulpaRatio_cpp_test_autodiff_division", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_division, 2},
-    {"_tulpaRatio_cpp_test_autodiff_lgamma", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_lgamma, 1},
-    {"_tulpaRatio_cpp_test_autodiff_softplus", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_softplus, 1},
-    {"_tulpaRatio_cpp_test_autodiff_inv_logit", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_inv_logit, 1},
-    {"_tulpaRatio_cpp_test_autodiff_log", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_log, 1},
-    {"_tulpaRatio_cpp_test_autodiff_sqrt", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_sqrt, 1},
-    {"_tulpaRatio_cpp_test_autodiff_pow", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_pow, 2},
-    {"_tulpaRatio_cpp_test_autodiff_log1p", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_log1p, 1},
-    {"_tulpaRatio_cpp_test_autodiff_log_sum_exp", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_log_sum_exp, 2},
-    {"_tulpaRatio_cpp_test_autodiff_logit", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_logit, 1},
-    {"_tulpaRatio_cpp_test_autodiff_negbin_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_negbin_loglik, 3},
+    {"_tulpaRatio_cpp_test_inverse_logit", (DL_FUNC) &_tulpaRatio_cpp_test_inverse_logit, 1},
+    {"_tulpaRatio_cpp_test_integrator", (DL_FUNC) &_tulpaRatio_cpp_test_integrator, 3},
+    {"_tulpaRatio_cpp_test_autodiff_unary", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_unary, 3},
+    {"_tulpaRatio_cpp_test_autodiff_binary", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_binary, 3},
+    {"_tulpaRatio_cpp_test_autodiff_vector", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_vector, 4},
     {"_tulpaRatio_cpp_test_pg_update_beta", (DL_FUNC) &_tulpaRatio_cpp_test_pg_update_beta, 5},
     {"_tulpaRatio_cpp_test_pg_update_re", (DL_FUNC) &_tulpaRatio_cpp_test_pg_update_re, 6},
     {"_tulpaRatio_cpp_test_pg_sigma_halfcauchy_chain", (DL_FUNC) &_tulpaRatio_cpp_test_pg_sigma_halfcauchy_chain, 3},
@@ -2028,7 +1767,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_zi_log_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_zi_log_likelihood, 5},
     {"_tulpaRatio_cpp_test_parallel_dot_products", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_dot_products, 3},
     {"_tulpaRatio_cpp_test_parallel_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_likelihood, 3},
-    {"_tulpaRatio_cpp_test_parallel_independent", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_independent, 2},
     {"_tulpaRatio_cpp_test_st_gp_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_log_lik, 14},
     {"_tulpaRatio_cpp_test_st_gp_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_margin_normalizer, 13},
     {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},

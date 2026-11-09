@@ -189,108 +189,28 @@ cpp_test_negbin_paths <- function(y, mu, phi, z, type = "zi_negbin") {
     .Call(`_tulpaRatio_cpp_test_negbin_paths`, y, mu, phi, z, type)
 }
 
-cpp_test_leapfrog <- function(q_init, p_init, epsilon, L) {
-    .Call(`_tulpaRatio_cpp_test_leapfrog`, q_init, p_init, epsilon, L)
+cpp_test_cholesky <- function(x) {
+    .Call(`_tulpaRatio_cpp_test_cholesky`, x)
 }
 
-cpp_test_hamiltonian <- function(q, p) {
-    .Call(`_tulpaRatio_cpp_test_hamiltonian`, q, p)
+cpp_test_inverse_logit <- function(x) {
+    .Call(`_tulpaRatio_cpp_test_inverse_logit`, x)
 }
 
-cpp_test_log_sum_exp <- function(log_vals) {
-    .Call(`_tulpaRatio_cpp_test_log_sum_exp`, log_vals)
+cpp_test_integrator <- function(q, p, epsilon) {
+    .Call(`_tulpaRatio_cpp_test_integrator`, q, p, epsilon)
 }
 
-cpp_test_softmax <- function(x) {
-    .Call(`_tulpaRatio_cpp_test_softmax`, x)
+cpp_test_autodiff_unary <- function(op, value, parameter = 1.0) {
+    .Call(`_tulpaRatio_cpp_test_autodiff_unary`, op, value, parameter)
 }
 
-cpp_test_inv_logit <- function(x) {
-    .Call(`_tulpaRatio_cpp_test_inv_logit`, x)
+cpp_test_autodiff_binary <- function(op, first, second) {
+    .Call(`_tulpaRatio_cpp_test_autodiff_binary`, op, first, second)
 }
 
-cpp_test_lgamma <- function(x) {
-    .Call(`_tulpaRatio_cpp_test_lgamma`, x)
-}
-
-cpp_test_poisson_loglik <- function(y, lambda) {
-    .Call(`_tulpaRatio_cpp_test_poisson_loglik`, y, lambda)
-}
-
-cpp_test_binomial_loglik <- function(y, n, p) {
-    .Call(`_tulpaRatio_cpp_test_binomial_loglik`, y, n, p)
-}
-
-cpp_test_negbin_loglik <- function(y, mu, phi) {
-    .Call(`_tulpaRatio_cpp_test_negbin_loglik`, y, mu, phi)
-}
-
-cpp_test_normal_loglik <- function(y, mu, sigma) {
-    .Call(`_tulpaRatio_cpp_test_normal_loglik`, y, mu, sigma)
-}
-
-cpp_test_cholesky <- function(A) {
-    .Call(`_tulpaRatio_cpp_test_cholesky`, A)
-}
-
-cpp_test_matvec <- function(A, x) {
-    .Call(`_tulpaRatio_cpp_test_matvec`, A, x)
-}
-
-cpp_test_autodiff_gradient <- function(x_vals) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_gradient`, x_vals)
-}
-
-cpp_test_autodiff_exp_chain <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_exp_chain`, x_val)
-}
-
-cpp_test_autodiff_log_likelihood <- function(y, eta) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_log_likelihood`, y, eta)
-}
-
-cpp_test_autodiff_division <- function(a_val, b_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_division`, a_val, b_val)
-}
-
-cpp_test_autodiff_lgamma <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_lgamma`, x_val)
-}
-
-cpp_test_autodiff_softplus <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_softplus`, x_val)
-}
-
-cpp_test_autodiff_inv_logit <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_inv_logit`, x_val)
-}
-
-cpp_test_autodiff_log <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_log`, x_val)
-}
-
-cpp_test_autodiff_sqrt <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_sqrt`, x_val)
-}
-
-cpp_test_autodiff_pow <- function(x_val, p) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_pow`, x_val, p)
-}
-
-cpp_test_autodiff_log1p <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_log1p`, x_val)
-}
-
-cpp_test_autodiff_log_sum_exp <- function(a_val, b_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_log_sum_exp`, a_val, b_val)
-}
-
-cpp_test_autodiff_logit <- function(x_val) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_logit`, x_val)
-}
-
-cpp_test_autodiff_negbin_loglik <- function(y, mu, phi) {
-    .Call(`_tulpaRatio_cpp_test_autodiff_negbin_loglik`, y, mu, phi)
+cpp_test_autodiff_vector <- function(op, values, y, phi = 1.0) {
+    .Call(`_tulpaRatio_cpp_test_autodiff_vector`, op, values, y, phi)
 }
 
 cpp_test_pg_update_beta <- function(kappa, omega, X, re_contrib, prior_sd) {
@@ -443,10 +363,6 @@ cpp_test_parallel_dot_products <- function(X, y, n_threads) {
 
 cpp_test_parallel_likelihood <- function(y, mu, n_threads) {
     .Call(`_tulpaRatio_cpp_test_parallel_likelihood`, y, mu, n_threads)
-}
-
-cpp_test_parallel_independent <- function(n, n_threads) {
-    .Call(`_tulpaRatio_cpp_test_parallel_independent`, n, n_threads)
 }
 
 cpp_test_st_gp_log_lik <- function(w, sigma2, phi_space, phi_time, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type = "product", cov_space = "exponential", cov_time = "exponential") {

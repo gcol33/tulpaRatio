@@ -10,6 +10,8 @@
 
 namespace ratiod {
 
+Rcpp::NumericMatrix chol_decomp(const Rcpp::NumericMatrix& A);
+
 // ---------------------------------------------------------------------
 // Core Gibbs sampler for binomial models
 // ---------------------------------------------------------------------

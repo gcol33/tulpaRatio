@@ -1,618 +1,105 @@
-# Unit tests for C++ helper functions
-# These test core numerical routines directly via Rcpp wrappers
+test_that("production inverse logit matches the logistic CDF", {
+  x <- c(-1000, -40, -10, -1, 0, 1, 10, 40, 1000)
+  expect_equal(tulpaRatio:::cpp_test_inverse_logit(x), plogis(x), tolerance = 1e-15)
+})
 
-# ---------------------------------------------------------------------------
-# Leapfrog integrator tests
-# ---------------------------------------------------------------------------
-
-test_that("leapfrog preserves Hamiltonian for quadratic potential", {
-  # For a quadratic potential U(q) = 0.5 * sum(q^2), the leapfrog integrator
-
-  # should approximately preserve the Hamiltonian H = U(q) + K(p)
-
-  q <- c(1.0, 0.5, -0.3)
+test_that("production leapfrog and Hamiltonian match a Gaussian reference", {
+  q <- c(1, 0.5, -0.3)
   p <- c(0.2, -0.4, 0.6)
-
-  H_initial <- tulpaRatio:::cpp_test_hamiltonian(q, p)
-
-  # Small step size, many steps for accuracy
-  result <- tulpaRatio:::cpp_test_leapfrog(q, p, epsilon = 0.01, L = 100)
-
-  H_final <- tulpaRatio:::cpp_test_hamiltonian(result$q, result$p)
-
-  # Hamiltonian should be conserved to within numerical precision
-
-  expect_equal(H_initial, H_final, tolerance = 0.01)
+  epsilon <- 0.1
+  result <- tulpaRatio:::cpp_test_integrator(q, p, epsilon)
+  half <- p - epsilon * q / 2
+  expected_q <- q + epsilon * half
+  expected_p <- half - epsilon * expected_q / 2
+  expect_equal(result$q, expected_q, tolerance = 1e-10)
+  expect_equal(result$p, expected_p, tolerance = 1e-10)
+  expect_equal(result$hamiltonian, sum(q^2 + p^2) / 2, tolerance = 1e-10)
+  reverse <- tulpaRatio:::cpp_test_integrator(result$q, -result$p, epsilon)
+  expect_equal(reverse$q, q, tolerance = 1e-10)
+  expect_equal(reverse$p, -p, tolerance = 1e-10)
 })
 
-test_that("leapfrog is reversible", {
-  q <- c(1.0, -0.5)
-  p <- c(0.3, 0.7)
-
-  # Forward integration
-  fwd <- tulpaRatio:::cpp_test_leapfrog(q, p, epsilon = 0.1, L = 10)
-
-  # Backward integration (negate momentum, integrate, negate again)
-  bwd <- tulpaRatio:::cpp_test_leapfrog(fwd$q, -fwd$p, epsilon = 0.1, L = 10)
-
-  # Should return to starting point
-  expect_equal(bwd$q, q, tolerance = 1e-10)
-  expect_equal(-bwd$p, p, tolerance = 1e-10)
+test_that("production Cholesky matches R on positive definite matrices", {
+  for (a in list(diag(3), matrix(c(4, 2, 2, 3), 2),
+                 matrix(c(4, 2, 1, 2, 5, 3, 1, 3, 6), 3))) {
+    expect_equal(as.matrix(tulpaRatio:::cpp_test_cholesky(a)),
+                 t(chol(a)), tolerance = 1e-10)
+  }
 })
 
-test_that("leapfrog with zero steps returns input",
-{
-  q <- c(1.0, 2.0)
-  p <- c(-0.5, 0.5)
-
-  # L=0 should be a no-op (though our implementation uses L-1 full steps)
-  # Actually with L=1, we do: half momentum, full position, half momentum
-  result <- tulpaRatio:::cpp_test_leapfrog(q, p, epsilon = 0.01, L = 1)
-
-  # With L=1, we still do one leapfrog step
-  expect_true(TRUE)  # Just check it doesn't error
+test_that("autodiff unary operations match exact values and derivatives", {
+  cases <- list(
+    exp_chain = list(x = c(0, 0.5, 1, -0.5, -1), f = function(x) exp(x^2),
+                     d = function(x) 2 * x * exp(x^2)),
+    lgamma = list(x = c(0.5, 1, 2, 5, 10), f = lgamma, d = digamma),
+    softplus = list(x = c(-50, -5, -1, 0, 1, 5, 50),
+                    f = function(x) log1p(exp(x)), d = plogis),
+    inv_logit = list(x = c(-3, -1, 0, 1, 3), f = plogis,
+                     d = function(x) plogis(x) * plogis(-x)),
+    log = list(x = c(0.5, 1, 2, 5, 10), f = log, d = function(x) 1 / x),
+    sqrt = list(x = c(0.25, 1, 4, 9, 16), f = sqrt,
+                d = function(x) 1 / (2 * sqrt(x))),
+    log1p = list(x = c(0, 0.5, 1, 5, 10), f = log1p,
+                 d = function(x) 1 / (1 + x)),
+    logit = list(x = c(0.1, 0.3, 0.5, 0.7, 0.9), f = qlogis,
+                 d = function(x) 1 / (x * (1 - x))))
+  for (op in names(cases)) {
+    case <- cases[[op]]
+    for (x in case$x) {
+      result <- tulpaRatio:::cpp_test_autodiff_unary(op, x)
+      expect_equal(result$value, case$f(x), tolerance = 1e-10)
+      expect_equal(result$gradient, case$d(x), tolerance = 1e-8)
+    }
+  }
 })
 
-# ---------------------------------------------------------------------------
-# Hamiltonian computation tests
-# ---------------------------------------------------------------------------
-
-test_that("Hamiltonian is sum of potential and kinetic energy", {
-  q <- c(2.0, 3.0)
-  p <- c(1.0, 1.0)
-
-  H <- tulpaRatio:::cpp_test_hamiltonian(q, p)
-
-  # U(q) = 0.5 * (4 + 9) = 6.5
-  # K(p) = 0.5 * (1 + 1) = 1.0
-  # H = 7.5
-  expect_equal(H, 7.5)
+test_that("autodiff division, log sums and constant powers match exact derivatives", {
+  for (pair in list(c(6, 2), c(1, 3), c(-4, 2), c(5, -2))) {
+    a <- pair[1]; b <- pair[2]
+    result <- tulpaRatio:::cpp_test_autodiff_binary("division", a, b)
+    expect_equal(result$value, a / b, tolerance = 1e-10)
+    expect_equal(result$gradient, c(1 / b, -a / b^2), tolerance = 1e-10)
+  }
+  for (pair in list(c(1, 2), c(-1, 1), c(100, 101), c(-100, -99))) {
+    expected <- exp(pair - max(pair)); expected <- expected / sum(expected)
+    result <- tulpaRatio:::cpp_test_autodiff_binary("log_sum_exp", pair[1], pair[2])
+    expect_equal(result$value, max(pair) + log(sum(exp(pair - max(pair)))), tolerance = 1e-10)
+    expect_equal(result$gradient, expected, tolerance = 1e-10)
+  }
+  for (pair in list(c(2, 2), c(3, 0.5), c(4, -1), c(2, 3))) {
+    x <- pair[1]; p <- pair[2]
+    result <- tulpaRatio:::cpp_test_autodiff_unary("pow", x, p)
+    expect_equal(result$value, x^p, tolerance = 1e-10)
+    expect_equal(result$gradient, p * x^(p - 1), tolerance = 1e-8)
+  }
 })
 
-test_that("Hamiltonian is zero at origin with zero momentum", {
-  q <- c(0.0, 0.0, 0.0)
-  p <- c(0.0, 0.0, 0.0)
-
-  H <- tulpaRatio:::cpp_test_hamiltonian(q, p)
-  expect_equal(H, 0.0)
+test_that("autodiff vector operations match exact densities and derivatives", {
+  for (x in list(c(1, 2, 3, -1.5), c(0, 0), c(10, 20, 50), 3)) {
+    result <- tulpaRatio:::cpp_test_autodiff_vector("squares", x, integer())
+    expect_equal(result$value, sum(x^2), tolerance = 1e-10)
+    expect_equal(result$gradient, 2 * x, tolerance = 1e-10)
+  }
+  y <- c(0L, 1L, 3L, 5L, 10L)
+  eta <- c(-0.5, 0, 0.5, 1, 2)
+  result <- tulpaRatio:::cpp_test_autodiff_vector("poisson", eta, y)
+  expect_equal(result$value, sum(dpois(y, exp(eta), log = TRUE)), tolerance = 1e-10)
+  expect_equal(result$gradient, y - exp(eta), tolerance = 1e-10)
+  y <- c(2L, 5L, 8L); mu <- c(3, 4, 6); phi <- 2
+  result <- tulpaRatio:::cpp_test_autodiff_vector("negbin", mu, y, phi)
+  expect_equal(result$value, sum(dnbinom(y, mu = mu, size = phi, log = TRUE)), tolerance = 1e-10)
+  expect_equal(result$gradient, y / mu - (y + phi) / (mu + phi), tolerance = 1e-10)
+  expected_phi <- sum(digamma(y + phi) - digamma(phi) + log(phi / (phi + mu)) +
+                        1 - (phi + y) / (phi + mu))
+  expect_equal(result$gradient_phi, expected_phi, tolerance = 1e-8)
 })
 
-# ---------------------------------------------------------------------------
-# Log-sum-exp tests
-# ---------------------------------------------------------------------------
-
-test_that("log_sum_exp is correct for simple cases", {
-  # log(exp(1) + exp(2)) = log(e + e^2) ≈ 2.313
-  result <- tulpaRatio:::cpp_test_log_sum_exp(c(1, 2))
-  expect_equal(result, log(exp(1) + exp(2)), tolerance = 1e-10)
-})
-test_that("log_sum_exp handles large values without overflow", {
-  # Values that would overflow if we computed exp() directly
-  large_vals <- c(700, 701, 702)
-  result <- tulpaRatio:::cpp_test_log_sum_exp(large_vals)
-
-  # log(exp(700) + exp(701) + exp(702)) = 702 + log(exp(-2) + exp(-1) + 1)
-  expected <- 702 + log(exp(-2) + exp(-1) + 1)
-  expect_equal(result, expected, tolerance = 1e-10)
-})
-
-test_that("log_sum_exp handles negative values", {
-  result <- tulpaRatio:::cpp_test_log_sum_exp(c(-1000, -999, -998))
-  expected <- -998 + log(exp(-2) + exp(-1) + 1)
-  expect_equal(result, expected, tolerance = 1e-10)
-})
-
-test_that("log_sum_exp of single value returns that value", {
-  expect_equal(tulpaRatio:::cpp_test_log_sum_exp(5.0), 5.0)
-})
-
-# ---------------------------------------------------------------------------
-# Softmax tests
-# ---------------------------------------------------------------------------
-
-test_that("softmax sums to 1", {
-  x <- c(1, 2, 3, 4)
-  result <- tulpaRatio:::cpp_test_softmax(x)
-  expect_equal(sum(result), 1.0, tolerance = 1e-10)
-})
-
-test_that("softmax preserves ordering", {
+test_that("production softmax and binomial density match exact references", {
   x <- c(1, 3, 2)
-  result <- tulpaRatio:::cpp_test_softmax(x)
-  expect_true(result[2] > result[3])
-  expect_true(result[3] > result[1])
-})
-
-test_that("softmax is shift-invariant", {
-  x <- c(1, 2, 3)
-  result1 <- tulpaRatio:::cpp_test_softmax(x)
-  result2 <- tulpaRatio:::cpp_test_softmax(x + 1000)
-  expect_equal(result1, result2, tolerance = 1e-10)
-})
-
-test_that("softmax of equal values gives uniform", {
-  x <- c(5, 5, 5, 5)
-  result <- tulpaRatio:::cpp_test_softmax(x)
-  expect_equal(result, rep(0.25, 4), tolerance = 1e-10)
-})
-
-# ---------------------------------------------------------------------------
-# Inverse logit tests
-# ---------------------------------------------------------------------------
-
-test_that("inv_logit of 0 is 0.5", {
-  result <- tulpaRatio:::cpp_test_inv_logit(0)
-  expect_equal(result, 0.5)
-})
-
-test_that("inv_logit is bounded (0, 1)", {
-  # Use moderate values to avoid numerical precision at extremes
-  x <- c(-10, -5, -1, 0, 1, 5, 10)
-  result <- tulpaRatio:::cpp_test_inv_logit(x)
-  expect_true(all(result > 0))
-  expect_true(all(result < 1))
-})
-
-test_that("inv_logit is monotonic", {
-  x <- seq(-5, 5, by = 0.5)
-  result <- tulpaRatio:::cpp_test_inv_logit(x)
-  expect_true(all(diff(result) > 0))
-})
-
-test_that("inv_logit is symmetric around 0.5", {
-  x <- c(-2, 2)
-  result <- tulpaRatio:::cpp_test_inv_logit(x)
-  expect_equal(result[1] + result[2], 1.0, tolerance = 1e-10)
-})
-
-# ---------------------------------------------------------------------------
-# Log-gamma tests
-# ---------------------------------------------------------------------------
-
-test_that("lgamma matches R's lgamma", {
-  x_vals <- c(0.5, 1, 2, 5, 10, 100)
-  for (x in x_vals) {
-    expect_equal(tulpaRatio:::cpp_test_lgamma(x), lgamma(x), tolerance = 1e-10)
-  }
-})
-
-test_that("lgamma(1) = 0", {
-  expect_equal(tulpaRatio:::cpp_test_lgamma(1), 0)
-})
-
-test_that("lgamma(n) = log((n-1)!) for integers", {
-  expect_equal(tulpaRatio:::cpp_test_lgamma(5), log(factorial(4)), tolerance = 1e-10)
-  expect_equal(tulpaRatio:::cpp_test_lgamma(10), log(factorial(9)), tolerance = 1e-10)
-})
-
-# ---------------------------------------------------------------------------
-# Poisson log-likelihood tests
-# ---------------------------------------------------------------------------
-
-test_that("poisson_loglik matches dpois", {
-  y <- as.integer(c(0, 1, 2, 5, 10))
-  lambda <- c(1, 2, 3, 4, 5)
-
-  cpp_ll <- tulpaRatio:::cpp_test_poisson_loglik(y, lambda)
-  r_ll <- sum(dpois(y, lambda, log = TRUE))
-
-  expect_equal(cpp_ll, r_ll, tolerance = 1e-10)
-})
-
-test_that("poisson_loglik returns -Inf for impossible observations", {
-  y <- as.integer(c(5))
-  lambda <- c(0)  # y > 0 but lambda = 0 is impossible
-
-  result <- tulpaRatio:::cpp_test_poisson_loglik(y, lambda)
-  expect_equal(result, -Inf)
-})
-
-# ---------------------------------------------------------------------------
-# Binomial log-likelihood tests
-# ---------------------------------------------------------------------------
-
-test_that("binomial_loglik matches dbinom", {
-  y <- as.integer(c(3, 5, 7))
-  n <- as.integer(c(10, 10, 10))
-  p <- c(0.3, 0.5, 0.7)
-
-  cpp_ll <- tulpaRatio:::cpp_test_binomial_loglik(y, n, p)
-  r_ll <- sum(dbinom(y, n, p, log = TRUE))
-
-  expect_equal(cpp_ll, r_ll, tolerance = 1e-10)
-})
-
-test_that("binomial_loglik handles edge probabilities", {
-  y <- as.integer(c(0, 10))
-  n <- as.integer(c(10, 10))
-
-  # p=0 with y=0 is valid, p=1 with y=n is valid
-  expect_true(is.finite(tulpaRatio:::cpp_test_binomial_loglik(
-    as.integer(0), as.integer(10), 0.0001
-  )))
-})
-
-# ---------------------------------------------------------------------------
-# Negative binomial log-likelihood tests
-# ---------------------------------------------------------------------------
-
-test_that("negbin_loglik matches dnbinom", {
-  y <- as.integer(c(0, 2, 5, 10))
-  mu <- c(3, 3, 3, 3)
-  phi <- 2.0  # size parameter
-
-  cpp_ll <- tulpaRatio:::cpp_test_negbin_loglik(y, mu, phi)
-  r_ll <- sum(dnbinom(y, size = phi, mu = mu, log = TRUE))
-
-  expect_equal(cpp_ll, r_ll, tolerance = 1e-10)
-})
-
-test_that("negbin_loglik handles large phi (approaches Poisson)", {
-  y <- as.integer(c(5, 10, 15))
-  mu <- c(5, 10, 15)
-  phi <- 1000  # Large phi -> Poisson
-
-  cpp_ll <- tulpaRatio:::cpp_test_negbin_loglik(y, mu, phi)
-  poisson_ll <- sum(dpois(y, mu, log = TRUE))
-
-  # Should be close to Poisson for large phi
-  expect_equal(cpp_ll, poisson_ll, tolerance = 0.1)
-})
-
-# ---------------------------------------------------------------------------
-# Normal log-likelihood tests
-# ---------------------------------------------------------------------------
-
-test_that("normal_loglik matches dnorm", {
-  y <- c(1.5, 2.0, 2.5, 3.0)
-  mu <- c(2.0, 2.0, 2.0, 2.0)
-  sigma <- 0.5
-
-  cpp_ll <- tulpaRatio:::cpp_test_normal_loglik(y, mu, sigma)
-  r_ll <- sum(dnorm(y, mu, sigma, log = TRUE))
-
-  expect_equal(cpp_ll, r_ll, tolerance = 1e-10)
-})
-
-test_that("normal_loglik peaks at y = mu", {
-  mu <- 5.0
-  sigma <- 1.0
-
-  ll_at_mu <- tulpaRatio:::cpp_test_normal_loglik(mu, mu, sigma)
-  ll_away <- tulpaRatio:::cpp_test_normal_loglik(mu + 1, mu, sigma)
-
-  expect_true(ll_at_mu > ll_away)
-})
-
-# ---------------------------------------------------------------------------
-# Cholesky decomposition tests
-# ---------------------------------------------------------------------------
-
-test_that("cholesky of identity is identity", {
-  I <- diag(3)
-  L <- tulpaRatio:::cpp_test_cholesky(I)
-  expect_equal(as.matrix(L), I, tolerance = 1e-10)
-})
-
-test_that("cholesky satisfies L %*% t(L) = A", {
-  A <- matrix(c(4, 2, 2, 3), nrow = 2)
-  L <- tulpaRatio:::cpp_test_cholesky(A)
-
-  reconstructed <- L %*% t(L)
-  expect_equal(as.matrix(reconstructed), A, tolerance = 1e-10)
-})
-
-test_that("cholesky is lower triangular", {
-  A <- matrix(c(4, 2, 1, 2, 5, 3, 1, 3, 6), nrow = 3)
-  L <- tulpaRatio:::cpp_test_cholesky(A)
-
-  # Upper triangle (excluding diagonal) should be zero
-  expect_true(all(L[upper.tri(L)] == 0))
-})
-
-# ---------------------------------------------------------------------------
-# Matrix-vector multiplication tests
-# ---------------------------------------------------------------------------
-
-test_that("matvec matches R's %*%", {
-  A <- matrix(c(1, 2, 3, 4, 5, 6), nrow = 2, ncol = 3)
-  x <- c(1, 2, 3)
-
-  cpp_result <- tulpaRatio:::cpp_test_matvec(A, x)
-  r_result <- as.vector(A %*% x)
-
-  expect_equal(cpp_result, r_result, tolerance = 1e-10)
-})
-
-test_that("matvec with identity matrix returns input", {
-  I <- diag(4)
-  x <- c(1, 2, 3, 4)
-
-  result <- tulpaRatio:::cpp_test_matvec(I, x)
-  expect_equal(result, x, tolerance = 1e-10)
-})
-
-test_that("matvec with zero matrix returns zeros", {
-  Z <- matrix(0, nrow = 3, ncol = 4)
-  x <- c(1, 2, 3, 4)
-
-  result <- tulpaRatio:::cpp_test_matvec(Z, x)
-  expect_equal(result, rep(0, 3), tolerance = 1e-10)
-})
-
-# ---------------------------------------------------------------------------
-# Autodiff tests - testing actual autodiff.h implementation
-# ---------------------------------------------------------------------------
-
-test_that("autodiff gradient of sum(x^2) is 2*x", {
-  x <- c(1.0, 2.0, 3.0, -1.5)
-  result <- tulpaRatio:::cpp_test_autodiff_gradient(x)
-
-  # f(x) = sum(x^2) = 1 + 4 + 9 + 2.25 = 16.25
-
-  expect_equal(result$value, sum(x^2), tolerance = 1e-10)
-
-
-  # Gradient should be 2*x
-  expect_equal(result$gradient, 2 * x, tolerance = 1e-10)
-})
-
-test_that("autodiff handles zero gradient correctly", {
-  x <- c(0.0, 0.0)
-  result <- tulpaRatio:::cpp_test_autodiff_gradient(x)
-
-  expect_equal(result$value, 0.0)
-  expect_equal(result$gradient, c(0.0, 0.0), tolerance = 1e-10)
-})
-
-test_that("autodiff chain rule works for exp(x^2)", {
-  test_vals <- c(0.0, 0.5, 1.0, -0.5, -1.0)  # Keep values small to avoid overflow
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_exp_chain(x)
-
-    # Value should be exp(x^2)
-    expect_equal(result$value, exp(x^2), tolerance = 1e-10)
-
-    # Gradient should match expected: 2x * exp(x^2)
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff Poisson log-likelihood gradient is correct", {
-  y <- as.integer(c(0, 1, 3, 5, 10))
-  eta <- c(-0.5, 0.0, 0.5, 1.0, 2.0)
-
-  result <- tulpaRatio:::cpp_test_autodiff_log_likelihood(y, eta)
-
-  # Gradient should be y - exp(eta)
-  expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-
-  # Double-check with R computation
-  expected_grad <- y - exp(eta)
-  expect_equal(result$gradient, expected_grad, tolerance = 1e-10)
-})
-
-test_that("autodiff log-likelihood value is correct", {
-  y <- as.integer(c(2, 3, 5))
-  eta <- c(0.5, 1.0, 1.5)
-
-  result <- tulpaRatio:::cpp_test_autodiff_log_likelihood(y, eta)
-
-  # ll = sum(y * eta - exp(eta))
-  expected_ll <- sum(y * eta - exp(eta))
-  expect_equal(result$value, expected_ll, tolerance = 1e-10)
-})
-
-test_that("autodiff division gradients are correct", {
-  test_cases <- list(
-    list(a = 6.0, b = 2.0),
-    list(a = 1.0, b = 3.0),
-    list(a = -4.0, b = 2.0),
-    list(a = 5.0, b = -2.0)
-  )
-
-  for (tc in test_cases) {
-    result <- tulpaRatio:::cpp_test_autodiff_division(tc$a, tc$b)
-
-    # Value should be a/b
-    expect_equal(result$value, tc$a / tc$b, tolerance = 1e-10)
-
-    # Gradients should match expected
-    expect_equal(result$grad_a, result$expected_grad_a, tolerance = 1e-10)
-    expect_equal(result$grad_b, result$expected_grad_b, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff lgamma gradient matches digamma", {
-  test_vals <- c(0.5, 1.0, 2.0, 5.0, 10.0)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_lgamma(x)
-
-    # Value should be lgamma(x)
-    expect_equal(result$value, lgamma(x), tolerance = 1e-10)
-
-    # Gradient should be digamma(x)
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-8)
-  }
-})
-
-test_that("autodiff handles extreme values without overflow", {
-  # Large values that might cause numerical issues
-  x <- c(10.0, 20.0, 50.0)
-  result <- tulpaRatio:::cpp_test_autodiff_gradient(x)
-
-  expect_true(is.finite(result$value))
-  expect_true(all(is.finite(result$gradient)))
-})
-
-test_that("autodiff gradient accumulates correctly for shared variables", {
-  # x appears twice in f(x) = x^2, gradient should be 2x
-  x <- 3.0
-  result <- tulpaRatio:::cpp_test_autodiff_gradient(x)
-
-  expect_equal(result$gradient, 6.0, tolerance = 1e-10)
-})
-
-test_that("autodiff softplus value and gradient are correct", {
-  test_vals <- c(-5.0, -1.0, 0.0, 1.0, 5.0)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_softplus(x)
-
-    # Value should be log(1 + exp(x))
-    expected_val <- log(1 + exp(x))
-    expect_equal(result$value, expected_val, tolerance = 1e-8)
-
-    # Gradient should be sigmoid(x) = 1/(1+exp(-x))
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-8)
-  }
-})
-
-test_that("autodiff softplus handles extreme values", {
-  # Large positive: softplus(x) ≈ x, gradient ≈ 1
-  result_large <- tulpaRatio:::cpp_test_autodiff_softplus(50.0)
-  expect_equal(result_large$value, 50.0, tolerance = 1e-6)
-  expect_equal(result_large$gradient, 1.0, tolerance = 1e-10)
-
-  # Large negative: softplus(x) ≈ 0, gradient ≈ 0
-  result_small <- tulpaRatio:::cpp_test_autodiff_softplus(-50.0)
-  expect_equal(result_small$value, 0.0, tolerance = 1e-6)
-  expect_equal(result_small$gradient, 0.0, tolerance = 1e-10)
-})
-
-test_that("autodiff inv_logit value and gradient are correct", {
-  test_vals <- c(-3.0, -1.0, 0.0, 1.0, 3.0)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_inv_logit(x)
-
-    # Value should be sigmoid(x) = 1/(1+exp(-x))
-    expected_val <- 1 / (1 + exp(-x))
-    expect_equal(result$value, expected_val, tolerance = 1e-10)
-
-    # Gradient should be sigmoid(x) * (1 - sigmoid(x))
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff inv_logit(0) = 0.5 with correct gradient", {
-  result <- tulpaRatio:::cpp_test_autodiff_inv_logit(0.0)
-
-  expect_equal(result$value, 0.5, tolerance = 1e-10)
-  # Gradient at 0: 0.5 * 0.5 = 0.25
-  expect_equal(result$gradient, 0.25, tolerance = 1e-10)
-})
-
-# ---------------------------------------------------------------------------
-# Additional autodiff function tests
-# ---------------------------------------------------------------------------
-
-test_that("autodiff log value and gradient are correct", {
-  test_vals <- c(0.5, 1.0, 2.0, 5.0, 10.0)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_log(x)
-    expect_equal(result$value, log(x), tolerance = 1e-10)
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff sqrt value and gradient are correct", {
-  test_vals <- c(0.25, 1.0, 4.0, 9.0, 16.0)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_sqrt(x)
-    expect_equal(result$value, sqrt(x), tolerance = 1e-10)
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff pow value and gradient are correct", {
-  test_cases <- list(
-    list(x = 2.0, p = 2.0),
-    list(x = 3.0, p = 0.5),
-    list(x = 4.0, p = -1.0),
-    list(x = 2.0, p = 3.0)
-  )
-
-  for (tc in test_cases) {
-    result <- tulpaRatio:::cpp_test_autodiff_pow(tc$x, tc$p)
-    expect_equal(result$value, tc$x^tc$p, tolerance = 1e-10)
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-8)
-  }
-})
-
-test_that("autodiff log1p value and gradient are correct", {
-  test_vals <- c(0.0, 0.5, 1.0, 5.0, 10.0)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_log1p(x)
-    expect_equal(result$value, log1p(x), tolerance = 1e-10)
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff log_sum_exp value and gradients are correct", {
-  test_cases <- list(
-    list(a = 1.0, b = 2.0),
-    list(a = -1.0, b = 1.0),
-    list(a = 100.0, b = 101.0),  # Large values
-    list(a = -100.0, b = -99.0)  # Small values
-  )
-
-  for (tc in test_cases) {
-    result <- tulpaRatio:::cpp_test_autodiff_log_sum_exp(tc$a, tc$b)
-
-    # Value should match log(exp(a) + exp(b))
-    expected_val <- log(exp(tc$a - max(tc$a, tc$b)) + exp(tc$b - max(tc$a, tc$b))) + max(tc$a, tc$b)
-    expect_equal(result$value, expected_val, tolerance = 1e-10)
-
-    # Gradients should be softmax
-    expect_equal(result$grad_a, result$expected_grad_a, tolerance = 1e-10)
-    expect_equal(result$grad_b, result$expected_grad_b, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff logit value and gradient are correct", {
-  test_vals <- c(0.1, 0.3, 0.5, 0.7, 0.9)
-
-  for (x in test_vals) {
-    result <- tulpaRatio:::cpp_test_autodiff_logit(x)
-
-    # Value should be log(x/(1-x))
-    expect_equal(result$value, log(x / (1 - x)), tolerance = 1e-10)
-
-    # Gradient should match
-    expect_equal(result$gradient, result$expected_gradient, tolerance = 1e-10)
-  }
-})
-
-test_that("autodiff negbin log-likelihood gradients are correct", {
-  y <- as.integer(c(2, 5, 8))
-  mu <- c(3.0, 4.0, 6.0)
-  phi <- 2.0
-
-  result <- tulpaRatio:::cpp_test_autodiff_negbin_loglik(y, mu, phi)
-
-  # Check gradients are finite and non-zero
-  expect_true(all(is.finite(result$gradient_mu)))
-  expect_true(is.finite(result$gradient_phi))
-
-  # Verify gradients via finite differences
-  eps <- 1e-5
-  for (i in seq_along(mu)) {
-    mu_plus <- mu
-    mu_plus[i] <- mu[i] + eps
-    result_plus <- tulpaRatio:::cpp_test_autodiff_negbin_loglik(y, mu_plus, phi)
-
-    mu_minus <- mu
-    mu_minus[i] <- mu[i] - eps
-    result_minus <- tulpaRatio:::cpp_test_autodiff_negbin_loglik(y, mu_minus, phi)
-
-    fd_grad <- (result_plus$value - result_minus$value) / (2 * eps)
-    expect_equal(result$gradient_mu[i], fd_grad, tolerance = 1e-4)
+  expect_equal(tulpaRatio:::cpp_test_softmax_inplace(x), exp(x) / sum(exp(x)), tolerance = 1e-10)
+  for (eta in c(-3, 0, 2)) {
+    expect_equal(tulpaRatio:::cpp_test_binomial_lpmf(3L, 10L, eta, 0, 0, "none"),
+                 dbinom(3, 10, plogis(eta), log = TRUE), tolerance = 1e-10)
   }
 })
 
@@ -1266,20 +753,6 @@ test_that("parallel likelihood reduction is correct", {
   for (n_threads in c(1, 2, 4)) {
     result <- tulpaRatio:::cpp_test_parallel_likelihood(y, mu, n_threads)
     expect_equal(result$log_lik, expected_ll, tolerance = 1e-8)
-  }
-})
-
-test_that("parallel independent computations are thread-safe", {
-  n <- 1000
-
-  # Run with different thread counts and verify determinism
-  results_1t <- tulpaRatio:::cpp_test_parallel_independent(n, 1L)
-
-  for (n_threads in c(2, 4)) {
-    results_mt <- tulpaRatio:::cpp_test_parallel_independent(n, n_threads)
-
-    # Results should be identical regardless of thread count
-    expect_equal(results_1t, results_mt, tolerance = 1e-10)
   }
 })
 

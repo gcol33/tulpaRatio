@@ -12,6 +12,15 @@
 #include "ratio_obs_lik.h"
 #include "taylor_jet.h"
 
+#include "linalg_fast.h"
+#include "hmc_temporal.h"
+#include "hmc_temporal_multiscale.h"
+#include "hmc_zi.h"
+#include "hmc_spatiotemporal.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 using namespace Rcpp;
 
 namespace ratiod_hmc {
@@ -83,641 +92,94 @@ List cpp_test_negbin_paths(int y, double mu, double phi, double z,
       _["H_table"] = ratiod_hmc::negbin_table_probe(y, mu, phi));
 }
 
-// ---------------------------------------------------------------------------
-// Leapfrog integrator (standalone version for testing)
-// ---------------------------------------------------------------------------
+static std::vector<double> flatten_row_major(const NumericMatrix& x) {
+  std::vector<double> out(x.size());
+  for (int i = 0; i < x.nrow(); ++i)
+    for (int j = 0; j < x.ncol(); ++j) out[i * x.ncol() + j] = x(i, j);
+  return out;
+}
 
-// Simple quadratic potential for testing: U(q) = 0.5 * sum(q^2)
-// Gradient: dU/dq = q
 // [[Rcpp::export]]
-List cpp_test_leapfrog(
-    NumericVector q_init,
-    NumericVector p_init,
-    double epsilon,
-    int L
-) {
-  int d = q_init.size();
-  std::vector<double> q(q_init.begin(), q_init.end());
-  std::vector<double> p(p_init.begin(), p_init.end());
+NumericMatrix cpp_test_cholesky(NumericMatrix x) {
+  return ratiod::chol_decomp(x);
+}
 
-  // Leapfrog integration with quadratic potential U(q) = 0.5 * sum(q^2)
-  // Gradient dU/dq = q
+// [[Rcpp::export]]
+NumericVector cpp_test_inverse_logit(NumericVector x) {
+  NumericVector out(x.size());
+  for (int i = 0; i < x.size(); ++i) out[i] = ratiod::math::inv_logit(x[i]);
+  return out;
+}
 
-  // Half step for momentum
-  for (int i = 0; i < d; i++) {
-    p[i] = p[i] - 0.5 * epsilon * q[i];
+// A binomial model without observations has independent N(0,1) coefficients.
+// [[Rcpp::export]]
+List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon) {
+  ratiod::ModelData data;
+  data.N = 0;
+  data.p_num = q.size();
+  data.p_denom = 0;
+  data.model_type = ratiod::ModelType::BINOMIAL;
+  data.sigma_beta = 1.0;
+  const auto layout = ratiod_hmc::compute_param_layout(data);
+  std::vector<double> position(q.begin(), q.end()), momentum(p.begin(), p.end());
+  const auto step = ratiod_hmc::leapfrog_step(position, momentum, epsilon, data, layout);
+  const double h = ratiod_hmc::nuts_compute_hamiltonian(
+      -0.5 * ratiod_linalg::norm_squared(position.data(), position.size()),
+      momentum, std::vector<double>(p.size(), 1.0), p.size());
+  return List::create(_["q"] = step.q, _["p"] = step.p, _["hamiltonian"] = h);
+}
+
+// [[Rcpp::export]]
+List cpp_test_autodiff_unary(std::string op, double value, double parameter = 1.0) {
+  using namespace ratiod::ad;
+  TapeScope scope;
+  Var x(value), out(0.0);
+  if (op == "exp_chain") out = exp(x * x);
+  else if (op == "lgamma") out = lgamma(x);
+  else if (op == "softplus") out = softplus(x);
+  else if (op == "inv_logit") out = inv_logit(x);
+  else if (op == "log") out = log(x);
+  else if (op == "sqrt") out = sqrt(x);
+  else if (op == "log1p") out = log1p(x);
+  else if (op == "logit") out = logit(x);
+  else if (op == "pow") out = pow(x, parameter);
+  else stop("Unknown unary operation '%s'.", op.c_str());
+  out.backward();
+  return List::create(_["value"] = out.val(), _["gradient"] = x.adj());
+}
+
+// [[Rcpp::export]]
+List cpp_test_autodiff_binary(std::string op, double first, double second) {
+  using namespace ratiod::ad;
+  TapeScope scope;
+  Var a(first), b(second), out(0.0);
+  if (op == "division") out = a / b;
+  else if (op == "log_sum_exp") out = log_sum_exp(a, b);
+  else stop("Unknown binary operation '%s'.", op.c_str());
+  out.backward();
+  return List::create(_["value"] = out.val(),
+                      _["gradient"] = NumericVector::create(a.adj(), b.adj()));
+}
+
+// [[Rcpp::export]]
+List cpp_test_autodiff_vector(std::string op, NumericVector values,
+                              IntegerVector y, double phi = 1.0) {
+  using namespace ratiod::ad;
+  TapeScope scope;
+  std::vector<Var> x;
+  for (double value : values) x.emplace_back(value);
+  Var scale(phi), out(0.0);
+  for (int i = 0; i < values.size(); ++i) {
+    if (op == "squares") out = out + x[i] * x[i];
+    else if (op == "poisson") out = out + ratiod::math::log_lik_poisson(y[i], exp(x[i]));
+    else if (op == "negbin") out = out + ratiod::math::log_lik_negbin(y[i], x[i], scale);
+    else stop("Unknown vector operation '%s'.", op.c_str());
   }
-
-  // Full steps
-  for (int step = 0; step < L - 1; step++) {
-    // Full step for position
-    for (int i = 0; i < d; i++) {
-      q[i] = q[i] + epsilon * p[i];
-    }
-    // Full step for momentum
-    for (int i = 0; i < d; i++) {
-      p[i] = p[i] - epsilon * q[i];
-    }
-  }
-
-  // Final full step for position
-  for (int i = 0; i < d; i++) {
-    q[i] = q[i] + epsilon * p[i];
-  }
-
-  // Half step for momentum
-  for (int i = 0; i < d; i++) {
-    p[i] = p[i] - 0.5 * epsilon * q[i];
-  }
-
-  return List::create(
-    Named("q") = NumericVector(q.begin(), q.end()),
-    Named("p") = NumericVector(p.begin(), p.end())
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Hamiltonian computation for testing
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_hamiltonian(NumericVector q, NumericVector p) {
-  // H(q, p) = U(q) + K(p) = 0.5 * sum(q^2) + 0.5 * sum(p^2)
-  double H = 0.0;
-  for (int i = 0; i < q.size(); i++) {
-    H += 0.5 * q[i] * q[i] + 0.5 * p[i] * p[i];
-  }
-  return H;
-}
-
-// ---------------------------------------------------------------------------
-// Log-sum-exp (numerically stable)
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_log_sum_exp(NumericVector log_vals) {
-  if (log_vals.size() == 0) return R_NegInf;
-
-  double max_val = *std::max_element(log_vals.begin(), log_vals.end());
-  if (max_val == R_NegInf) return R_NegInf;
-
-  double sum_exp = 0.0;
-  for (int i = 0; i < log_vals.size(); i++) {
-    sum_exp += std::exp(log_vals[i] - max_val);
-  }
-
-  return max_val + std::log(sum_exp);
-}
-
-// ---------------------------------------------------------------------------
-// Softmax (numerically stable)
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-NumericVector cpp_test_softmax(NumericVector x) {
-  double max_val = *std::max_element(x.begin(), x.end());
-  NumericVector result(x.size());
-  double sum_exp = 0.0;
-
-  for (int i = 0; i < x.size(); i++) {
-    result[i] = std::exp(x[i] - max_val);
-    sum_exp += result[i];
-  }
-
-  for (int i = 0; i < x.size(); i++) {
-    result[i] /= sum_exp;
-  }
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Inverse logit (sigmoid)
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-NumericVector cpp_test_inv_logit(NumericVector x) {
-  NumericVector result(x.size());
-  for (int i = 0; i < x.size(); i++) {
-    result[i] = 1.0 / (1.0 + std::exp(-x[i]));
-  }
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Log-gamma function wrapper
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_lgamma(double x) {
-  return std::lgamma(x);
-}
-
-// ---------------------------------------------------------------------------
-// Poisson log-likelihood
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_poisson_loglik(IntegerVector y, NumericVector lambda) {
-  double ll = 0.0;
-  for (int i = 0; i < y.size(); i++) {
-    if (lambda[i] > 0) {
-      ll += y[i] * std::log(lambda[i]) - lambda[i] - std::lgamma(y[i] + 1);
-    } else if (y[i] > 0) {
-      return R_NegInf;
-    }
-  }
-  return ll;
-}
-
-// ---------------------------------------------------------------------------
-// Binomial log-likelihood
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_binomial_loglik(IntegerVector y, IntegerVector n, NumericVector p) {
-  double ll = 0.0;
-  for (int i = 0; i < y.size(); i++) {
-    if (p[i] > 0 && p[i] < 1) {
-      ll += y[i] * std::log(p[i]) + (n[i] - y[i]) * std::log(1 - p[i]);
-      ll += std::lgamma(n[i] + 1) - std::lgamma(y[i] + 1) - std::lgamma(n[i] - y[i] + 1);
-    } else if ((p[i] <= 0 && y[i] > 0) || (p[i] >= 1 && y[i] < n[i])) {
-      return R_NegInf;
-    }
-  }
-  return ll;
-}
-
-// ---------------------------------------------------------------------------
-// Negative binomial log-likelihood
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_negbin_loglik(IntegerVector y, NumericVector mu, double phi) {
-  double ll = 0.0;
-  for (int i = 0; i < y.size(); i++) {
-    ll += ratiod::math::log_lik_negbin(y[i], mu[i], phi);
-  }
-  return ll;
-}
-
-// ---------------------------------------------------------------------------
-// Normal log-likelihood
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-double cpp_test_normal_loglik(NumericVector y, NumericVector mu, double sigma) {
-  double ll = 0.0;
-  double tau = 1.0 / (sigma * sigma);
-  for (int i = 0; i < y.size(); i++) {
-    double resid = y[i] - mu[i];
-    ll += -0.5 * std::log(2 * M_PI) - std::log(sigma) - 0.5 * tau * resid * resid;
-  }
-  return ll;
-}
-
-// ---------------------------------------------------------------------------
-// Cholesky decomposition (for testing covariance matrices)
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-NumericMatrix cpp_test_cholesky(NumericMatrix A) {
-  int n = A.nrow();
-  NumericMatrix L(n, n);
-
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j <= i; j++) {
-      double sum = 0.0;
-      for (int k = 0; k < j; k++) {
-        sum += L(i, k) * L(j, k);
-      }
-      if (i == j) {
-        L(i, j) = std::sqrt(A(i, i) - sum);
-      } else {
-        L(i, j) = (A(i, j) - sum) / L(j, j);
-      }
-    }
-  }
-
-  return L;
-}
-
-// ---------------------------------------------------------------------------
-// Matrix-vector multiplication
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-NumericVector cpp_test_matvec(NumericMatrix A, NumericVector x) {
-  int n = A.nrow();
-  int m = A.ncol();
-  NumericVector result(n);
-
-  for (int i = 0; i < n; i++) {
-    result[i] = 0.0;
-    for (int j = 0; j < m; j++) {
-      result[i] += A(i, j) * x[j];
-    }
-  }
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Autodiff tests - test the actual autodiff.h implementation
-// ---------------------------------------------------------------------------
-
-using namespace ratiod::ad;
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_gradient(NumericVector x_vals) {
-  // Test gradient computation for f(x) = sum(x^2)
-  // Gradient should be 2*x
-  init_tape();
-
-  int n = x_vals.size();
-  std::vector<Var> x(n);
-
-  // Initialize with values
-  for (int i = 0; i < n; i++) {
-    x[i] = Var(x_vals[i]);
-  }
-
-  // Compute f(x) = sum(x^2)
-  Var result = Var(0.0);
-  for (int i = 0; i < n; i++) {
-    result = result + x[i] * x[i];
-  }
-
-  // Backward pass
-  result.backward();
-
-  // Extract gradients
-  NumericVector grads(n);
-  for (int i = 0; i < n; i++) {
-    grads[i] = x[i].adj();
-  }
-
-  double value = result.val();
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grads
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_exp_chain(double x_val) {
-  // Test chain rule: f(x) = exp(x^2)
-  // f'(x) = 2x * exp(x^2)
-  init_tape();
-
-  Var x(x_val);
-  Var x_sq = x * x;
-  Var result = ratiod::ad::exp(x_sq);
-
-  result.backward();
-
-  double expected_grad = 2.0 * x_val * std::exp(x_val * x_val);
-  double grad = x.adj();
-  double value = result.val();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = expected_grad
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_log_likelihood(IntegerVector y, NumericVector eta) {
-  // Test Poisson log-likelihood gradient w.r.t. linear predictor
-  // ll = sum(y * eta - exp(eta))
-  // dll/deta = y - exp(eta)
-  init_tape();
-
-  int n = y.size();
-  std::vector<Var> eta_ad(n);
-
-  for (int i = 0; i < n; i++) {
-    eta_ad[i] = Var(eta[i]);
-  }
-
-  Var ll = Var(0.0);
-  for (int i = 0; i < n; i++) {
-    ll = ll + Var((double)y[i]) * eta_ad[i] - ratiod::ad::exp(eta_ad[i]);
-  }
-
-  ll.backward();
-
-  NumericVector grads(n);
-  NumericVector expected_grads(n);
-  for (int i = 0; i < n; i++) {
-    grads[i] = eta_ad[i].adj();
-    expected_grads[i] = y[i] - std::exp(eta[i]);
-  }
-
-  double value = ll.val();
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grads,
-    Named("expected_gradient") = expected_grads
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_division(double a_val, double b_val) {
-  // Test division: f(a, b) = a / b
-  // df/da = 1/b, df/db = -a/b^2
-  init_tape();
-
-  Var a(a_val);
-  Var b(b_val);
-
-  Var result = a / b;
-
-  result.backward();
-
-  double value = result.val();
-  double grad_a = a.adj();
-  double grad_b = b.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("grad_a") = grad_a,
-    Named("grad_b") = grad_b,
-    Named("expected_grad_a") = 1.0 / b_val,
-    Named("expected_grad_b") = -a_val / (b_val * b_val)
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_lgamma(double x_val) {
-  // Test lgamma gradient: d/dx lgamma(x) = digamma(x)
-  init_tape();
-
-  Var x(x_val);
-
-  Var result = ratiod::ad::lgamma(x);
-
-  result.backward();
-
-  // R's digamma function for comparison
-  double expected_grad = R::digamma(x_val);
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = expected_grad
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_softplus(double x_val) {
-  // Test softplus: f(x) = log(1 + exp(x))
-  // f'(x) = sigmoid(x) = 1 / (1 + exp(-x))
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::softplus(x);
-
-  result.backward();
-
-  double expected_grad = 1.0 / (1.0 + std::exp(-x_val));
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = expected_grad
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_inv_logit(double x_val) {
-  // Test inv_logit (sigmoid): f(x) = 1 / (1 + exp(-x))
-  // f'(x) = f(x) * (1 - f(x))
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::inv_logit(x);
-
-  result.backward();
-
-  double sigmoid_val = 1.0 / (1.0 + std::exp(-x_val));
-  double expected_grad = sigmoid_val * (1.0 - sigmoid_val);
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = expected_grad
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Autodiff: Additional math functions
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_log(double x_val) {
-  // Test log: f(x) = log(x), f'(x) = 1/x
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::log(x);
-
-  result.backward();
-
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = 1.0 / x_val
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_sqrt(double x_val) {
-  // Test sqrt: f(x) = sqrt(x), f'(x) = 1/(2*sqrt(x))
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::sqrt(x);
-
-  result.backward();
-
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = 1.0 / (2.0 * std::sqrt(x_val))
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_pow(double x_val, double p) {
-  // Test pow: f(x) = x^p, f'(x) = p * x^(p-1)
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::pow(x, p);
-
-  result.backward();
-
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = p * std::pow(x_val, p - 1.0)
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_log1p(double x_val) {
-  // Test log1p: f(x) = log(1+x), f'(x) = 1/(1+x)
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::log1p(x);
-
-  result.backward();
-
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = 1.0 / (1.0 + x_val)
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_log_sum_exp(double a_val, double b_val) {
-  // Test log_sum_exp: f(a,b) = log(exp(a) + exp(b))
-  // df/da = exp(a) / (exp(a) + exp(b)) = softmax(a)
-  // df/db = exp(b) / (exp(a) + exp(b)) = softmax(b)
-  init_tape();
-
-  Var a(a_val);
-  Var b(b_val);
-  Var result = ratiod::ad::log_sum_exp(a, b);
-
-  result.backward();
-
-  double value = result.val();
-  double grad_a = a.adj();
-  double grad_b = b.adj();
-
-  // Expected gradients (softmax)
-  double max_val = std::max(a_val, b_val);
-  double sum_exp = std::exp(a_val - max_val) + std::exp(b_val - max_val);
-  double expected_a = std::exp(a_val - max_val) / sum_exp;
-  double expected_b = std::exp(b_val - max_val) / sum_exp;
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("grad_a") = grad_a,
-    Named("grad_b") = grad_b,
-    Named("expected_grad_a") = expected_a,
-    Named("expected_grad_b") = expected_b
-  );
-}
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_logit(double x_val) {
-  // Test logit: f(x) = log(x/(1-x)), f'(x) = 1/(x*(1-x))
-  init_tape();
-
-  Var x(x_val);
-  Var result = ratiod::ad::logit(x);
-
-  result.backward();
-
-  double value = result.val();
-  double grad = x.adj();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient") = grad,
-    Named("expected_gradient") = 1.0 / (x_val * (1.0 - x_val))
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Autodiff: Compound expressions (test gradient accumulation)
-// ---------------------------------------------------------------------------
-
-// [[Rcpp::export]]
-List cpp_test_autodiff_negbin_loglik(IntegerVector y, NumericVector mu, double phi) {
-  // Test negative binomial log-likelihood gradient
-  // ll = sum( lgamma(y + phi) - lgamma(phi) - lgamma(y + 1)
-  //           + phi * log(phi/(phi+mu)) + y * log(mu/(phi+mu)) )
-  init_tape();
-
-  int n = y.size();
-  std::vector<Var> mu_ad(n);
-  for (int i = 0; i < n; i++) {
-    mu_ad[i] = Var(mu[i]);
-  }
-  Var phi_ad(phi);
-
-  Var ll = Var(0.0);
-  for (int i = 0; i < n; i++) {
-    ll = ll + ratiod::math::log_lik_negbin(y[i], mu_ad[i], phi_ad);
-  }
-
-  ll.backward();
-
-  NumericVector grads_mu(n);
-  for (int i = 0; i < n; i++) {
-    grads_mu[i] = mu_ad[i].adj();
-  }
-  double grad_phi = phi_ad.adj();
-  double value = ll.val();
-
-  clear_tape();
-
-  return List::create(
-    Named("value") = value,
-    Named("gradient_mu") = grads_mu,
-    Named("gradient_phi") = grad_phi
-  );
+  out.backward();
+  NumericVector gradient(values.size());
+  for (int i = 0; i < values.size(); ++i) gradient[i] = x[i].adj();
+  return List::create(_["value"] = out.val(), _["gradient"] = gradient,
+                      _["gradient_phi"] = scale.adj());
 }
 
 // ---------------------------------------------------------------------------
@@ -760,7 +222,6 @@ NumericVector cpp_test_pg_sigma_halfcauchy_chain(NumericVector re, double scale,
 // linalg_fast.h test wrappers
 // ---------------------------------------------------------------------------
 
-#include "linalg_fast.h"
 
 // [[Rcpp::export]]
 double cpp_test_dot_product(NumericVector x, NumericVector y) {
@@ -795,12 +256,7 @@ NumericVector cpp_test_scale(double a, NumericVector x) {
 NumericVector cpp_test_linalg_matvec(NumericMatrix X, NumericVector beta) {
   int N = X.nrow();
   int p = X.ncol();
-  std::vector<double> X_flat(N * p);
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < p; j++) {
-      X_flat[i * p + j] = X(i, j);
-    }
-  }
+  const auto X_flat = flatten_row_major(X);
   NumericVector y(N);
   ratiod_linalg::matvec(X_flat.data(), beta.begin(), y.begin(), N, p);
   return y;
@@ -810,12 +266,7 @@ NumericVector cpp_test_linalg_matvec(NumericMatrix X, NumericVector beta) {
 NumericVector cpp_test_linalg_matvec_add(NumericMatrix X, NumericVector beta, NumericVector y_init) {
   int N = X.nrow();
   int p = X.ncol();
-  std::vector<double> X_flat(N * p);
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < p; j++) {
-      X_flat[i * p + j] = X(i, j);
-    }
-  }
+  const auto X_flat = flatten_row_major(X);
   NumericVector y = clone(y_init);
   ratiod_linalg::matvec_add(X_flat.data(), beta.begin(), y.begin(), N, p);
   return y;
@@ -825,12 +276,7 @@ NumericVector cpp_test_linalg_matvec_add(NumericMatrix X, NumericVector beta, Nu
 NumericVector cpp_test_linalg_matvec_transpose(NumericMatrix X, NumericVector x) {
   int N = X.nrow();
   int p = X.ncol();
-  std::vector<double> X_flat(N * p);
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < p; j++) {
-      X_flat[i * p + j] = X(i, j);
-    }
-  }
+  const auto X_flat = flatten_row_major(X);
   NumericVector y(p);
   ratiod_linalg::matvec_transpose(X_flat.data(), x.begin(), y.begin(), N, p);
   return y;
@@ -868,17 +314,8 @@ List cpp_test_compute_linear_predictors(
   int p_num = X_num.ncol();
   int p_denom = X_denom.ncol();
 
-  std::vector<double> X_num_flat(N * p_num);
-  std::vector<double> X_denom_flat(N * p_denom);
-
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < p_num; j++) {
-      X_num_flat[i * p_num + j] = X_num(i, j);
-    }
-    for (int j = 0; j < p_denom; j++) {
-      X_denom_flat[i * p_denom + j] = X_denom(i, j);
-    }
-  }
+  const auto X_num_flat = flatten_row_major(X_num);
+  const auto X_denom_flat = flatten_row_major(X_denom);
 
   NumericVector eta_num(N);
   NumericVector eta_denom(N);
@@ -899,8 +336,6 @@ List cpp_test_compute_linear_predictors(
 // hmc_temporal.h test wrappers
 // ---------------------------------------------------------------------------
 
-#include "hmc_temporal.h"
-#include "hmc_temporal_multiscale.h"
 
 // [[Rcpp::export]]
 double cpp_test_rw1_quadratic_form(NumericVector phi, bool cyclic) {
@@ -944,7 +379,6 @@ double cpp_test_ms_rw_log_lik(NumericVector phi, double sigma2, int order,
 // hmc_zi.h test wrappers
 // ---------------------------------------------------------------------------
 
-#include "hmc_zi.h"
 
 // [[Rcpp::export]]
 double cpp_test_log1pexp(double x) {
@@ -1036,22 +470,13 @@ double cpp_test_zi_log_likelihood(int y, double mu, double phi, double logit_zi,
 // OpenMP parallel execution tests
 // ---------------------------------------------------------------------------
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 // [[Rcpp::export]]
 List cpp_test_parallel_dot_products(NumericMatrix X, NumericVector y, int n_threads) {
   // Test OpenMP parallel reduction with multiple dot products
   int N = X.nrow();
   int p = X.ncol();
 
-  std::vector<double> X_flat(N * p);
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < p; j++) {
-      X_flat[i * p + j] = X(i, j);
-    }
-  }
+  const auto X_flat = flatten_row_major(X);
 
   NumericVector results(N);
   const double total_sum = ratiod_omp::sum_range(N, n_threads, [&](int i) {
@@ -1075,32 +500,13 @@ List cpp_test_parallel_likelihood(
   // Test OpenMP parallel reduction for likelihood computation
   int N = y.size();
   const double log_lik = ratiod_omp::sum_range(N, n_threads, [&](int i) {
-    // Poisson log-likelihood
-    return mu[i] > 0 ? y[i] * std::log(mu[i]) - mu[i] - std::lgamma(y[i] + 1)
-                     : 0.0;
+    return ratiod::math::log_lik_poisson(y[i], mu[i]);
   });
 
   return List::create(
     Named("log_lik") = log_lik,
     Named("n_threads_requested") = n_threads
   );
-}
-
-// Test for thread-local storage correctness
-// [[Rcpp::export]]
-NumericVector cpp_test_parallel_independent(int n, int n_threads) {
-  // Each thread computes independent values, then we verify results
-  NumericVector results(n);
-
-#ifdef _OPENMP
-  #pragma omp parallel for schedule(static) num_threads(n_threads)
-#endif
-  for (int i = 0; i < n; i++) {
-    // Compute a deterministic function that doesn't depend on shared state
-    results[i] = std::sin(i * 0.1) * std::cos(i * 0.2) + i;
-  }
-
-  return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -1113,7 +519,6 @@ NumericVector cpp_test_parallel_independent(int n, int n_threads) {
 // definition rather than against themselves; test-st-gp-density.R drives it.
 // ---------------------------------------------------------------------------
 
-#include "hmc_spatiotemporal.h"
 
 static ratiod_spatiotemporal::SpatiotemporalData test_st_gp_structure(
     int n, NumericMatrix coords, NumericVector time_values, int nn,
