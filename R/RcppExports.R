@@ -433,6 +433,10 @@ cpp_test_precision_beta_spec_h <- function(y, n, phi) {
     .Call(`_tulpaRatio_cpp_test_precision_beta_spec_h`, y, n, phi)
 }
 
+cpp_test_ratio_margin <- function(family, y, n, eta, phi, cached) {
+    .Call(`_tulpaRatio_cpp_test_ratio_margin`, family, y, n, eta, phi, cached)
+}
+
 cpp_tls_workspace_shrink <- function(cycles, work, n) {
     .Call(`_tulpaRatio_cpp_tls_workspace_shrink`, cycles, work, n)
 }

@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------
 //   binomial:       resid_num = y - n*p,                 p = sigmoid(eta)
 //   poisson_gamma:  resid_num   = y_num - mu_num,        mu_num = exp(eta_num)
-//                   resid_denom = shape*(1 - y_d/mu_d),  mu_d  = exp(eta_d)
+//                   resid_denom = shape*(y_d/mu_d - 1),  mu_d  = exp(eta_d)
 //                   d/d log_shape = sum_i [shape*(log(rate_i) + 1 + log(y_d_i)
 //                                          - digamma(shape) - rate_i*y_d_i/shape)]
 //   negbin_gamma:   numerator = NegBin scalar resid (see negbin block);
@@ -69,7 +69,7 @@
 
 #include "lik_specs/lik_grad_h_kernel.h"
 #include "lik_specs/lik_helpers.h"
-#include "beta_binomial_obs.h"
+#include "ratio_margins.h"
 
 #include <Rcpp.h>
 #include <cmath>
@@ -240,533 +240,144 @@ inline double dlog_half_cauchy_log(double log_sigma, double scale) {
     return -2.0 * r2 / (1.0 + r2) + 1.0;
 }
 
-// =====================================================================
-// Per-family functors. Each one captures the response payload, the
-// shared cfg knobs, and any decoded extra parameters; operator()(i, eta,
-// resid, extra) returns log L_i and writes per-obs derivatives.
-// =====================================================================
+using namespace margins;
 
-struct BinomialFn {
-    const lik::BinomialResponseData* resp;
-    int N;
-    double operator()(int i, const double* eta, double* resid, double* /*extra*/) const {
-        const double eta_i = eta[i];   // np = 1, so eta[i] is the only one
-        const int y = resp->y[i];
-        const int n = resp->n[i];
-        const double p = 1.0 / (1.0 + std::exp(-eta_i));
-        resid[0] = static_cast<double>(y) - n * p;
+template<class Num, class Den, class YN, class YD>
+Ratio<Num,Den> bind_ratio(const YN& yn, const YD& yd, int N,
+                         const std::vector<double>& params, int offset) {
+    Response n, d;
+    if constexpr (std::is_same<typename YN::value_type,int>::value) n.counts = yn.data();
+    else n.continuous = yn.data();
+    if constexpr (std::is_same<typename YD::value_type,int>::value) d.counts = yd.data();
+    else d.continuous = yd.data();
+    double pn = 1.0, pd = 1.0;
+    if constexpr (Num::n_extra) pn = std::exp(params[offset]);
+    if constexpr (Den::n_extra) pd = std::exp(params[offset + Num::n_extra]);
+    return {Num(pn),Den(pd),n,d,N};
+}
 
-        // Stable log-pmf
-        double log_p, log_1mp;
-        if (eta_i >= 0.0) {
-            const double e = std::exp(-eta_i);
-            log_p   = -std::log1p(e);
-            log_1mp = -eta_i - std::log1p(e);
+template<class Margin, class ResponseData>
+Ratio<Margin> bind_single(const ResponseData& r, int N,
+                          const std::vector<double>& params, int offset) {
+    double p = 1.0;
+    if constexpr (Margin::n_extra) p = std::exp(params[offset]);
+    return {Margin(p),NoMargin(),{r.y.data(),nullptr,r.n.data()},{},N};
+}
+
+inline auto bind_family(const lik::BinomialResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_single<Binomial>(r,n,p,e);
+}
+inline auto bind_family(const lik::BetaBinomialResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_single<BetaBinomial>(r,n,p,e);
+}
+inline auto bind_family(const lik::PoissonGammaResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_ratio<Poisson,Gamma>(r.y_num,r.y_denom_cont,n,p,e);
+}
+inline auto bind_family(const lik::NegbinGammaResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_ratio<NegBin,Gamma>(r.y_num,r.y_denom_cont,n,p,e);
+}
+inline auto bind_family(const lik::NegbinNegbinResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_ratio<NegBin,NegBin>(r.y_num,r.y_denom,n,p,e);
+}
+inline auto bind_family(const lik::GammaGammaResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_ratio<Gamma,Gamma>(r.y_num_cont,r.y_denom_cont,n,p,e);
+}
+inline auto bind_family(const lik::LognormalResponseData& r, int n, const std::vector<double>& p, int e) {
+    return bind_ratio<Lognormal,Lognormal>(r.y_num_cont,r.y_denom_cont,n,p,e);
+}
+
+template<class Margin>
+inline double apply_extra(const Margin& margin, int e,
+                           const std::vector<double>& params,
+                           const tulpa::ModelData& data,
+                           const tulpa::ParamLayout& layout,
+                           std::vector<double>& grad) {
+    if constexpr (Margin::n_extra == 0) return 0.0;
+    else {
+        const int j = layout.extra_offset + e;
+        const double log_p = params[j];
+        if constexpr (!Margin::log_extra) grad[j] *= margin.phi;
+        if constexpr (Margin::prior == Prior::Gamma) {
+            grad[j] += dlog_gamma_prior_log(log_p,data.phi_prior_shape,data.phi_prior_rate);
+            return log_gamma_prior_log(log_p,data.phi_prior_shape,data.phi_prior_rate);
         } else {
-            const double e = std::exp(eta_i);
-            log_p   = eta_i - std::log1p(e);
-            log_1mp = -std::log1p(e);
+            grad[j] += dlog_half_cauchy_log(log_p,data.sigma_re_scale);
+            return log_half_cauchy_log(log_p,data.sigma_re_scale);
         }
-        return y * log_p + (n - y) * log_1mp + tulpa::math::portable_lchoose(n, y);
     }
-};
+}
 
-struct PoissonGammaFn {
-    const lik::PoissonGammaResponseData* resp;
-    double shape;       // == exp(log_shape)
-    double log_shape;
-    int N;
-    // Precision-only normalizer and score, shared across observations.
-    tulpa::math::GammaPrecision gamma;
-    double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const double eta_n = eta[i];          // process 0
-        const double eta_d = eta[N + i];      // process 1
-        const int    y_n   = resp->y_num[i];
-        const double y_d   = resp->y_denom_cont[i];
-        const double mu_n  = std::exp(eta_n);
-        const double mu_d  = std::exp(eta_d);
+template<class ResponseData>
+void grad_h(const std::vector<double>& params, const tulpa::ModelData& data,
+             const tulpa::ParamLayout& layout, std::vector<double>& grad,
+             double* log_post_out) {
+    assert_no_latent_structure(layout);
+    grad.assign(params.size(),0.0);
+    if (log_post_out) *log_post_out = 0.0;
+    apply_beta_prior(params,data,layout,grad,log_post_out);
+    const auto fn = bind_family(*static_cast<const ResponseData*>(data.model_response_data),
+                                 data.N,params,layout.extra_offset);
+    const auto eta = compute_eta_matrix(params,data,layout);
+    const double ll = run_obs_loop(params,data,layout,eta.data(),fn,grad,decltype(fn)::n_extra);
+    double lp = ll;
+    lp += apply_extra(fn.num,0,params,data,layout,grad);
+    lp += apply_extra(fn.den,decltype(fn.num)::n_extra,params,data,layout,grad);
+    if (log_post_out) *log_post_out += lp;
+}
 
-        // Numerator: Poisson
-        resid[0] = static_cast<double>(y_n) - mu_n;
+} // namespace
 
-        // Denominator: Gamma(shape, rate=shape/mu_d)
-        // Skip if y_d <= 0 (matches legacy behaviour; gamma support).
-        double ll_g = 0.0;
-        double extra_i = 0.0;
-        if (y_d > 0.0) {
-            resid[1] = shape * (y_d / mu_d - 1.0);
-            // ll_gamma = shape*log(rate) + (shape-1)*log(y) - rate*y - lgamma(shape)
-            const double log_y = std::log(y_d);
-            ll_g = gamma.log_density(y_d,mu_d,log_y);
-            // d/dshape per obs (chain-rule to d/dlog_shape applied outside):
-            //   d/dshape = log(rate) + 1 + log(y) - digamma(shape) - rate*y/shape
-            extra_i = gamma.derivative(y_d,mu_d,log_y);
-        } else {
-            resid[1] = 0.0;
-        }
-        extra[0] += extra_i;
-
-        const double ll_p = static_cast<double>(y_n) * eta_n - mu_n
-                            - std::lgamma(static_cast<double>(y_n) + 1.0);
-        return ll_p + ll_g;
-    }
-};
-
-struct NegbinGammaFn {
-    const lik::NegbinGammaResponseData* resp;
-    double phi_num;       // == exp(log_phi_num)
-    double phi_denom;     // == exp(log_phi_denom)   == "shape"
-    int N;
-    tulpa::math::GammaPrecision gamma_denom;
-    double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const double eta_n = eta[i];
-        const double eta_d = eta[N + i];
-        const int    y_n   = resp->y_num[i];
-        const double y_d   = resp->y_denom_cont[i];
-        const double mu_n  = std::exp(eta_n);
-        const double mu_d  = std::exp(eta_d);
-
-        // Numerator: NegBin(mu_num, phi_num)
-        const double denom_n = mu_n + phi_num;
-        resid[0] = static_cast<double>(y_n)
-                   - mu_n * (static_cast<double>(y_n) + phi_num) / denom_n;
-        const double dlog_phi_num_i = tulpa::math::negbin_size_score(y_n, mu_n, phi_num);
-
-        // Denominator: Gamma(shape=phi_denom, rate=phi_denom/mu_d). Only if y_d > 0.
-        double dlog_phi_denom_i = 0.0;
-        double ll_g = 0.0;
-        if (y_d > 0.0) {
-            resid[1] = phi_denom * (y_d / mu_d - 1.0);
-            const double log_y = std::log(y_d);
-            ll_g = gamma_denom.log_density(y_d,mu_d,log_y);
-            dlog_phi_denom_i = gamma_denom.derivative(y_d,mu_d,log_y);
-        } else {
-            resid[1] = 0.0;
-        }
-        // extra grads come back as d/dlog_phi (= phi * d/dphi). The chain rule
-        // is applied at the scaffold level via multiplying by phi after the
-        // sum — so accumulate the d/dphi pieces here, multiply once outside.
-        extra[0] += dlog_phi_num_i;
-        extra[1] += dlog_phi_denom_i;
-
-        // Log-likelihood: NegBin numerator + Gamma denominator
-        const double ll_n = lik::negbin_log_pmf<double>(y_n, mu_n, phi_num);
-        return ll_n + ll_g;
-    }
-};
-
-struct NegbinNegbinFn {
-    const lik::NegbinNegbinResponseData* resp;
-    double phi_num, phi_denom;
-    int N;
-    double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const double eta_n = eta[i];
-        const double eta_d = eta[N + i];
-        const int    y_n   = resp->y_num[i];
-        const int    y_d   = resp->y_denom[i];
-        const double mu_n  = std::exp(eta_n);
-        const double mu_d  = std::exp(eta_d);
-
-        const double denom_n = mu_n + phi_num;
-        const double denom_d = mu_d + phi_denom;
-        resid[0] = static_cast<double>(y_n)
-                   - mu_n * (static_cast<double>(y_n) + phi_num) / denom_n;
-        resid[1] = static_cast<double>(y_d)
-                   - mu_d * (static_cast<double>(y_d) + phi_denom) / denom_d;
-
-        extra[0] += tulpa::math::negbin_size_score(y_n, mu_n, phi_num);
-        extra[1] += tulpa::math::negbin_size_score(y_d, mu_d, phi_denom);
-
-        const double ll_n = lik::negbin_log_pmf<double>(y_n, mu_n, phi_num);
-        const double ll_d = lik::negbin_log_pmf<double>(y_d, mu_d, phi_denom);
-        return ll_n + ll_d;
-    }
-};
-
-struct GammaGammaFn {
-    const lik::GammaGammaResponseData* resp;
-    double phi_num, phi_denom;
-    int N;
-    tulpa::math::GammaPrecision gamma_num, gamma_denom;
-    double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const double eta_n = eta[i];
-        const double eta_d = eta[N + i];
-        const double y_n   = resp->y_num_cont[i];
-        const double y_d   = resp->y_denom_cont[i];
-        const double mu_n  = std::exp(eta_n);
-        const double mu_d  = std::exp(eta_d);
-
-        double ll = 0.0;
-        if (y_n > 0.0) {
-            resid[0] = phi_num * (y_n / mu_n - 1.0);
-            const double log_yn = std::log(y_n);
-            ll += gamma_num.log_density(y_n,mu_n,log_yn);
-            extra[0] += gamma_num.derivative(y_n,mu_n,log_yn);
-        } else {
-            resid[0] = 0.0;
-        }
-        if (y_d > 0.0) {
-            resid[1] = phi_denom * (y_d / mu_d - 1.0);
-            const double log_yd = std::log(y_d);
-            ll += gamma_denom.log_density(y_d,mu_d,log_yd);
-            extra[1] += gamma_denom.derivative(y_d,mu_d,log_yd);
-        } else {
-            resid[1] = 0.0;
-        }
-        return ll;
-    }
-};
-
-struct LognormalFn {
-    const lik::LognormalResponseData* resp;
-    double sigma_num, sigma_denom;
-    int N;
-    double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const double mu_n = eta[i];           // eta IS mu_log
-        const double mu_d = eta[N + i];
-        const double y_n  = resp->y_num_cont[i];
-        const double y_d  = resp->y_denom_cont[i];
-        const double log_yn = std::log(y_n);
-        const double log_yd = std::log(y_d);
-        const double s_n  = sigma_num;
-        const double s_d  = sigma_denom;
-        const double s_n2 = s_n * s_n;
-        const double s_d2 = s_d * s_d;
-        const double z_n  = (log_yn - mu_n) / s_n;
-        const double z_d  = (log_yd - mu_d) / s_d;
-
-        resid[0] = (log_yn - mu_n) / s_n2;
-        resid[1] = (log_yd - mu_d) / s_d2;
-
-        // d/dsigma_k = (-1 + z_k^2) / sigma_k
-        // d/dlog_sigma_k = sigma_k * d/dsigma_k = -1 + z_k^2
-        extra[0] += -1.0 + z_n * z_n;
-        extra[1] += -1.0 + z_d * z_d;
-
-        // Log-likelihood (matches legacy: drops -0.5*log(2*pi))
-        return -log_yn - std::log(s_n) - 0.5 * z_n * z_n
-             + -log_yd - std::log(s_d) - 0.5 * z_d * z_d;
-    }
-};
-
-struct BetaBinomialFn {
-    const lik::BetaBinomialResponseData* resp;
-    double phi;            // == exp(log_phi)
-    int N;
-    double operator()(int i, const double* eta, double* resid, double* extra) const {
-        const int y = resp->y[i];
-        const int n = resp->n[i];
-        const ratiod::math::BetaBinomialObs bb =
-            ratiod::math::beta_binomial_obs(y, n, eta[i], phi);
-        resid[0] = bb.d_eta;
-        // d/dphi (will be multiplied by phi at the end of the loop)
-        extra[0] += bb.d_phi;
-        return bb.ll + tulpa::math::portable_lchoose(n, y);
-    }
-};
-
-}  // namespace
 Rcpp::NumericMatrix precision_spec_h_probe(double y, double mu, double phi) {
-  lik::PoissonGammaResponseData pg; pg.y_num={0}; pg.y_denom_cont={y};
-  lik::NegbinGammaResponseData ng; ng.y_num={0}; ng.y_denom_cont={y};
-  lik::GammaGammaResponseData gg; gg.y_num_cont={y}; gg.y_denom_cont={y};
-  double eta[2]={0,std::log(mu)}, resid[2], extra[2]={0,0};
-  Rcpp::NumericMatrix out(3,2);
-  PoissonGammaFn a{&pg,phi,std::log(phi),1,tulpa::math::GammaPrecision(phi)};
-  out(0,0)=a(0,eta,resid,extra)+1; out(0,1)=extra[0];
-  extra[0]=extra[1]=0;
-  NegbinGammaFn b{&ng,2,phi,1,tulpa::math::GammaPrecision(phi)};
-  out(1,0)=b(0,eta,resid,extra)+2*std::log1p(.5); out(1,1)=extra[1];
-  extra[0]=extra[1]=0; eta[0]=eta[1];
-  GammaGammaFn c{&gg,phi,phi,1,tulpa::math::GammaPrecision(phi),tulpa::math::GammaPrecision(phi)};
-  out(2,0)=c(0,eta,resid,extra); out(2,1)=extra[1];
-  return out;
+    const Gamma gamma(phi);
+    const Observation x{y,std::log(mu)};
+    const auto g = gamma.operator()<false>(x);
+    Rcpp::NumericMatrix out(3,2);
+    out(0,0) = (-1.0 + g.ll) + 1.0;
+    out(0,1) = g.extra;
+    out(1,0) = (NegBin(2).operator()<false>({0,0}).ll + g.ll) + 2*std::log1p(.5);
+    out(1,1) = g.extra;
+    out(2,0) = g.ll + g.ll;
+    out(2,1) = g.extra;
+    return out;
 }
 
 Rcpp::NumericVector precision_spec_beta_h_probe(int y, int n, double phi) {
-  lik::BetaBinomialResponseData resp; resp.y={y};resp.n={n};
-  BetaBinomialFn fn{&resp,phi,1};
-  double eta=0, resid=0, extra=0;
-  const double ll=fn(0,&eta,&resid,&extra);
-  return Rcpp::NumericVector::create(ll,extra);
+    const auto b = BetaBinomial(phi).operator()<false>({double(y),0.0,n});
+    return Rcpp::NumericVector::create(b.ll,b.extra);
+}
+void grad_h_beta_binomial(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::BetaBinomialResponseData>(params,data,layout,grad,lp);
 }
 
-
-// =====================================================================
-// Public per-family entry points
-// =====================================================================
-
-void grad_h_binomial(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::BinomialResponseData*>(
-        data.model_response_data);
-    BinomialFn fn{resp, data.N};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/0);
-    if (log_post_out) *log_post_out += log_lik;
+void grad_h_binomial(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::BinomialResponseData>(params,data,layout,grad,lp);
 }
 
-void grad_h_poisson_gamma(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const double log_shape = params[layout.extra_offset];
-    const double shape     = std::exp(log_shape);
-    const tulpa::math::GammaPrecision dig_shape(shape);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::PoissonGammaResponseData*>(
-        data.model_response_data);
-    PoissonGammaFn fn{resp, shape, log_shape, data.N, dig_shape};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/1);
-
-    // Convert d/dshape -> d/dlog_shape via chain rule (* shape).
-    grad[layout.extra_offset] *= shape;
-
-    // Extra-parameter prior on log_shape: Gamma(phi_prior_shape, phi_prior_rate)
-    grad[layout.extra_offset] += dlog_gamma_prior_log(
-        log_shape, data.phi_prior_shape, data.phi_prior_rate);
-    if (log_post_out) {
-        *log_post_out += log_lik
-            + log_gamma_prior_log(log_shape, data.phi_prior_shape, data.phi_prior_rate);
-    }
+void grad_h_negbin_gamma(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::NegbinGammaResponseData>(params,data,layout,grad,lp);
 }
 
-void grad_h_negbin_gamma(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const double log_phi_num   = params[layout.extra_offset + 0];
-    const double log_phi_denom = params[layout.extra_offset + 1];
-    const double phi_num       = std::exp(log_phi_num);
-    const double phi_denom     = std::exp(log_phi_denom);
-    const tulpa::math::GammaPrecision dig_phi_denom(phi_denom);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::NegbinGammaResponseData*>(
-        data.model_response_data);
-    NegbinGammaFn fn{resp, phi_num, phi_denom, data.N, dig_phi_denom};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/2);
-
-    // The functor wrote d/dphi; convert to d/dlog_phi via chain rule (* phi)
-    grad[layout.extra_offset + 0] *= phi_num;
-    grad[layout.extra_offset + 1] *= phi_denom;
-
-    // Extra-parameter priors on log_phi_num, log_phi_denom
-    grad[layout.extra_offset + 0] += dlog_gamma_prior_log(
-        log_phi_num,   data.phi_prior_shape, data.phi_prior_rate);
-    grad[layout.extra_offset + 1] += dlog_gamma_prior_log(
-        log_phi_denom, data.phi_prior_shape, data.phi_prior_rate);
-
-    if (log_post_out) {
-        *log_post_out += log_lik
-            + log_gamma_prior_log(log_phi_num,   data.phi_prior_shape, data.phi_prior_rate)
-            + log_gamma_prior_log(log_phi_denom, data.phi_prior_shape, data.phi_prior_rate);
-    }
+void grad_h_lognormal(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::LognormalResponseData>(params,data,layout,grad,lp);
 }
 
-void grad_h_negbin_negbin(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const double log_phi_num   = params[layout.extra_offset + 0];
-    const double log_phi_denom = params[layout.extra_offset + 1];
-    const double phi_num       = std::exp(log_phi_num);
-    const double phi_denom     = std::exp(log_phi_denom);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::NegbinNegbinResponseData*>(
-        data.model_response_data);
-    NegbinNegbinFn fn{resp, phi_num, phi_denom, data.N};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/2);
-
-    grad[layout.extra_offset + 0] *= phi_num;
-    grad[layout.extra_offset + 1] *= phi_denom;
-
-    grad[layout.extra_offset + 0] += dlog_gamma_prior_log(
-        log_phi_num,   data.phi_prior_shape, data.phi_prior_rate);
-    grad[layout.extra_offset + 1] += dlog_gamma_prior_log(
-        log_phi_denom, data.phi_prior_shape, data.phi_prior_rate);
-
-    if (log_post_out) {
-        *log_post_out += log_lik
-            + log_gamma_prior_log(log_phi_num,   data.phi_prior_shape, data.phi_prior_rate)
-            + log_gamma_prior_log(log_phi_denom, data.phi_prior_shape, data.phi_prior_rate);
-    }
+void grad_h_gamma_gamma(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::GammaGammaResponseData>(params,data,layout,grad,lp);
 }
 
-void grad_h_gamma_gamma(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const double log_phi_num   = params[layout.extra_offset + 0];
-    const double log_phi_denom = params[layout.extra_offset + 1];
-    const double phi_num       = std::exp(log_phi_num);
-    const double phi_denom     = std::exp(log_phi_denom);
-    const tulpa::math::GammaPrecision dig_phi_num(phi_num);
-    const tulpa::math::GammaPrecision dig_phi_denom(phi_denom);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::GammaGammaResponseData*>(
-        data.model_response_data);
-    GammaGammaFn fn{resp, phi_num, phi_denom, data.N, dig_phi_num, dig_phi_denom};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/2);
-
-    grad[layout.extra_offset + 0] *= phi_num;
-    grad[layout.extra_offset + 1] *= phi_denom;
-
-    grad[layout.extra_offset + 0] += dlog_gamma_prior_log(
-        log_phi_num,   data.phi_prior_shape, data.phi_prior_rate);
-    grad[layout.extra_offset + 1] += dlog_gamma_prior_log(
-        log_phi_denom, data.phi_prior_shape, data.phi_prior_rate);
-
-    if (log_post_out) {
-        *log_post_out += log_lik
-            + log_gamma_prior_log(log_phi_num,   data.phi_prior_shape, data.phi_prior_rate)
-            + log_gamma_prior_log(log_phi_denom, data.phi_prior_shape, data.phi_prior_rate);
-    }
+void grad_h_poisson_gamma(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::PoissonGammaResponseData>(params,data,layout,grad,lp);
 }
 
-void grad_h_lognormal(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const double log_sig_num   = params[layout.extra_offset + 0];
-    const double log_sig_denom = params[layout.extra_offset + 1];
-    const double sig_num       = std::exp(log_sig_num);
-    const double sig_denom     = std::exp(log_sig_denom);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::LognormalResponseData*>(
-        data.model_response_data);
-    LognormalFn fn{resp, sig_num, sig_denom, data.N};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/2);
-    // Functor writes d/dlog_sigma directly (= -1 + z^2), so no chain-rule pass.
-
-    // Half-Cauchy(0, sigma_re_scale) prior on each log_sigma. tulpaRatio's
-    // R-side bridge sets `data.sigma_re_scale = sigma_prior_scale` from the
-    // RatioConfig (mirrors legacy backend). We mirror that contract here.
-    grad[layout.extra_offset + 0] += dlog_half_cauchy_log(
-        log_sig_num,   data.sigma_re_scale);
-    grad[layout.extra_offset + 1] += dlog_half_cauchy_log(
-        log_sig_denom, data.sigma_re_scale);
-
-    if (log_post_out) {
-        *log_post_out += log_lik
-            + log_half_cauchy_log(log_sig_num,   data.sigma_re_scale)
-            + log_half_cauchy_log(log_sig_denom, data.sigma_re_scale);
-    }
+void grad_h_negbin_negbin(const std::vector<double>& params, const tulpa::ModelData& data,
+ const tulpa::ParamLayout& layout, std::vector<double>& grad, double* lp) {
+ grad_h<lik::NegbinNegbinResponseData>(params,data,layout,grad,lp);
 }
 
-void grad_h_beta_binomial(
-    const std::vector<double>& params,
-    const tulpa::ModelData& data,
-    const tulpa::ParamLayout& layout,
-    std::vector<double>& grad,
-    double* log_post_out
-) {
-    assert_no_latent_structure(layout);
-    const int n = static_cast<int>(params.size());
-    grad.assign(n, 0.0);
-    if (log_post_out) *log_post_out = 0.0;
-
-    apply_beta_prior(params, data, layout, grad, log_post_out);
-
-    const double log_phi = params[layout.extra_offset];
-    const double phi     = std::exp(log_phi);
-
-    const std::vector<double> eta = compute_eta_matrix(params, data, layout);
-    const auto* resp = static_cast<const lik::BetaBinomialResponseData*>(
-        data.model_response_data);
-    BetaBinomialFn fn{resp, phi, data.N};
-
-    const double log_lik = run_obs_loop(params, data, layout, eta.data(), fn,
-                                        grad, /*n_extra_grads=*/1);
-
-    // Convert d/dphi -> d/dlog_phi via chain rule
-    grad[layout.extra_offset] *= phi;
-
-    grad[layout.extra_offset] += dlog_gamma_prior_log(
-        log_phi, data.phi_prior_shape, data.phi_prior_rate);
-
-    if (log_post_out) {
-        *log_post_out += log_lik
-            + log_gamma_prior_log(log_phi, data.phi_prior_shape, data.phi_prior_rate);
-    }
-}
-
-}  // namespace tulpaRatio
+} // namespace tulpaRatio
