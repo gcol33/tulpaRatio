@@ -184,6 +184,7 @@ utils::globalVariables(c(
   "cpp_test_metric_step",
   "cpp_test_metric_epsilon",
   "cpp_test_metric_geometry",
+  "cpp_test_gradient_trajectory",
   "cpp_test_residual_accumulation",
   "cpp_test_precision_spec",
   "cpp_test_precision_beta_spec",

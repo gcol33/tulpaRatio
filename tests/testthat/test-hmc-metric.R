@@ -1,3 +1,26 @@
+metric_reference_epsilon <- function(q, p, C) {
+  H0 <- sum(q*q)/2+drop(crossprod(p,C%*%p))/2
+  trials <- 0L
+  trial <- function(epsilon) {
+    trials <<- trials+1L
+    half <- p-epsilon*q/2
+    qt <- q+epsilon*drop(C%*%half)
+    pt <- half-epsilon*qt/2
+    sum(qt*qt)/2+drop(crossprod(pt,C%*%pt))/2-H0
+  }
+  epsilon <- 1
+  delta <- trial(epsilon)
+  direction <- if(!is.finite(delta)||delta>log(2)) -1 else 1
+  for(i in 1:50) {
+    epsilon <- epsilon*2^direction
+    if(epsilon<1e-10||epsilon>1e5) break
+    delta <- trial(epsilon)
+    if(direction==1 && (!is.finite(delta)||delta>log(2))) break
+    if(direction== -1 && is.finite(delta) && delta<log(2)) break
+  }
+  list(epsilon=max(1e-10,min(epsilon,1e3)), calls=trials+1L)
+}
+
 test_that("metric products, energies and momenta match an explicit matrix", {
   for (n in c(5L,17L)) for (type in c('identity','diag','dense','block')) {
     for (block in c('none','precision','sparse','kronecker')) {
@@ -35,27 +58,47 @@ test_that("the production leapfrog follows the metric Hamiltonian", {
 test_that("epsilon search uses one new score per trial with every metric", {
   for(type in c('identity','diag','dense','block')) {
     z <- tulpaRatio:::cpp_test_metric_epsilon(type)
-    C <- z$inverse_mass; q <- z$q; p <- z$p
-    H0 <- sum(q*q)/2+drop(crossprod(p,C%*%p))/2
-    trials <- 0L
-    trial <- function(epsilon) {
-      trials <<- trials+1L
-      half <- p-epsilon*q/2
-      qt <- q+epsilon*drop(C%*%half)
-      pt <- half-epsilon*qt/2
-      sum(qt*qt)/2+drop(crossprod(pt,C%*%pt))/2-H0
+    ref <- metric_reference_epsilon(z$q,z$p,z$inverse_mass)
+    expect_identical(z$epsilon,ref$epsilon)
+    expect_identical(z$calls,ref$calls)
+  }
+})
+
+test_that("all gradient modes retain reversible metric trajectories after an arena fit", {
+  skip_on_cran()
+  d <- data.frame(y=c(1L,2L,1L,3L),trials=4L)
+  invisible(suppressWarnings(tratio(y | trials ~ 1, data=d,
+    family=ratiod_binomial(),mode="hmc",control=list(iter=20L,warmup=10L,
+      chains=1L,seed=183L,cores=1L,gradient_mode="A_r",verbose=FALSE))))
+  for (n in c(5L,17L)) for (mode in c("N","A","A_r","H","auto","reallocate")) {
+    for (type in c("identity","diag","dense","block")) {
+      for (block in c("none","precision","sparse","kronecker")) {
+        paths <- c("copy","cached","inplace","tree","walnuts")
+        if (block=="none" && type %in% c("identity","diag") && mode!="reallocate")
+          paths <- c(paths,"tree_copy")
+        for (path in paths) {
+          epsilon <- 0.1
+          steps <- 7L
+          z <- tulpaRatio:::cpp_test_gradient_trajectory(type,block,mode,path,n,steps,epsilon)
+          q <- z$q0; p <- z$p0
+          for (j in seq_len(steps)) {
+            p <- p-epsilon*q/2
+            q <- q+epsilon*drop(z$inverse_mass%*%p)
+            p <- p-epsilon*q/2
+          }
+          info <- paste(n,mode,type,block,path,sep="/")
+          # Central differences of a quadratic have only cancellation error.
+          score_error <- if (mode=="N") 64*.Machine$double.eps*sum(q*q)/1e-5 else 0
+          expect_lt(max(abs(z$q-q)),1e-12+steps*epsilon*score_error,label=info)
+          expect_lt(max(abs(z$p-p)),1e-12+steps*epsilon*score_error,label=info)
+          expect_lt(max(abs(z$grad+z$q)),1e-12+score_error,label=info)
+          roundoff <- 64*.Machine$double.eps*max(1,abs(z$q0),abs(z$p0))
+          expect_lt(max(abs(z$reverse_q-z$q0)),roundoff,label=info)
+          expect_lt(max(abs(z$reverse_p+z$p0)),roundoff,label=info)
+          ref <- metric_reference_epsilon(z$q0,z$search_p,z$inverse_mass)
+          expect_identical(z$epsilon,ref$epsilon,info=info)
+        }
+      }
     }
-    epsilon <- 1
-    delta <- trial(epsilon)
-    direction <- if(!is.finite(delta)||delta>log(2)) -1 else 1
-    for(i in 1:50) {
-      epsilon <- epsilon*2^direction
-      if(epsilon<1e-10||epsilon>1e5) break
-      delta <- trial(epsilon)
-      if(direction==1 && (!is.finite(delta)||delta>log(2))) break
-      if(direction== -1 && is.finite(delta) && delta<log(2)) break
-    }
-    expect_identical(z$epsilon,max(1e-10,min(epsilon,1e3)))
-    expect_identical(z$calls,trials+1L)
   }
 })

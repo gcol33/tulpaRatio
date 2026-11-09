@@ -1641,6 +1641,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_gradient_trajectory
+Rcpp::List cpp_test_gradient_trajectory(std::string type, std::string block, std::string mode, std::string path, int n, int steps, double epsilon);
+RcppExport SEXP _tulpaRatio_cpp_test_gradient_trajectory(SEXP typeSEXP, SEXP blockSEXP, SEXP modeSEXP, SEXP pathSEXP, SEXP nSEXP, SEXP stepsSEXP, SEXP epsilonSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type block(blockSEXP);
+    Rcpp::traits::input_parameter< std::string >::type mode(modeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type path(pathSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type steps(stepsSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_gradient_trajectory(type, block, mode, path, n, steps, epsilon));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_metric_step
 Rcpp::List cpp_test_metric_step(std::string type, std::string block, int n, double epsilon, bool extreme);
 RcppExport SEXP _tulpaRatio_cpp_test_metric_step(SEXP typeSEXP, SEXP blockSEXP, SEXP nSEXP, SEXP epsilonSEXP, SEXP extremeSEXP) {
@@ -2207,6 +2224,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_st_gp_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_margin_normalizer, 13},
     {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},
     {"_tulpaRatio_cpp_test_pg_rw2_conditional", (DL_FUNC) &_tulpaRatio_cpp_test_pg_rw2_conditional, 3},
+    {"_tulpaRatio_cpp_test_gradient_trajectory", (DL_FUNC) &_tulpaRatio_cpp_test_gradient_trajectory, 7},
     {"_tulpaRatio_cpp_test_metric_step", (DL_FUNC) &_tulpaRatio_cpp_test_metric_step, 5},
     {"_tulpaRatio_cpp_test_metric_epsilon", (DL_FUNC) &_tulpaRatio_cpp_test_metric_epsilon, 2},
     {"_tulpaRatio_cpp_test_metric_geometry", (DL_FUNC) &_tulpaRatio_cpp_test_metric_geometry, 4},

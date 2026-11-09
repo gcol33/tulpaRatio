@@ -7326,25 +7326,6 @@ public:
 // Leapfrog integrator
 // =====================================================================
 
-template<class Metric>
-LeapfrogResultWithGrad integrate_copy(const std::vector<double>& q,
-    const std::vector<double>& p, double epsilon, const Metric& metric,
-    const ModelData& data, const ParamLayout& layout,
-    const std::vector<double>* initial_grad = nullptr) {
-  LeapfrogResultWithGrad result;
-  result.q = q; result.p = p;
-  result.grad.resize(q.size());
-  if (initial_grad) result.grad = *initial_grad;
-  else compute_gradient(q,data,layout,result.grad);
-  std::vector<double> displacement(q.size());
-  const auto evaluate = [&](const double*,double*,double& lp) {
-    compute_gradient(result.q,data,layout,result.grad,&lp);
-  };
-  result.divergent = metric_leapfrog(result.q.data(),result.p.data(),result.grad.data(),
-      q.size(),epsilon,metric,displacement.data(),evaluate,result.log_prob);
-  return result;
-}
-
 inline LeapfrogResult without_gradient(LeapfrogResultWithGrad result) {
   LeapfrogResult out;
   out.q = std::move(result.q); out.p = std::move(result.p);
@@ -7388,18 +7369,6 @@ LeapfrogResult leapfrog_step_mass(const std::vector<double>& q,
     const std::vector<double>& p, double epsilon, const std::vector<double>& inv_mass,
     const ModelData& data, const ParamLayout& layout) {
   return without_gradient(integrate_copy(q,p,epsilon,DiagonalMetric{inv_mass},data,layout));
-}
-
-template<class Metric>
-double find_epsilon(const std::vector<double>& q, const ModelData& data,
-    const ParamLayout& layout, std::mt19937& rng, const Metric& metric) {
-  std::vector<double> params(q.size()), grad(q.size());
-  const auto evaluate = [&](const double* x, double* g, double& lp) {
-    std::copy(x,x+q.size(),params.begin());
-    compute_gradient(params,data,layout,grad,&lp);
-    std::copy(grad.begin(),grad.end(),g);
-  };
-  return metric_find_epsilon(q,metric,rng,evaluate);
 }
 
 double find_reasonable_epsilon(const std::vector<double>& q, const ModelData& data,
@@ -7664,11 +7633,7 @@ LeapfrogInPlaceResult leapfrog_step_inplace(
     const ModelData& data, const ParamLayout& layout) {
 
   const int n = ws.n;
-  const auto evaluate = [&](const double* q, double* grad, double& lp) {
-    std::memcpy(ws.params_buf.data(),q,n*sizeof(double));
-    ws.gradient_fn(ws.params_buf,data,layout,ws.grad_buf,&lp);
-    std::memcpy(grad,ws.grad_buf.data(),n*sizeof(double));
-  };
+  const GradientEvaluator evaluate{data,layout,ws.params_buf,ws.grad_buf,ws.gradient_fn};
   LeapfrogInPlaceResult result;
   result.divergent = metric_leapfrog(ws.q_at(slot),ws.p_at(slot),ws.grad_at(slot),n,
       epsilon,mass,ws.dense_scratch.data(),evaluate,ws.logp_at(slot));

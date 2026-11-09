@@ -7,8 +7,25 @@
 #include <random>
 #include <vector>
 #include "linalg_fast.h"
+#include "hmc_sampler.h"
 
 namespace ratiod_hmc {
+
+// Gradient implementations may replace their output vector. Only scratch
+// storage is passed to them; the integrator's score buffer keeps its address.
+struct GradientEvaluator {
+  const ModelData& data;
+  const ParamLayout& layout;
+  std::vector<double>& params;
+  std::vector<double>& scratch;
+  GradientFn gradient_fn = compute_gradient;
+
+  void operator()(const double* q, double* grad, double& log_prob) const {
+    if (q != params.data()) std::copy_n(q, params.size(), params.data());
+    gradient_fn(params, data, layout, scratch, &log_prob);
+    std::copy_n(scratch.data(), params.size(), grad);
+  }
+};
 
 template<class Metric>
 inline void advance_metric_position(const Metric& metric, double* q, const double* p,
@@ -55,6 +72,7 @@ struct DiagonalMetric {
 };
 
 // The gradient buffer holds the score at q on entry and at the new q on exit.
+// evaluate writes through grad without resizing its owning storage.
 // The metric scales its product before the position addition.
 template<class Metric, class Evaluate>
 inline bool metric_leapfrog(double* q, double* p, double* grad, int n,
@@ -68,6 +86,24 @@ inline bool metric_leapfrog(double* q, double* p, double* grad, int n,
   for (int i = 0; i < n; ++i)
     if (std::abs(q[i]) > 1e10 || !std::isfinite(q[i])) return true;
   return false;
+}
+
+template<class Metric>
+LeapfrogResultWithGrad integrate_copy(const std::vector<double>& q,
+    const std::vector<double>& p, double epsilon, const Metric& metric,
+    const ModelData& data, const ParamLayout& layout,
+    const std::vector<double>* initial_grad = nullptr,
+    GradientFn gradient_fn = compute_gradient) {
+  LeapfrogResultWithGrad result;
+  result.q = q; result.p = p;
+  result.grad.resize(q.size());
+  std::vector<double> scratch(q.size()), displacement(q.size());
+  const GradientEvaluator evaluate{data,layout,result.q,scratch,gradient_fn};
+  if (initial_grad) result.grad = *initial_grad;
+  else evaluate(q.data(),result.grad.data(),result.log_prob);
+  result.divergent = metric_leapfrog(result.q.data(),result.p.data(),result.grad.data(),
+      q.size(),epsilon,metric,displacement.data(),evaluate,result.log_prob);
+  return result;
 }
 
 template<class Metric, class Evaluate>
@@ -99,6 +135,15 @@ double metric_find_epsilon(const std::vector<double>& q, const Metric& metric,
     if (direction == -1 && std::isfinite(delta) && delta < std::log(2.0)) break;
   }
   return std::max(1e-10,std::min(epsilon,1e3));
+}
+
+template<class Metric>
+double find_epsilon(const std::vector<double>& q, const ModelData& data,
+    const ParamLayout& layout, std::mt19937& rng, const Metric& metric,
+    GradientFn gradient_fn = compute_gradient) {
+  std::vector<double> params(q.size()), scratch(q.size());
+  const GradientEvaluator evaluate{data,layout,params,scratch,gradient_fn};
+  return metric_find_epsilon(q,metric,rng,evaluate);
 }
 
 }

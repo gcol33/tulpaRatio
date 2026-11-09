@@ -1,5 +1,26 @@
 # tulpaRatio 1.7.3
 
+* The collapsed ICAR and GP kernels evaluate each unit through the shared eta
+  margins: the ICAR mean is no longer capped at eta = 20 while its linear term
+  and score were not, so the score is the derivative of the density it
+  evaluates, and the Poisson and binomial data constants are included. The
+  GP kernel's negative-binomial and gamma inner likelihoods no longer fall
+  through to the Poisson case (#224).
+
+* One C++ family registry derives the likelihood spec builders and the R
+  model-type metadata (draw names, extra parameters, response domains,
+  inflation support), replacing seven builders and their static configuration
+  singletons (#187).
+
+* Every likelihood path reads one eta-space margin interface (value, score,
+  observed curvature). The spec bridge to the engine now carries crossed and
+  correlated random effects, multiple chains and the exposure families (#176).
+
+* Copying leapfrog integration, NUTS and the step-size search keep their
+  gradient storage stable across evaluations; the arena gradient had
+  reallocated a buffer the integrator still pointed into, so trajectories were
+  not reversible and the momentum update read a stale gradient (#229).
+
 * Polya-Gamma samplers share one set of Gaussian conditionals, scale updates
   and iteration control; the six samplers outside the negative-binomial
   kernels give byte-identical draws. The single-response and spatial

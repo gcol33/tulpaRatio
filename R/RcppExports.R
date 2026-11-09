@@ -413,6 +413,10 @@ cpp_test_pg_rw2_conditional <- function(omega, residual, tau) {
     .Call(`_tulpaRatio_cpp_test_pg_rw2_conditional`, omega, residual, tau)
 }
 
+cpp_test_gradient_trajectory <- function(type, block, mode, path, n = 5L, steps = 7L, epsilon = 0.1) {
+    .Call(`_tulpaRatio_cpp_test_gradient_trajectory`, type, block, mode, path, n, steps, epsilon)
+}
+
 cpp_test_metric_step <- function(type, block, n = 5L, epsilon = 0.15, extreme = FALSE) {
     .Call(`_tulpaRatio_cpp_test_metric_step`, type, block, n, epsilon, extreme)
 }

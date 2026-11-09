@@ -2,6 +2,7 @@
 #include <RcppEigen.h>
 #include "hmc_sampler.h"
 #include "hmc_integrator.h"
+#include <tulpa/walnuts.h>
 
 template<class Run>
 auto with_test_metric(std::string type, std::string block, int n, Run run) {
@@ -69,6 +70,118 @@ void metric_gaussian_gradient(const std::vector<double>& q,
     double sum = 0.0;
     for (size_t i=0;i<q.size();++i) { gradient[i] = -q[i]; sum += q[i]*q[i]; }
     if(lp) *lp = -0.5*sum;
+}
+
+void reallocating_gaussian_gradient(const std::vector<double>& q,
+    const ratiod_hmc::ModelData& data, const ratiod_hmc::ParamLayout& layout,
+    std::vector<double>& gradient, double* lp) {
+    std::vector<double> replacement;
+    metric_gaussian_gradient(q,data,layout,replacement,lp);
+    gradient.swap(replacement);
+}
+
+template<class Metric>
+struct TestWalnutsModel {
+    const Metric& metric;
+    const ratiod_hmc::ModelData& data;
+    const ratiod_hmc::ParamLayout& layout;
+    ratiod_hmc::GradientFn fn;
+    void gradient(const std::vector<double>& q, std::vector<double>& g, double* lp) {
+        fn(q,data,layout,g,lp);
+    }
+    void drift(double step, double* q, const double* p, double* scratch) const {
+        metric.advance_position(q,p,step,scratch);
+    }
+    double kinetic_energy(const double* p) const { return metric.kinetic_energy(p); }
+};
+
+// [[Rcpp::export]]
+Rcpp::List cpp_test_gradient_trajectory(std::string type, std::string block,
+    std::string mode, std::string path, int n = 5, int steps = 7,
+    double epsilon = 0.1) {
+  using namespace ratiod_hmc;
+  const auto selected = mode == "reallocate" ? GradientMode::AUTO : parse_gradient_mode(mode);
+  set_gradient_mode(selected);
+  struct ModeScope { ~ModeScope() { set_gradient_mode(GradientMode::AUTO); } } scope;
+  ModelData data;
+  data.N = 0; data.p_num = n; data.p_denom = 0;
+  data.model_type = ModelType::BINOMIAL; data.sigma_beta = 1.0;
+  const auto layout = compute_param_layout(data);
+  const auto fn = mode == "reallocate" ? reallocating_gaussian_gradient
+                                       : resolve_gradient_fn(selected,data,layout);
+  return with_test_metric(type,block,n,[&](const auto& mass,const auto& C) {
+   const auto run = [&](const auto& metric) {
+    std::vector<double> q0(n), p0(n), q(n), p(n), g(n), scratch(n), displacement(n);
+    const double scale=mode=="N" ? 1e-3 : 1.0;
+    for (int i=0;i<n;++i) {
+      q0[i]=scale*(0.1+0.15*i);
+      p0[i]=scale*(0.3+0.2*i);
+    }
+    q=q0; p=p0;
+    double lp;
+    fn(q,data,layout,g,&lp);
+    NUTSWorkspace ws; ws.init(n,2); ws.gradient_fn=fn;
+    tulpa::WalnutsWorkspace wws; wws.init(n,2);
+    TestWalnutsModel<std::decay_t<decltype(metric)>> model{metric,data,layout,fn};
+    using Model = std::decay_t<decltype(model)>;
+    struct Context {
+      Model& model;
+      tulpa::WalnutsWorkspace& ws;
+    } context{model,wws};
+    const auto step = [&]() {
+      if (path == "copy" || path == "cached") {
+        auto out=integrate_copy(q,p,epsilon,metric,data,layout,path=="cached" ? &g : nullptr,fn);
+        q=std::move(out.q); p=std::move(out.p); g=std::move(out.grad); lp=out.log_prob;
+      } else if (path == "inplace" || path == "tree") {
+        std::copy(q.begin(),q.end(),ws.q_at(0));
+        std::copy(p.begin(),p.end(),ws.p_at(0));
+        std::copy(g.begin(),g.end(),ws.grad_at(0));
+        ws.logp_at(0)=lp;
+        if (path == "inplace") leapfrog_step_inplace(ws,0,epsilon,mass,data,layout);
+        else {
+          std::mt19937 rng(229);
+          build_tree_fast(ws,0,1,0,epsilon,mass,-lp+mass.kinetic_energy(p.data()),
+                          1000.0,data,layout,rng);
+        }
+        q.assign(ws.q_at(0),ws.q_at(0)+n);
+        p.assign(ws.p_at(0),ws.p_at(0)+n);
+        g.assign(ws.grad_at(0),ws.grad_at(0)+n); lp=ws.logp_at(0);
+      } else if (path == "tree_copy") {
+        NUTSNode node; node.q=q; node.p=p; node.grad=g; node.log_prob=lp;
+        std::mt19937 rng(229);
+        auto out=build_tree(node,1,0,epsilon,mass.inv_mass_diag,type!="identity",
+                            -lp+metric.kinetic_energy(p.data()),1000.0,data,layout,rng);
+        q=out.left.q; p=out.left.p; g=out.left.grad; lp=out.left.log_prob;
+      } else if (path == "walnuts") {
+        auto& state=wws.step_state;
+        state.theta=q; state.rho=p; state.grad=g;
+        tulpa::walnuts_detail::leapfrog(context,state,epsilon,1);
+        q=state.theta; p=state.rho; g=state.grad; lp=state.logp_pos;
+      } else {
+        const GradientEvaluator evaluate{data,layout,q,scratch,fn};
+        metric_leapfrog(q.data(),p.data(),g.data(),n,epsilon,metric,
+                        displacement.data(),evaluate,lp);
+      }
+    };
+    for (int j=0;j<steps;++j) step();
+    const auto forward_q=q, forward_p=p, forward_g=g;
+    for (double& x:p) x=-x;
+    for (int j=0;j<steps;++j) step();
+    std::mt19937 rng(170183), clone=rng;
+    std::vector<double> search_p(n);
+    metric.sample_momentum(search_p.data(),clone);
+    const double search_epsilon=find_epsilon(q0,data,layout,rng,metric,fn);
+    return Rcpp::List::create(Rcpp::Named("q0")=q0,Rcpp::Named("p0")=p0,
+      Rcpp::Named("q")=forward_q,Rcpp::Named("p")=forward_p,
+      Rcpp::Named("grad")=forward_g,Rcpp::Named("reverse_q")=q,
+      Rcpp::Named("reverse_p")=p,Rcpp::Named("inverse_mass")=C,
+      Rcpp::Named("epsilon")=search_epsilon,Rcpp::Named("search_p")=search_p,
+      Rcpp::Named("gradient_fn")=gradient_fn_name(fn));
+   };
+   if (block=="none" && type=="identity") return run(IdentityMetric{n});
+   if (block=="none" && type=="diag") return run(DiagonalMetric{mass.inv_mass_diag});
+   return run(mass);
+  });
 }
 
 // [[Rcpp::export]]
