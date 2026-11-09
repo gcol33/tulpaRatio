@@ -14,20 +14,12 @@
 #' @return Numeric vector of length `n`
 #' @keywords internal
 pp_draw_prior <- function(prior, n) {
-  switch(
-    prior$distribution,
-    normal       = stats::rnorm(n, prior$mean, prior$sd),
-    half_normal  = abs(stats::rnorm(n, 0, prior$sd)),
-    half_cauchy  = abs(stats::rcauchy(n, 0, prior$scale)),
-    gamma        = stats::rgamma(n, shape = prior$shape, rate = prior$rate),
-    exponential  = stats::rexp(n, rate = prior$rate),
-    beta         = stats::rbeta(n, prior$alpha, prior$beta),
-    # A PC prior on a standard deviation is exponential on that scale, with
-    # rate -log(alpha) / U -- the calibration prior_pc() already stores.
-    pc           = stats::rexp(n, rate = prior$rate),
+  spec <- PRIOR_DISTRIBUTIONS[[prior$distribution]]
+  if (is.null(spec)) {
     stop(sprintf("Cannot simulate from prior distribution '%s'",
                  prior$distribution), call. = FALSE)
-  )
+  }
+  spec$rng(prior, n)
 }
 
 #' Inverse link function by name

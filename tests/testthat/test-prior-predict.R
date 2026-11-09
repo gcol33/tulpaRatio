@@ -175,6 +175,24 @@ test_that("every prior_*() constructor can be drawn from", {
   }
 })
 
+test_that("prior draws match their defining distributions under the same seed", {
+  priors <- list(prior_normal(1, 2), prior_half_normal(1.5), prior_half_cauchy(2),
+                 prior_gamma(3, 0.5), prior_exponential(2), prior_beta(2, 3),
+                 prior_pc(2, 0.05))
+  reference <- list(
+    function(n) rnorm(n, 1, 2), function(n) abs(rnorm(n, 0, 1.5)),
+    function(n) abs(rcauchy(n, 0, 2)), function(n) rgamma(n, 3, rate = 0.5),
+    function(n) rexp(n, 2), function(n) rbeta(n, 2, 3),
+    function(n) rexp(n, -log(0.05) / 2))
+  for (i in seq_along(priors)) {
+    set.seed(1703)
+    expected <- reference[[i]](1000)
+    set.seed(1703)
+    expect_identical(pp_draw_prior(priors[[i]], 1000), expected)
+  }
+  expect_error(pp_draw_prior(list(distribution = "unknown"), 1), "Cannot simulate")
+})
+
 test_that("each inverse link maps to its own range", {
   eta <- seq(-3, 3, length.out = 25)
   expect_true(all(pp_linkinv("log")(eta) > 0))

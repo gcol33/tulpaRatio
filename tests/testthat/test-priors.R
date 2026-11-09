@@ -171,6 +171,21 @@ test_that("prior print methods work", {
   expect_output(print(ratiod_priors()), "tulpaRatio prior specification")
 })
 
+test_that("each prior prints its parameters and calibration exactly", {
+  priors <- list(prior_normal(1, 2), prior_half_normal(1.5), prior_half_cauchy(2),
+                 prior_gamma(3, 0.5), prior_exponential(2), prior_beta(2, 3),
+                 prior_pc(2, 0.05))
+  expected <- list(
+    "  Normal(1.00, 2.00)", "  Half-Normal(1.50)", "  Half-Cauchy(2.00)",
+    "  Gamma(3.00, 0.50)  [mean = 6.00]", "  Exponential(2.00)  [mean = 0.50]",
+    "  Beta(2.00, 3.00)  [mean = 0.40]",
+    c("  PC prior: P(x > 2.00) = 0.050", "    => Exponential(1.498)"))
+  for (i in seq_along(priors)) {
+    expect_identical(capture.output(print_prior(priors[[i]], "  ")), expected[[i]])
+  }
+  expect_identical(capture.output(print_prior(NULL, "  ")), "  default")
+})
+
 
 test_that("priors_default() prints no dispersion prior for a family without one", {
   out <- capture.output(priors_default(ratiod_poisson()))

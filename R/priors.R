@@ -95,6 +95,68 @@ validate_prior <- function(prior, name) {
 }
 
 
+PRIOR_DISTRIBUTIONS <- list(
+  normal = list(
+    parameters = c("mean", "sd"), positive = "sd",
+    format = function(p, indent) sprintf("%sNormal(%.2f, %.2f)\n", indent, p$mean, p$sd),
+    rng = function(p, n) stats::rnorm(n, p$mean, p$sd)),
+  half_normal = list(
+    parameters = "sd", positive = "sd",
+    format = function(p, indent) sprintf("%sHalf-Normal(%.2f)\n", indent, p$sd),
+    rng = function(p, n) abs(stats::rnorm(n, 0, p$sd))),
+  half_cauchy = list(
+    parameters = "scale", positive = "scale",
+    format = function(p, indent) sprintf("%sHalf-Cauchy(%.2f)\n", indent, p$scale),
+    rng = function(p, n) abs(stats::rcauchy(n, 0, p$scale))),
+  gamma = list(
+    parameters = c("shape", "rate"), positive = c("shape", "rate"),
+    format = function(p, indent) sprintf("%sGamma(%.2f, %.2f)  [mean = %.2f]\n",
+                                         indent, p$shape, p$rate, p$shape / p$rate),
+    rng = function(p, n) stats::rgamma(n, shape = p$shape, rate = p$rate)),
+  exponential = list(
+    parameters = "rate", positive = "rate",
+    format = function(p, indent) sprintf("%sExponential(%.2f)  [mean = %.2f]\n",
+                                         indent, p$rate, 1 / p$rate),
+    rng = function(p, n) stats::rexp(n, rate = p$rate)),
+  beta = list(
+    parameters = c("alpha", "beta"), positive = c("alpha", "beta"),
+    format = function(p, indent) sprintf("%sBeta(%.2f, %.2f)  [mean = %.2f]\n",
+                                         indent, p$alpha, p$beta,
+                                         p$alpha / (p$alpha + p$beta)),
+    rng = function(p, n) stats::rbeta(n, p$alpha, p$beta)),
+  pc = list(
+    parameters = c("U", "alpha"), positive = "U",
+    validate = function(p) {
+      if (p$alpha <= 0 || p$alpha >= 1)
+        stop("alpha must be in (0, 1)", call. = FALSE)
+    },
+    derive = function(p) list(rate = -log(p$alpha) / p$U),
+    format = function(p, indent) paste0(
+      sprintf("%sPC prior: P(x > %.2f) = %.3f\n", indent, p$U, p$alpha),
+      sprintf("%s  => Exponential(%.3f)\n", indent, p$rate)),
+    rng = function(p, n) stats::rexp(n, rate = p$rate))
+)
+
+new_prior <- function(distribution, ...) {
+  spec <- PRIOR_DISTRIBUTIONS[[distribution]]
+  if (is.null(spec)) {
+    stop(sprintf("Unknown prior distribution '%s'", distribution), call. = FALSE)
+  }
+  parameters <- list(...)
+  if (!setequal(names(parameters), spec$parameters)) {
+    stop(sprintf("%s prior requires %s", distribution,
+                 paste(spec$parameters, collapse = ", ")), call. = FALSE)
+  }
+  parameters <- parameters[spec$parameters]
+  for (nm in spec$positive) {
+    if (parameters[[nm]] <= 0) stop(nm, " must be positive", call. = FALSE)
+  }
+  if (!is.null(spec$validate)) spec$validate(parameters)
+  if (!is.null(spec$derive)) parameters <- c(parameters, spec$derive(parameters))
+  structure(c(list(distribution = distribution), parameters), class = "ratiod_prior")
+}
+
+
 #' Normal Prior
 #'
 #' @description
@@ -111,15 +173,7 @@ validate_prior <- function(prior, name) {
 #'
 #' @export
 prior_normal <- function(mean = 0, sd = 2.5) {
-  if (sd <= 0) stop("sd must be positive", call. = FALSE)
-  structure(
-    list(
-      distribution = "normal",
-      mean = mean,
-      sd = sd
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("normal", mean = mean, sd = sd)
 }
 
 
@@ -137,14 +191,7 @@ prior_normal <- function(mean = 0, sd = 2.5) {
 #'
 #' @export
 prior_half_normal <- function(sd = 1) {
-  if (sd <= 0) stop("sd must be positive", call. = FALSE)
-  structure(
-    list(
-      distribution = "half_normal",
-      sd = sd
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("half_normal", sd = sd)
 }
 
 
@@ -163,14 +210,7 @@ prior_half_normal <- function(sd = 1) {
 #'
 #' @export
 prior_half_cauchy <- function(scale = 2.5) {
-  if (scale <= 0) stop("scale must be positive", call. = FALSE)
-  structure(
-    list(
-      distribution = "half_cauchy",
-      scale = scale
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("half_cauchy", scale = scale)
 }
 
 
@@ -193,16 +233,7 @@ prior_half_cauchy <- function(scale = 2.5) {
 #'
 #' @export
 prior_gamma <- function(shape = 2, rate = 0.1) {
-  if (shape <= 0) stop("shape must be positive", call. = FALSE)
-  if (rate <= 0) stop("rate must be positive", call. = FALSE)
-  structure(
-    list(
-      distribution = "gamma",
-      shape = shape,
-      rate = rate
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("gamma", shape = shape, rate = rate)
 }
 
 
@@ -220,14 +251,7 @@ prior_gamma <- function(shape = 2, rate = 0.1) {
 #'
 #' @export
 prior_exponential <- function(rate = 1) {
-  if (rate <= 0) stop("rate must be positive", call. = FALSE)
-  structure(
-    list(
-      distribution = "exponential",
-      rate = rate
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("exponential", rate = rate)
 }
 
 
@@ -254,16 +278,7 @@ prior_exponential <- function(rate = 1) {
 #'
 #' @export
 prior_beta <- function(alpha = 1, beta = 1) {
-  if (alpha <= 0) stop("alpha must be positive", call. = FALSE)
-  if (beta <= 0) stop("beta must be positive", call. = FALSE)
-  structure(
-    list(
-      distribution = "beta",
-      alpha = alpha,
-      beta = beta
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("beta", alpha = alpha, beta = beta)
 }
 
 
@@ -335,20 +350,7 @@ rho_prior_anchors <- function(block_prior, default_prior = NULL) {
 #'
 #' @export
 prior_pc <- function(U = 1, alpha = 0.01) {
-  if (U <= 0) stop("U must be positive", call. = FALSE)
-  if (alpha <= 0 || alpha >= 1) stop("alpha must be in (0, 1)", call. = FALSE)
-
-  rate <- -log(alpha) / U
-
-  structure(
-    list(
-      distribution = "pc",
-      U = U,
-      alpha = alpha,
-      rate = rate
-    ),
-    class = "ratiod_prior"
-  )
+  new_prior("pc", U = U, alpha = alpha)
 }
 
 
@@ -505,30 +507,9 @@ print_prior <- function(prior, indent = "") {
     return(invisible(NULL))
   }
 
-  dist <- prior$distribution
-
-  if (dist == "normal") {
-    cat(sprintf("%sNormal(%.2f, %.2f)\n", indent, prior$mean, prior$sd))
-  } else if (dist == "half_normal") {
-    cat(sprintf("%sHalf-Normal(%.2f)\n", indent, prior$sd))
-  } else if (dist == "half_cauchy") {
-    cat(sprintf("%sHalf-Cauchy(%.2f)\n", indent, prior$scale))
-  } else if (dist == "gamma") {
-    cat(sprintf("%sGamma(%.2f, %.2f)  [mean = %.2f]\n",
-                indent, prior$shape, prior$rate, prior$shape / prior$rate))
-  } else if (dist == "exponential") {
-    cat(sprintf("%sExponential(%.2f)  [mean = %.2f]\n",
-                indent, prior$rate, 1 / prior$rate))
-  } else if (dist == "beta") {
-    cat(sprintf("%sBeta(%.2f, %.2f)  [mean = %.2f]\n",
-                indent, prior$alpha, prior$beta,
-                prior$alpha / (prior$alpha + prior$beta)))
-  } else if (dist == "pc") {
-    cat(sprintf("%sPC prior: P(x > %.2f) = %.3f\n", indent, prior$U, prior$alpha))
-    cat(sprintf("%s  => Exponential(%.3f)\n", indent, prior$rate))
-  } else {
-    cat(sprintf("%s%s\n", indent, dist))
-  }
+  spec <- PRIOR_DISTRIBUTIONS[[prior$distribution]]
+  if (is.null(spec)) return(cat(sprintf("%s%s\n", indent, prior$distribution)))
+  cat(spec$format(prior, indent))
 }
 
 
