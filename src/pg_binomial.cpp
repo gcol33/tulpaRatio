@@ -3,6 +3,7 @@
 // Based on Polson, Scott & Windle (2013) JASA
 
 #include "pg_common.h"
+#include "pg_temporal.h"
 #include "pg_rng.h"
 #include "pg_spatial.h"
 #include "hmc_cov.h"
@@ -800,6 +801,8 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
     double prior_beta_sd = 10.0,
     double prior_sigma_re_scale = 2.5,
     double prior_sigma_trend_scale = 1.0,
+    double prior_sigma_trend_U = 3.0,
+    double prior_sigma_trend_alpha = 0.01,
     double prior_sigma_seasonal_scale = 1.0,
     double prior_sigma_short_scale = 1.0,
     double rho_short_init = 0.5,
@@ -914,6 +917,13 @@ Rcpp::List cpp_pg_binomial_gibbs_temporal(
       double shape = prior_sigma_trend_scale + 0.5 * (n_trend - 1);
       double rate = prior_sigma_trend_scale + 0.5 * ss;
       sigma_trend = 1.0 / std::sqrt(R::rgamma(shape, 1.0 / rate));
+    }
+
+    if (trend_type == 2) {
+      trend = ratiod::pg_rw2_draw(sum_omega_t, sum_resid_t,
+                                  1.0 / (sigma_trend * sigma_trend));
+      sigma_trend = ratiod::pg_rw2_scale(trend, sigma_trend,
+                                        prior_sigma_trend_U, prior_sigma_trend_alpha);
     }
 
     // Update seasonal (cyclic RW1)

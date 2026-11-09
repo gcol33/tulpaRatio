@@ -20,6 +20,8 @@ fit_pg_binomial(
   prior_sigma_scale = 2.5,
   prior_sigma_spatial_U = 3,
   prior_sigma_spatial_alpha = 0.01,
+  prior_sigma_temporal_U = 3,
+  prior_sigma_temporal_alpha = 0.01,
   verbose = TRUE
 )
 }
@@ -51,6 +53,8 @@ fit_pg_binomial(
 \item{prior_sigma_spatial_U}{PC prior SD anchor (default 3)}
 
 \item{prior_sigma_spatial_alpha}{PC prior tail probability (default 0.01)}
+
+\item{prior_sigma_temporal_U, prior_sigma_temporal_alpha}{PC prior anchors for the RW2 trend SD.}
 
 \item{verbose}{Print progress}
 }

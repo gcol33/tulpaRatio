@@ -443,7 +443,9 @@ TRATIO_BACKENDS <- list(
     priors <- sampler_priors(x$inputs$priors, get_hmc_model_type(x$inputs$family))
     c(args, list(prior_beta_sd = priors$sigma_beta, prior_sigma_scale = priors$sigma_re_scale,
                  prior_sigma_spatial_U = priors$spatial_sigma_prior_U,
-                 prior_sigma_spatial_alpha = priors$spatial_sigma_prior_alpha))
+                 prior_sigma_spatial_alpha = priors$spatial_sigma_prior_alpha,
+                 prior_sigma_temporal_U = priors$temporal_sigma_prior_U,
+                 prior_sigma_temporal_alpha = priors$temporal_sigma_prior_alpha))
   }),
   laplace = list(fit = "fit_laplace", args = function(x) {
     args <- tratio_backend_args(x, "cores")

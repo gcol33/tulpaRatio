@@ -107,6 +107,7 @@ utils::globalVariables(c(
   "cpp_test_autodiff_binary",
   "cpp_test_autodiff_vector",
   "cpp_test_pg_update_beta",
+  "cpp_test_pg_rw2_conditional",
   "cpp_test_pg_update_re",
   "cpp_test_pg_sigma_halfcauchy_chain",
   "cpp_test_dot_product",

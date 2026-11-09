@@ -15,6 +15,10 @@ fit_pg_binomial_temporal(
   thin = 1,
   cores = NULL,
   seed = NULL,
+  prior_beta_sd = 10,
+  prior_sigma_scale = 2.5,
+  prior_sigma_trend_U = 3,
+  prior_sigma_trend_alpha = 0.01,
   verbose = TRUE
 )
 }
@@ -38,6 +42,12 @@ fit_pg_binomial_temporal(
 \item{cores}{Number of cores for within-chain parallelism}
 
 \item{seed}{Random seed for reproducibility}
+
+\item{prior_beta_sd}{Prior SD for fixed effects.}
+
+\item{prior_sigma_scale}{Half-Cauchy scale for random-effect SDs.}
+
+\item{prior_sigma_trend_U, prior_sigma_trend_alpha}{PC prior anchors for the RW2 trend SD.}
 
 \item{verbose}{Print progress}
 }

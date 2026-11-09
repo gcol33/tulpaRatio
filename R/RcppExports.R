@@ -69,8 +69,8 @@ cpp_pg_binomial_gibbs_gp <- function(y, n, X, re_group, n_re_groups, coords, nn_
     .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_gp`, y, n, X, re_group, n_re_groups, coords, nn_idx, nn_dist, nn_order, obs_to_loc, n_spatial, nn, sigma2_gp_init, phi_gp_init, cov_type, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_gp_U, prior_sigma_gp_alpha, prior_phi_lower, prior_phi_upper, store_eta, verbose, n_threads)
 }
 
-cpp_pg_binomial_gibbs_temporal <- function(y, n, X, re_group, n_re_groups, time_idx, n_times, seasonal_period, trend_type, short_type, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_trend_scale = 1.0, prior_sigma_seasonal_scale = 1.0, prior_sigma_short_scale = 1.0, rho_short_init = 0.5, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
-    .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_temporal`, y, n, X, re_group, n_re_groups, time_idx, n_times, seasonal_period, trend_type, short_type, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_trend_scale, prior_sigma_seasonal_scale, prior_sigma_short_scale, rho_short_init, store_eta, verbose, n_threads)
+cpp_pg_binomial_gibbs_temporal <- function(y, n, X, re_group, n_re_groups, time_idx, n_times, seasonal_period, trend_type, short_type, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_trend_scale = 1.0, prior_sigma_trend_U = 3.0, prior_sigma_trend_alpha = 0.01, prior_sigma_seasonal_scale = 1.0, prior_sigma_short_scale = 1.0, rho_short_init = 0.5, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
+    .Call(`_tulpaRatio_cpp_pg_binomial_gibbs_temporal`, y, n, X, re_group, n_re_groups, time_idx, n_times, seasonal_period, trend_type, short_type, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_trend_scale, prior_sigma_trend_U, prior_sigma_trend_alpha, prior_sigma_seasonal_scale, prior_sigma_short_scale, rho_short_init, store_eta, verbose, n_threads)
 }
 
 cpp_pg_binomial_gibbs_rsr <- function(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_design, n_iter = 2000L, n_warmup = 1000L, thin = 1L, prior_beta_sd = 10.0, prior_sigma_re_scale = 2.5, prior_sigma_spatial_U = 3.0, prior_sigma_spatial_alpha = 0.01, store_eta = FALSE, verbose = TRUE, n_threads = 1L) {
@@ -383,6 +383,10 @@ cpp_test_st_gp_margin_normalizer <- function(tau, phi_space, phi_time, n_spatial
 
 cpp_test_st_ar1_margin_normalizer <- function(rho, n_spatial, n_times, type = "II") {
     .Call(`_tulpaRatio_cpp_test_st_ar1_margin_normalizer`, rho, n_spatial, n_times, type)
+}
+
+cpp_test_pg_rw2_conditional <- function(omega, residual, tau) {
+    .Call(`_tulpaRatio_cpp_test_pg_rw2_conditional`, omega, residual, tau)
 }
 
 cpp_test_metric_step <- function(type, block, n = 5L, epsilon = 0.15, extreme = FALSE) {

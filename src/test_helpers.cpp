@@ -6,6 +6,7 @@
 #include <vector>
 #include <random>
 #include "pg_common.h"
+#include "pg_temporal.h"
 #include "omp_sum.h"
 #include "hmc_sampler.h"
 #include "ratio_obs_lik.h"
@@ -637,4 +638,11 @@ Rcpp::NumericVector cpp_test_st_ar1_margin_normalizer(
   return Rcpp::NumericVector::create(
       ratiod_spatiotemporal::st_ar1_margin_log_normalizer(rho, st),
       ratiod_spatiotemporal::st_ar1_margin_log_normalizer_drho(rho, st));
+}
+
+// [[Rcpp::export]]
+NumericVector cpp_test_pg_rw2_conditional(NumericVector omega, NumericVector residual,
+                                         double tau) {
+  return ratiod::pg_rw2_draw(Rcpp::as<std::vector<double>>(omega),
+    Rcpp::as<std::vector<double>>(residual), tau);
 }

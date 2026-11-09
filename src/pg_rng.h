@@ -32,17 +32,8 @@ Rcpp::NumericVector rpg_vec(Rcpp::IntegerVector b, Rcpp::NumericVector z);
 // Used in the Devroye method for PG(1, z)
 double sample_jacobi_tilted(double z);
 
-// Compute a_n(x, t) coefficients for the alternating series
-double a_coef(int n, double x, double t);
-
-// Mass function ratio for accept/reject
-double mass_ratio(double x, double z);
-
 // Inverse Gaussian sampler (needed for large z)
 double rinvgauss(double mu, double lambda);
-
-// Truncated inverse Gaussian sampler
-double rinvgauss_trunc(double mu, double lambda, double trunc);
 
 // Exponential tilting constant
 inline double cosh_safe(double x) {

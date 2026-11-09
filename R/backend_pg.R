@@ -102,6 +102,7 @@ NULL
 #' @param prior_sigma_scale Half-Cauchy scale for RE SD (default 2.5)
 #' @param prior_sigma_spatial_U PC prior SD anchor (default 3)
 #' @param prior_sigma_spatial_alpha PC prior tail probability (default 0.01)
+#' @param prior_sigma_temporal_U,prior_sigma_temporal_alpha PC prior anchors for the RW2 trend SD.
 #' @param verbose Print progress
 #'
 #' @return A ratiod_fit object
@@ -121,6 +122,8 @@ fit_pg_binomial <- function(formula,
                             prior_sigma_scale = 2.5,
                             prior_sigma_spatial_U = 3,
                             prior_sigma_spatial_alpha = 0.01,
+                            prior_sigma_temporal_U = 3,
+                            prior_sigma_temporal_alpha = 0.01,
                             verbose = TRUE) {
 
   assert_backend_fits_structures(
@@ -209,6 +212,10 @@ fit_pg_binomial <- function(formula,
       thin = thin,
       cores = cores,
       seed = seed,
+      prior_beta_sd = prior_beta_sd,
+      prior_sigma_scale = prior_sigma_scale,
+      prior_sigma_trend_U = prior_sigma_temporal_U,
+      prior_sigma_trend_alpha = prior_sigma_temporal_alpha,
       verbose = verbose
     ))
   }
@@ -572,6 +579,9 @@ fit_pg_binomial_gp <- function(formula,
 #' @param thin Thinning interval
 #' @param cores Number of cores for within-chain parallelism
 #' @param seed Random seed for reproducibility
+#' @param prior_beta_sd Prior SD for fixed effects.
+#' @param prior_sigma_scale Half-Cauchy scale for random-effect SDs.
+#' @param prior_sigma_trend_U,prior_sigma_trend_alpha PC prior anchors for the RW2 trend SD.
 #' @param verbose Print progress
 #'
 #' @return A ratiod_fit object
@@ -586,6 +596,10 @@ fit_pg_binomial_temporal <- function(formula,
                                       thin = 1,
                                       cores = NULL,
                                       seed = NULL,
+                                      prior_beta_sd = 10,
+                                      prior_sigma_scale = 2.5,
+                                      prior_sigma_trend_U = 3,
+                                      prior_sigma_trend_alpha = 0.01,
                                       verbose = TRUE) {
 
   # Set cores for within-chain parallelism
@@ -657,6 +671,10 @@ fit_pg_binomial_temporal <- function(formula,
       n_iter = n_iter,
       n_warmup = n_warmup,
       thin = as.integer(thin),
+      prior_beta_sd = prior_beta_sd,
+      prior_sigma_re_scale = prior_sigma_scale,
+      prior_sigma_trend_U = prior_sigma_trend_U,
+      prior_sigma_trend_alpha = prior_sigma_trend_alpha,
       store_eta = TRUE,
       verbose = verbose,
       n_threads = as.integer(cores)
