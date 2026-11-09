@@ -21,7 +21,9 @@ This backend implements:
 With \code{options(tulpaRatio.use_specs = TRUE)}, the engine's likelihood
 callback route supports the ratio and exposure families, multiple chains,
 crossed random intercepts, and correlated random slopes. It also supports
-sampled ICAR/BYM2 fields and centered RW1/RW2/AR1 temporal effects.
+sampled ICAR/BYM2 fields, automatic ICAR coordinates, and single-group
+automatic or centered RW1/RW2/AR1 temporal effects, including cyclic walks.
+Sampler controls select NUTS, fixed-step HMC, WALNUTS and the metric.
 
 \strong{Supported model families:}
 \itemize{

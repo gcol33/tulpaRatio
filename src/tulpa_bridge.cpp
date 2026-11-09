@@ -325,6 +325,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       }
       if (spatial_type == "icar") {
         data.spatial_type = tulpa::SpatialType::ICAR;
+        data.auto_spatial_coordinates = param == "auto";
       } else if (spatial_type == "bym2") {
         data.spatial_type = tulpa::SpatialType::BYM2;
       } else {
@@ -332,6 +333,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
                    "yet supported on the spec path. Supported: 'icar', 'bym2'.",
                    spatial_type.c_str());
       }
+      data.spatial_component_centering = true;
 
       data.spatial_sigma_prior_U = Rcpp::as<double>(spatial_params["sigma_prior_U"]);
       data.spatial_sigma_prior_alpha = Rcpp::as<double>(spatial_params["sigma_prior_alpha"]);
@@ -343,7 +345,12 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
           Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]),
           Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]));
       if (spatial_params.containsElementNamed("bym2_scale")) {
-        data.bym2_scale_factor = Rcpp::as<double>(spatial_params["bym2_scale"]);
+        std::vector<double> precision;
+        if (spatial_params.containsElementNamed("node_prec") &&
+            !Rf_isNull(spatial_params["node_prec"]))
+          precision = Rcpp::as<std::vector<double>>(spatial_params["node_prec"]);
+        data.set_bym2_scaling(Rcpp::as<double>(spatial_params["bym2_scale"]),
+                             std::move(precision));
       }
       if (spatial_params.containsElementNamed("Q_inv") &&
           spatial_params.containsElementNamed("L_Q")) {
@@ -393,7 +400,11 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       data.n_temporal_groups   = Rcpp::as<int>(temporal_params["n_groups"]);
       data.n_temporal_params   = Rcpp::as<int>(temporal_params["n_params"]);
       data.temporal_cyclic     = Rcpp::as<bool>(temporal_params["cyclic"]);
-      data.temporal_shared     = Rcpp::as<bool>(temporal_params["shared"]);
+      const bool shared = Rcpp::as<bool>(temporal_params["shared"]);
+      for (int k = 1; k < data.n_processes; ++k) data.sharing.temporal[k] = shared;
+      if (temporal_params.containsElementNamed("parameterization"))
+        data.auto_temporal_coordinates =
+            Rcpp::as<std::string>(temporal_params["parameterization"]) == "auto";
       data.ar1_rho_prior_a = Rcpp::as<double>(temporal_params["rho_prior_a"]);
       data.ar1_rho_prior_b = Rcpp::as<double>(temporal_params["rho_prior_b"]);
       if (temporal_params.containsElementNamed("sigma_prior_U")) {

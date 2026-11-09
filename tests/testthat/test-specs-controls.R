@@ -47,3 +47,15 @@ test_that("engine sampler controls recover the binomial posterior across seeds",
   }
   expect_equal(calls, 36L)
 })
+
+test_that("WALNUTS requires a NUTS trajectory length on both routes", {
+  d <- data.frame(y = 2L, n = 3L)
+  op <- options(tulpaRatio.use_specs = FALSE)
+  on.exit(options(op))
+  for (specs in c(FALSE, TRUE)) {
+    options(tulpaRatio.use_specs = specs)
+    expect_error(tratio(y | n ~ 1, d, family = ratiod_binomial(), mode = 'hmc',
+      control = list(iter = 20L, warmup = 10L, chains = 1L, L = 5L, walnuts = TRUE)),
+      'walnuts requires control\\$L = 0')
+  }
+})

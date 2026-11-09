@@ -16,7 +16,9 @@
 #' With `options(tulpaRatio.use_specs = TRUE)`, the engine's likelihood
 #' callback route supports the ratio and exposure families, multiple chains,
 #' crossed random intercepts, and correlated random slopes. It also supports
-#' sampled ICAR/BYM2 fields and centered RW1/RW2/AR1 temporal effects.
+#' sampled ICAR/BYM2 fields, automatic ICAR coordinates, and single-group
+#' automatic or centered RW1/RW2/AR1 temporal effects, including cyclic walks.
+#' Sampler controls select NUTS, fixed-step HMC, WALNUTS and the metric.
 #'
 #' **Supported model families:**
 #' - `ratiod_binomial()` - Trial-based proportions
@@ -91,6 +93,9 @@ fit_hmc <- function(formula,
                     re_param = "noncentered",
                     metric = "auto",
                     walnuts = FALSE) {
+
+  if (L > 0L && isTRUE(walnuts))
+    stop("control$walnuts requires control$L = 0.", call. = FALSE)
 
   cores <- clamp_check_cores(cores %||% cpp_get_max_threads(),
                              check = is.null(cores))
@@ -207,15 +212,15 @@ fit_hmc <- function(formula,
   spatial_param_v <- spatial_info$parameterization %||% "standard"
   spatial_supported <- identical(spatial_type_v, "none") ||
     (spatial_type_v %in% c("icar", "bym2") &&
-     (identical(spatial_type_v, "bym2") || !identical(spatial_param_v, "auto")) &&
      !identical(spatial_param_v, "collapsed") &&
      is.null(spatial_info$rsr_basis))
   temporal_type_v <- temporal_info$type %||% "none"
   temporal_supported <- identical(temporal_type_v, "none") ||
-    (temporal_type_v %in% TEMPORAL_TYPES_SINGLE &&
-     !identical(temporal_info$parameterization, "auto") &&
-     !isTRUE(temporal_info$precision_structure$cyclic) &&
-     identical(temporal_info$parameterization %||% "centered", "centered") &&
+    (temporal_type_v %in% c("rw1", "rw2", "ar1") &&
+     (temporal_info$parameterization %||% "centered") %in% c("auto", "centered") &&
+     (identical(temporal_info$n_groups, 1L) || identical(temporal_type_v, "ar1")) &&
+     (identical(temporal_info$parameterization, "centered") ||
+      identical(temporal_info$n_groups, 1L)) &&
      is.null(temporal_info$rtr_basis))
   specs_eligible <- use_specs_path &&
     !is.null(MODEL_TYPES[[model_type]]$n_processes) &&
@@ -308,6 +313,7 @@ fit_hmc <- function(formula,
         adj_col_idx      = as.integer(spatial_info$adj_col_idx),
         n_neighbors      = as.integer(spatial_info$n_neighbors),
         bym2_scale       = spatial_info$bym2_scale %||% 1.0,
+        node_prec        = spatial_info$node_prec,
         Q_inv            = spatial_info$Q_inv,
         L_Q              = spatial_info$L_Q,
         sigma_prior_U = sp$spatial_sigma_prior_U,
@@ -326,6 +332,7 @@ fit_hmc <- function(formula,
         n_params  = as.integer(temporal_info$n_temporal_params),
         cyclic    = isTRUE(temporal_info$precision_structure$cyclic),
         shared    = isTRUE(temporal_info$shared %||% TRUE),
+        parameterization = temporal_info$parameterization %||% "centered",
         sigma_prior_U = temporal_sigma_prior_U,
         sigma_prior_alpha = temporal_sigma_prior_alpha,
         rho_prior_a = rho_temporal_ab[["a"]],

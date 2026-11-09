@@ -29,12 +29,16 @@ test_that("automatic fields use the NUTS field-coordinate transform", {
   fit <- (function() {
     op <- options(tulpaRatio.use_specs = TRUE)
     on.exit(options(op), add = TRUE)
-    local_mocked_bindings(
-      cpp_tulpaRatio_run_nuts_specs = function(...) stop("unavailable coordinate"),
-      .package = "tulpaRatio")
-    tratio(y | n ~ 1, data = df, family = ratiod_binomial(),
+    calls <- 0L
+    trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+      tracer = function() calls <<- calls + 1L, print = FALSE)
+    on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')),
+      add = TRUE)
+    fit <- tratio(y | n ~ 1, data = df, family = ratiod_binomial(),
       temporal = temporal_rw1("time"), mode = "hmc",
       control = list(iter = 200, warmup = 100, chains = 1, seed = 7, verbose = FALSE))
+    expect_equal(calls, 1L)
+    fit
   })()
   expect_identical(fit$algorithm, "NUTS")
   expect_equal(nrow(as.matrix(fit$draws)), 100L)
