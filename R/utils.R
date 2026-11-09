@@ -28,7 +28,7 @@ cat_shared <- function(shared, yes = "Yes (enters both processes)", no = "No",
 print_point_fit <- function(x, title, extra, means, sds, digits = 3,
                             parameters = names(means)) {
   cat(title, "\n", sep = "")
-  cat("Family:", class(x$family)[1], "\n")
+  cat("Family:", x$family$name, "\n")
   cat("Observations:", x$n_obs, "\n")
   cat("Parameters:", x$n_params)
   extra()

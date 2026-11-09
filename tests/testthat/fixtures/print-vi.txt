@@ -1,6 +1,6 @@
 c(
   "Variational Inference (Low-Rank)",
-  "Family: ratiod_family ",
+  "Family: binomial_fixed ",
   "Observations: 25 ",
   "Parameters: 12 (rank = 2 )",
   "",

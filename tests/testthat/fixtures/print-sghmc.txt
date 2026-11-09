@@ -1,6 +1,6 @@
 c(
   "Stochastic Gradient HMC Fit",
-  "Family: ratiod_family ",
+  "Family: binomial_fixed ",
   "Observations: 25 ",
   "Parameters: 12 ",
   "Batch size: 10 ( 40 %)",
