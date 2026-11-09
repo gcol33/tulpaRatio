@@ -18,75 +18,14 @@ test_that("waic.ratiod_fit exists", {
 })
 
 # Test ratiod_compare
-test_that("ratiod_compare requires at least two models", {
-  mock_fit <- structure(list(), class = "ratiod_fit")
-
-  expect_error(ratiod_compare(mock_fit), "At least two models required")
-})
-
-test_that("ratiod_compare requires ratiod_fit objects", {
-  expect_error(ratiod_compare("a", "b"), "must be ratiod_fit models")
-})
 
 # Test ratiod_average
-test_that("ratiod_average requires at least two models", {
-  mock_fit <- structure(list(), class = "ratiod_fit")
-
-  expect_error(ratiod_average(mock_fit), "At least two models required")
-})
-
-test_that("ratiod_average requires ratiod_fit objects", {
-  expect_error(ratiod_average("a", "b"), "must be ratiod_fit models")
-})
 
 # Test print.ratiod_average
-test_that("print.ratiod_average works", {
-  mock_avg <- structure(
-    list(
-      weights = c(model1 = 0.6, model2 = 0.4),
-      predictions = data.frame(
-        mean = c(1.0, 1.5, 2.0),
-        sd = c(0.1, 0.15, 0.2)
-      ),
-      models = c("model1", "model2"),
-      type = "ratio",
-      weights_method = "loo",
-      n_models = 2
-    ),
-    class = "ratiod_average"
-  )
-
-  output <- capture.output(print(mock_avg))
-  expect_true(any(grepl("ratio model averaging", output)))
-  expect_true(any(grepl("Method:", output)))
-  expect_true(any(grepl("model1", output)))
-})
 
 # Test fitted.ratiod_average
-test_that("fitted.ratiod_average returns predictions", {
-  mock_avg <- structure(
-    list(
-      predictions = data.frame(mean = c(1, 2, 3), sd = c(0.1, 0.2, 0.3))
-    ),
-    class = "ratiod_average"
-  )
-
-  result <- fitted(mock_avg)
-  expect_equal(result, mock_avg$predictions)
-})
 
 # Test weights.ratiod_average
-test_that("weights.ratiod_average returns weights", {
-  mock_avg <- structure(
-    list(
-      weights = c(model1 = 0.7, model2 = 0.3)
-    ),
-    class = "ratiod_average"
-  )
-
-  result <- weights(mock_avg)
-  expect_equal(result, mock_avg$weights)
-})
 
 # Test internal helper: average_predictions
 test_that("average_predictions works on log scale for ratios", {
@@ -145,22 +84,6 @@ test_that("pp_check_single function exists", {
 })
 
 # Test print.ratiod_average with matrix predictions
-test_that("print.ratiod_average handles matrix predictions", {
-  mock_avg <- structure(
-    list(
-      weights = c(model1 = 0.5, model2 = 0.5),
-      predictions = matrix(rnorm(30), nrow = 10, ncol = 3),
-      models = c("model1", "model2"),
-      type = "ratio",
-      weights_method = "pbma",
-      n_models = 2
-    ),
-    class = "ratiod_average"
-  )
-
-  output <- capture.output(print(mock_avg))
-  expect_true(any(grepl("draws", output)))
-})
 
 # Test get_predictions with various paths
 test_that("get_predictions extracts ratio from draws$ratio", {
@@ -332,22 +255,3 @@ test_that("ratiod_average errors when models have different data sizes", {
 })
 
 # Test print.ratiod_average with more than 6 rows
-test_that("print.ratiod_average shows truncation message for many rows", {
-  mock_avg <- structure(
-    list(
-      weights = c(model1 = 0.5, model2 = 0.5),
-      predictions = data.frame(
-        mean = 1:10,
-        sd = rep(0.1, 10)
-      ),
-      models = c("model1", "model2"),
-      type = "ratio",
-      weights_method = "loo",
-      n_models = 2
-    ),
-    class = "ratiod_average"
-  )
-
-  output <- capture.output(print(mock_avg))
-  expect_true(any(grepl("more rows", output)))
-})

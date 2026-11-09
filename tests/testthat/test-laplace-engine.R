@@ -3,15 +3,6 @@
 # predictor, so a change in the engine's latent scale fails here rather than
 # shifting every stored effect.
 
-laplace_chain_adjacency <- function(S) {
-  adj <- matrix(0L, S, S)
-  for (i in seq_len(S - 1L)) {
-    adj[i, i + 1L] <- 1L
-    adj[i + 1L, i] <- 1L
-  }
-  adj
-}
-
 laplace_binomial_fixture <- function(seed = 3) {
   set.seed(seed)
   S <- 8L
@@ -56,19 +47,19 @@ test_that("iid blocks enter the predictor as sigma times the latent coordinate",
 
 test_that("an ICAR block enters the predictor as its latent coordinate", {
   expect_cell_eta_matches_engine(
-    spatial = spatial_car(adjacency = laplace_chain_adjacency(8L), group_var = "site")
+    spatial = spatial_car(adjacency = build_chain_adjacency(8L), group_var = "site")
   )
 })
 
 test_that("a BYM2 block enters the predictor as sigma (sqrt(rho) a + sqrt(1 - rho) b)", {
   expect_cell_eta_matches_engine(
-    spatial = spatial_bym2(adjacency = laplace_chain_adjacency(8L), group_var = "site")
+    spatial = spatial_bym2(adjacency = build_chain_adjacency(8L), group_var = "site")
   )
 })
 
 test_that("a proper CAR block enters the predictor as its latent coordinate", {
   expect_cell_eta_matches_engine(
-    spatial = spatial_car(adjacency = laplace_chain_adjacency(8L),
+    spatial = spatial_car(adjacency = build_chain_adjacency(8L),
                           group_var = "site", proper = TRUE)
   )
 })
@@ -79,7 +70,7 @@ test_that("an HSGP block enters the predictor through sqrt(S_j) times the coeffi
 })
 
 test_that("a restricted field enters the predictor through its projector", {
-  adj <- laplace_chain_adjacency(8L)
+  adj <- build_chain_adjacency(8L)
   expect_cell_eta_matches_engine(
     spatial = spatial_rsr(spatial_car(adjacency = adj, group_var = "site"), ~ x)
   )
@@ -96,7 +87,7 @@ test_that("a restricted field is orthogonal to the restricted covariates", {
   df <- laplace_binomial_fixture()
   fit <- tratio(
     s | n ~ x, data = df, family = ratiod_binomial(),
-    spatial = spatial_rsr(spatial_car(adjacency = laplace_chain_adjacency(8L),
+    spatial = spatial_rsr(spatial_car(adjacency = build_chain_adjacency(8L),
                                       group_var = "site"), ~ x),
     mode = "laplace", control = list(verbose = FALSE)
   )

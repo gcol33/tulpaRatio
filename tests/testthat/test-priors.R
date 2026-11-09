@@ -193,3 +193,112 @@ test_that("priors_default() prints no dispersion prior for a family without one"
   out <- capture.output(priors_default(ratiod_negbin()))
   expect_false(any(grepl("none (", out, fixed = TRUE)))
 })
+
+test_that("prior_predict refuses a family it cannot simulate from", {
+  expect_error(prior_predict(NULL, NULL, NULL), "ratiod_family")
+})
+
+test_that("prior_normal creates valid prior", {
+  p <- prior_normal(0, 2.5)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "normal")
+  expect_equal(p$mean, 0)
+  expect_equal(p$sd, 2.5)
+})
+
+test_that("prior_half_normal creates valid prior", {
+  p <- prior_half_normal(2.5)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "half_normal")
+  expect_equal(p$sd, 2.5)
+})
+
+test_that("prior_half_cauchy creates valid prior", {
+  p <- prior_half_cauchy(2.5)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "half_cauchy")
+  expect_equal(p$scale, 2.5)
+})
+
+test_that("prior_gamma creates valid prior", {
+  p <- prior_gamma(2, 0.5)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "gamma")
+  expect_equal(p$shape, 2)
+  expect_equal(p$rate, 0.5)
+})
+
+test_that("prior_beta creates valid prior", {
+  p <- prior_beta(2, 2)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "beta")
+  expect_equal(p$alpha, 2)
+  expect_equal(p$beta, 2)
+})
+
+test_that("prior_exponential creates valid prior", {
+  p <- prior_exponential(1)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "exponential")
+  expect_equal(p$rate, 1)
+})
+
+test_that("prior_pc creates valid prior", {
+  p <- prior_pc(U = 1.0, alpha = 0.01)
+  expect_s3_class(p, "ratiod_prior")
+  expect_equal(p$dist, "pc")
+  expect_equal(p$U, 1.0)
+  expect_equal(p$alpha, 0.01)
+})
+
+test_that("validate_prior rejects non-prior objects", {
+  expect_error(
+    tulpaRatio:::validate_prior(list(x = 1), "test"),
+    "must be a prior object"
+  )
+})
+
+test_that("ratiod_priors validates all priors", {
+  expect_error(
+    ratiod_priors(beta = list(x = 1)),
+    "must be a prior object"
+  )
+})
+
+test_that("temporal_ar1 creates valid object with a correlation prior", {
+  temp <- temporal_ar1(time_var = "year", rho_prior = prior_beta(9, 1))
+  expect_s3_class(temp$rho_prior, "ratiod_prior")
+  expect_equal(temp$rho_prior$alpha, 9)
+})
+
+test_that("ratiod_priors creates valid prior object", {
+  priors <- ratiod_priors()
+  expect_s3_class(priors, "ratiod_priors")
+})
+
+test_that("ratiod_priors accepts custom values", {
+  priors <- ratiod_priors(
+    beta = prior_normal(0, 5),
+    sigma = prior_pc(U = 1.5),
+    phi = prior_gamma(2, 0.5)
+  )
+
+  expect_s3_class(priors, "ratiod_priors")
+  expect_equal(priors$beta$dist, "normal")
+  expect_equal(priors$sigma$dist, "pc")
+})
+
+test_that("print.ratiod_priors works", {
+  priors <- ratiod_priors()
+  output <- capture.output(print(priors))
+  expect_true(any(grepl("tulpaRatio prior specification", output)))
+})
+
+test_that("temporal_ar1 accepts a Beta prior on its correlation", {
+  temp <- temporal_ar1(time_var = "year", rho_prior = prior_beta(5, 2))
+  expect_equal(temp$rho_prior$alpha, 5)
+  expect_equal(temp$rho_prior$beta, 2)
+  # `rho` is not an argument; it used to partial-match rho_prior and store a
+  # bare number nothing read.
+  expect_error(temporal_ar1(time_var = "year", rho = 0.8), "Beta prior")
+})

@@ -199,3 +199,30 @@ test_that("sim_ratiod_sbc print method works", {
   expect_true(any(grepl("Simulations:", output)))
   expect_true(any(grepl("Family:", output)))
 })
+
+test_that("sim_ratiod generates valid data", {
+  skip_on_cran()
+
+  # Test with default parameters
+  data <- sim_ratiod(
+    n = 50,
+    family = ratiod_negbin_negbin()
+  )
+
+  expect_s3_class(data, "ratiod_simdata")
+  expect_true("data" %in% names(data))
+  expect_equal(nrow(data$data), 50)
+})
+
+test_that("sim_ratiod works with random effects", {
+  skip_on_cran()
+
+  data <- sim_ratiod(
+    n = 60,
+    n_groups = 6,
+    family = ratiod_negbin_negbin()
+  )
+
+  expect_s3_class(data, "ratiod_simdata")
+  expect_true("group" %in% names(data$data) || "site" %in% names(data$data))
+})

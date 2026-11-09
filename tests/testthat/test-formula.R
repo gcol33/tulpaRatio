@@ -224,3 +224,42 @@ test_that("a formula with transforms and a random effect fits", {
   expect_named(coef(fit), c("num:(Intercept)", "num:log(x)", "num:I(x^2)",
                             "denom:(Intercept)", "denom:log(x)", "denom:I(x^2)"))
 })
+
+test_that("ratiod_formula parses basic formula", {
+  df <- data.frame(
+    count = rpois(10, 10),
+    total = rpois(10, 100) + 10,
+    x = rnorm(10)
+  )
+
+  formula <- ratiod_formula(count | total ~ x, data = df)
+  expect_s3_class(formula, "ratiod_formula")
+  expect_true("numerator" %in% names(formula))
+  expect_true("denominator" %in% names(formula))
+})
+
+test_that("ratiod_formula rejects offset", {
+  df <- data.frame(
+    count = rpois(10, 10),
+    total = rpois(10, 100) + 10,
+    x = rnorm(10),
+    effort = runif(10, 1, 5)
+  )
+
+  expect_error(
+    ratiod_formula(count | total ~ x + offset(log(effort)), data = df),
+    "offset"
+  )
+})
+
+test_that("ratiod_formula parses random effects", {
+  df <- data.frame(
+    count = rpois(20, 10),
+    total = rpois(20, 100) + 10,
+    x = rnorm(20),
+    site = factor(rep(1:5, each = 4))
+  )
+
+  formula <- ratiod_formula(count | total ~ x + (1 | site), data = df)
+  expect_true(length(formula$numerator$random_effects) > 0)
+})

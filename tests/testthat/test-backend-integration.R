@@ -262,46 +262,12 @@ test_that("as_draws.ratiod_fit converts to draws format", {
 })
 
 # Test draws_wide
-test_that("draws_wide.ratiod_fit works", {
-  fit <- quick_fit()
-
-  sp <- draws_wide(fit, beta_num)
-  expect_s3_class(sp, "ratiod_draws")
-  expect_true(".chain" %in% names(sp))
-  expect_true(".draw" %in% names(sp))
-})
 
 # Test draws_long
-test_that("draws_long.ratiod_fit works", {
-  fit <- quick_fit()
-
-  gd <- draws_long(fit, beta_num)
-  expect_s3_class(gd, "ratiod_draws_long")
-  expect_true(".variable" %in% names(gd))
-  expect_true(".value" %in% names(gd))
-})
 
 # Test draws_interval
-test_that("draws_interval.ratiod_fit works", {
-  fit <- quick_fit()
-
-  pi <- draws_interval(fit, beta_num)
-  expect_s3_class(pi, "ratiod_draws_interval")
-  expect_true(".value" %in% names(pi))
-  expect_true(".lower" %in% names(pi))
-  expect_true(".upper" %in% names(pi))
-})
 
 # Test draws_interval with HDI
-test_that("draws_interval supports HDI", {
-  fit <- quick_fit()
-
-  pi_qi <- draws_interval(fit, beta_num, .interval = "qi")
-  pi_hdi <- draws_interval(fit, beta_num, .interval = "hdi")
-
-  expect_equal(unique(pi_qi$.interval), "qi")
-  expect_equal(unique(pi_hdi$.interval), "hdi")
-})
 
 # Test multi-chain fitting
 test_that("HMC backend works with multiple chains", {
@@ -605,7 +571,6 @@ test_that("HMC backend works with temporal RW1", {
   expect_true(any(grepl("phi_temporal|tau_temporal", colnames(fit$draws))))
 })
 
-
 test_that("HMC backend works with temporal AR1", {
   set.seed(1002)
   n_times <- 8
@@ -635,7 +600,6 @@ test_that("HMC backend works with temporal AR1", {
   expect_true(any(grepl("rho|phi_temporal", colnames(fit$draws))))
 })
 
-
 test_that("HMC backend works with temporal RW2", {
   set.seed(1003)
   n_times <- 10  # RW2 needs more time points
@@ -662,7 +626,6 @@ test_that("HMC backend works with temporal RW2", {
   expect_s3_class(fit, "ratiod_fit")
   expect_equal(fit$backend, "hmc")
 })
-
 
 test_that("HMC backend works with cyclic RW1", {
   set.seed(1004)
@@ -691,7 +654,6 @@ test_that("HMC backend works with cyclic RW1", {
   expect_equal(fit$backend, "hmc")
 })
 
-
 # ---------------------------------------------------------------------------
 # Parallel chain tests (exercises OpenMP across-chain parallelization)
 # ---------------------------------------------------------------------------
@@ -718,7 +680,6 @@ test_that("HMC backend works with parallel chains", {
   # Each chain should have contributed samples
   expect_true(nrow(fit$draws) >= 2 * 50)  # At least 50 post-warmup per chain
 })
-
 
 test_that("HMC backend with 4 chains produces consistent results", {
   set.seed(3002)
@@ -748,7 +709,6 @@ test_that("HMC backend with 4 chains produces consistent results", {
   }
 })
 
-
 test_that("Temporal model works with multiple chains", {
   set.seed(3003)
   n_times <- 6
@@ -776,7 +736,6 @@ test_that("Temporal model works with multiple chains", {
   expect_equal(fit$chains, 2)
 })
 
-
 # ---------------------------------------------------------------------------
 # Edge case tests for robustness
 # ---------------------------------------------------------------------------
@@ -802,4 +761,9 @@ test_that("Model handles single time point per site", {
   )
 
   expect_s3_class(fit, "ratiod_fit")
+})
+
+test_that("draw accessors preserve the draw contract", {
+  skip_on_cran()
+  expect_draw_accessors(quick_fit())
 })

@@ -16,7 +16,6 @@ test_that("spatiotemporal creates Type I specification", {
   expect_true(st$shared)
 })
 
-
 test_that("spatiotemporal creates Type IV specification", {
   adj <- matrix(0, 5, 5)
   for (i in 1:4) adj[i, i+1] <- adj[i+1, i] <- 1
@@ -30,7 +29,6 @@ test_that("spatiotemporal creates Type IV specification", {
   expect_s3_class(st, "ratiod_spatiotemporal")
   expect_equal(st$type, "IV")
 })
-
 
 test_that("spatiotemporal 'iid' normalizes to 'I'", {
   adj <- matrix(0, 3, 3)
@@ -46,7 +44,6 @@ test_that("spatiotemporal 'iid' normalizes to 'I'", {
   expect_equal(st$type, "I")
 })
 
-
 test_that("spatiotemporal validates spatial specification", {
   expect_error(
     spatiotemporal(
@@ -57,7 +54,6 @@ test_that("spatiotemporal validates spatial specification", {
     "tulpaRatio spatial specification"
   )
 })
-
 
 test_that("spatiotemporal validates temporal specification", {
   adj <- matrix(0, 3, 3)
@@ -72,7 +68,6 @@ test_that("spatiotemporal validates temporal specification", {
     "tulpaRatio temporal specification"
   )
 })
-
 
 test_that("spatiotemporal warns for non-shared effects", {
   adj <- matrix(0, 3, 3)
@@ -89,7 +84,6 @@ test_that("spatiotemporal warns for non-shared effects", {
   )
 })
 
-
 test_that("spatiotemporal warns for proper CAR with Type IV", {
   adj <- matrix(0, 3, 3)
   adj[1, 2] <- adj[2, 1] <- 1
@@ -105,7 +99,6 @@ test_that("spatiotemporal warns for proper CAR with Type IV", {
   )
 })
 
-
 test_that("print.ratiod_spatiotemporal works", {
   adj <- matrix(0, 4, 4)
   for (i in 1:3) adj[i, i+1] <- adj[i+1, i] <- 1
@@ -120,7 +113,6 @@ test_that("print.ratiod_spatiotemporal works", {
   expect_true(any(grepl("Spatiotemporal", output)))
   expect_true(any(grepl("Type III", output)))
 })
-
 
 test_that("validate_spatiotemporal computes correct dimensions", {
   adj <- matrix(0, 4, 4)
@@ -144,7 +136,6 @@ test_that("validate_spatiotemporal computes correct dimensions", {
   expect_equal(st_valid$n_times, 5)
   expect_equal(st_valid$n_params, 20)  # 4 * 5
 })
-
 
 test_that("build_st_index creates correct mappings", {
   adj <- matrix(0, 3, 3)
@@ -173,7 +164,6 @@ test_that("build_st_index creates correct mappings", {
   expect_equal(length(idx$t_idx), 6)
 })
 
-
 test_that("prepare_spatiotemporal_for_hmc returns correct structure", {
   adj <- matrix(0, 3, 3)
   adj[1, 2] <- adj[2, 1] <- 1
@@ -197,14 +187,12 @@ test_that("prepare_spatiotemporal_for_hmc returns correct structure", {
   expect_equal(hmc_data$n_times, 4)
 })
 
-
 test_that("prepare_spatiotemporal_for_hmc handles NULL", {
   hmc_data <- tulpaRatio:::prepare_spatiotemporal_for_hmc(NULL, data.frame())
 
   expect_false(hmc_data$has_spatiotemporal)
   expect_equal(hmc_data$type, "none")
 })
-
 
 st_gp_adj <- function(S) {
   adj <- matrix(0, S, S)
@@ -232,7 +220,6 @@ st_gp_spec <- function(S = 5L, coords = ~ lon + lat, ...) {
   )
 }
 
-
 test_that("nonsep_gp carries its kernels and its non-separability", {
   st <- st_gp_spec(type = "nonsep_gp", nonsep_type = "gneiting",
                    cov_space = "matern", nn = 4)
@@ -245,7 +232,6 @@ test_that("nonsep_gp carries its kernels and its non-separability", {
   expect_equal(st$nn, 4L)
   expect_equal(st$coord_vars, c("lon", "lat"))
 })
-
 
 test_that("the GP types need coordinates of their own", {
   for (type in c("separable", "nonsep_gp")) {
@@ -262,7 +248,6 @@ test_that("the GP types need coordinates of their own", {
   expect_error(st_gp_spec(type = "separable", coords = 42), "formula")
 })
 
-
 test_that("a GP main effect pairs with a GP interaction", {
   # gcol33/tulpaRatio#70: the GP sampler entry is handed the interaction now,
   # so the pairing builds instead of being refused.
@@ -277,7 +262,6 @@ test_that("a GP main effect pairs with a GP interaction", {
   expect_equal(st$coord_vars, c("lon", "lat"))
 })
 
-
 test_that("separable is the product arm, and says so", {
   expect_error(
     st_gp_spec(type = "separable", nonsep_type = "gneiting"),
@@ -286,12 +270,10 @@ test_that("separable is the product arm, and says so", {
   expect_equal(st_gp_spec(type = "separable")$nonsep_type, "product")
 })
 
-
 test_that("an unknown kernel is refused where the argument is nameable", {
   expect_error(st_gp_spec(type = "separable", cov_space = "cauchy"),
                "Unknown covariance")
 })
-
 
 test_that("validation builds the grid the interaction is defined on", {
   S <- 5L; T <- 4L
@@ -317,7 +299,6 @@ test_that("validation builds the grid the interaction is defined on", {
   expect_true(all(is.finite(g$nn_dist_time)))
 })
 
-
 test_that("a unit whose rows disagree gets its centroid, and is told so", {
   df <- st_gp_df(4L, 3L)
   df$lon <- df$lon + rep(c(-1, 0, 1), times = 4)  # spread within each unit
@@ -327,7 +308,6 @@ test_that("a unit whose rows disagree gets its centroid, and is told so", {
     "centroid"
   )
 })
-
 
 test_that("prepare_spatiotemporal_for_hmc emits the GP grid", {
   S <- 4L; T <- 3L
@@ -347,7 +327,6 @@ test_that("prepare_spatiotemporal_for_hmc emits the GP grid", {
   expect_equal(info$gp$cov_space, 0L)  # exponential
   expect_equal(info$gp$cov_time, 0L)
 })
-
 
 test_that("a spatial GP indexes an interaction by location, not by row", {
   # Two observations per location: s_idx has to be the location, or st_flat
@@ -370,7 +349,6 @@ test_that("a spatial GP indexes an interaction by location, not by row", {
   expect_equal(sort(unique(st$st_index$s_idx)), 1:3)
 })
 
-
 test_that("compute_st_nngp_neighbors creates valid structure", {
   set.seed(42)
   coords <- cbind(runif(15), runif(15))
@@ -387,7 +365,6 @@ test_that("compute_st_nngp_neighbors creates valid structure", {
   expect_equal(sort(result$nn_order), 1:15)
   expect_equal(result$nn_order_inv[result$nn_order], 1:15)
 })
-
 
 test_that("all interaction types are supported", {
   adj <- matrix(0, 4, 4)
@@ -406,12 +383,48 @@ test_that("all interaction types are supported", {
   }
 })
 
-
 test_that("separable builds cleanly on an areal main effect", {
   st <- st_gp_spec(type = "separable")
   expect_equal(st$type, "separable")
   expect_equal(st$nonsep_type, "product")
 })
 
+test_that("spatiotemporal creates valid structure", {
+  # Need to create spatial and temporal objects first
+  adj <- matrix(c(0, 1, 0, 1, 0, 1, 0, 1, 0), nrow = 3)
+  spatial <- spatial_car(group_var = "region", adjacency = adj)
+  temporal <- temporal_rw1(time_var = "year")
 
+  st <- spatiotemporal(
+    spatial = spatial,
+    temporal = temporal,
+    type = "I"
+  )
+  expect_s3_class(st, "ratiod_spatiotemporal")
+  expect_equal(st$type, "I")
+})
 
+test_that("spatiotemporal validates type", {
+  adj <- matrix(c(0, 1, 0, 1, 0, 1, 0, 1, 0), nrow = 3)
+  spatial <- spatial_car(group_var = "region", adjacency = adj)
+  temporal <- temporal_rw1(time_var = "year")
+
+  # Invalid type should error - match.arg gives specific message
+  expect_error(
+    spatiotemporal(spatial = spatial, temporal = temporal, type = "invalid")
+  )
+})
+
+test_that("print.ratiod_spatiotemporal works", {
+  adj <- matrix(c(0, 1, 0, 1, 0, 1, 0, 1, 0), nrow = 3)
+  spatial <- spatial_car(group_var = "region", adjacency = adj)
+  temporal <- temporal_rw1(time_var = "year")
+
+  st <- spatiotemporal(
+    spatial = spatial,
+    temporal = temporal,
+    type = "II"
+  )
+  output <- capture.output(print(st))
+  expect_true(length(output) > 0)
+})

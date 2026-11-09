@@ -33,7 +33,6 @@ test_that("predict works for basic model (no spatial)", {
   expect_equal(nrow(pred_pop), 3)
 })
 
-
 test_that("predict works with ICAR spatial (lookup)",
 {
   skip_on_cran()
@@ -43,11 +42,7 @@ test_that("predict works with ICAR spatial (lookup)",
   n <- 30
 
   # Create simple adjacency
-  adj <- matrix(0, n_sites, n_sites)
-  for (i in 1:(n_sites - 1)) {
-    adj[i, i + 1] <- 1
-    adj[i + 1, i] <- 1
-  }
+  adj <- build_chain_adjacency(n_sites, integer = FALSE)
 
   df <- data.frame(
     y = rpois(n, 10),
@@ -72,7 +67,6 @@ test_that("predict works with ICAR spatial (lookup)",
   expect_true(all(pred$mean > 0 & pred$mean < 1))  # Probabilities
 })
 
-
 test_that("predict works with return_spatial = TRUE", {
   skip_on_cran()
 
@@ -80,11 +74,7 @@ test_that("predict works with return_spatial = TRUE", {
   n_sites <- 6
   n <- 30
 
-  adj <- matrix(0, n_sites, n_sites)
-  for (i in 1:(n_sites - 1)) {
-    adj[i, i + 1] <- 1
-    adj[i + 1, i] <- 1
-  }
+  adj <- build_chain_adjacency(n_sites, integer = FALSE)
 
   df <- data.frame(
     y = rpois(n, 10),
@@ -109,7 +99,6 @@ test_that("predict works with return_spatial = TRUE", {
   expect_true("w.0.samples" %in% names(pred))
   expect_equal(ncol(pred$w.0.samples), 3)  # 3 new observations
 })
-
 
 test_that("predict errors when coords.0 missing for GP", {
   skip_on_cran()
@@ -139,7 +128,6 @@ test_that("predict errors when coords.0 missing for GP", {
     "coords.0 required"
   )
 })
-
 
 # The four kernels, written out here rather than read off the package, so the
 # kriging below is scored against a covariance family it does not share code
@@ -286,7 +274,6 @@ test_that("a PG GP fit predicts its field at new coordinates", {
   expect_true(all(is.finite(pred$w.0.samples)))
 })
 
-
 test_that("detect_spatial_type identifies spatial types correctly", {
   # Mock objects
   obj_none <- list(spatial = NULL, .internal = list(hmc_data = list()))
@@ -304,7 +291,6 @@ test_that("detect_spatial_type identifies spatial types correctly", {
   expect_equal(detect_spatial_type(obj_icar), "icar")
 })
 
-
 test_that("predict works for PG backend with spatial", {
   skip_on_cran()
 
@@ -312,11 +298,7 @@ test_that("predict works for PG backend with spatial", {
   n_sites <- 6
   n <- 30
 
-  adj <- matrix(0, n_sites, n_sites)
-  for (i in 1:(n_sites - 1)) {
-    adj[i, i + 1] <- 1
-    adj[i + 1, i] <- 1
-  }
+  adj <- build_chain_adjacency(n_sites, integer = FALSE)
 
   df <- data.frame(
     y = rbinom(n, 20, 0.4),

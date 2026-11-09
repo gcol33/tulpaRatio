@@ -362,3 +362,115 @@ test_that("the stochastic-gradient samplers are Tier 3, beside VI", {
   expect_false(any(c("sghmc", "sgld") %in% get_mode_backends("auto")))
   expect_false(any(c("sghmc", "sgld") %in% get_mode_backends("exact")))
 })
+
+test_that("extract_re_from_data handles no RE", {
+  # Create mock formula object
+  mock_formula <- list(
+    numerator = list(
+      random_effects = NULL
+    )
+  )
+  data <- data.frame(y = 1:10)
+
+  result <- tulpaRatio:::extract_re_from_data(mock_formula, data)
+
+  expect_equal(result$n_groups, 0L)
+  expect_equal(result$n_re_terms, 0L)
+  expect_equal(length(result$group_idx), 10)
+  expect_false(result$has_slopes)
+})
+
+test_that("extract_re_from_data handles single RE", {
+  mock_formula <- list(
+    numerator = list(
+      random_effects = list(
+        list(
+          group_var = "site",
+          group = c(1, 1, 2, 2, 3, 3),
+          n_groups = 3L,
+          slope_vars = character(0)
+        )
+      )
+    )
+  )
+  data <- data.frame(y = 1:6)
+
+  result <- tulpaRatio:::extract_re_from_data(mock_formula, data)
+
+  expect_equal(result$n_groups, 3L)
+  expect_equal(result$n_re_terms, 1L)
+  expect_equal(result$group_var, "site")
+  expect_equal(result$total_groups, 3L)
+})
+
+test_that("extract_re_from_data handles multiple RE terms", {
+  mock_formula <- list(
+    numerator = list(
+      random_effects = list(
+        list(
+          group_var = "site",
+          group = c(1, 1, 2, 2),
+          n_groups = 2L,
+          slope_vars = character(0)
+        ),
+        list(
+          group_var = "year",
+          group = c(1, 2, 1, 2),
+          n_groups = 2L,
+          slope_vars = character(0)
+        )
+      )
+    )
+  )
+  data <- data.frame(y = 1:4)
+
+  result <- tulpaRatio:::extract_re_from_data(mock_formula, data)
+
+  expect_equal(result$n_re_terms, 2L)
+  expect_equal(result$total_groups, 4L)
+  expect_equal(nrow(result$group_idx_matrix), 4)
+  expect_equal(ncol(result$group_idx_matrix), 2)
+})
+
+test_that("extract_re_from_data warns about slopes", {
+  mock_formula <- list(
+    numerator = list(
+      random_effects = list(
+        list(
+          group_var = "site",
+          group = c(1, 1, 2, 2),
+          n_groups = 2L,
+          slope_vars = c("x1")
+        )
+      )
+    )
+  )
+  data <- data.frame(y = 1:4)
+
+  expect_warning(
+    result <- tulpaRatio:::extract_re_from_data(mock_formula, data),
+    "Random slopes not yet fully supported"
+  )
+  expect_true(result$has_slopes)
+})
+
+test_that("fit_pg_binomial errors without trials", {
+  mock_formula <- list(
+    numerator = list(
+      response = 1:5,
+      X = cbind(1, rnorm(5)),
+      random_effects = NULL
+    ),
+    denominator = list(response = NULL)
+  )
+
+  expect_error(
+    tulpaRatio:::fit_pg_binomial(
+      formula = mock_formula,
+      data = data.frame(x = 1:5),
+      family = ratiod_binomial(),
+      verbose = FALSE
+    ),
+    "trials"
+  )
+})

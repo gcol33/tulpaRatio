@@ -13,7 +13,6 @@ test_that("temporal_rw1 creates correct structure", {
   expect_true(temp$shared)
 })
 
-
 test_that("temporal_rw1 with cyclic option", {
   temp <- temporal_rw1("month", cyclic = TRUE)
 
@@ -21,7 +20,6 @@ test_that("temporal_rw1 with cyclic option", {
   expect_equal(temp$type, "rw1")
   expect_true(temp$cyclic)
 })
-
 
 test_that("temporal_rw2 creates correct structure", {
   temp <- temporal_rw2("year")
@@ -33,7 +31,6 @@ test_that("temporal_rw2 creates correct structure", {
   expect_true(temp$shared)
 })
 
-
 test_that("temporal_ar1 creates correct structure", {
   temp <- temporal_ar1("time_var")
 
@@ -43,7 +40,6 @@ test_that("temporal_ar1 creates correct structure", {
   expect_true(temp$shared)
 })
 
-
 test_that("temporal with panel group", {
   temp <- temporal_rw1("year", group_var = "site")
 
@@ -52,7 +48,6 @@ test_that("temporal with panel group", {
   expect_equal(temp$time_var, "year")
   expect_equal(temp$group_var, "site")
 })
-
 
 test_that("temporal shared=FALSE works", {
   # Expect warning about non-shared effects
@@ -65,14 +60,12 @@ test_that("temporal shared=FALSE works", {
   expect_false(temp$shared)
 })
 
-
 test_that("temporal print method works", {
   temp <- temporal_rw1("year")
   output <- capture.output(print(temp))
   expect_true(any(grepl("temporal", output, ignore.case = TRUE)))
   expect_true(any(grepl("RW1", output)))
 })
-
 
 test_that("validate_temporal extracts time indices", {
   df <- data.frame(
@@ -88,7 +81,6 @@ test_that("validate_temporal extracts time indices", {
   expect_equal(validated$n_times, 5)
   expect_equal(validated$n_groups, 1)  # No panel group
 })
-
 
 test_that("validate_temporal with panel groups", {
   df <- data.frame(
@@ -106,7 +98,6 @@ test_that("validate_temporal with panel groups", {
   expect_equal(validated$n_groups, 3)
   expect_equal(validated$n_temporal_params, 15)  # 5 times * 3 groups
 })
-
 
 test_that("HMC with temporal RW1 runs", {
   skip_on_cran()
@@ -138,16 +129,16 @@ test_that("HMC with temporal RW1 runs", {
     X_num = X,
     X_denom = matrix(1, n, 1),
     family = list(model_type = "binomial"),
-    re_params = make_re_params_temporal(n),
-    spatial_params = make_spatial_params_temporal(n),
+    re_params = fixture_re_params(n),
+    spatial_params = fixture_spatial_params(n),
     gp_params = list(gp_type = "none"),
-    temporal_params = make_temporal_params(n, time_idx, type = "rw1", n_times = n_times),
-    prior_params = make_prior_params_temporal(),
-    zi_params = make_zi_params_temporal(n),
-    latent_params = make_latent_params_temporal(),
-    st_params = make_st_params_temporal(),
-    tvc_params = make_tvc_params_temporal(),
-    svc_params = make_svc_params_temporal(),
+    temporal_params = fixture_temporal_params(n, time_idx, type = "rw1", n_times = n_times),
+    prior_params = fixture_prior_params(),
+    zi_params = fixture_zi_params(n),
+    latent_params = fixture_latent_params(),
+    st_params = fixture_st_params(),
+    tvc_params = fixture_tvc_params(),
+    svc_params = fixture_svc_params(),
     n_iter = 200L,
     n_warmup = 100L,
     L = 10L,
@@ -171,9 +162,6 @@ test_that("HMC with temporal RW1 runs", {
   # Just verify temporal effects are finite (skip sum constraint for short chains)
   expect_true(all(is.finite(temporal_means)))
 })
-
-
-
 
 # Each group's walk sums to zero over time, so it carries the group's trend
 # and a group intercept its level; the two no longer lie along the same
@@ -290,16 +278,16 @@ test_that("HMC with temporal AR1 runs", {
     X_num = X,
     X_denom = matrix(1, n, 1),
     family = list(model_type = "binomial"),
-    re_params = make_re_params_temporal(n),
-    spatial_params = make_spatial_params_temporal(n),
+    re_params = fixture_re_params(n),
+    spatial_params = fixture_spatial_params(n),
     gp_params = list(gp_type = "none"),
-    temporal_params = make_temporal_params(n, time_idx, type = "ar1", n_times = n_times),
-    prior_params = make_prior_params_temporal(),
-    zi_params = make_zi_params_temporal(n),
-    latent_params = make_latent_params_temporal(),
-    st_params = make_st_params_temporal(),
-    tvc_params = make_tvc_params_temporal(),
-    svc_params = make_svc_params_temporal(),
+    temporal_params = fixture_temporal_params(n, time_idx, type = "ar1", n_times = n_times),
+    prior_params = fixture_prior_params(),
+    zi_params = fixture_zi_params(n),
+    latent_params = fixture_latent_params(),
+    st_params = fixture_st_params(),
+    tvc_params = fixture_tvc_params(),
+    svc_params = fixture_svc_params(),
     n_iter = 200L,
     n_warmup = 100L,
     L = 10L,
@@ -324,7 +312,6 @@ test_that("HMC with temporal AR1 runs", {
   # 100-draw chain has not shaken off.
   expect_gt(mean(rho_samples), 0.2)
 })
-
 
 test_that("HMC with cyclic RW1 (seasonal) runs", {
   skip_on_cran()
@@ -356,16 +343,16 @@ test_that("HMC with cyclic RW1 (seasonal) runs", {
     X_num = X,
     X_denom = matrix(1, n, 1),
     family = list(model_type = "binomial"),
-    re_params = make_re_params_temporal(n),
-    spatial_params = make_spatial_params_temporal(n),
+    re_params = fixture_re_params(n),
+    spatial_params = fixture_spatial_params(n),
     gp_params = list(gp_type = "none"),
-    temporal_params = make_temporal_params(n, time_idx, type = "rw1", n_times = n_months, cyclic = TRUE),
-    prior_params = make_prior_params_temporal(),
-    zi_params = make_zi_params_temporal(n),
-    latent_params = make_latent_params_temporal(),
-    st_params = make_st_params_temporal(),
-    tvc_params = make_tvc_params_temporal(),
-    svc_params = make_svc_params_temporal(),
+    temporal_params = fixture_temporal_params(n, time_idx, type = "rw1", n_times = n_months, cyclic = TRUE),
+    prior_params = fixture_prior_params(),
+    zi_params = fixture_zi_params(n),
+    latent_params = fixture_latent_params(),
+    st_params = fixture_st_params(),
+    tvc_params = fixture_tvc_params(),
+    svc_params = fixture_svc_params(),
     n_iter = 200L,
     n_warmup = 100L,
     L = 10L,
@@ -378,7 +365,6 @@ test_that("HMC with cyclic RW1 (seasonal) runs", {
   expect_equal(ncol(result$samples), 16)
   expect_equal(nrow(result$samples), 100)
 })
-
 
 test_that("HMC with panel temporal (group-specific) runs", {
   skip_on_cran()
@@ -421,16 +407,16 @@ test_that("HMC with panel temporal (group-specific) runs", {
     X_num = X,
     X_denom = matrix(1, n, 1),
     family = list(model_type = "binomial"),
-    re_params = make_re_params_temporal(n),
-    spatial_params = make_spatial_params_temporal(n),
+    re_params = fixture_re_params(n),
+    spatial_params = fixture_spatial_params(n),
     gp_params = list(gp_type = "none"),
-    temporal_params = make_temporal_params(n, time_idx, type = "rw1", n_times = n_times, group_idx = group_idx, n_groups = n_groups),
-    prior_params = make_prior_params_temporal(),
-    zi_params = make_zi_params_temporal(n),
-    latent_params = make_latent_params_temporal(),
-    st_params = make_st_params_temporal(),
-    tvc_params = make_tvc_params_temporal(),
-    svc_params = make_svc_params_temporal(),
+    temporal_params = fixture_temporal_params(n, time_idx, type = "rw1", n_times = n_times, group_idx = group_idx, n_groups = n_groups),
+    prior_params = fixture_prior_params(),
+    zi_params = fixture_zi_params(n),
+    latent_params = fixture_latent_params(),
+    st_params = fixture_st_params(),
+    tvc_params = fixture_tvc_params(),
+    svc_params = fixture_svc_params(),
     n_iter = 200L,
     n_warmup = 100L,
     L = 10L,
@@ -443,7 +429,6 @@ test_that("HMC with panel temporal (group-specific) runs", {
   expect_equal(ncol(result$samples), 19)
   expect_equal(nrow(result$samples), 100)
 })
-
 
 test_that("HMC with temporal runs multiple chains in parallel", {
   skip_on_cran()
@@ -475,16 +460,16 @@ test_that("HMC with temporal runs multiple chains in parallel", {
     X_num = X,
     X_denom = matrix(1, n, 1),
     family = list(model_type = "binomial"),
-    re_params = make_re_params_temporal(n),
-    spatial_params = make_spatial_params_temporal(n),
+    re_params = fixture_re_params(n),
+    spatial_params = fixture_spatial_params(n),
     gp_params = list(gp_type = "none"),
-    temporal_params = make_temporal_params(n, time_idx, type = "rw1", n_times = n_times),
-    prior_params = make_prior_params_temporal(),
-    zi_params = make_zi_params_temporal(n),
-    latent_params = make_latent_params_temporal(),
-    st_params = make_st_params_temporal(),
-    tvc_params = make_tvc_params_temporal(),
-    svc_params = make_svc_params_temporal(),
+    temporal_params = fixture_temporal_params(n, time_idx, type = "rw1", n_times = n_times),
+    prior_params = fixture_prior_params(),
+    zi_params = fixture_zi_params(n),
+    latent_params = fixture_latent_params(),
+    st_params = fixture_st_params(),
+    tvc_params = fixture_tvc_params(),
+    svc_params = fixture_svc_params(),
     n_iter = 200L,
     n_warmup = 100L,
     L = 10L,
@@ -510,7 +495,6 @@ test_that("HMC with temporal runs multiple chains in parallel", {
   expect_false(all(chain1_mean == chain2_mean))
 })
 
-
 # =============================================================================
 # Tests for temporal_gp() - Gaussian Process temporal structure
 # =============================================================================
@@ -527,7 +511,6 @@ test_that("temporal_gp creates correct structure with exponential covariance", {
   expect_true(temp$scale)
 })
 
-
 test_that("temporal_gp creates correct structure with matern covariance", {
   temp <- temporal_gp("day", cov = "matern", nu = 2.5)
 
@@ -536,7 +519,6 @@ test_that("temporal_gp creates correct structure with matern covariance", {
   expect_equal(temp$nu, 2.5)
 })
 
-
 test_that("temporal_gp creates correct structure with periodic covariance", {
   temp <- temporal_gp("month", cov = "periodic", period = 12)
 
@@ -544,7 +526,6 @@ test_that("temporal_gp creates correct structure with periodic covariance", {
   expect_equal(temp$cov, "periodic")
   expect_equal(temp$period, 12)
 })
-
 
 test_that("temporal_gp validates period for periodic covariance", {
   expect_error(
@@ -558,14 +539,12 @@ test_that("temporal_gp validates period for periodic covariance", {
   )
 })
 
-
 test_that("temporal_gp warns for non-shared effects", {
   expect_warning(
     temporal_gp("time", shared = FALSE),
     regexp = "confounded"
   )
 })
-
 
 test_that("temporal_gp print method works", {
   temp <- temporal_gp("timestamp", cov = "matern", nu = 1.5)
@@ -575,7 +554,6 @@ test_that("temporal_gp print method works", {
   expect_true(any(grepl("matern", output, ignore.case = TRUE)))
   expect_true(any(grepl("nu", output)))
 })
-
 
 test_that("validate_temporal_gp extracts time values correctly", {
   df <- data.frame(
@@ -593,7 +571,6 @@ test_that("validate_temporal_gp extracts time values correctly", {
   expect_equal(validated$n_temporal_params, 20)
 })
 
-
 test_that("validate_temporal_gp handles date/time variables", {
   df <- data.frame(
     y = rpois(10, 10),
@@ -606,7 +583,6 @@ test_that("validate_temporal_gp handles date/time variables", {
   expect_equal(validated$n_obs, 10)
   expect_true(is.numeric(validated$time_values))
 })
-
 
 test_that("validate_temporal_gp with grouping", {
   df <- data.frame(
@@ -623,7 +599,6 @@ test_that("validate_temporal_gp with grouping", {
   # With 10 unique times and 3 groups, we get 10 * 3 = 30 temporal params
   expect_equal(validated$n_temporal_params, 30)
 })
-
 
 # =============================================================================
 # Tests for temporal_tvc() - Temporally-Varying Coefficients
@@ -642,7 +617,6 @@ test_that("temporal_tvc creates correct structure with index terms", {
   expect_true(tvc$shared)
 })
 
-
 test_that("temporal_tvc creates correct structure with named terms", {
   tvc <- temporal_tvc("year", terms = c("(Intercept)", "depth"))
 
@@ -650,14 +624,12 @@ test_that("temporal_tvc creates correct structure with named terms", {
   expect_equal(tvc$terms_spec$names, c("(Intercept)", "depth"))
 })
 
-
 test_that("temporal_tvc creates correct structure with formula terms", {
   tvc <- temporal_tvc("year", terms = ~ 1 + depth + temp)
 
   expect_equal(tvc$terms_spec$type, "formula")
   expect_true(inherits(tvc$terms_spec$formula, "formula"))
 })
-
 
 test_that("temporal_tvc supports different structures", {
   tvc_rw1 <- temporal_tvc("year", terms = 1, structure = "rw1")
@@ -681,14 +653,12 @@ test_that("temporal_tvc rejects structure = 'gp' (gcol33/tulpaRatio#32)", {
   )
 })
 
-
 test_that("temporal_tvc warns for non-shared effects", {
   expect_warning(
     temporal_tvc("year", terms = 1, shared = FALSE),
     regexp = "confounded"
   )
 })
-
 
 test_that("temporal_tvc print method works", {
   tvc <- temporal_tvc("year", terms = c(1, 2), structure = "rw2")
@@ -697,7 +667,6 @@ test_that("temporal_tvc print method works", {
   expect_true(any(grepl("temporally-varying", output, ignore.case = TRUE)))
   expect_true(any(grepl("RW2", output)))
 })
-
 
 test_that("validate_tvc resolves index terms correctly", {
   df <- data.frame(
@@ -716,7 +685,6 @@ test_that("validate_tvc resolves index terms correctly", {
   expect_equal(validated$n_temporal_params, 10)  # 5 times * 2 terms
 })
 
-
 test_that("validate_tvc resolves named terms correctly", {
   df <- data.frame(
     y = rpois(30, 10),
@@ -734,7 +702,6 @@ test_that("validate_tvc resolves named terms correctly", {
   expect_equal(validated$tvc_indices, c(2, 3))  # Columns 2 and 3 in X
 })
 
-
 test_that("validate_tvc errors on missing terms", {
   df <- data.frame(
     y = rpois(30, 10),
@@ -750,7 +717,6 @@ test_that("validate_tvc errors on missing terms", {
     regexp = "not found in design matrix"
   )
 })
-
 
 test_that("validate_tvc with panel groups", {
   df <- data.frame(
@@ -770,7 +736,6 @@ test_that("validate_tvc with panel groups", {
   expect_equal(validated$n_temporal_params, 10)  # 5 times * 1 term * 2 groups
 })
 
-
 # =============================================================================
 # Tests for temporal_rtr() - Restricted Temporal Regression
 # =============================================================================
@@ -786,7 +751,6 @@ test_that("temporal_rtr creates correct structure", {
   expect_true(inherits(rtr$rtr_formula, "formula"))
 })
 
-
 test_that("temporal_rtr works with different base temporal types", {
   rtr_rw1 <- temporal_rtr(temporal_rw1("year"), restrict_to = ~ x)
   rtr_gp <- temporal_rtr(temporal_gp("time"), restrict_to = ~ x)
@@ -797,7 +761,6 @@ test_that("temporal_rtr works with different base temporal types", {
   expect_s3_class(rtr_gp, "ratiod_rtr")
   expect_equal(rtr_gp$type, "gp")
 })
-
 
 test_that("temporal_rtr validates inputs", {
   expect_error(
@@ -811,7 +774,6 @@ test_that("temporal_rtr validates inputs", {
   )
 })
 
-
 test_that("temporal_rtr print method works", {
   rtr <- temporal_rtr(temporal_rw2("year"), restrict_to = ~ temp + precip)
   output <- capture.output(print(rtr))
@@ -820,7 +782,6 @@ test_that("temporal_rtr print method works", {
   expect_true(any(grepl("Orthogonal", output)))
   expect_true(any(grepl("temp", output)))
 })
-
 
 test_that("rtr_basis spans the restricted covariates", {
   df <- data.frame(
@@ -838,7 +799,6 @@ test_that("rtr_basis spans the restricted covariates", {
   expect_equal(X - Q %*% crossprod(Q, X), 0 * X, tolerance = 1e-10)
 })
 
-
 test_that("rtr_basis errors on missing variables", {
   df <- data.frame(
     y = rpois(50, 10),
@@ -850,7 +810,6 @@ test_that("rtr_basis errors on missing variables", {
 
   expect_error(tulpaRatio:::rtr_basis(rtr, df), regexp = "RTR variables not found in data")
 })
-
 
 # =============================================================================
 # Tests for tvc() extractor function
@@ -887,7 +846,6 @@ test_that("tvc extractor creates ratiod_tvc_posterior object", {
   expect_equal(result$term_names, c("(Intercept)", "x"))
 })
 
-
 test_that("tvc extractor subsets terms correctly", {
   mock_fit <- structure(
     list(
@@ -915,7 +873,6 @@ test_that("tvc extractor subsets terms correctly", {
   expect_equal(result$term_names, "x")
   expect_equal(dim(result$draws), c(400, 5, 1))
 })
-
 
 test_that("tvc summary method works", {
   mock_fit <- structure(
@@ -947,7 +904,6 @@ test_that("tvc summary method works", {
   expect_true("sd" %in% names(result))
 })
 
-
 test_that("tvc errors when model has no TVC", {
   mock_fit <- structure(
     list(tvc = NULL),
@@ -958,4 +914,35 @@ test_that("tvc errors when model has no TVC", {
     tvc(mock_fit),
     regexp = "not fitted with temporally-varying coefficients"
   )
+})
+
+test_that("temporal_rw1 creates valid object", {
+  temp <- temporal_rw1(time_var = "year")
+  expect_s3_class(temp, "ratiod_temporal")
+  expect_equal(temp$type, "rw1")
+})
+
+test_that("temporal_rw2 creates valid object", {
+  temp <- temporal_rw2(time_var = "year")
+  expect_s3_class(temp, "ratiod_temporal")
+  expect_equal(temp$type, "rw2")
+})
+
+test_that("temporal_rw1 creates valid structure", {
+  temp <- temporal_rw1(time_var = "year")
+  expect_s3_class(temp, "ratiod_temporal")
+  expect_equal(temp$type, "rw1")
+  expect_equal(temp$time_var, "year")
+})
+
+test_that("temporal_ar1 creates valid structure", {
+  temp <- temporal_ar1(time_var = "year")
+  expect_s3_class(temp, "ratiod_temporal")
+  expect_equal(temp$type, "ar1")
+})
+
+test_that("print.ratiod_temporal works", {
+  temp <- temporal_rw1(time_var = "year")
+  output <- capture.output(print(temp))
+  expect_true(length(output) > 0)
 })

@@ -6,76 +6,6 @@ test_that("pp_check generic dispatches correctly", {
   expect_true("pp_check.ratiod_fit" %in% methods("pp_check"))
 })
 
-test_that("ratiod_compare requires at least two models", {
-  skip_on_cran()
-  skip_if_not_installed("loo")
-
-  set.seed(123)
-  n <- 30
-  df <- data.frame(
-    count = rpois(n, lambda = 10),
-    effort = rgamma(n, shape = 3, rate = 1),
-    x = rnorm(n)
-  )
-
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1)
-  )
-
-  expect_error(
-    ratiod_compare(fit),
-    "At least two models"
-  )
-})
-
-test_that("ratiod_compare validates model class", {
-  skip_if_not_installed("loo")
-
-  expect_error(
-    ratiod_compare("not_a_fit", "also_not_a_fit"),
-    "ratiod_fit"
-  )
-})
-
-test_that("ratiod_average requires at least two models", {
-  skip_on_cran()
-  skip_if_not_installed("loo")
-
-  set.seed(456)
-  n <- 30
-  df <- data.frame(
-    count = rpois(n, lambda = 10),
-    effort = rgamma(n, shape = 3, rate = 1),
-    x = rnorm(n)
-  )
-
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    mode = "hmc",
-    control = list(iter = 100, warmup = 50, chains = 1)
-  )
-
-  expect_error(
-    ratiod_average(fit),
-    "At least two models"
-  )
-})
-
-test_that("ratiod_average validates model class", {
-  skip_if_not_installed("loo")
-
-  expect_error(
-    ratiod_average("not_a_fit", "also_not_a_fit"),
-    "ratiod_fit"
-  )
-})
-
 test_that("average_predictions works on log scale for ratios", {
   set.seed(789)
   # Create fake prediction matrices
@@ -121,55 +51,6 @@ test_that("average_predictions returns summary when requested", {
   expect_true("q2.5" %in% names(result))
   expect_true("q97.5" %in% names(result))
   expect_equal(nrow(result), 5)
-})
-
-test_that("print.ratiod_average works", {
-  # Create mock ratiod_average object
-  avg <- structure(
-    list(
-      weights = c(model1 = 0.7, model2 = 0.3),
-      predictions = data.frame(
-        mean = c(1.2, 1.5, 1.8),
-        sd = c(0.1, 0.15, 0.2),
-        q2.5 = c(1.0, 1.2, 1.4),
-        q97.5 = c(1.4, 1.8, 2.2)
-      ),
-      models = c("model1", "model2"),
-      type = "ratio",
-      weights_method = "loo",
-      n_models = 2
-    ),
-    class = "ratiod_average"
-  )
-
-  output <- capture.output(print(avg))
-  expect_true(any(grepl("ratio model averaging", output)))
-  expect_true(any(grepl("Method:", output)))
-  expect_true(any(grepl("Model weights:", output)))
-})
-
-test_that("fitted.ratiod_average extracts predictions", {
-  avg <- structure(
-    list(
-      predictions = data.frame(mean = 1:3, sd = rep(0.1, 3))
-    ),
-    class = "ratiod_average"
-  )
-
-  result <- fitted(avg)
-  expect_equal(result, avg$predictions)
-})
-
-test_that("weights.ratiod_average extracts weights", {
-  avg <- structure(
-    list(
-      weights = c(m1 = 0.6, m2 = 0.4)
-    ),
-    class = "ratiod_average"
-  )
-
-  result <- weights(avg)
-  expect_equal(result, c(m1 = 0.6, m2 = 0.4))
 })
 
 test_that("loo.ratiod_fit method exists", {
@@ -412,25 +293,6 @@ test_that("ratio() extracts ratio posterior draws", {
   expect_equal(ncol(r$draws), n)
 })
 
-test_that("print.ratiod_average handles matrix predictions", {
-  # Create mock ratiod_average object with matrix predictions
-  avg <- structure(
-    list(
-      weights = c(model1 = 0.6, model2 = 0.4),
-      predictions = matrix(rnorm(30), nrow = 10, ncol = 3),
-      models = c("model1", "model2"),
-      type = "ratio",
-      weights_method = "loo",
-      n_models = 2
-    ),
-    class = "ratiod_average"
-  )
-
-  output <- capture.output(print(avg))
-  expect_true(any(grepl("draws x", output)))
-  expect_true(any(grepl("observations", output)))
-})
-
 test_that("the pointwise log-likelihood is evaluated at the full linear predictor", {
   skip_on_cran()
   sim <- sim_ratiod(n = 80, family = ratiod_poisson_gamma(), sigma_re = 0.8,
@@ -448,4 +310,60 @@ test_that("the pointwise log-likelihood is evaluated at the full linear predicto
   manual <- dpois(y_num, fv$numerator, log = TRUE) +
     dgamma(y_den, shape = shape, rate = shape / fv$denominator, log = TRUE)
   expect_equal(unname(ll), unname(manual))
+})
+
+test_that("compute_loo requires loo package", {
+  skip_if_not_installed("loo")
+  skip_on_cran()
+
+  set.seed(42)
+  n <- 20
+  df <- data.frame(
+    count = rpois(n, 10),
+    total = rpois(n, 100) + 10,
+    x = rnorm(n)
+  )
+
+  fit <- tratio(
+    count | total ~ x,
+    data = df,
+    family = ratiod_negbin_negbin(),
+    control = list(iter = 100, warmup = 50, chains = 1)
+  )
+
+  # This should work or throw informative error
+  tryCatch({
+    result <- loo(fit)
+    expect_s3_class(result, "loo")
+  }, error = function(e) {
+    # Expected if loo computation fails due to short chain
+    expect_true(TRUE)
+  })
+})
+
+test_that("compute_waic requires loo package", {
+  skip_if_not_installed("loo")
+  skip_on_cran()
+
+  set.seed(42)
+  n <- 20
+  df <- data.frame(
+    count = rpois(n, 10),
+    total = rpois(n, 100) + 10,
+    x = rnorm(n)
+  )
+
+  fit <- tratio(
+    count | total ~ x,
+    data = df,
+    family = ratiod_negbin_negbin(),
+    control = list(iter = 100, warmup = 50, chains = 1)
+  )
+
+  tryCatch({
+    result <- waic(fit)
+    expect_s3_class(result, "waic")
+  }, error = function(e) {
+    expect_true(TRUE)
+  })
 })

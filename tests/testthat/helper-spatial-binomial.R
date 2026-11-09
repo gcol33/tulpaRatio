@@ -1,12 +1,12 @@
 # A binomial ratio model over a chain of areal units: one structured field,
 # a fixed intercept and slope, `reps` observations per unit.
 
-
-build_chain_adjacency <- function(n_units) {
-  adj <- matrix(0L, n_units, n_units)
-  for (i in seq_len(n_units - 1L)) {
-    adj[i, i + 1L] <- 1L
-    adj[i + 1L, i] <- 1L
+build_chain_adjacency <- function(n_units, integer = TRUE) {
+  adj <- matrix(if (integer) 0L else 0, n_units, n_units)
+  if (n_units > 1L) {
+    i <- seq_len(n_units - 1L)
+    adj[cbind(i, i + 1L)] <- if (integer) 1L else 1
+    adj[cbind(i + 1L, i)] <- if (integer) 1L else 1
   }
   adj
 }

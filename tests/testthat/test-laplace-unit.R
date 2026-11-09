@@ -179,105 +179,84 @@ test_that("prepare_spatial_for_laplace errors without adjacency matrix", {
 # ratiod_compare error handling tests
 # ---------------------------------------------------------------------------
 
-test_that("ratiod_compare errors with single model", {
-  fit <- list()
-  class(fit) <- "ratiod_fit"
-
-  expect_error(
-    ratiod_compare(fit),
-    "At least two models"
-  )
-})
-
-test_that("ratiod_compare errors with non-ratiod objects", {
-  expect_error(
-    ratiod_compare(list(a = 1), list(b = 2)),
-    "must be ratiod_fit"
-  )
-})
-
 # ---------------------------------------------------------------------------
 # ratiod_average error handling tests
 # ---------------------------------------------------------------------------
-
-test_that("ratiod_average errors with single model", {
-  fit <- list()
-  class(fit) <- "ratiod_fit"
-
-  expect_error(
-    ratiod_average(fit),
-    "At least two models"
-  )
-})
-
-test_that("ratiod_average errors with non-ratiod objects", {
-  expect_error(
-    ratiod_average(list(a = 1), list(b = 2)),
-    "must be ratiod_fit"
-  )
-})
 
 # ---------------------------------------------------------------------------
 # print.ratiod_average tests
 # ---------------------------------------------------------------------------
 
-test_that("print.ratiod_average works", {
-  avg_obj <- list(
-    weights = c(m1 = 0.6, m2 = 0.4),
-    predictions = data.frame(
-      mean = 1:3,
-      sd = 0.1
-    ),
-    models = c("m1", "m2"),
-    type = "ratio",
-    weights_method = "loo",
-    n_models = 2
-  )
-  class(avg_obj) <- "ratiod_average"
-
-  output <- capture.output(print(avg_obj))
-  expect_true(any(grepl("ratio model averaging", output)))
-  expect_true(any(grepl("Model weights", output)))
-  expect_true(any(grepl("m1", output)))
-})
-
-test_that("print.ratiod_average handles matrix predictions", {
-  avg_obj <- list(
-    weights = c(m1 = 0.6, m2 = 0.4),
-    predictions = matrix(1:20, nrow = 10, ncol = 2),
-    models = c("m1", "m2"),
-    type = "ratio",
-    weights_method = "loo",
-    n_models = 2
-  )
-  class(avg_obj) <- "ratiod_average"
-
-  output <- capture.output(print(avg_obj))
-  expect_true(any(grepl("draws x", output)))
-})
-
 # ---------------------------------------------------------------------------
 # fitted.ratiod_average tests
 # ---------------------------------------------------------------------------
-
-test_that("fitted.ratiod_average extracts predictions", {
-  preds <- data.frame(mean = 1:5, sd = 0.1)
-  avg_obj <- list(predictions = preds)
-  class(avg_obj) <- "ratiod_average"
-
-  result <- fitted(avg_obj)
-  expect_equal(result, preds)
-})
 
 # ---------------------------------------------------------------------------
 # weights.ratiod_average tests
 # ---------------------------------------------------------------------------
 
-test_that("weights.ratiod_average extracts weights", {
-  w <- c(m1 = 0.7, m2 = 0.3)
-  avg_obj <- list(weights = w)
-  class(avg_obj) <- "ratiod_average"
+test_that("extract_re_for_laplace handles no RE", {
+  mock_formula <- list(
+    numerator = list(
+      response = 1:10,
+      random_effects = NULL
+    )
+  )
 
-  result <- weights(avg_obj)
-  expect_equal(result, w)
+  result <- tulpaRatio:::extract_re_for_laplace(mock_formula)
+
+  expect_equal(result$n_groups, 0L)
+  expect_equal(result$n_re_terms, 0L)
+  expect_equal(length(result$group_idx), 10)
+})
+
+test_that("extract_re_for_laplace handles single RE", {
+  mock_formula <- list(
+    numerator = list(
+      response = 1:6,
+      random_effects = list(
+        list(
+          group_var = "site",
+          group = c(1, 1, 2, 2, 3, 3),
+          n_groups = 3L,
+          slope_vars = character(0)
+        )
+      )
+    )
+  )
+
+  result <- tulpaRatio:::extract_re_for_laplace(mock_formula)
+
+  expect_equal(result$n_groups, 3L)
+  expect_equal(result$n_re_terms, 1L)
+  expect_equal(result$group_var, "site")
+})
+
+test_that("extract_re_for_laplace handles multiple RE with warning for slopes", {
+  mock_formula <- list(
+    numerator = list(
+      response = 1:4,
+      random_effects = list(
+        list(
+          group_var = "site",
+          group = c(1, 1, 2, 2),
+          n_groups = 2L,
+          slope_vars = c("x1")
+        ),
+        list(
+          group_var = "year",
+          group = c(1, 2, 1, 2),
+          n_groups = 2L,
+          slope_vars = character(0)
+        )
+      )
+    )
+  )
+
+  expect_warning(
+    result <- tulpaRatio:::extract_re_for_laplace(mock_formula),
+    "Random slopes are not carried"
+  )
+  expect_equal(result$n_re_terms, 2)
+  expect_true(result$has_slopes)
 })

@@ -120,3 +120,82 @@ test_that("family print methods work", {
   expect_output(print(ratiod_gamma_gamma()), "gamma_gamma")
   expect_output(print(ratiod_lognormal()), "lognormal")
 })
+
+test_that("all main families create valid objects", {
+  fam1 <- ratiod_negbin_negbin()
+  expect_s3_class(fam1, "ratiod_family")
+
+  fam2 <- ratiod_binomial()
+  expect_s3_class(fam2, "ratiod_family")
+
+  fam3 <- ratiod_poisson_gamma()
+  expect_s3_class(fam3, "ratiod_family")
+})
+
+test_that("print.ratiod_family works", {
+  fam <- ratiod_negbin_negbin()
+  output <- capture.output(print(fam))
+  expect_true(length(output) > 0)
+})
+
+test_that("zero inflation families are created correctly", {
+  zi <- ratiod_zipois()
+  expect_s3_class(zi, "ratiod_family")
+  expect_true(zi$zero_inflated)
+
+  zi <- ratiod_zinegbin()
+  expect_s3_class(zi, "ratiod_family")
+  expect_true(zi$zero_inflated)
+
+  hurdle <- ratiod_hurdle_pois()
+  expect_s3_class(hurdle, "ratiod_family")
+  expect_equal(hurdle$zi_type, "hurdle")
+})
+
+test_that("print.ratiod_family shows ZI info", {
+  zi <- ratiod_zipois()
+  output <- capture.output(print(zi))
+  expect_true(any(grepl("zero", output, ignore.case = TRUE)) ||
+              any(grepl("Zero", output)))
+})
+
+test_that("additional ZI families work correctly", {
+  # Test binomial variants
+  zi_bin <- ratiod_zibinomial()
+  expect_s3_class(zi_bin, "ratiod_family")
+  expect_true(zi_bin$zero_inflated)
+
+  hurdle_bin <- ratiod_hurdle_binomial()
+  expect_s3_class(hurdle_bin, "ratiod_family")
+  expect_equal(hurdle_bin$zi_type, "hurdle")
+
+  hurdle_nb <- ratiod_hurdle_negbin()
+  expect_s3_class(hurdle_nb, "ratiod_family")
+  expect_equal(hurdle_nb$zi_type, "hurdle")
+})
+
+test_that("can_use_pg_backend returns TRUE for binomial family", {
+  fam <- ratiod_binomial()
+  expect_true(tulpaRatio:::can_use_pg_backend(fam))
+})
+
+test_that("can_use_pg_backend returns FALSE for negbin family", {
+  fam <- ratiod_negbin_negbin()
+  expect_false(tulpaRatio:::can_use_pg_backend(fam))
+})
+
+test_that("mode = 'pg' refuses a negative binomial family", {
+  set.seed(1)
+  d <- data.frame(y_num = rpois(20, 5), y_denom = rpois(20, 3) + 1,
+                  x1 = rnorm(20))
+  expect_error(
+    tratio(y_num | y_denom ~ x1, data = d, family = ratiod_negbin_negbin(),
+           mode = "pg", control = list(iter = 20, chains = 1, verbose = FALSE)),
+    "PG backend fits ratiod_binomial\\(\\) only"
+  )
+})
+
+test_that("can_use_pg_backend returns FALSE for poisson_gamma family", {
+  fam <- ratiod_poisson_gamma()
+  expect_false(tulpaRatio:::can_use_pg_backend(fam))
+})

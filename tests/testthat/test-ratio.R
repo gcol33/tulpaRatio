@@ -291,101 +291,6 @@ test_that("as_draws.ratiod_fit works", {
   expect_true(inherits(draws, "draws_df") || inherits(draws, "draws"))
 })
 
-test_that("draws_wide.ratiod_fit works", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  sp <- draws_wide(fit, beta_num)
-
-  expect_s3_class(sp, "ratiod_draws")
-  expect_true(".chain" %in% names(sp))
-  expect_true(".iteration" %in% names(sp))
-  expect_true(".draw" %in% names(sp))
-  expect_true(any(grepl("beta_num", names(sp))))
-})
-
-test_that("draws_wide subsamples when requested", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  sp <- draws_wide(fit, beta_num, ndraws = 50)
-
-  expect_equal(nrow(sp), 50)
-})
-
-test_that("draws_wide errors on no matches", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-
-  expect_error(
-    draws_wide(fit, nonexistent_param),
-    "No parameters matched"
-  )
-})
-
-test_that("draws_long.ratiod_fit works", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  gd <- draws_long(fit, beta_num)
-
-  expect_s3_class(gd, "ratiod_draws_long")
-  expect_true(".variable" %in% names(gd))
-  expect_true(".value" %in% names(gd))
-  expect_true(all(grepl("beta_num", gd$.variable)))
-})
-
-test_that("draws_interval.ratiod_fit works", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  pi <- draws_interval(fit, beta_num, beta_denom)
-
-  expect_s3_class(pi, "ratiod_draws_interval")
-  expect_true(".variable" %in% names(pi))
-  expect_true(".value" %in% names(pi))
-  expect_true(".lower" %in% names(pi))
-  expect_true(".upper" %in% names(pi))
-  expect_true(".width" %in% names(pi))
-})
-
-test_that("draws_interval supports multiple widths", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  pi <- draws_interval(fit, beta_num, .width = c(0.5, 0.9))
-
-  widths <- unique(pi$.width)
-  expect_true(0.5 %in% widths)
-  expect_true(0.9 %in% widths)
-})
-
-test_that("draws_interval supports mean point estimate", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  pi_median <- draws_interval(fit, beta_num, .point = "median")
-  pi_mean <- draws_interval(fit, beta_num, .point = "mean")
-
-  expect_equal(unique(pi_median$.point), "median")
-  expect_equal(unique(pi_mean$.point), "mean")
-
-  # Values should differ slightly
-  expect_false(identical(pi_median$.value[1], pi_mean$.value[1]))
-})
-
-test_that("draws_interval supports HDI", {
-  skip_on_cran()
-
-  fit <- make_test_fit()
-  pi_qi <- draws_interval(fit, beta_num, .interval = "qi")
-  pi_hdi <- draws_interval(fit, beta_num, .interval = "hdi")
-
-  expect_equal(unique(pi_qi$.interval), "qi")
-  expect_equal(unique(pi_hdi$.interval), "hdi")
-})
-
 test_that("aggregate_by_group uses geometric mean", {
   # Test the internal aggregation function
   set.seed(999)
@@ -484,4 +389,9 @@ test_that("aggregate_by_group handles single observation per group", {
   expect_equal(ncol(result), 2)
   expect_equal(as.numeric(result[1, 1]), 2)
   expect_equal(as.numeric(result[1, 2]), 8)
+})
+
+test_that("draw accessors preserve the draw contract", {
+  skip_on_cran()
+  expect_draw_accessors(make_test_fit())
 })

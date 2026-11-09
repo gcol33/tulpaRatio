@@ -299,84 +299,10 @@ test_that("as_draws errors without posterior package", {
 })
 
 # Test draws_wide
-test_that("draws_wide.ratiod_fit works", {
-  fit <- make_mock_ratio_fit()
-
-  sp <- draws_wide(fit, beta_num)
-
-  expect_s3_class(sp, "ratiod_draws")
-  expect_true(".chain" %in% names(sp))
-  expect_true(".iteration" %in% names(sp))
-  expect_true(".draw" %in% names(sp))
-})
-
-test_that("draws_wide subsamples when requested", {
-  fit <- make_mock_ratio_fit()
-
-  sp <- draws_wide(fit, beta_num, ndraws = 50)
-
-  expect_equal(nrow(sp), 50)
-})
-
-test_that("draws_wide errors on no matches", {
-  fit <- make_mock_ratio_fit()
-
-  expect_error(draws_wide(fit, nonexistent_param), "No parameters matched")
-})
 
 # Test draws_long
-test_that("draws_long.ratiod_fit works", {
-  fit <- make_mock_ratio_fit()
-
-  gd <- draws_long(fit, beta_num)
-
-  expect_s3_class(gd, "ratiod_draws_long")
-  expect_true(".variable" %in% names(gd))
-  expect_true(".value" %in% names(gd))
-})
 
 # Test draws_interval
-test_that("draws_interval.ratiod_fit works", {
-  fit <- make_mock_ratio_fit()
-
-  pi <- draws_interval(fit, beta_num, beta_denom)
-
-  expect_s3_class(pi, "ratiod_draws_interval")
-  expect_true(".variable" %in% names(pi))
-  expect_true(".value" %in% names(pi))
-  expect_true(".lower" %in% names(pi))
-  expect_true(".upper" %in% names(pi))
-})
-
-test_that("draws_interval supports multiple widths", {
-  fit <- make_mock_ratio_fit()
-
-  pi <- draws_interval(fit, beta_num, .width = c(0.5, 0.9))
-
-  widths <- unique(pi$.width)
-  expect_true(0.5 %in% widths)
-  expect_true(0.9 %in% widths)
-})
-
-test_that("draws_interval supports mean point estimate", {
-  fit <- make_mock_ratio_fit()
-
-  pi_median <- draws_interval(fit, beta_num, .point = "median")
-  pi_mean <- draws_interval(fit, beta_num, .point = "mean")
-
-  expect_equal(unique(pi_median$.point), "median")
-  expect_equal(unique(pi_mean$.point), "mean")
-})
-
-test_that("draws_interval supports HDI", {
-  fit <- make_mock_ratio_fit()
-
-  pi_qi <- draws_interval(fit, beta_num, .interval = "qi")
-  pi_hdi <- draws_interval(fit, beta_num, .interval = "hdi")
-
-  expect_equal(unique(pi_qi$.interval), "qi")
-  expect_equal(unique(pi_hdi$.interval), "hdi")
-})
 
 # Test HDI computation
 test_that("HDI computation works correctly", {
@@ -396,4 +322,47 @@ test_that("HDI computation works correctly", {
   # HDI should be approximately 5 +/- 2 for 95% interval of N(5,1)
   expect_true(lower > 2 && lower < 4)
   expect_true(upper > 6 && upper < 8)
+})
+
+test_that("average_predictions works for ratio type", {
+  pred1 <- matrix(2, nrow = 10, ncol = 5)
+  pred2 <- matrix(4, nrow = 10, ncol = 5)
+  predictions <- list(pred1, pred2)
+  weights <- c(0.5, 0.5)
+
+  # Ratio averaging on log scale
+  avg <- tulpaRatio:::average_predictions(predictions, weights, "ratio", summary = FALSE)
+  # exp(0.5*log(2) + 0.5*log(4)) = exp(0.5*0.693 + 0.5*1.386) = exp(1.0397) ~ 2.83
+  expect_true(all(abs(avg - sqrt(2 * 4)) < 0.01))  # Geometric mean
+})
+
+test_that("ratio_contrast validates inputs", {
+  # ratio_contrast requires a contrast formula
+  expect_error(ratio_contrast(NULL, NULL))
+})
+
+test_that("ratio handles invalid type", {
+  skip_on_cran()
+
+  set.seed(42)
+  n <- 20
+  df <- data.frame(
+    count = rpois(n, 10),
+    total = rpois(n, 100) + 10,
+    x = rnorm(n)
+  )
+
+  fit <- tratio(
+    count | total ~ x,
+    data = df,
+    family = ratiod_negbin_negbin(),
+    control = list(iter = 50, warmup = 25, chains = 1)
+  )
+
+  expect_error(ratio(fit, type = "invalid_type"))
+})
+
+test_that("draw accessors preserve the draw contract", {
+  skip_on_cran()
+  expect_draw_accessors(make_mock_ratio_fit())
 })

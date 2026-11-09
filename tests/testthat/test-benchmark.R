@@ -9,7 +9,6 @@ test_that("ratiod_threads returns positive integer", {
   expect_true(n_threads == as.integer(n_threads))
 })
 
-
 test_that("print.ratiod_benchmark works", {
   bench <- list(
     config = list(
@@ -181,4 +180,99 @@ test_that("ratiod_benchmark works with random effects", {
 test_that("ratiod_benchmark_compare function exists", {
   expect_true(exists("ratiod_benchmark_compare"))
   expect_true(is.function(ratiod_benchmark_compare))
+})
+
+test_that("ratiod_threads returns integer", {
+  threads <- ratiod_threads()
+  expect_true(is.numeric(threads))
+  expect_true(threads >= 1)
+})
+
+test_that("print.ratiod_benchmark formats output correctly", {
+  # Create minimal benchmark object
+  bench <- structure(
+    list(
+      config = list(
+        N = 100L, p = 3L, n_groups = 0L, n_params = 5L,
+        n_iter = 100L, n_warmup = 50L, n_chains = 1L, n_threads = 1L
+      ),
+      timing = list(
+        elapsed_seconds = 1.5,
+        samples_per_second = 33.3,
+        iterations_per_second = 66.7
+      ),
+      diagnostics = list(
+        n_divergent = 0,
+        divergent_pct = 0.0
+      )
+    ),
+    class = c("ratiod_benchmark", "list")
+  )
+
+  output <- capture.output(print(bench))
+  expect_true(any(grepl("Benchmark Results", output)))
+  expect_true(any(grepl("Configuration:", output)))
+  expect_true(any(grepl("Timing:", output)))
+})
+
+test_that("print.ratiod_benchmark handles NA diagnostics", {
+  bench <- structure(
+    list(
+      config = list(
+        N = 100L, p = 3L, n_groups = 0L, n_params = 5L,
+        n_iter = 100L, n_warmup = 50L, n_chains = 1L, n_threads = 1L
+      ),
+      timing = list(
+        elapsed_seconds = 1.5,
+        samples_per_second = 33.3,
+        iterations_per_second = 66.7
+      ),
+      diagnostics = list(
+        n_divergent = NA,
+        divergent_pct = NA
+      )
+    ),
+    class = c("ratiod_benchmark", "list")
+  )
+
+  output <- capture.output(print(bench))
+  # NA diagnostics should be skipped
+  expect_false(any(grepl("Divergent:", output)))
+})
+
+test_that("ratiod_benchmark_compare runs with configs", {
+  skip_on_cran()
+
+  configs <- list(
+    list(N = 20, p = 2, n_groups = 0)
+  )
+
+  result <- ratiod_benchmark_compare(
+    configs,
+    n_iter = 50,
+    n_warmup = 25,
+    n_threads = 1
+  )
+
+  expect_true(is.data.frame(result))
+  expect_true("N" %in% names(result))
+  expect_true("elapsed_sec" %in% names(result))
+  expect_equal(nrow(result), 1)
+})
+
+test_that("ratiod_benchmark_compare handles n_groups default", {
+  skip_on_cran()
+
+  # Config without explicit n_groups should default to 0
+  configs <- list(
+    list(N = 20, p = 2)
+  )
+
+  result <- ratiod_benchmark_compare(
+    configs,
+    n_iter = 50,
+    n_warmup = 25
+  )
+
+  expect_equal(result$n_groups, 0)
 })

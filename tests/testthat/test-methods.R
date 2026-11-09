@@ -1,166 +1,180 @@
 # Tests for plot and other S3 methods
 
 test_that("plot.ratiod_fit works with base graphics", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(123)
-  n <- 25
-  df <- data.frame(
-    count = rpois(n, lambda = 8),
-    effort = rgamma(n, shape = 2, rate = 0.5),
-    x = rnorm(n)
-  )
+    set.seed(123)
+    n <- 25
+    df <- data.frame(
+      count = rpois(n, lambda = 8),
+      effort = rgamma(n, shape = 2, rate = 0.5),
+      x = rnorm(n)
+    )
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    mode = "hmc",
-    control = list(iter = 80, warmup = 40, chains = 1)
-  )
+    fit <- tratio(
+      count | effort ~ x,
+      data = df,
+      family = ratiod_poisson_gamma(),
+      mode = "hmc",
+      control = list(iter = 80, warmup = 40, chains = 1)
+    )
 
-  # Should not error
-  expect_silent(
-    suppressWarnings(plot(fit, type = "trace"))
-  )
+    # Should not error
+    expect_silent(
+      suppressWarnings(plot(fit, type = "trace"))
+    )
+  })
 })
 
 test_that("plot.ratiod_fit respects pars argument", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(456)
-  n <- 25
-  df <- data.frame(
-    count = rpois(n, lambda = 8),
-    effort = rgamma(n, shape = 2, rate = 0.5),
-    x = rnorm(n)
-  )
+    set.seed(456)
+    n <- 25
+    df <- data.frame(
+      count = rpois(n, lambda = 8),
+      effort = rgamma(n, shape = 2, rate = 0.5),
+      x = rnorm(n)
+    )
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    mode = "hmc",
-    control = list(iter = 80, warmup = 40, chains = 1)
-  )
+    fit <- tratio(
+      count | effort ~ x,
+      data = df,
+      family = ratiod_poisson_gamma(),
+      mode = "hmc",
+      control = list(iter = 80, warmup = 40, chains = 1)
+    )
 
-  # Should not error with specific parameters
-  expect_silent(
-    suppressWarnings(plot(fit, pars = "beta_num"))
-  )
+    # Should not error with specific parameters
+    expect_silent(
+      suppressWarnings(plot(fit, pars = "beta_num"))
+    )
+  })
 })
 
 test_that("plot.ratiod_fit errors with no matching parameters", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(789)
-  n <- 25
-  df <- data.frame(
-    count = rpois(n, lambda = 8),
-    effort = rgamma(n, shape = 2, rate = 0.5),
-    x = rnorm(n)
-  )
+    set.seed(789)
+    n <- 25
+    df <- data.frame(
+      count = rpois(n, lambda = 8),
+      effort = rgamma(n, shape = 2, rate = 0.5),
+      x = rnorm(n)
+    )
 
-  fit <- tratio(
-    count | effort ~ x,
-    data = df,
-    family = ratiod_poisson_gamma(),
-    mode = "hmc",
-    control = list(iter = 80, warmup = 40, chains = 1)
-  )
+    fit <- tratio(
+      count | effort ~ x,
+      data = df,
+      family = ratiod_poisson_gamma(),
+      mode = "hmc",
+      control = list(iter = 80, warmup = 40, chains = 1)
+    )
 
-  expect_error(
-    plot(fit, pars = "nonexistent_parameter_xyz"),
-    "No parameters selected"
-  )
+    expect_error(
+      plot(fit, pars = "nonexistent_parameter_xyz"),
+      "No parameters selected"
+    )
+  })
 })
 
 test_that("plot_with_base produces trace plots", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(111)
-  draws_array <- array(
-    rnorm(200),
-    dim = c(100, 1, 2),
-    dimnames = list(
-      iteration = 1:100,
-      chain = 1,
-      parameter = c("a", "b")
+    set.seed(111)
+    draws_array <- array(
+      rnorm(200),
+      dim = c(100, 1, 2),
+      dimnames = list(
+        iteration = 1:100,
+        chain = 1,
+        parameter = c("a", "b")
+      )
     )
-  )
 
-  # Should not error
-  expect_silent(
-    suppressWarnings(
-      tulpaRatio:::plot_with_base(draws_array, type = "trace", n_chains = 1)
+    # Should not error
+    expect_silent(
+      suppressWarnings(
+        tulpaRatio:::plot_with_base(draws_array, type = "trace", n_chains = 1)
+      )
     )
-  )
+  })
 })
 
 test_that("plot_with_base produces density plots", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(222)
-  draws_array <- array(
-    rnorm(200),
-    dim = c(100, 1, 2),
-    dimnames = list(
-      iteration = 1:100,
-      chain = 1,
-      parameter = c("a", "b")
+    set.seed(222)
+    draws_array <- array(
+      rnorm(200),
+      dim = c(100, 1, 2),
+      dimnames = list(
+        iteration = 1:100,
+        chain = 1,
+        parameter = c("a", "b")
+      )
     )
-  )
 
-  # Should not error
-  expect_silent(
-    suppressWarnings(
-      tulpaRatio:::plot_with_base(draws_array, type = "dens", n_chains = 1)
+    # Should not error
+    expect_silent(
+      suppressWarnings(
+        tulpaRatio:::plot_with_base(draws_array, type = "dens", n_chains = 1)
+      )
     )
-  )
+  })
 })
 
 test_that("plot_with_base produces combined plots", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(333)
-  draws_array <- array(
-    rnorm(200),
-    dim = c(100, 1, 2),
-    dimnames = list(
-      iteration = 1:100,
-      chain = 1,
-      parameter = c("a", "b")
+    set.seed(333)
+    draws_array <- array(
+      rnorm(200),
+      dim = c(100, 1, 2),
+      dimnames = list(
+        iteration = 1:100,
+        chain = 1,
+        parameter = c("a", "b")
+      )
     )
-  )
 
-  # Should not error
-  expect_silent(
-    suppressWarnings(
-      tulpaRatio:::plot_with_base(draws_array, type = "both", n_chains = 1)
+    # Should not error
+    expect_silent(
+      suppressWarnings(
+        tulpaRatio:::plot_with_base(draws_array, type = "both", n_chains = 1)
+      )
     )
-  )
+  })
 })
 
 test_that("plot_with_base handles multi-chain", {
-  skip_on_cran()
+  with_null_pdf({
+    skip_on_cran()
 
-  set.seed(444)
-  draws_array <- array(
-    rnorm(400),
-    dim = c(100, 2, 2),
-    dimnames = list(
-      iteration = 1:100,
-      chain = 1:2,
-      parameter = c("a", "b")
+    set.seed(444)
+    draws_array <- array(
+      rnorm(400),
+      dim = c(100, 2, 2),
+      dimnames = list(
+        iteration = 1:100,
+        chain = 1:2,
+        parameter = c("a", "b")
+      )
     )
-  )
 
-  # Should not error
-  expect_silent(
-    suppressWarnings(
-      tulpaRatio:::plot_with_base(draws_array, type = "dens", n_chains = 2)
+    # Should not error
+    expect_silent(
+      suppressWarnings(
+        tulpaRatio:::plot_with_base(draws_array, type = "dens", n_chains = 2)
+      )
     )
-  )
+  })
 })
 
 test_that("as.data.frame.ratiod_fit works", {

@@ -119,3 +119,20 @@ test_that("latent_factors() reads a fitted model's factor scores", {
                                      mode = "laplace")),
                "latent factors")
 })
+
+test_that("latent_factor creates valid structure", {
+  lf <- latent_factor(n_factors = 2)
+  expect_s3_class(lf, "ratiod_latent")
+  expect_equal(lf$n_factors, 2)
+})
+
+test_that("latent_factor validates n_factors", {
+  expect_error(latent_factor(n_factors = 0), "positive integer")
+  expect_error(latent_factor(n_factors = -1), "positive integer")
+})
+
+test_that("print.ratiod_latent works", {
+  lf <- latent_factor(n_factors = 2)
+  output <- capture.output(print(lf))
+  expect_true(any(grepl("Latent factor specification", output)))
+})

@@ -347,36 +347,6 @@ test_that("aggregate_by_group handles single observation per group", {
 })
 
 # Test validation functions
-test_that("validate_response accepts valid count data", {
-  valid_counts <- c(0L, 1L, 5L, 10L, 100L)
-
-  expect_silent(tulpaRatio:::validate_response(valid_counts, "poisson", "test"))
-  expect_silent(tulpaRatio:::validate_response(valid_counts, "neg_binomial_2", "test"))
-})
-
-test_that("validate_response rejects negative counts", {
-  invalid_counts <- c(-1, 0, 5, 10)
-
-  expect_error(
-    tulpaRatio:::validate_response(invalid_counts, "poisson", "numerator"),
-    "non-negative"
-  )
-})
-
-test_that("validate_response accepts valid gamma data", {
-  valid_gamma <- c(0.1, 1.5, 2.3, 10.0)
-
-  expect_silent(tulpaRatio:::validate_response(valid_gamma, "gamma", "denominator"))
-})
-
-test_that("validate_response rejects non-positive gamma data", {
-  invalid_gamma <- c(0, 1.5, 2.3)
-
-  expect_error(
-    tulpaRatio:::validate_response(invalid_gamma, "gamma", "denominator"),
-    "positive"
-  )
-})
 
 # Test family validation
 test_that("family objects have required components", {

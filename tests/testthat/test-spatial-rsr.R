@@ -193,15 +193,6 @@ rsr_fixture <- function(seed = 3, S = 8L, reps = 6L) {
   )
 }
 
-rsr_chain <- function(S = 8L) {
-  A <- matrix(0L, S, S)
-  for (i in seq_len(S - 1L)) {
-    A[i, i + 1L] <- 1L
-    A[i + 1L, i] <- 1L
-  }
-  A
-}
-
 rsr_fit <- function(spatial, mode, df = rsr_fixture(), iter = 200) {
   suppressWarnings(tratio(
     y | trials ~ x, data = df, family = ratiod_binomial(), spatial = spatial,
@@ -219,7 +210,7 @@ hmc_field_eta <- function(fit) {
 test_that("HMC carries a restricted areal field orthogonal to the covariates", {
   skip_on_cran()
   df <- rsr_fixture()
-  car <- spatial_car(rsr_chain(), group_var = "region")
+  car <- spatial_car(build_chain_adjacency(8L), group_var = "region")
   plain <- rsr_fit(car, "hmc", df)
   restricted <- rsr_fit(spatial_rsr(car, ~ x), "hmc", df)
 
@@ -238,7 +229,7 @@ test_that("HMC carries a restricted BYM2 and HSGP field", {
   skip_on_cran()
   df <- rsr_fixture()
   for (spatial in list(
-    spatial_rsr(spatial_bym2(rsr_chain(), group_var = "region"), ~ x),
+    spatial_rsr(spatial_bym2(build_chain_adjacency(8L), group_var = "region"), ~ x),
     spatial_rsr(spatial_hsgp(~ lon + lat, m = 4), ~ x)
   )) {
     fit <- rsr_fit(spatial, "hmc", df)
@@ -249,7 +240,7 @@ test_that("HMC carries a restricted BYM2 and HSGP field", {
 test_that("PG draws a restricted ICAR field from its exact conditional", {
   skip_on_cran()
   df <- rsr_fixture()
-  spatial <- spatial_rsr(spatial_car(rsr_chain(), group_var = "region"), ~ x)
+  spatial <- spatial_rsr(spatial_car(build_chain_adjacency(8L), group_var = "region"), ~ x)
   pg <- rsr_fit(spatial, "pg", df, iter = 3000)
   field <- pg$.internal$spatial
   expect_equal(dim(field), c(nrow(pg$.internal$beta), nrow(df)))
@@ -265,7 +256,7 @@ test_that("PG draws a restricted ICAR field from its exact conditional", {
 
 test_that("a backend that does not carry RSR refuses it", {
   df <- rsr_fixture()
-  car <- spatial_car(rsr_chain(), group_var = "region")
+  car <- spatial_car(build_chain_adjacency(8L), group_var = "region")
   restricted <- spatial_rsr(car, ~ x)
 
   for (backend in c("ess", "gibbs", "sghmc", "sgld", "vi")) {
@@ -274,7 +265,7 @@ test_that("a backend that does not carry RSR refuses it", {
   }
   expect_match(
     unsupported_structures("pg", list(
-      spatial = spatial_rsr(spatial_bym2(rsr_chain(), group_var = "region"), ~ x)
+      spatial = spatial_rsr(spatial_bym2(build_chain_adjacency(8L), group_var = "region"), ~ x)
     ))[["spatial"]],
     "intrinsic CAR"
   )
@@ -286,7 +277,7 @@ test_that("a backend that does not carry RSR refuses it", {
 test_that("a restricted field has no value at a new row", {
   skip_on_cran()
   df <- rsr_fixture()
-  fit <- rsr_fit(spatial_rsr(spatial_car(rsr_chain(), group_var = "region"), ~ x),
+  fit <- rsr_fit(spatial_rsr(spatial_car(build_chain_adjacency(8L), group_var = "region"), ~ x),
                  "hmc", df, iter = 40)
   expect_error(predict(fit, newdata = df[1:3, ]), "no value at a new")
   expect_no_error(suppressWarnings(

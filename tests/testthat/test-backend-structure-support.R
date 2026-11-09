@@ -1,17 +1,8 @@
 # A backend that cannot carry a structure must refuse the model, never fit it
 # without the structure and report success.
 
-chain_adjacency <- function(n) {
-  A <- matrix(0L, n, n)
-  for (i in seq_len(n - 1)) {
-    A[i, i + 1] <- 1L
-    A[i + 1, i] <- 1L
-  }
-  A
-}
-
 car_spec <- function(n = 10) {
-  spatial_car(chain_adjacency(n), group_var = "region")
+  spatial_car(build_chain_adjacency(n), group_var = "region")
 }
 
 # ---------------------------------------------------------------------------
@@ -28,7 +19,6 @@ test_that("every backend has an entry covering every structure", {
   }
 })
 
-
 test_that("HMC carries every structure", {
   structures <- list(
     spatial = car_spec(),
@@ -42,7 +32,6 @@ test_that("HMC carries every structure", {
   expect_true(tulpaRatio:::backend_fits_structures("hmc", structures))
 })
 
-
 test_that("unsupported_structures names each structure the backend drops", {
   structures <- list(
     zi = structure(list(), class = "ratiod_zi"),
@@ -55,13 +44,11 @@ test_that("unsupported_structures names each structure the backend drops", {
   expect_true(all(nzchar(reasons)))
 })
 
-
 test_that("a model with no structure is fit by every backend", {
   for (backend in names(tulpaRatio:::BACKEND_STRUCTURE_SUPPORT)) {
     expect_true(tulpaRatio:::backend_fits_structures(backend, list()))
   }
 })
-
 
 test_that("unsupported_structures rejects an unknown backend", {
   expect_error(
@@ -69,7 +56,6 @@ test_that("unsupported_structures rejects an unknown backend", {
     "Unknown backend"
   )
 })
-
 
 test_that("Gibbs carries TVC temporal only", {
   tvc <- temporal_tvc("year", terms = 1)
@@ -83,14 +69,12 @@ test_that("Gibbs carries TVC temporal only", {
   )
 })
 
-
 test_that("Laplace carries a multi-scale temporal term beside a spatial field", {
   ms <- temporal_multiscale("year", trend = "rw1", short_term = "none")
   expect_true(tulpaRatio:::backend_fits_structures(
     "laplace", list(spatial = car_spec(), temporal = ms)
   ))
 })
-
 
 test_that("Laplace and PG carry multi-scale temporal on its own", {
   ms <- temporal_multiscale("year", trend = "rw1", short_term = "none")
@@ -108,7 +92,6 @@ test_that("Laplace and PG carry multi-scale temporal on its own", {
   ))
 })
 
-
 test_that("assert_backend_fits_structures names the structure and a way out", {
   err <- expect_error(
     tulpaRatio:::assert_backend_fits_structures(
@@ -122,14 +105,12 @@ test_that("assert_backend_fits_structures names the structure and a way out", {
   expect_match(conditionMessage(err), "mode = \"hmc\"", fixed = TRUE)
 })
 
-
 test_that("assert_backend_fits_structures passes a model the backend fits", {
   expect_true(tulpaRatio:::assert_backend_fits_structures(
     "laplace",
     list(spatial = car_spec())
   ))
 })
-
 
 # ---------------------------------------------------------------------------
 # Auto selection never downgrades a structure away
@@ -146,7 +127,6 @@ test_that("auto does not send a temporal model to Laplace on row count alone", {
   expect_equal(selection$backend, "hmc")
 })
 
-
 test_that("auto still sends an unstructured large model to Laplace", {
   selection <- tulpaRatio:::select_inference_mode(
     mode = "auto",
@@ -157,7 +137,6 @@ test_that("auto still sends an unstructured large model to Laplace", {
 
   expect_equal(selection$backend, "laplace")
 })
-
 
 test_that("auto sends a large multi-scale temporal model to Laplace", {
   selection <- tulpaRatio:::select_inference_mode(
@@ -170,7 +149,6 @@ test_that("auto sends a large multi-scale temporal model to Laplace", {
 
   expect_equal(selection$backend, "laplace")
 })
-
 
 test_that("auto does not send a latent or zi model to Gibbs", {
   spat <- car_spec()
@@ -189,7 +167,6 @@ test_that("auto does not send a latent or zi model to Gibbs", {
   }
 })
 
-
 test_that("auto still sends an ICAR model to Gibbs", {
   selection <- tulpaRatio:::select_inference_mode(
     mode = "auto",
@@ -200,7 +177,6 @@ test_that("auto still sends an ICAR model to Gibbs", {
 
   expect_equal(selection$backend, "gibbs")
 })
-
 
 # ---------------------------------------------------------------------------
 # tratio() refuses before fitting
@@ -257,7 +233,6 @@ test_that("a named backend refuses a structure it cannot carry", {
   }
 })
 
-
 test_that("mode = 'structured' refuses a structure Laplace cannot carry", {
   df <- structure_test_data()
 
@@ -268,7 +243,6 @@ test_that("mode = 'structured' refuses a structure Laplace cannot carry", {
     "`zi`"
   )
 })
-
 
 # ---------------------------------------------------------------------------
 # The structures these backends do carry are fitted
@@ -293,7 +267,6 @@ test_that("Laplace fits a multi-scale temporal model", {
   expect_equal(sum(grepl("^trend\\[", colnames(fit$draws))), 6L)
   expect_true(all(is.finite(fit$.internal$temporal_draws$trend)))
 })
-
 
 test_that("PG fits a multi-scale temporal model", {
   skip_on_cran()

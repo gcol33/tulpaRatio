@@ -1,15 +1,10 @@
-# helper-temporal-params.R
-# The bundled parameter lists cpp_hmc_fit() takes, for the temporal tests.
-# Shared so a field added to one of them reaches every file that drives the
-# sampler directly, rather than only the file it was written in.
-
-make_re_params_temporal <- function(n) {
+fixture_re_params <- function(n, group = rep(0L, n), n_groups = 0L, n_terms = 0L) {
   list(
-    group = rep(0L, n),
-    n_groups = 0L,
-    n_terms = 0L,
+    group = as.integer(group),
+    n_groups = as.integer(n_groups),
+    n_terms = as.integer(n_terms),
     group_matrix = matrix(0L, nrow = n, ncol = 1),
-    n_groups_vec = 0L,
+    n_groups_vec = as.integer(n_groups),
     has_slopes = FALSE,
     has_correlated_slopes = FALSE,
     n_coefs_vec = integer(0),
@@ -19,10 +14,9 @@ make_re_params_temporal <- function(n) {
     parameterization = 0L  # 0 = centered (default)
   )
 }
-
-make_spatial_params_temporal <- function(n) {
+fixture_spatial_params <- function(n, type = "none") {
   list(
-    type = "none",
+    type = type,
     group = rep(0L, n),
     n_units = 0L,
     adj_row_ptr = 0L,
@@ -31,9 +25,11 @@ make_spatial_params_temporal <- function(n) {
     bym2_scale = 1.0
   )
 }
-
-make_temporal_params <- function(n, time_idx, type = "rw1", n_times, cyclic = FALSE, group_idx = NULL, n_groups = 1L) {
-  if (is.null(group_idx)) group_idx <- rep(1L, n)
+fixture_temporal_params <- function(n, time_idx = rep(0L, n),
+                                 type = if (missing(time_idx)) "none" else "rw1",
+                                 n_times = 0L, cyclic = FALSE, group_idx = NULL,
+                                 n_groups = if (type == "none") 0L else 1L) {
+  if (is.null(group_idx)) group_idx <- rep(if (type == "none") 0L else 1L, n)
   list(
     type = type,
     time_idx = as.integer(time_idx),
@@ -57,7 +53,7 @@ make_temporal_params <- function(n, time_idx, type = "rw1", n_times, cyclic = FA
   )
 }
 
-make_prior_params_temporal <- function() {
+fixture_prior_params <- function() {
   list(
     sigma_beta = 10.0,
     sigma_re_scale = 2.5,
@@ -67,8 +63,7 @@ make_prior_params_temporal <- function() {
     tau_spatial_rate = 0.01
   )
 }
-
-make_zi_params_temporal <- function(n) {
+fixture_zi_params <- function(n) {
   list(
     type = "none",
     X = matrix(0, nrow = n, ncol = 1),
@@ -80,8 +75,7 @@ make_zi_params_temporal <- function(n) {
     oi_prior_sd = 10.0
   )
 }
-
-make_latent_params_temporal <- function() {
+fixture_latent_params <- function() {
   list(
     has_latent = FALSE,
     n_factors = 0L,
@@ -91,8 +85,7 @@ make_latent_params_temporal <- function() {
     sigma_prior_rate = 0.0
   )
 }
-
-make_st_params_temporal <- function() {
+fixture_st_params <- function() {
   list(
     has_spatiotemporal = FALSE,
     type = "none",
@@ -111,8 +104,7 @@ make_st_params_temporal <- function() {
     sigma2_prior_alpha = 0.01
   )
 }
-
-make_tvc_params_temporal <- function() {
+fixture_tvc_params <- function() {
   list(
     has_tvc = FALSE,
     n_tvc = 0L,
@@ -126,8 +118,7 @@ make_tvc_params_temporal <- function() {
     sigma2_prior_alpha = 0.01
   )
 }
-
-make_svc_params_temporal <- function() {
+fixture_svc_params <- function() {
   list(
     has_svc = FALSE,
     n_svc = 0L,

@@ -16,15 +16,6 @@ level_order_data <- function(n = 60, seed = 5) {
   )
 }
 
-level_order_adjacency <- function(S = 6L) {
-  A <- matrix(0L, S, S)
-  for (i in seq_len(S - 1L)) {
-    A[i, i + 1L] <- 1L
-    A[i + 1L, i] <- 1L
-  }
-  A
-}
-
 expect_prediction_matches_fit <- function(fit, df) {
   f <- fitted(fit, component = "ratio", summary = FALSE)$ratio
   p <- suppressWarnings(predict(fit, newdata = df, component = "ratio",
@@ -37,7 +28,7 @@ test_that("an areal prediction reads each row's own unit (HMC)", {
   df <- level_order_data()
   fit <- suppressWarnings(tratio(
     y | trials ~ x, data = df, family = ratiod_binomial(),
-    spatial = spatial_car(level_order_adjacency(), group_var = "region"),
+    spatial = spatial_car(build_chain_adjacency(6L), group_var = "region"),
     mode = "hmc",
     control = list(iter = 80, warmup = 40, chains = 1, verbose = FALSE)
   ))
@@ -61,7 +52,7 @@ test_that("a PG spatial fit stores the predictor of the draw it saves", {
   df <- level_order_data()
   fit <- suppressWarnings(tratio(
     y | trials ~ x, data = df, family = ratiod_binomial(),
-    spatial = spatial_car(level_order_adjacency(), group_var = "region"),
+    spatial = spatial_car(build_chain_adjacency(6L), group_var = "region"),
     mode = "pg",
     control = list(iter = 80, warmup = 40, chains = 1, verbose = FALSE)
   ))
@@ -76,7 +67,7 @@ test_that("an areal and a random-effect prediction read each row's own unit (PG)
   df <- level_order_data()
   fit <- suppressWarnings(tratio(
     y | trials ~ x + (1 | site), data = df, family = ratiod_binomial(),
-    spatial = spatial_car(level_order_adjacency(), group_var = "region"),
+    spatial = spatial_car(build_chain_adjacency(6L), group_var = "region"),
     mode = "pg",
     control = list(iter = 80, warmup = 40, chains = 1, verbose = FALSE)
   ))
