@@ -698,14 +698,14 @@ generate_spatial_zi_data <- function(n_sites, seed, spatial_type = "icar", famil
     y_denom_cont <- rep(0.0, n_sites)
   }
 
-  list(
+  data.frame(
     x = coords$x / side,
     y = coords$y / side,
     y_num = y_num,
     y_denom = y_denom,
     y_denom_cont = y_denom_cont,
     site = 1:n_sites,
-    adj_list = adj_list
+    adj_list = I(adj_list)
   )
 }
 
@@ -729,7 +729,7 @@ test_that("poisson_gamma with BYM2 + ZI runs correctly (row 52)", {
       y_num | y_denom_cont ~ 1 + (1 | site),
       data = as.data.frame(df),
       spatial = spatial_bym2(adj_mat, level = "group", group_var = "site"),
-      zi = ~ 1,
+      zi = zi_poisson(~ 1),
       family = ratiod_poisson_gamma(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -752,7 +752,7 @@ test_that("poisson_gamma with GP + ZI runs correctly (row 53)", {
       y_num | y_denom_cont ~ 1,
       data = as.data.frame(df),
       spatial = spatial_gp(~ x + y, nn = 8),
-      zi = ~ 1,
+      zi = zi_poisson(~ 1),
       family = ratiod_poisson_gamma(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -782,8 +782,8 @@ test_that("negbin_negbin with ICAR + ZI runs correctly (row 54)", {
     tratio(
       y_num | y_denom ~ 1 + (1 | site),
       data = as.data.frame(df),
-      spatial = spatial_icar(adj_mat, level = "group", group_var = "site"),
-      zi = ~ 1,
+      spatial = spatial_car(adj_mat, level = "group", group_var = "site"),
+      zi = zi_negbin(~ 1),
       family = ratiod_negbin_negbin(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -847,7 +847,7 @@ test_that("poisson_gamma with crossed RE + ICAR runs correctly (row 57)", {
     tratio(
       y_num | y_denom_cont ~ 1 + (1 | site) + (1 | species),
       data = df,
-      spatial = spatial_icar(adj_mat, level = "group", group_var = "site"),
+      spatial = spatial_car(adj_mat, level = "group", group_var = "site"),
       family = ratiod_poisson_gamma(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -973,9 +973,9 @@ test_that("poisson_gamma with ICAR + RW1 + ZI runs correctly (row 64)", {
     tratio(
       y_num | y_denom_cont ~ 1 + (1 | site),
       data = df,
-      spatial = spatial_icar(adj_mat, level = "group", group_var = "site"),
+      spatial = spatial_car(adj_mat, level = "group", group_var = "site"),
       temporal = temporal_rw1("time"),
-      zi = ~ 1,
+      zi = zi_poisson(~ 1),
       family = ratiod_poisson_gamma(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -1010,7 +1010,7 @@ test_that("negbin_negbin with BYM2 + ZI runs correctly (row 55)", {
       y_num | y_denom ~ 1 + (1 | site),
       data = as.data.frame(df),
       spatial = spatial_bym2(adj_mat, level = "group", group_var = "site"),
-      zi = ~ 1,
+      zi = zi_negbin(~ 1),
       family = ratiod_negbin_negbin(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -1040,8 +1040,8 @@ test_that("binomial with ICAR + ZI runs correctly (row 56)", {
     tratio(
       y_num | y_denom ~ 1 + (1 | site),
       data = as.data.frame(df),
-      spatial = spatial_icar(adj_mat, level = "group", group_var = "site"),
-      zi = ~ 1,
+      spatial = spatial_car(adj_mat, level = "group", group_var = "site"),
+      zi = zi_binomial(~ 1),
       family = ratiod_binomial(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -1162,7 +1162,7 @@ test_that("negbin_negbin with crossed RE + ICAR runs correctly (row 59)", {
     tratio(
       y_num | y_denom ~ 1 + (1 | site) + (1 | species),
       data = df,
-      spatial = spatial_icar(adj_mat, level = "group", group_var = "site"),
+      spatial = spatial_car(adj_mat, level = "group", group_var = "site"),
       family = ratiod_negbin_negbin(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -1391,7 +1391,7 @@ test_that("poisson_gamma with BYM2 + RW1 + ZI runs correctly (row 65)", {
       data = df,
       spatial = spatial_bym2(adj_mat, level = "group", group_var = "site"),
       temporal = temporal_rw1("time"),
-      zi = ~ 1,
+      zi = zi_poisson(~ 1),
       family = ratiod_poisson_gamma(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
@@ -1459,9 +1459,9 @@ test_that("negbin_negbin with ICAR + RW1 + ZI runs correctly (row 66)", {
     tratio(
       y_num | y_denom ~ 1 + (1 | site),
       data = df,
-      spatial = spatial_icar(adj_mat, level = "group", group_var = "site"),
+      spatial = spatial_car(adj_mat, level = "group", group_var = "site"),
       temporal = temporal_rw1("time"),
-      zi = ~ 1,
+      zi = zi_negbin(~ 1),
       family = ratiod_negbin_negbin(),
       mode = "hmc",
       control = list(chains = 1, iter = 150, warmup = 75, verbose = FALSE)
