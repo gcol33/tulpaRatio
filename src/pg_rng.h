@@ -18,6 +18,9 @@ double rpg1(double z);
 // Uses sum of b independent PG(1, z) draws
 double rpg_int(int b, double z);
 
+// Real-shape PG draw using integer additivity and the fractional inverse CDF.
+double rpg_real(double b, double z);
+
 // Vectorized PG(1, z) sampler
 Rcpp::NumericVector rpg1_vec(Rcpp::NumericVector z);
 

@@ -89,12 +89,24 @@ cpp_pg_negbin_gibbs_spatial <- function(y, X, re_group, n_re_groups, spatial_gro
     .Call(`_tulpaRatio_cpp_pg_negbin_gibbs_spatial`, y, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha, prior_r_shape, prior_r_rate, r_init, store_eta, verbose, n_threads)
 }
 
+cpp_test_pg_negbin_loglik <- function(y, eta, r, log_mean = FALSE) {
+    .Call(`_tulpaRatio_cpp_test_pg_negbin_loglik`, y, eta, r, log_mean)
+}
+
+cpp_test_pg_negbin_r_conditional <- function(y, eta, shape, rate, n_draws) {
+    .Call(`_tulpaRatio_cpp_test_pg_negbin_r_conditional`, y, eta, shape, rate, n_draws)
+}
+
 cpp_rpg1 <- function(z) {
     .Call(`_tulpaRatio_cpp_rpg1`, z)
 }
 
 cpp_rpg <- function(b, z) {
     .Call(`_tulpaRatio_cpp_rpg`, b, z)
+}
+
+cpp_rpg_real <- function(shape, eta) {
+    .Call(`_tulpaRatio_cpp_rpg_real`, shape, eta)
 }
 
 cpp_ratio_precision_density <- function(y, mu, phi, trials) {

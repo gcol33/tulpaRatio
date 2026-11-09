@@ -486,6 +486,35 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_pg_negbin_loglik
+double cpp_test_pg_negbin_loglik(IntegerVector y, NumericVector eta, double r, bool log_mean);
+RcppExport SEXP _tulpaRatio_cpp_test_pg_negbin_loglik(SEXP ySEXP, SEXP etaSEXP, SEXP rSEXP, SEXP log_meanSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type r(rSEXP);
+    Rcpp::traits::input_parameter< bool >::type log_mean(log_meanSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_pg_negbin_loglik(y, eta, r, log_mean));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_pg_negbin_r_conditional
+NumericVector cpp_test_pg_negbin_r_conditional(IntegerVector y, NumericVector eta, double shape, double rate, int n_draws);
+RcppExport SEXP _tulpaRatio_cpp_test_pg_negbin_r_conditional(SEXP ySEXP, SEXP etaSEXP, SEXP shapeSEXP, SEXP rateSEXP, SEXP n_drawsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< IntegerVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type shape(shapeSEXP);
+    Rcpp::traits::input_parameter< double >::type rate(rateSEXP);
+    Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_pg_negbin_r_conditional(y, eta, shape, rate, n_draws));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_rpg1
 Rcpp::NumericVector cpp_rpg1(Rcpp::NumericVector z);
 RcppExport SEXP _tulpaRatio_cpp_rpg1(SEXP zSEXP) {
@@ -506,6 +535,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type b(bSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type z(zSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_rpg(b, z));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_rpg_real
+Rcpp::NumericVector cpp_rpg_real(Rcpp::NumericVector shape, Rcpp::NumericVector eta);
+RcppExport SEXP _tulpaRatio_cpp_rpg_real(SEXP shapeSEXP, SEXP etaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type shape(shapeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eta(etaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_rpg_real(shape, eta));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1982,8 +2023,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_pg_negbin_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_gibbs, 15},
     {"_tulpaRatio_cpp_pg_negbin_negbin_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_negbin_gibbs, 19},
     {"_tulpaRatio_cpp_pg_negbin_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_pg_negbin_gibbs_spatial, 21},
+    {"_tulpaRatio_cpp_test_pg_negbin_loglik", (DL_FUNC) &_tulpaRatio_cpp_test_pg_negbin_loglik, 4},
+    {"_tulpaRatio_cpp_test_pg_negbin_r_conditional", (DL_FUNC) &_tulpaRatio_cpp_test_pg_negbin_r_conditional, 5},
     {"_tulpaRatio_cpp_rpg1", (DL_FUNC) &_tulpaRatio_cpp_rpg1, 1},
     {"_tulpaRatio_cpp_rpg", (DL_FUNC) &_tulpaRatio_cpp_rpg, 2},
+    {"_tulpaRatio_cpp_rpg_real", (DL_FUNC) &_tulpaRatio_cpp_rpg_real, 2},
     {"_tulpaRatio_cpp_ratio_precision_density", (DL_FUNC) &_tulpaRatio_cpp_ratio_precision_density, 4},
     {"_tulpaRatio_cpp_sghmc_fit", (DL_FUNC) &_tulpaRatio_cpp_sghmc_fit, 26},
     {"_tulpaRatio_cpp_sgld_fit", (DL_FUNC) &_tulpaRatio_cpp_sgld_fit, 28},

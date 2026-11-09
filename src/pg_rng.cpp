@@ -6,6 +6,7 @@
 #include <Rcpp.h>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 using namespace Rcpp;
 
@@ -164,6 +165,48 @@ double rpg_int(int b, double z) {
   return sum;
 }
 
+// For 0 < b < 1, integrating the tilted Jacobi density gives a decreasing
+// alternating CDF series. Its partial sums bound the inverse-CDF decision.
+static bool pg_fraction_cdf_above(double x, double u, double b, double z) {
+  const double root = std::sqrt(x);
+  const double normalization = b * std::log1p(std::exp(-2.0 * z));
+  double log_coefficient = 0.0;
+  long double sum = 0.0;
+  for (int n = 0;; ++n) {
+    const double a = 2.0 * n + b;
+    const double log_left = R::pnorm(z * root - a / root, 0.0, 1.0, 1, 1);
+    const double log_right = R::pnorm(-z * root - a / root, 0.0, 1.0, 1, 1);
+    const double term = std::exp(normalization + log_coefficient - 2.0 * n * z + log_left)
+      + std::exp(normalization + log_coefficient + 2.0 * (n + b) * z + log_right);
+    const long double previous = sum;
+    sum += (n % 2 == 0) ? term : -term;
+    if (n % 2 == 0 && u > sum) return false;
+    if (n % 2 == 1 && u < sum) return true;
+    if (sum == previous) return u < sum;
+    log_coefficient += std::log(n + b) - std::log(n + 1.0);
+  }
+}
+
+double rpg_real(double b, double eta) {
+  if (!(b > 0.0) || !std::isfinite(b) || !std::isfinite(eta))
+    Rcpp::stop("PG shape must be finite and positive and its tilt must be finite.");
+  const double whole = std::floor(b), fraction = b - whole;
+  if (whole > static_cast<double>(std::numeric_limits<int>::max()))
+    Rcpp::stop("PG integer shape exceeds the supported count range.");
+  double out = rpg_int(static_cast<int>(whole), eta);
+  if (fraction == 0.0) return out;
+  const double z = 0.5 * std::abs(eta);
+  const double u = R::unif_rand();
+  double lower = 0.0, upper = fraction;
+  while (!pg_fraction_cdf_above(upper, u, fraction, z)) upper *= 2.0;
+  for (;;) {
+    const double middle = lower + 0.5 * (upper - lower);
+    if (middle == lower || middle == upper) return out + 0.25 * middle;
+    if (pg_fraction_cdf_above(middle, u, fraction, z)) upper = middle;
+    else lower = middle;
+  }
+}
+
 // Vectorized PG(1, z)
 NumericVector rpg1_vec(NumericVector z) {
   int n = z.size();
@@ -206,4 +249,12 @@ Rcpp::NumericVector cpp_rpg1(Rcpp::NumericVector z) {
 // [[Rcpp::export]]
 Rcpp::NumericVector cpp_rpg(Rcpp::IntegerVector b, Rcpp::NumericVector z) {
   return ratiod::rpg_vec(b, z);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_rpg_real(Rcpp::NumericVector shape, Rcpp::NumericVector eta) {
+  if (shape.size() != eta.size()) Rcpp::stop("PG shapes and tilts must have equal lengths.");
+  Rcpp::NumericVector out(shape.size());
+  for (int i = 0; i < shape.size(); ++i) out[i] = ratiod::rpg_real(shape[i], eta[i]);
+  return out;
 }

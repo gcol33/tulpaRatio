@@ -5,85 +5,58 @@
 
 using namespace Rcpp;
 namespace ratiod {
-static double negbin_loglik_eta(
-    const IntegerVector& y,
-    const NumericVector& eta,
-    double r
-) {
-  int n = y.size();
+// eta is the log odds of success; log_scale converts a log mean to log odds.
+static double negbin_loglik_eta(const IntegerVector& y, const NumericVector& eta,
+                                double r, double log_scale = 0.0) {
   double ll = 0.0;
-
-  for (int i = 0; i < n; i++) {
-    // mu = r * exp(eta) in Zhou's logit parameterization
-    double eta_i = std::max(-20.0, std::min(20.0, eta[i]));
-    double mu_i = r * std::exp(eta_i);
-    mu_i = std::max(1e-10, mu_i);
-
-    ll += tulpa::math::negbin_log_pmf(y[i], mu_i, r);
+  for (int i = 0; i < y.size(); ++i) {
+    const double x = eta[i] + log_scale;
+    const double softplus = x > 0.0 ? x + std::log1p(std::exp(-x))
+                                     : std::log1p(std::exp(x));
+    ll += tulpa::math::lgamma_ratio_count<double>(y[i], r) - R::lgammafn(y[i] + 1.0)
+        + y[i] * x - (y[i] + r) * softplus;
   }
-
   return ll;
 }
 
-// Metropolis update for the dispersion conditional.
-double update_r_negbin(
-    const IntegerVector& y,
-    const NumericVector& eta,
-    double r_current,
-    double prior_shape,
-    double prior_rate
-) {
-  double log_r_current = std::log(r_current);
-  double proposal_sd = 0.15;
-
-  double log_r_prop = R::rnorm(log_r_current, proposal_sd);
-  double r_prop = std::exp(log_r_prop);
-
-  if (r_prop < 0.1 || r_prop > 500.0) {
-    return r_current;
-  }
-
-  double log_prior_current = (prior_shape - 1.0) * log_r_current - prior_rate * r_current;
-  double log_prior_prop = (prior_shape - 1.0) * log_r_prop - prior_rate * r_prop;
-
-  double log_lik_current = negbin_loglik_eta(y, eta, r_current);
-  double log_lik_prop = negbin_loglik_eta(y, eta, r_prop);
-
-  double log_alpha = (log_prior_prop + log_lik_prop + log_r_prop)
-                   - (log_prior_current + log_lik_current + log_r_current);
-
-  if (std::log(R::runif(0.0, 1.0)) < log_alpha) {
-    return r_prop;
-  }
-  return r_current;
+// A log-random-walk Metropolis update conditions on the NB2 log mean.
+static double update_r_negbin(const IntegerVector& y, const NumericVector& eta,
+    double current, double shape, double rate) {
+  const double log_current = std::log(current);
+  const double log_proposal = R::rnorm(log_current, 0.15);
+  const double proposal = std::exp(log_proposal);
+  if (!(proposal > 0.0) || !std::isfinite(proposal)) return current;
+  const double ratio = negbin_loglik_eta(y, eta, proposal, -log_proposal)
+                     - negbin_loglik_eta(y, eta, current, -log_current)
+                     + shape * (log_proposal - log_current)
+                     - rate * (proposal - current);
+  return std::log(R::unif_rand()) < ratio ? proposal : current;
 }
 
-// One process conditional in a shared-random-effect negative-binomial pair.
+static void negbin_predictor(const NumericMatrix& X, const NumericVector& beta,
+    const NumericVector& re, const IntegerVector& group, bool shared,
+    NumericVector& fixed, NumericVector& eta) {
+  for (int i = 0; i < X.nrow(); ++i) {
+    fixed[i] = 0.0;
+    for (int j = 0; j < X.ncol(); ++j) fixed[i] += X(i, j) * beta[j];
+    eta[i] = fixed[i] + (shared && re.size() > 0 ? re[group[i] - 1] : 0.0);
+  }
+}
+
+// The NB2 log mean is X beta + re; the PG log odds subtract log(r).
 static void update_negbin_arm(const IntegerVector& y, const NumericMatrix& X,
     NumericVector& beta, const NumericVector& re, const IntegerVector& group,
-    bool shared, NumericVector& X_beta, NumericVector& eta, NumericVector& kappa,
-    NumericVector& omega, double& r, double beta_sd, double r_shape, double r_rate) {
-  const int N = y.size(), p = X.ncol();
-  NumericVector re_contrib(N), probabilities(N);
-  for (int i = 0; i < N; ++i) {
-    X_beta[i] = 0.0;
-    for (int j = 0; j < p; ++j) X_beta[i] += X(i, j) * beta[j];
-    re_contrib[i] = shared && re.size() > 0 ? re[group[i] - 1] : 0.0;
-    eta[i] = X_beta[i] + re_contrib[i];
+    bool shared, NumericVector& fixed, NumericVector& eta, NumericVector& kappa,
+    NumericVector& omega, double r, double beta_sd) {
+  negbin_predictor(X, beta, re, group, shared, fixed, eta);
+  NumericVector offset(y.size());
+  const double log_r = std::log(r);
+  for (int i = 0; i < y.size(); ++i) {
     kappa[i] = (y[i] - r) / 2.0;
+    omega[i] = rpg_real(y[i] + r, eta[i] - log_r);
+    offset[i] = eta[i] - fixed[i] - log_r;
   }
-  for (int i = 0; i < N; ++i) {
-    const int b = static_cast<int>(std::round(y[i] + r));
-    omega[i] = rpg_int(std::max(1, b), eta[i]);
-  }
-  beta = update_beta(kappa, omega, X, re_contrib, beta_sd);
-  for (int i = 0; i < N; ++i) {
-    double eta_new = 0.0;
-    for (int j = 0; j < p; ++j) eta_new += X(i, j) * beta[j];
-    eta_new += re_contrib[i];
-    probabilities[i] = 1.0 / (1.0 + std::exp(-eta_new));
-  }
-  r = update_r_negbin(y, probabilities, r, r_shape, r_rate);
+  beta = update_beta(kappa, omega, X, offset, beta_sd);
 }
 
 List pg_negbin_negbin_gibbs(
@@ -127,7 +100,7 @@ List pg_negbin_negbin_gibbs(
   PGField numerator(no_contribution,
     [&](const NumericVector&, const NumericVector&, const NumericVector&) {
       update_negbin_arm(y_num, X_num, beta_num, re, group, shared, X_beta_num,
-        eta_num, kappa_num, omega_num, r_num, prior_beta_sd, prior_r_shape, prior_r_rate);
+        eta_num, kappa_num, omega_num, r_num, prior_beta_sd);
     }, [&](int row) {
       for (int j = 0; j < p_num; ++j) beta_num_draws(row, j) = beta_num[j];
       r_num_draws[row] = r_num;
@@ -136,7 +109,7 @@ List pg_negbin_negbin_gibbs(
   PGField denominator(no_contribution,
     [&](const NumericVector&, const NumericVector&, const NumericVector&) {
       update_negbin_arm(y_denom, X_denom, beta_denom, re, group, shared, X_beta_denom,
-        eta_denom, kappa_denom, omega_denom, r_denom, prior_beta_sd, prior_r_shape, prior_r_rate);
+        eta_denom, kappa_denom, omega_denom, r_denom, prior_beta_sd);
     }, [&](int row) {
       for (int j = 0; j < p_denom; ++j) beta_denom_draws(row, j) = beta_denom[j];
       r_denom_draws[row] = r_denom;
@@ -153,7 +126,8 @@ List pg_negbin_negbin_gibbs(
         for (int j = 0; j < p_denom; ++j) X_beta_denom[i] += X_denom(i, j) * beta_denom[j];
         kappa[i] = kappa_num[i]; kappa[N + i] = kappa_denom[i];
         omega[i] = omega_num[i]; omega[N + i] = omega_denom[i];
-        offset[i] = X_beta_num[i]; offset[N + i] = X_beta_denom[i];
+        offset[i] = X_beta_num[i] - std::log(r_num);
+        offset[N + i] = X_beta_denom[i] - std::log(r_denom);
         groups[i] = groups[N + i] = group[i];
       }
       re = update_re(kappa, omega, offset, groups, n_groups, sigma_re);
@@ -162,7 +136,15 @@ List pg_negbin_negbin_gibbs(
       for (int g = 0; g < n_groups; ++g) re_draws(row, g) = re[g];
       sigma_draws[row] = sigma_re;
     });
-  pg_run(n_iter, n_warmup, thin, verbose, {&numerator, &denominator, &random},
+  PGField dispersion(no_contribution,
+    [&](const NumericVector&, const NumericVector&, const NumericVector&) {
+      negbin_predictor(X_num, beta_num, re, group, shared, X_beta_num, eta_num);
+      negbin_predictor(X_denom, beta_denom, re, group, shared, X_beta_denom, eta_denom);
+      // The auxiliary weights are discarded before updating dispersion.
+      r_num = update_r_negbin(y_num, eta_num, r_num, prior_r_shape, prior_r_rate);
+      r_denom = update_r_negbin(y_denom, eta_denom, r_denom, prior_r_shape, prior_r_rate);
+    }, [&](int) {});
+  pg_run(n_iter, n_warmup, thin, verbose, {&numerator, &denominator, &random, &dispersion},
     driver_kappa, driver_omega, no_eta, false,
     [](const NumericVector&, NumericVector&, NumericVector&) {});
   List result = List::create(_["beta_num"] = beta_num_draws,
@@ -270,4 +252,22 @@ Rcpp::List cpp_pg_negbin_gibbs_spatial(
     prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha,
     prior_r_shape, prior_r_rate, r_init, store_eta, verbose, n_threads, &result.value);
   return ratiod::pg_engine_fit(result.value, store_eta);
+}
+
+// [[Rcpp::export]]
+double cpp_test_pg_negbin_loglik(IntegerVector y, NumericVector eta, double r,
+                                bool log_mean = false) {
+  return ratiod::negbin_loglik_eta(y, eta, r, log_mean ? -std::log(r) : 0.0);
+}
+
+// [[Rcpp::export]]
+NumericVector cpp_test_pg_negbin_r_conditional(IntegerVector y, NumericVector eta,
+    double shape, double rate, int n_draws) {
+  NumericVector out(n_draws);
+  double r = 1.0;
+  for (int i = 0; i < n_draws; ++i) {
+    r = ratiod::update_r_negbin(y, eta, r, shape, rate);
+    out[i] = r;
+  }
+  return out;
 }
