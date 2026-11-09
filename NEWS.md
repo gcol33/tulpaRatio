@@ -1,5 +1,12 @@
 # tulpaRatio 1.7.3
 
+* The hand-coded multiscale temporal gradients (RW1, cyclic RW1, RW2, AR1,
+  IID) divide by the variance their densities use instead of
+  `sigma2 + 1e-10`; at log variance -30 the RW2 variance score had been
+  -3.499 against the density's -2.147. The multiscale funnel checks in the
+  constrained-field recovery tests read the noncentred RW2 posterior against a
+  dense integration under the PC prior, keeping the divergence budgets (#228).
+
 * The collapsed ICAR and GP kernels evaluate each unit through the shared eta
   margins: the ICAR mean is no longer capped at eta = 20 while its linear term
   and score were not, so the score is the derivative of the density it

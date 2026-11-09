@@ -131,6 +131,7 @@ utils::globalVariables(c(
   "cpp_test_ar1_log_density",
   "cpp_test_temporal_log_prior",
   "cpp_test_ms_rw_log_lik",
+  "cpp_test_multiscale_prior",
   "cpp_test_log1pexp",
   "cpp_test_log_logistic",
   "cpp_test_log1m_logistic",

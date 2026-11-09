@@ -1699,6 +1699,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_multiscale_prior
+Rcpp::List cpp_test_multiscale_prior(std::string structure, Rcpp::NumericVector phi, double log_sigma2, double logit_rho);
+RcppExport SEXP _tulpaRatio_cpp_test_multiscale_prior(SEXP structureSEXP, SEXP phiSEXP, SEXP log_sigma2SEXP, SEXP logit_rhoSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type structure(structureSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< double >::type log_sigma2(log_sigma2SEXP);
+    Rcpp::traits::input_parameter< double >::type logit_rho(logit_rhoSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_multiscale_prior(structure, phi, log_sigma2, logit_rho));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_negbin_math
 Rcpp::NumericVector cpp_test_negbin_math(int y, double phi);
 RcppExport SEXP _tulpaRatio_cpp_test_negbin_math(SEXP ySEXP, SEXP phiSEXP) {
@@ -2228,6 +2242,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_metric_step", (DL_FUNC) &_tulpaRatio_cpp_test_metric_step, 5},
     {"_tulpaRatio_cpp_test_metric_epsilon", (DL_FUNC) &_tulpaRatio_cpp_test_metric_epsilon, 2},
     {"_tulpaRatio_cpp_test_metric_geometry", (DL_FUNC) &_tulpaRatio_cpp_test_metric_geometry, 4},
+    {"_tulpaRatio_cpp_test_multiscale_prior", (DL_FUNC) &_tulpaRatio_cpp_test_multiscale_prior, 4},
     {"_tulpaRatio_cpp_test_negbin_math", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_math, 2},
     {"_tulpaRatio_cpp_test_negbin_spec", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_spec, 5},
     {"_tulpaRatio_cpp_test_precision_jet", (DL_FUNC) &_tulpaRatio_cpp_test_precision_jet, 3},

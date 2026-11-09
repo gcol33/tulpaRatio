@@ -32,10 +32,14 @@ grid_adj <- function(S) {
 }
 
 # Gaussian importance integration over the fixed effects and the constrained
-# field, followed by trapezoidal integration over log precision. Whitening by
+# field, followed by trapezoidal integration over a log scale. Whitening by
 # the positive eigenvalues of Q keeps the dense solve conditioned as tau grows.
 constrained_field_reference <- function(df, Q, group, n_draws = 2048L,
-                                        seed = 222L) {
+                                        seed = 222L,
+                                        flat = matrix(0, nrow(Q), 0L),
+                                        log_sd_slope = -0.5, U = 3,
+                                        grid = seq(-4, 50, by = 0.25)) {
+  force(df)
   old_seed <- get0(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
   on.exit({
     if (is.null(old_seed)) rm(".Random.seed", envir = .GlobalEnv)
@@ -43,23 +47,25 @@ constrained_field_reference <- function(df, Q, group, n_draws = 2048L,
   }, add = TRUE)
   set.seed(seed)
   eigen_Q <- eigen(Q, symmetric = TRUE)
-  rank <- nrow(Q) - 1L
+  rank <- nrow(Q) - 1L - ncol(flat)
   positive <- seq_len(rank)
-  field <- sweep(eigen_Q$vectors[group, positive, drop = FALSE],
+  field <- sweep(eigen_Q$vectors[, positive, drop = FALSE],
                   2, sqrt(eigen_Q$values[positive]), "/")
-  dimension <- rank + 2L
+  dimension <- rank + 2L + ncol(flat)
   z <- matrix(0, dimension, n_draws)
   odd <- seq.int(1L, n_draws, by = 2L)
   z[, odd] <- matrix(rnorm(dimension * length(odd)), dimension)
   z[, odd + 1L] <- -z[, odd]
   softplus <- function(x) pmax(x, 0) + log1p(exp(-abs(x)))
-  x <- seq(-4, 50, by = 0.25)
+  x <- grid
   log_marginal <- matrix(0, length(x), 4L)
+  field_first <- field_second <- array(0, c(length(x), nrow(Q), 4L))
   at <- numeric(dimension)
-  precision <- c(rep(1 / 100, 2L), rep(1, rank))
-  lambda <- -log(0.01) / 3
+  precision <- c(rep(1 / 100, 2L), rep(0, ncol(flat)), rep(1, rank))
+  lambda <- -log(0.01) / U
   for (i in seq_along(x)) {
-    design <- cbind(1, df$x, exp(-x[i] / 2) * field)
+    field_design <- cbind(flat, exp(log_sd_slope * x[i]) * field)
+    design <- cbind(1, df$x, field_design[group, , drop = FALSE])
     log_joint <- function(b) {
       eta <- drop(design %*% b)
       sum(df$y * eta - df$trials * softplus(eta)) - sum(precision * b^2) / 2
@@ -86,24 +92,50 @@ constrained_field_reference <- function(df, Q, group, n_draws = 2048L,
     joint <- colSums(df$y * eta - df$trials * softplus(eta)) -
       colSums(precision * b^2) / 2
     correction <- exp(joint - log_joint(at) + colSums(z^2) / 2)
-    log_prior <- log(lambda / 2) - x[i] / 2 - lambda * exp(-x[i] / 2)
+    log_prior <- log(lambda * abs(log_sd_slope)) + log_sd_slope * x[i] -
+      lambda * exp(log_sd_slope * x[i])
     log_marginal[i, ] <- log_joint(at) - sum(log(diag(factor))) +
       log_prior + log(colMeans(matrix(correction, ncol = 4L)))
+    phi <- field_design %*% b[-c(1L, 2L), , drop = FALSE]
+    batches <- split(seq_len(n_draws), rep(seq_len(4L), each = n_draws / 4L))
+    for (k in seq_along(batches)) {
+      index <- batches[[k]]
+      w <- correction[index] / sum(correction[index])
+      field_first[i, , k] <- drop(phi[, index, drop = FALSE] %*% w)
+      field_second[i, , k] <- drop(phi[, index, drop = FALSE]^2 %*% w)
+    }
   }
   moments <- function(logp, index = seq_along(x)) {
     w <- exp(logp[index] - max(logp[index]))
     w[c(1L, length(w))] <- w[c(1L, length(w))] / 2
     w <- w / sum(w)
     mean <- sum(w * x[index])
-    c(mean = mean, sd = sqrt(sum(w * (x[index] - mean)^2)))
+    list(mean = mean, sd = sqrt(sum(w * (x[index] - mean)^2)), weights = w)
   }
   logp <- log(rowMeans(exp(log_marginal - max(log_marginal))))
   reference <- moments(logp)
-  batch_means <- apply(log_marginal, 2, function(a) moments(a)["mean"])
-  list(mean = unname(reference["mean"]), sd = unname(reference["sd"]),
+  batch_means <- apply(log_marginal, 2, function(a) moments(a)$mean)
+  field_moments <- function(index = seq_along(x)) {
+    w <- exp(log_marginal[index, , drop = FALSE] - max(log_marginal))
+    w[c(1L, nrow(w)), ] <- w[c(1L, nrow(w)), ] / 2
+    w <- w / sum(w)
+    first <- vapply(seq_len(nrow(Q)), function(j)
+      sum(w * field_first[index, j, ]), numeric(1))
+    second <- vapply(seq_len(nrow(Q)), function(j)
+      sum(w * field_second[index, j, ]), numeric(1))
+    list(mean = first, sd = sqrt(second - first^2))
+  }
+  field_result <- field_moments()
+  field_batches <- vapply(seq_len(4L), function(k)
+    drop(crossprod(moments(log_marginal[, k])$weights, field_first[, , k])),
+    numeric(nrow(Q)))
+  coarse <- seq.int(1L, length(x), by = 2L)
+  list(mean = reference$mean, sd = reference$sd,
        mcse = sd(batch_means) / 2,
-       grid_error = abs(reference["mean"] -
-         moments(logp, seq.int(1L, length(x), by = 2L))["mean"]),
+       grid_error = abs(reference$mean - moments(logp, coarse)$mean),
+       field_mean = field_result$mean, field_sd = field_result$sd,
+       field_mcse = apply(field_batches, 1L, sd) / 2,
+       field_grid_error = abs(field_result$mean - field_moments(coarse)$mean),
        tail_slope = diff(tail(logp, 2L)) / diff(tail(x, 2L)))
 }
 
@@ -556,57 +588,80 @@ test_that("sampled and collapsed ICAR recover the dense log-precision posterior"
 })
 
 
-# The multiscale RW2 fixture simulates eta = TRUE_INTERCEPT + TRUE_SLOPE * x
-# with no trend, so sigma2_trend's true value is zero and the fit sits in the
-# neck of a centred-parameterisation funnel by construction. Augmenting the
-# constant raised the step size, which is what let the sampler reach the neck at
-# all: the divergence count went 15 -> 38 out of 2000 while the intercept
-# recovery was unchanged.
-#
-# A count alone cannot separate "reached further into a known funnel" from "a
-# new pathology somewhere else", and it is not comparable across step sizes.
-# What distinguishes them is WHERE the divergences sit. They belong at the small
-# end of sigma2_trend and nowhere else; divergences spread across the range
-# would be a different fault. The trend arm's non-centred coordinate is the fix
-# (gcol33/tulpaRatio#79).
-
-test_that("multiscale RW2 divergences stay in the sigma2_trend funnel neck", {
+test_that("multiscale RW2 funnel diagnostics and posterior agree with dense integration", {
   skip_on_cran()
+  skip_if_not_installed("posterior")
+  if (!identical(Sys.getenv("TULPA_SLOW_TESTS"), "true"))
+    skip("Set TULPA_SLOW_TESTS=true")
 
-  set.seed(3)
-  f <- tratio(y | trials ~ x, data = sim_data(22), family = ratiod_binomial(),
-              temporal = temporal_multiscale("time", trend = "rw2",
-                                             seasonal = NULL, short_term = "none"),
-              control = list(iter = 1000, warmup = 500, chains = 4,
-                             verbose = FALSE))
-  expect_identical(f$backend, "hmc")
+  df <- sim_data(22)
+  fit <- function(parameterization, seed, iter = 1000L, warmup = 500L,
+                  adapt_delta = NULL) {
+    f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
+      temporal = temporal_multiscale("time", trend = "rw2", seasonal = NULL,
+        short_term = "none", parameterization = parameterization),
+      control = list(iter = iter, warmup = warmup, chains = 4, seed = seed,
+        adapt_delta = adapt_delta, verbose = FALSE))
+    expect_identical(f$backend, "hmc")
+    dr <- as.matrix(f$draws)
+    log_sigma2 <- log(dr[, "sigma2_trend"])
+    list(draws = dr, log_sigma2 = matrix(log_sigma2, ncol = f$chains),
+         divergent = as.logical(f$diagnostics$divergent),
+         neck = log_sigma2 < unname(quantile(log_sigma2, 1 / 3)))
+  }
 
-  divergent <- as.logical(f$diagnostics$divergent)
-  log_sigma2 <- log(as.matrix(f$draws)[, "sigma2_trend"])
-
-  # The arm is shrunk to its true value of zero, which is where the neck is.
-  expect_lt(median(exp(log_sigma2)), 1e-2)
-
-  # Bounded, so the rate cannot climb unnoticed.
+  # The lower tertile defines the neck within each fit. Pooling independent
+  # seeds measures its divergence share across sampling trajectories.
+  centred <- lapply(c(3L, 7L, 17L, 23L, 31L, 43L, 59L),
+                    function(seed) fit("centered", seed))
+  divergent <- unlist(lapply(centred, `[[`, "divergent"))
+  neck <- unlist(lapply(centred, `[[`, "neck"))
   expect_lt(mean(divergent), 0.05)
+  expect_gte(sum(divergent), 5L)
+  expect_gt(mean(neck[divergent]), 0.8)
+  for (result in centred) {
+    if (sum(result$divergent) >= 5L)
+      expect_gt(mean(result$neck[result$divergent]), mean(result$neck))
+  }
+  centred_draws <- do.call(rbind, lapply(centred, `[[`, "draws"))
+  expect_lt(median(centred_draws[, "sigma2_trend"]), 1e-2)
 
-  skip_if(sum(divergent) < 5, "too few divergences to locate")
+  # RW2 leaves a flat linear direction after its constant is constrained.
+  n <- nlevels(df$time)
+  ramp <- seq_len(n) - mean(seq_len(n))
+  ramp <- matrix(ramp / sqrt(sum(ramp^2)), ncol = 1L)
+  reference <- constrained_field_reference(df,
+    crossprod(diff(diag(n), differences = 2)), as.integer(df$time),
+    seed = 228L, flat = ramp, log_sd_slope = 0.5, U = 1,
+    grid = seq(-60, 0, by = 0.25))
+  expect_lt(reference$mcse / reference$sd, 0.001)
+  expect_lt(reference$grid_error / reference$sd, 0.001)
+  expect_lt(max(reference$field_mcse / reference$field_sd), 0.001)
+  expect_lt(max(reference$field_grid_error / reference$field_sd), 0.001)
 
-  # Every divergence in the bottom third of sigma2_trend is the funnel. Any
-  # appreciable share above it is not, and is what this guards against.
-  cutoff <- unname(quantile(log_sigma2, 1 / 3))
-  expect_gt(mean(log_sigma2[divergent] < cutoff), 0.8)
-
-  # Same statement the other way: the divergent draws sit well below the clean
-  # ones on the scale the funnel is in.
-  shift <- (mean(log_sigma2[divergent]) - mean(log_sigma2[!divergent])) /
-    stats::sd(log_sigma2)
-  expect_lt(shift, -1)
-
-  # None of this is allowed to cost the recovery the fixture is for.
-  dr <- as.matrix(f$draws)
-  expect_equal(mean(dr[, "beta_num[1]"]), TRUE_INTERCEPT, tolerance = 0.08)
-  expect_equal(mean(dr[, "beta_num[2]"]), TRUE_SLOPE, tolerance = 0.08)
+  # A 0.1 posterior-SD mean error at three Monte Carlo standard errors requires
+  # MCSE below SD/30. The field moments also integrate over log variance.
+  nc <- lapply(c(3L, 7L, 17L), function(seed)
+    fit("noncentered", seed, iter = 4000L, warmup = 1000L, adapt_delta = 0.99))
+  log_sigma2 <- do.call(cbind, lapply(nc, `[[`, "log_sigma2"))
+  error <- abs(mean(log_sigma2) - reference$mean)
+  mcse <- posterior::mcse_mean(log_sigma2)
+  expect_lt(posterior::rhat(log_sigma2), 1.01)
+  expect_lt(mcse, reference$sd / 30)
+  expect_lt(error, 0.1 * reference$sd)
+  expect_lt(error, 3 * sqrt(mcse^2 + reference$mcse^2) + reference$grid_error)
+  expect_lt(mean(unlist(lapply(nc, `[[`, "divergent"))), 0.005)
+  nc_draws <- do.call(rbind, lapply(nc, `[[`, "draws"))
+  field <- nc_draws[, startsWith(colnames(nc_draws), "trend["), drop = FALSE]
+  expect_lt(max(abs(colMeans(field) - reference$field_mean) / reference$field_sd), 0.1)
+  for (result in nc) {
+    expect_lt(posterior::rhat(result$log_sigma2), 1.01)
+    expect_lt(abs(mean(result$log_sigma2) - reference$mean), 0.1 * reference$sd)
+  }
+  for (dr in list(centred_draws, nc_draws)) {
+    expect_equal(mean(dr[, "beta_num[1]"]), TRUE_INTERCEPT, tolerance = 0.08)
+    expect_equal(mean(dr[, "beta_num[2]"]), TRUE_SLOPE, tolerance = 0.08)
+  }
 })
 
 
@@ -675,57 +730,4 @@ test_that("centring a proper CAR field moves the level onto the intercept", {
   # removed, so there is no model on the other side of the switch.
   expect_error(spatial_car(A, spatial_level = "group", group_var = "site", center = FALSE),
                "proper = TRUE")
-})
-
-
-# The centred coordinate cannot reach the neck of a variance shrunk toward zero,
-# so it reports that variance too large. This fixture's trend is exactly zero,
-# which puts the whole posterior in the neck, and the non-centred coordinate is
-# what lets the sampler descend into it (gcol33/tulpaRatio#79).
-
-test_that("the multi-scale trend's non-centred coordinate drains the funnel", {
-  skip_on_cran()
-  skip_if_not_installed("posterior")
-
-  fit <- function(parameterization) {
-    set.seed(3)
-    f <- tratio(y | trials ~ x, data = sim_data(22), family = ratiod_binomial(),
-                temporal = temporal_multiscale("time", trend = "rw2",
-                                               seasonal = NULL,
-                                               short_term = "none",
-                                               parameterization = parameterization),
-                control = list(iter = 1000, warmup = 500, chains = 4,
-                               verbose = FALSE))
-    dr <- as.matrix(f$draws)
-    per <- nrow(dr) / f$chains
-    log_s2 <- log(dr[, "sigma2_trend"])
-    list(divergent = mean(as.logical(f$diagnostics$divergent)),
-         ess = posterior::ess_bulk(matrix(log_s2, per, f$chains)),
-         rhat = posterior::rhat(matrix(log_s2, per, f$chains)),
-         median = median(dr[, "sigma2_trend"]),
-         intercept = mean(dr[, "beta_num[1]"]),
-         slope = mean(dr[, "beta_num[2]"]))
-  }
-
-  centred <- fit("centered")
-  nc <- fit("noncentered")
-
-  # Measured: 30/2000 divergences -> 3/2000, ESS 21 -> 310, rhat 1.126 -> 1.013.
-  expect_lt(nc$divergent, 0.005)
-  expect_lt(nc$divergent, centred$divergent)
-  expect_gt(nc$ess, 150)
-  expect_gt(nc$ess, 4 * centred$ess)
-  expect_lt(nc$rhat, 1.05)
-
-  # The coordinate the centred sampler could not reach is the small end, so what
-  # it reports is biased upward: 1.6e-04 against 4.2e-05 here. Only the
-  # non-centred run has converged on that parameter, which is what makes it the
-  # one to believe.
-  expect_lt(nc$median, centred$median)
-
-  # Everything the fixture is actually about is unmoved.
-  expect_equal(nc$intercept, centred$intercept, tolerance = 0.05)
-  expect_equal(nc$slope, centred$slope, tolerance = 0.05)
-  expect_equal(nc$intercept, TRUE_INTERCEPT, tolerance = 0.08)
-  expect_equal(nc$slope, TRUE_SLOPE, tolerance = 0.08)
 })

@@ -17,6 +17,10 @@ namespace ratiod_temporal_grad {
 using ratiod_temporal::MultiscaleTemporalData;
 using ratiod_temporal::TemporalType;
 
+inline double inverse_variance(double sigma2) {
+    return 1.0 / sigma2;
+}
+
 // The sum-to-zero augmentation, as the intrinsic VALUE functions apply it
 // (ratiod_temporal::rw1_log_lik / rw2_log_lik with `augment`), split into the
 // three places a gradient has to follow it: the normalizer's rank, the
@@ -72,7 +76,7 @@ struct MultiscaleTemporalGradients {
 //                        - 0.5 / sigma2 * sum((phi[t] - phi[t-1])^2)
 inline void rw1_grad_phi(const double* phi, int n, double sigma2,
                          double* grad_phi, bool augment = false) {
-    double inv_sigma2 = 1.0 / (sigma2 + 1e-10);
+    double inv_sigma2 = inverse_variance(sigma2);
 
     for (int t = 0; t < n; t++) {
         if (t == 0) {
@@ -97,7 +101,7 @@ inline double rw1_grad_log_sigma2(const double* phi, int n, double sigma2,
     // Chain rule: d/d(log_sigma2) = d/d(sigma2) * sigma2
     //           = -0.5*rank + 0.5*quad/sigma2
     return -0.5 * aug_rank(tulpa::rw1_rank(n, false), augment)
-         + 0.5 * aug_quad(phi, n, quad, augment) / (sigma2 + 1e-10);
+         + 0.5 * aug_quad(phi, n, quad, augment) * inverse_variance(sigma2);
 }
 
 // =============================================================================
@@ -112,7 +116,7 @@ inline void rw1_cyclic_grad_phi(const double* phi, int n, double sigma2,
         return;
     }
 
-    double inv_sigma2 = 1.0 / (sigma2 + 1e-10);
+    double inv_sigma2 = inverse_variance(sigma2);
 
     // Each diff d[t] = phi[t] - phi[t-1] contributes:
     //   grad_phi[t]   -= inv_sigma2 * d[t]   (from its own diff)
@@ -150,7 +154,7 @@ inline double rw1_cyclic_grad_log_sigma2(const double* phi, int n, double sigma2
         quad += diff * diff;
     }
     return -0.5 * aug_rank(tulpa::rw1_rank(n, true), augment)
-         + 0.5 * aug_quad(phi, n, quad, augment) / (sigma2 + 1e-10);
+         + 0.5 * aug_quad(phi, n, quad, augment) * inverse_variance(sigma2);
 }
 
 // =============================================================================
@@ -164,7 +168,7 @@ inline void rw2_grad_phi(const double* phi, int n, double sigma2,
         return;
     }
 
-    double inv_sigma2 = 1.0 / (sigma2 + 1e-10);
+    double inv_sigma2 = inverse_variance(sigma2);
 
     // RW2: log p = -0.5/sigma2 * sum_{t=2}^{n-1} (phi[t] - 2*phi[t-1] + phi[t-2])^2
     // d/d(phi[k]) sums contributions from d[k] (coef=1), d[k+1] (coef=-2), d[k+2] (coef=1)
@@ -192,7 +196,7 @@ inline double rw2_grad_log_sigma2(const double* phi, int n, double sigma2,
     // d/d(sigma2) = -0.5*rank/sigma2 + 0.5*quad/sigma2^2
     // Chain rule: d/d(log_sigma2) = d/d(sigma2) * sigma2
     return -0.5 * aug_rank(tulpa::rw2_rank(n, false), augment)
-         + 0.5 * aug_quad(phi, n, quad, augment) / (sigma2 + 1e-10);
+         + 0.5 * aug_quad(phi, n, quad, augment) * inverse_variance(sigma2);
 }
 
 // =============================================================================
@@ -200,7 +204,7 @@ inline double rw2_grad_log_sigma2(const double* phi, int n, double sigma2,
 // =============================================================================
 
 inline void ar1_grad_phi(const double* phi, int n, double sigma2, double rho, double* grad_phi) {
-    double inv_sigma2 = 1.0 / (sigma2 + 1e-10);
+    double inv_sigma2 = inverse_variance(sigma2);
     double one_m_rho2 = ratiod_ar1::one_minus_rho2(rho);
     double inv_var_stationary = one_m_rho2 * inv_sigma2;
 
@@ -238,7 +242,7 @@ inline double ar1_grad_log_sigma2(const double* phi, int n, double sigma2, doubl
         double resid = phi[t] - rho * phi[t-1];
         quad += resid * resid;
     }
-    grad += 0.5 * quad / (sigma2 + 1e-10);
+    grad += 0.5 * quad * inverse_variance(sigma2);
 
     // Chain rule: d/d(log_sigma2) = d/d(sigma2) * sigma2
     // Already applied: -0.5*n + 0.5*quad/sigma2 IS the result after chain rule
@@ -246,7 +250,7 @@ inline double ar1_grad_log_sigma2(const double* phi, int n, double sigma2, doubl
 }
 
 inline double ar1_grad_logit_rho(const double* phi, int n, double sigma2, double rho) {
-    double inv_sigma2 = 1.0 / (sigma2 + 1e-10);
+    double inv_sigma2 = inverse_variance(sigma2);
     double one_m_rho2 = ratiod_ar1::one_minus_rho2(rho);
 
     // AR1 log-lik = -0.5*log(sigma2/(1-rho^2)) - 0.5*(1-rho^2)/sigma2 * phi[0]^2
@@ -280,7 +284,7 @@ inline double ar1_grad_logit_rho(const double* phi, int n, double sigma2, double
 // =============================================================================
 
 inline void iid_grad_phi(const double* phi, int n, double sigma2, double* grad_phi) {
-    double inv_sigma2 = 1.0 / (sigma2 + 1e-10);
+    double inv_sigma2 = inverse_variance(sigma2);
     for (int t = 0; t < n; t++) {
         grad_phi[t] = -inv_sigma2 * phi[t];
     }
@@ -293,7 +297,7 @@ inline double iid_grad_log_sigma2(const double* phi, int n, double sigma2) {
     }
     // d/d(sigma2) = -0.5*n/sigma2 + 0.5*quad/sigma2^2
     // Chain rule: d/d(log_sigma2) = d/d(sigma2) * sigma2
-    return -0.5 * n + 0.5 * quad / (sigma2 + 1e-10);
+    return -0.5 * n + 0.5 * quad * inverse_variance(sigma2);
 }
 
 // =============================================================================

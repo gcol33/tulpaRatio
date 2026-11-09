@@ -429,6 +429,10 @@ cpp_test_metric_geometry <- function(type, block, n = 5L, n_draws = 20000L) {
     .Call(`_tulpaRatio_cpp_test_metric_geometry`, type, block, n, n_draws)
 }
 
+cpp_test_multiscale_prior <- function(structure, phi, log_sigma2, logit_rho) {
+    .Call(`_tulpaRatio_cpp_test_multiscale_prior`, structure, phi, log_sigma2, logit_rho)
+}
+
 cpp_test_negbin_math <- function(y, phi) {
     .Call(`_tulpaRatio_cpp_test_negbin_math`, y, phi)
 }
