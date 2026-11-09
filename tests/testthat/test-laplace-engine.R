@@ -104,3 +104,50 @@ test_that("the trend, seasonal and short-term blocks enter as their coordinates"
                                    short_term = "iid")
   )
 })
+
+test_that('HSGP Laplace cells match the exact squared-exponential Gaussian posterior', {
+  skip_on_cran()
+  df <- expand.grid(lon = seq(-1, 1, length.out = 6),
+                    lat = seq(-.8, .8, length.out = 5))
+  X <- cbind(1, df$lon)
+  y <- sin(2 * df$lon) + cos(3 * df$lat)
+  noise <- .3
+  responses <- list(num = list(y = y, X = X, family = 'gaussian', phi = noise))
+  for (widths in list(4L, 6L, c(4L, 4L))) {
+    bases <- lapply(widths, function(m)
+      tulpaRatio:::hsgp_basis_2d(as.matrix(df), m = m, c_boundary = 1.5))
+    parts <- lapply(seq_along(bases), function(b) {
+      part <- tulpaRatio:::laplace_hsgp_part(
+        b, 'gp', 'w_gp', bases[[b]], seq_len(nrow(df)), 1L)
+      part$block$sigma2_grid <- c(.3, 1.2) / b
+      part$block$lengthscale_grid <- c(.2, 1.1) / b
+      part
+    })
+    fit <- tulpa::tulpa_nested_laplace_joint(
+      responses = responses, prior = lapply(parts, `[[`, 'block'),
+      control = list(integration = 'grid', axis_refine = 'none', prune = FALSE,
+                     progress = FALSE, n_threads = 1L, tol = 1e-10))
+    model <- list(parts = parts, arms = list(responses = responses))
+    for (cell in seq_len(nrow(fit$theta_grid))) {
+      loadings <- lapply(seq_along(bases), function(b) {
+        sigma2 <- fit$theta_grid[cell, paste0('b', b, '.sigma2')]
+        ell <- fit$theta_grid[cell, paste0('b', b, '.lengthscale')]
+        basis <- bases[[b]]
+        spectrum <- 2 * pi * sigma2 * ell^2 * exp(-ell^2 * basis$eigenvalues / 2)
+        sweep(basis$phi, 2L, sqrt(spectrum), '*')
+      })
+      A <- cbind(X, do.call(cbind, loadings))
+      Q <- crossprod(A) / noise + diag(c(rep(1 / 2.5^2, ncol(X)),
+                                        rep(1, sum(widths^2))))
+      V <- solve(Q)
+      mu <- as.numeric(V %*% crossprod(A, y) / noise)
+      eta <- as.numeric(A %*% mu)
+      eta_var <- rowSums((A %*% V) * A)
+      expect_equal(as.numeric(fit$modes[cell, ]), mu, tolerance = 1e-8)
+      expect_equal(as.numeric(fit$fitted_eta[cell, ]), eta, tolerance = 1e-8)
+      expect_equal(as.numeric(fit$fitted_eta_var[cell, ]), eta_var, tolerance = 1e-8)
+      expect_equal(tulpaRatio:::laplace_cell_eta(fit, model, cell), eta,
+                   tolerance = 1e-8)
+    }
+  }
+})

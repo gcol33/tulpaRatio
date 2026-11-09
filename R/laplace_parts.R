@@ -170,7 +170,8 @@ laplace_hsgp_part <- function(k, label, columns, basis, obs_to_loc, n_arms,
     Phi <- Phi_obs
     obs_to_loc <- seq_len(nrow(Phi_obs))
   }
-  block <- list(type = "hsgp", m_total = basis$m_total,
+  block <- list(type = "hsgp", kernel = "squared_exponential",
+                observation_space = FALSE, m_total = basis$m_total,
                 phi = rep(list(Phi_obs), n_arms),
                 n_obs_per_arm = rep(nrow(Phi_obs), n_arms),
                 eigenvalues = lam)

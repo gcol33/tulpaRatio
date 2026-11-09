@@ -1,5 +1,13 @@
 # tulpaRatio 1.7.3
 
+* Laplace HSGP and GP fields state their squared-exponential kernel and
+  coefficient coordinates to the engine instead of relying on its default,
+  which became Matern: the fitted field had been built under one kernel and
+  reconstructed under another, 3.2 posterior SD from an exact Gaussian
+  reference on the test fixture, and the reconstructed linear predictor now
+  matches the engine's to round-off for single, restricted and multi-scale
+  fields (#223).
+
 * Variational fits converge to the posterior: the local convergence check
   stopped on small ELBO improvements relative to the raw ELBO even with large
   gradients, so on an exact-quadrature binomial fixture the mean-field and
