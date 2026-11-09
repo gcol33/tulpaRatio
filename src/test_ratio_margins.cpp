@@ -33,3 +33,29 @@ Rcpp::NumericVector cpp_test_ratio_margin(std::string family, double y, int n,
     return Rcpp::NumericVector::create(Rcpp::Named("ll")=r.ll,
         Rcpp::Named("residual")=r.residual,Rcpp::Named("extra")=r.extra);
 }
+
+template<class T>
+T margin_density(const std::string& family, double y, int n, const T& eta, const T& phi) {
+    using namespace ratiod::math;
+    if (family == "poisson") return log_lik_poisson(int(y),safe_exp(eta));
+    if (family == "negbin") return log_lik_negbin(int(y),safe_exp(eta),phi);
+    if (family == "gamma") return log_lik_gamma(y,phi,safe_exp(eta));
+    if (family == "lognormal") return log_lik_lognormal(y,eta,phi);
+    if (family == "binomial") return log_lik_binomial(int(y),n,eta);
+    return log_lik_beta_binomial(int(y),n,eta,phi);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix cpp_test_ratio_margin_scalars(std::string family, double y, int n,
+                                                 double eta, double phi) {
+    Rcpp::NumericMatrix out(3,3);
+    out(0,0)=margin_density(family,y,n,eta,phi);
+    const auto e=margin_density(family,y,n,fwd::Dual(eta,1),fwd::Dual(phi));
+    const auto p=margin_density(family,y,n,fwd::Dual(eta),fwd::Dual(phi,1));
+    out(1,0)=e.val;out(1,1)=e.grad;out(1,2)=p.grad;
+    tulpa::arena::ArenaScope scope;
+    tulpa::arena::Var a(eta),b(phi);
+    auto c=margin_density(family,y,n,a,b);c.backward();
+    out(2,0)=c.val();out(2,1)=a.adj();out(2,2)=b.adj();
+    return out;
+}

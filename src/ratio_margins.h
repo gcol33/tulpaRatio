@@ -1,6 +1,7 @@
 #ifndef TULPARATIO_RATIO_MARGINS_H
 #define TULPARATIO_RATIO_MARGINS_H
 
+#include "ratio_math.h"
 #include <tulpa/ad_scalar_math.h>
 #include <cmath>
 #include <type_traits>
@@ -8,6 +9,129 @@
 #include <tulpa/precision_math.h>
 #include <tulpa/portable_math.h>
 #include "beta_binomial_obs.h"
+
+namespace ratiod { namespace math {
+
+template<class T>
+inline T poisson_eta_density(double y, const T& eta, const T& mu, const T& constant) {
+    return y * eta - mu - constant;
+}
+
+template<class T>
+inline T binomial_eta_density(double y, int n, const T& log_p,
+                               const T& log_1mp, double constant) {
+    return y * log_p + (n-y) * log_1mp + constant;
+}
+
+template<class T>
+inline T lognormal_eta_density(double log_y, const T& eta, const T& sigma,
+                                const T& log_sigma, const T& initial = T(0.0)) {
+    const T z = (log_y - eta) / sigma;
+    return initial + -log_y - log_sigma - T(0.5)*z*z;
+}
+struct NegbinMath {
+    template <typename T> static double value(const T& x) { return get_value(x); }
+    template <typename T> static T log(const T& x) { return safe_log(x); }
+    template <typename T> static T log1p(const T& x) { return log1p_fn(x); }
+    template <typename T> static T log1pmx(const T& x) { using tulpa::math::log1pmx; return log1pmx(x); }
+    template <typename T> static T lgamma(const T& x) { return lgamma_fn(x); }
+};
+
+template<typename T>
+inline T negbin_log_p0(const T& mu, const T& phi) {
+    return tulpa::math::negbin_log_p0<T, NegbinMath>(mu, phi);
+}
+
+template<typename T>
+inline T log_lik_poisson(int y, const T& mu) {
+    // y * log(mu) - mu - lgamma(y+1)
+    // Note: lgamma(y+1) is constant w.r.t. parameters, but we include it for correctness
+    return poisson_eta_density(double(y), safe_log(mu), mu, lgamma_fn(T(y + 1.0)));
+}
+
+template<typename T>
+inline T log_lik_gamma(double y, const T& shape, const T& mu) {
+    return tulpa::math::gamma_log_density(y, mu, shape, std::log(y));
+}
+
+template<typename T>
+inline T log_lik_negbin(int y, const T& mu, const T& phi) {
+    return tulpa::math::negbin_log_pmf<T, NegbinMath>(y, mu, phi);
+}
+
+template<typename T>
+inline T log_lik_binomial(int y, int n, const T& q) {
+    return binomial_eta_density(double(y), n, log_inv_logit(q), log1m_inv_logit(q), portable_lchoose(n,y));
+}
+
+template<typename T>
+inline T log_lik_zi_binomial(int y, int n, const T& q, const T& logit_zi) {
+    if (y == 0) {
+        return log_add_exp(log_inv_logit(logit_zi),
+                           log1m_inv_logit(logit_zi) + n * log1m_inv_logit(q));
+    }
+    return log1m_inv_logit(logit_zi) + log_lik_binomial(y, n, q);
+}
+
+template<typename T>
+inline T log_lik_oi_binomial(int y, int n, const T& q, const T& logit_oi) {
+    if (y == n) {
+        return log_add_exp(log_inv_logit(logit_oi),
+                           log1m_inv_logit(logit_oi) + n * log_inv_logit(q));
+    }
+    return log1m_inv_logit(logit_oi) + log_lik_binomial(y, n, q);
+}
+
+template<typename T>
+inline T log_lik_zoib(int y, int n, const T& q, const T& logit_zi, const T& logit_oi) {
+    const T log_1m_zi = log1m_inv_logit(logit_zi);
+    const T log_1m_oi = log1m_inv_logit(logit_oi);
+    if (y == 0) {
+        return log_add_exp(log_inv_logit(logit_zi),
+                           log_1m_zi + log_1m_oi + n * log1m_inv_logit(q));
+    }
+    if (y == n) {
+        return log_1m_zi + log_add_exp(log_inv_logit(logit_oi),
+                                       log_1m_oi + n * log_inv_logit(q));
+    }
+    return log_1m_zi + log_1m_oi + log_lik_binomial(y, n, q);
+}
+
+template<typename T>
+inline T log_lik_hurdle_binomial(int y, int n, const T& q, const T& logit_theta) {
+    if (y == 0) return log1m_inv_logit(logit_theta);
+    // theta P(Y=y|Y>0), P(Y=y|Y>0) = Binom(y|n,p) / (1 - (1-p)^n)
+    return log_inv_logit(logit_theta) + log_lik_binomial(y, n, q)
+        - log1m_exp(n * log1m_inv_logit(q));
+}
+
+template<typename T>
+inline T log_lik_gamma_gamma(double y_num, double y_denom,
+                             const T& mu_num, const T& mu_denom,
+                             const T& shape_num, const T& shape_denom) {
+    return log_lik_gamma(y_num, shape_num, mu_num)
+         + log_lik_gamma(y_denom, shape_denom, mu_denom);
+}
+
+template<typename T>
+inline T log_lik_lognormal(double y, const T& mu, const T& sigma) {
+    return lognormal_eta_density(std::log(y), mu, sigma, safe_log(sigma));
+}
+
+template<typename T>
+inline T log_lik_lognormal_lognormal(double y_num, double y_denom,
+                                     const T& mu_num, const T& mu_denom,
+                                     const T& sigma_num, const T& sigma_denom) {
+    return log_lik_lognormal(y_num, mu_num, sigma_num) +
+           log_lik_lognormal(y_denom, mu_denom, sigma_denom);
+}
+
+template<typename T>
+inline T log_lik_beta_binomial(int y, int n, const T& q, const T& phi) {
+    return tulpa::math::beta_binomial_log_pmf<T, NegbinMath>(y, n,
+        safe_exp(log_inv_logit(q)), safe_exp(log1m_inv_logit(q)), phi, portable_lchoose(n,y));
+}
+} }
 
 namespace tulpaRatio { namespace margins {
 
@@ -36,7 +160,7 @@ struct Poisson : NoMargin {
     using NoMargin::NoMargin;
     template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
         const double mu = std::exp(x.eta);
-        return {lp ? x.y * x.eta - mu - (Cached ? x.log_factorial : std::lgamma(x.y + 1.0)) : 0.0,
+        return {lp ? ratiod::math::poisson_eta_density(x.y, x.eta, mu, Cached ? x.log_factorial : std::lgamma(x.y + 1.0)) : 0.0,
                 x.y - mu, 0.0};
     }
 };
@@ -90,13 +214,13 @@ struct Lognormal {
     template<bool Cached> Result operator()(const Observation& x, bool lp = true) const {
         const double log_y = Cached ? x.log_y : std::log(x.y);
         const double z = (log_y - x.eta) / phi;
-        return {lp ? -log_y - log_sigma - 0.5*z*z : 0.0,
+        return {lp ? ratiod::math::lognormal_eta_density(log_y, x.eta, phi, log_sigma) : 0.0,
                 (log_y - x.eta) / variance, -1.0 + z*z};
     }
     double add_density(double ll, const Observation& x) const {
         const double log_y = std::log(x.y);
         const double z = (log_y - x.eta) / phi;
-        return ll + -log_y - log_sigma - 0.5*z*z;
+        return ratiod::math::lognormal_eta_density(log_y, x.eta, phi, log_sigma, ll);
     }
 };
 
@@ -116,7 +240,7 @@ struct Binomial : NoMargin {
             log_p = x.eta + log_1mp;
         }
         const double constant = Cached ? x.log_factorial : tulpa::math::portable_lchoose(x.trials, int(x.y));
-        return {lp ? x.y*log_p + (x.trials-x.y)*log_1mp + constant : 0.0,
+        return {lp ? ratiod::math::binomial_eta_density(x.y, x.trials, log_p, log_1mp, constant) : 0.0,
                 x.y - x.trials*p, 0.0};
     }
 };

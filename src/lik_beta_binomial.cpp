@@ -81,7 +81,7 @@ static T beta_binomial_log_likelihood(
     const T log_phi = params[layout.extra_offset];
     const T phi     = exp(log_phi);
 
-    T ll = lik::beta_binomial_log_pmf(y, n, eta[0], phi);
+    T ll = ratiod::math::log_lik_beta_binomial(y, n, eta[0], phi);
 
     if (i == 0) {
         const auto& cfg = beta_binomial_cfg();

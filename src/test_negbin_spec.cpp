@@ -14,9 +14,9 @@ T negbin_spec_probe_density(int y, const T& eta, const T& log_phi, const T& z,
                             const std::string& type) {
   using std::exp;
   const T mu = exp(eta), phi = exp(log_phi);
-  if (type == "zi_negbin") return tulpaRatio::lik::zi_negbin_log_pmf(y, mu, phi, z);
-  if (type == "hurdle_negbin") return tulpaRatio::lik::hurdle_negbin_log_pmf(y, mu, phi, z);
-  return tulpaRatio::lik::negbin_log_pmf(y, mu, phi);
+  if (type == "zi_negbin") return ratiod_zi::zi_negbin_lpmf_logit(y, mu, phi, z);
+  if (type == "hurdle_negbin") return ratiod_zi::hurdle_negbin_lpmf_logit(y, mu, phi, z);
+  return ratiod::math::log_lik_negbin(y, mu, phi);
 }
 
 // [[Rcpp::export]]

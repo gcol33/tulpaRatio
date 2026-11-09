@@ -79,8 +79,8 @@ static T lognormal_log_likelihood(
     const T sigma_num       = exp(log_sigma_num);
     const T sigma_denom     = exp(log_sigma_denom);
 
-    T ll = lik::lognormal_log_pdf(y_n, eta[0], sigma_num);
-    ll = ll + lik::lognormal_log_pdf(y_d, eta[1], sigma_denom);
+    T ll = ratiod::math::log_lik_lognormal(y_n, eta[0], sigma_num);
+    ll = ll + ratiod::math::log_lik_lognormal(y_d, eta[1], sigma_denom);
 
     if (i == 0) {
         const auto& cfg = lognormal_cfg();

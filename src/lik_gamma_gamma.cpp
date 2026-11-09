@@ -83,8 +83,8 @@ static T gamma_gamma_log_likelihood(
     const T shape_num       = exp(log_shape_num);
     const T shape_denom     = exp(log_shape_denom);
 
-    T ll = lik::gamma_log_pdf(y_n, shape_num,   mu_num);
-    ll = ll + lik::gamma_log_pdf(y_d, shape_denom, mu_denom);
+    T ll = ratiod::math::log_lik_gamma(y_n, shape_num,   mu_num);
+    ll = ll + ratiod::math::log_lik_gamma(y_d, shape_denom, mu_denom);
 
     if (i == 0) {
         const auto& cfg = gamma_gamma_cfg();

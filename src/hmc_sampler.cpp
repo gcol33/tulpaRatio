@@ -1738,108 +1738,48 @@ void compute_gradient_analytical(
         grad_logit_zi_i = od.logit_zi;
         grad_logit_oi_i = od.logit_oi;
 
-      } else if (data.model_type == ModelType::BINOMIAL) {
-        // ---- BINOMIAL ----
-        // p = inv_logit(eta_num), LL = y*log(p) + (n-y)*log(1-p)
-        // d(LL)/d(eta) = y - n*p
-        resid_num = data.y_num[i] - data.y_denom[i] * ratiod::math::inv_logit(eta_num);
-
-      } else if (data.model_type == ModelType::NEGBIN_NEGBIN) {
-        // ---- NEGBIN_NEGBIN ----
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        int y_num_i = data.y_num[i];
-        int y_denom_i = data.y_denom[i];
-        double denom_d = mu_denom + phi_denom;
-        resid_denom = y_denom_i - mu_denom * (y_denom_i + phi_denom) / denom_d;
-        grad_phi_denom_i = tulpa::math::negbin_size_score(y_denom_i, mu_denom, phi_denom);
-        double denom_num = mu_num + phi_num;
-        resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-        grad_phi_num_i = tulpa::math::negbin_size_score(y_num_i, mu_num, phi_num);
-
-      } else if (data.model_type == ModelType::POISSON_GAMMA) {
-        // ---- POISSON_GAMMA ----
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        // Denominator: Gamma — skip if y <= 0
-        double y_denom_i = data.y_denom_cont[i];
-        if (y_denom_i > 0.0) {
-          resid_denom = phi_denom * (y_denom_i / mu_denom - 1.0);
-          grad_phi_denom_i = tulpa::math::gamma_phi_derivative(y_denom_i, mu_denom, phi_denom, 1);
+      } else {
+        using namespace tulpaRatio::margins;
+        const auto apply = [&](const auto& num, const auto& den,
+                               const Observation& x, const Observation& y) {
+          using Num = std::decay_t<decltype(num)>;
+          using Den = std::decay_t<decltype(den)>;
+          const auto n = num.template operator()<std::is_same<Num,Binomial>::value>(x,false);
+          const auto d = den.template operator()<std::is_same<Den,Binomial>::value>(y,false);
+          resid_num = n.residual;
+          resid_denom = d.residual;
+          grad_phi_num_i = n.extra;
+          grad_phi_denom_i = d.extra;
+          if constexpr (Num::log_extra) grad_phi_num_i /= phi_num;
+          if constexpr (Den::log_extra) grad_phi_denom_i /= phi_denom;
+        };
+        const Observation count_num{data.y_num.empty() ? 0.0 : double(data.y_num[i]),eta_num};
+        switch (data.model_type) {
+          case ModelType::BINOMIAL:
+            apply(Binomial(),NoMargin(),{double(data.y_num[i]),eta_num,data.y_denom[i]},{});
+            break;
+          case ModelType::POISSON_GAMMA:
+            apply(Poisson(),Gamma(phi_denom,false),count_num,{data.y_denom_cont[i],eta_denom});
+            break;
+          case ModelType::NEGBIN_GAMMA:
+            apply(NegBin(phi_num),Gamma(phi_denom,false),count_num,{data.y_denom_cont[i],eta_denom});
+            break;
+          case ModelType::NEGBIN_NEGBIN:
+            apply(NegBin(phi_num),NegBin(phi_denom),count_num,{double(data.y_denom[i]),eta_denom});
+            break;
+          case ModelType::GAMMA_GAMMA:
+            apply(Gamma(phi_num,false),Gamma(phi_denom,false),{data.y_num_cont[i],eta_num},
+                  {data.y_denom_cont[i],eta_denom});
+            break;
+          case ModelType::LOGNORMAL:
+            apply(Lognormal(phi_num,false),Lognormal(phi_denom,false),{data.y_num_cont[i],eta_num},
+                  {data.y_denom_cont[i],eta_denom});
+            break;
+          case ModelType::BETA_BINOMIAL:
+            apply(BetaBinomial(phi_num),NoMargin(),{double(data.y_num[i]),eta_num,data.y_denom[i]},{});
+            break;
+          default: break;
         }
-        resid_num = data.y_num[i] - mu_num;
-
-      } else if (data.model_type == ModelType::NEGBIN_GAMMA) {
-        // ---- NEGBIN_GAMMA ----
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        int y_num_i = data.y_num[i];
-        // Denominator: Gamma — skip if y <= 0
-        double y_denom_i = data.y_denom_cont[i];
-        if (y_denom_i > 0.0) {
-          resid_denom = phi_denom * (y_denom_i / mu_denom - 1.0);
-          grad_phi_denom_i = tulpa::math::gamma_phi_derivative(y_denom_i, mu_denom, phi_denom, 1);
-        }
-        double denom_num = mu_num + phi_num;
-        resid_num = y_num_i - mu_num * (y_num_i + phi_num) / denom_num;
-        grad_phi_num_i = tulpa::math::negbin_size_score(y_num_i, mu_num, phi_num);
-
-      } else if (data.model_type == ModelType::GAMMA_GAMMA) {
-        // ---- GAMMA_GAMMA ----
-        // Gamma requires y > 0; skip contributions for y <= 0 (matches log_lik_gamma)
-        double mu_num = std::exp(eta_num);
-        double mu_denom = std::exp(eta_denom);
-        double y_num_i = data.y_num_cont[i];
-        double y_denom_i = data.y_denom_cont[i];
-
-        if (y_num_i > 0.0) {
-          resid_num = phi_num * (y_num_i / mu_num - 1.0);
-          grad_phi_num_i = tulpa::math::gamma_phi_derivative(y_num_i, mu_num, phi_num, 1);
-        }
-        if (y_denom_i > 0.0) {
-          resid_denom = phi_denom * (y_denom_i / mu_denom - 1.0);
-          grad_phi_denom_i = tulpa::math::gamma_phi_derivative(y_denom_i, mu_denom, phi_denom, 1);
-        }
-
-      } else if (data.model_type == ModelType::LOGNORMAL) {
-        // ---- LOGNORMAL ----
-        // Both numerator and denominator are Lognormal distributed
-        // log(y) ~ Normal(mu, sigma^2), so y ~ Lognormal(mu, sigma^2)
-        // LL = -log(y) - log(sigma) - 0.5*((log(y) - mu)/sigma)^2
-        // d(LL)/d(eta) = d(LL)/d(mu) = (log(y) - mu) / sigma^2
-        // (Note: eta IS mu for lognormal, so no chain rule needed)
-        double mu_num = eta_num;  // mu is directly the linear predictor
-        double mu_denom = eta_denom;
-        double y_num_i = data.y_num_cont[i];
-        double y_denom_i = data.y_denom_cont[i];
-        double log_y_num = std::log(y_num_i);
-        double log_y_denom = std::log(y_denom_i);
-
-        // phi_num, phi_denom are sigma (std dev on log scale)
-        double sigma_num = phi_num;
-        double sigma_denom = phi_denom;
-        double sigma_num_sq = sigma_num * sigma_num;
-        double sigma_denom_sq = sigma_denom * sigma_denom;
-
-        // Residuals (gradient w.r.t. mu)
-        resid_num = (log_y_num - mu_num) / sigma_num_sq;
-        resid_denom = (log_y_denom - mu_denom) / sigma_denom_sq;
-
-        // Sigma gradients: d(LL)/d(sigma), NOT d(LL)/d(log_sigma)
-        // Because the accumulation code multiplies by phi to get d(LL)/d(log_phi)
-        // d(LL)/d(sigma) = -1/sigma + z^2/sigma = (-1 + z^2) / sigma
-        double z_num = (log_y_num - mu_num) / sigma_num;
-        double z_denom = (log_y_denom - mu_denom) / sigma_denom;
-        grad_phi_num_i = (-1.0 + z_num * z_num) / sigma_num;
-        grad_phi_denom_i = (-1.0 + z_denom * z_denom) / sigma_denom;
-
-      } else if (data.model_type == ModelType::BETA_BINOMIAL) {
-        // ---- BETA_BINOMIAL ----
-        // logit(p) = eta, phi = alpha + beta; no denominator contribution
-        const ratiod::math::BetaBinomialObs bb = ratiod::math::beta_binomial_obs(
-            data.y_num[i], data.y_denom[i], eta_num, phi_num);
-        resid_num = bb.d_eta;
-        grad_phi_num_i = bb.d_phi;
       }
 
       // Accumulate ZI coefficient gradients

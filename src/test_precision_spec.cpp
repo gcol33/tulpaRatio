@@ -16,12 +16,12 @@ Rcpp::NumericMatrix cpp_test_precision_spec(double y, double mu, double phi) {
     Rcpp::NumericMatrix out(3, 2);
     Rcpp::rownames(out) = Rcpp::CharacterVector::create("double", "forward", "arena");
     Rcpp::colnames(out) = Rcpp::CharacterVector::create("value", "dphi");
-    out(0, 0) = tulpaRatio::lik::gamma_log_pdf(y, phi, mu);
-    auto f = tulpaRatio::lik::gamma_log_pdf(y, fwd::Dual(phi, 1), fwd::Dual(mu));
+    out(0, 0) = ratiod::math::log_lik_gamma(y, phi, mu);
+    auto f = ratiod::math::log_lik_gamma(y, fwd::Dual(phi, 1), fwd::Dual(mu));
     out(1, 0) = f.val; out(1, 1) = f.grad;
     tulpa::arena::ArenaScope scope;
     tulpa::arena::Var p(phi), m(mu);
-    auto a = tulpaRatio::lik::gamma_log_pdf(y, p, m); a.backward();
+    auto a = ratiod::math::log_lik_gamma(y, p, m); a.backward();
     out(2, 0) = a.val(); out(2, 1) = p.adj();
     return out;
 }
@@ -29,12 +29,12 @@ Rcpp::NumericMatrix cpp_test_precision_spec(double y, double mu, double phi) {
 // [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_test_precision_beta_spec(int y, int n, double phi) {
     Rcpp::NumericMatrix out(3,2);
-    out(0,0)=tulpaRatio::lik::beta_binomial_log_pmf(y,n,0.,phi);
-    auto f=tulpaRatio::lik::beta_binomial_log_pmf(y,n,fwd::Dual(0),fwd::Dual(phi,1));
+    out(0,0)=ratiod::math::log_lik_beta_binomial(y,n,0.,phi);
+    auto f=ratiod::math::log_lik_beta_binomial(y,n,fwd::Dual(0),fwd::Dual(phi,1));
     out(1,0)=f.val;out(1,1)=f.grad;
     tulpa::arena::ArenaScope scope;
     tulpa::arena::Var p(phi), eta(0.);
-    auto a=tulpaRatio::lik::beta_binomial_log_pmf(y,n,eta,p);a.backward();
+    auto a=ratiod::math::log_lik_beta_binomial(y,n,eta,p);a.backward();
     out(2,0)=a.val();out(2,1)=p.adj();
     return out;
 }

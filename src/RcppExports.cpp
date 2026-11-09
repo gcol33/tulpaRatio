@@ -1779,6 +1779,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_ratio_margin_scalars
+Rcpp::NumericMatrix cpp_test_ratio_margin_scalars(std::string family, double y, int n, double eta, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_ratio_margin_scalars(SEXP familySEXP, SEXP ySEXP, SEXP nSEXP, SEXP etaSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_ratio_margin_scalars(family, y, n, eta, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_ratio_prior
 Rcpp::NumericMatrix cpp_test_ratio_prior(std::string prior, double x);
 RcppExport SEXP _tulpaRatio_cpp_test_ratio_prior(SEXP priorSEXP, SEXP xSEXP) {
@@ -2066,6 +2081,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
+    {"_tulpaRatio_cpp_test_ratio_margin_scalars", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin_scalars, 5},
     {"_tulpaRatio_cpp_test_ratio_prior", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_prior, 2},
     {"_tulpaRatio_cpp_test_scalar_math", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_math, 2},
     {"_tulpaRatio_cpp_test_scalar_boundaries", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_boundaries, 1},

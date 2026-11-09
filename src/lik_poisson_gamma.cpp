@@ -93,23 +93,22 @@ static T poisson_gamma_log_likelihood(
     T ll;
     switch (data.zi_type) {
         case tulpa::ZIType::ZI_POISSON:
-            ll = lik::zi_poisson_log_pmf(y_n, mu_num, logit_zi);
+            ll = ratiod_zi::zi_poisson_lpmf_logit(y_n, mu_num, logit_zi);
             break;
         case tulpa::ZIType::HURDLE_POISSON:
-            ll = lik::hurdle_poisson_log_pmf(y_n, mu_num, logit_zi);
+            ll = ratiod_zi::hurdle_poisson_lpmf_logit(y_n, mu_num, logit_zi);
             break;
         case tulpa::ZIType::NONE:
         default:
             // Inline plain Poisson form to share `mu_num` with the denominator.
-            ll = T(double(y_n)) * eta_num - mu_num
-               - T(std::lgamma(double(y_n) + 1.0));
+            ll = ratiod::math::poisson_eta_density(double(y_n), eta_num, mu_num, T(std::lgamma(double(y_n) + 1.0)));
             break;
     }
 
     // Denominator: Gamma(y_denom | shape, rate=shape/mu_denom).
     const T log_shape = params[layout.extra_offset];
     const T shape     = exp(log_shape);
-    ll = ll + lik::gamma_log_pdf(y_d, shape, mu_denom);
+    ll = ll + ratiod::math::log_lik_gamma(y_d, shape, mu_denom);
 
     // Anchor the extra-parameter prior at i==0 so it contributes exactly once
     // to the total log posterior while still flowing through autodiff.

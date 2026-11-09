@@ -84,17 +84,17 @@ static T negbin_negbin_log_likelihood(
     T ll;
     switch (data.zi_type) {
         case tulpa::ZIType::ZI_NEGBIN:
-            ll = lik::zi_negbin_log_pmf(y_n, mu_num, phi_num, logit_zi);
+            ll = ratiod_zi::zi_negbin_lpmf_logit(y_n, mu_num, phi_num, logit_zi);
             break;
         case tulpa::ZIType::HURDLE_NEGBIN:
-            ll = lik::hurdle_negbin_log_pmf(y_n, mu_num, phi_num, logit_zi);
+            ll = ratiod_zi::hurdle_negbin_lpmf_logit(y_n, mu_num, phi_num, logit_zi);
             break;
         case tulpa::ZIType::NONE:
         default:
-            ll = lik::negbin_log_pmf(y_n, mu_num, phi_num);
+            ll = ratiod::math::log_lik_negbin(y_n, mu_num, phi_num);
             break;
     }
-    ll = ll + lik::negbin_log_pmf(y_d, mu_denom, phi_denom);
+    ll = ll + ratiod::math::log_lik_negbin(y_d, mu_denom, phi_denom);
 
     if (i == 0) {
         const auto& cfg = negbin_negbin_cfg();

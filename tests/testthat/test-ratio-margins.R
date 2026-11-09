@@ -19,6 +19,11 @@ test_that("ratio margins match normalized densities and their derivatives", {
     if (family == 'lognormal') extra <- extra*p
     if (family %in% c('poisson','binomial')) extra <- 0
     expect_equal(unname(r['extra']),extra,tolerance=1e-8,info=family)
+    scalars <- tulpaRatio:::cpp_test_ratio_margin_scalars(family,y,n,e,p)
+    expect_equal(unname(scalars[,1]),rep(f(y,n,e,p),3),tolerance=1e-12,info=family)
+    expect_equal(unname(scalars[2:3,2]),rep(unname(r['residual']),2),tolerance=1e-12,info=family)
+    scalar_extra <- if (family == 'lognormal') r['extra']/p else r['extra']
+    expect_equal(unname(scalars[2:3,3]),rep(unname(scalar_extra),2),tolerance=1e-12,info=family)
   }
 })
 

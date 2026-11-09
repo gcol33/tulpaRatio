@@ -1,5 +1,20 @@
 # tulpaRatio 1.7.3
 
+* Variational fits converge to the posterior: the local convergence check
+  stopped on small ELBO improvements relative to the raw ELBO even with large
+  gradients, so on an exact-quadrature binomial fixture the mean-field and
+  low-rank posterior SDs were 2.13 and 2.61 times too wide (now 1.0004 and
+  1.0001). VI uses the engine's optimizer and checker (gradient stationarity
+  with Monte Carlo error, an ELBO window scaled by the run's span), the
+  path-derivative Gaussian gradient and factor-frame alignment for low rank.
+  The `A_t` gradient mode and the local tape autodiff are removed (#186).
+* The likelihood stack uses tulpa's autodiff types and portable math instead of
+  local forks, so the forward and arena scalars share one set of boundary
+  guards (#175); stable log-probability helpers and transformed-prior densities
+  and scores exist once, the PC score including its Jacobian (#190); the spec
+  and legacy stacks and the H scores read one set of margin densities (#176,
+  partial: the collapsed kernels and the spec-stack migration remain).
+
 * Family metadata lives in one `MODEL_TYPES` table (distributions, responses,
   dispersion names, samplers, default dispersion prior, labels) and every
   exported family constructor is one `new_ratiod_family()` call (#198);

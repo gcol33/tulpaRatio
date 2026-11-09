@@ -74,16 +74,16 @@ static T binomial_log_likelihood(
 
     switch (data.zi_type) {
         case tulpa::ZIType::ZI_BINOMIAL:
-            return lik::zi_binom_log_pmf(y_i, n_i, eta[0], logit_zi);
+            return ratiod::math::log_lik_zi_binomial(y_i, n_i, eta[0], logit_zi);
         case tulpa::ZIType::HURDLE_BINOMIAL:
-            return lik::hurdle_binom_log_pmf(y_i, n_i, eta[0], logit_zi);
+            return ratiod::math::log_lik_hurdle_binomial(y_i, n_i, eta[0], logit_zi);
         case tulpa::ZIType::OI_BINOMIAL:
-            return lik::oi_binom_log_pmf(y_i, n_i, eta[0], logit_oi);
+            return ratiod::math::log_lik_oi_binomial(y_i, n_i, eta[0], logit_oi);
         case tulpa::ZIType::ZOIB:
-            return lik::zoib_log_pmf(y_i, n_i, eta[0], logit_zi, logit_oi);
+            return ratiod::math::log_lik_zoib(y_i, n_i, eta[0], logit_zi, logit_oi);
         case tulpa::ZIType::NONE:
         default:
-            return lik::binom_logit_log_pmf(y_i, n_i, eta[0]);
+            return ratiod::math::log_lik_binomial(y_i, n_i, eta[0]);
     }
 }
 
