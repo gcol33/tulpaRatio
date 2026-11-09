@@ -74,7 +74,7 @@ inline bool re_blocks_prior_grad(
 
       // Extract sigma parameters and compute priors
       for (int c = 0; c < n_coefs; c++) {
-        int log_sigma_idx = layout.log_sigma_re_slopes[t][c];
+        int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, c);
         double log_sigma_c = params[log_sigma_idx];
         double sigma_c = std::exp(log_sigma_c);
 
@@ -121,7 +121,7 @@ inline bool re_blocks_prior_grad(
       // Extract sigma parameters
       std::vector<double> sigmas(n_coefs);
       for (int c = 0; c < n_coefs; c++) {
-        int log_sigma_idx = layout.log_sigma_re_slopes[t][c];
+        int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, c);
         sigmas[c] = std::exp(params[log_sigma_idx]);
 
         // Half-Cauchy prior on sigma_c: d/d(log_sigma) = -2*(sigma/scale)^2/(1+(sigma/scale)^2) + 1
@@ -186,7 +186,7 @@ inline bool re_blocks_prior_grad(
             grad[re_start_t + g * n_coefs + c] = -tau_c * re_gc;
             sigma_grad_c += tau_c * re_gc * re_gc - 1.0;
           }
-          int log_sigma_idx = layout.log_sigma_re_slopes[t][c];
+          int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, c);
           grad[log_sigma_idx] += sigma_grad_c;
         }
       }
@@ -197,7 +197,7 @@ inline bool re_blocks_prior_grad(
 
     for (int t = 0; t < n_terms; t++) {
       // Get term-specific parameters
-      int log_sigma_idx = (n_terms > 1) ? layout.log_sigma_re_multi[t] : layout.log_sigma_re_idx;
+      int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, n_terms, t, 0);
       int re_start_t = (n_terms > 1) ? layout.re_start_multi[t] : layout.re_start;
       int n_groups_t = (n_terms > 1) ? data.re_n_groups_multi[t] : data.n_re_groups;
 
@@ -255,8 +255,7 @@ inline double re_blocks_eta(
     if (!layout.has_re_slopes) {
       const int re_start_t = (data.n_re_terms > 1) ? layout.re_start_multi[t]
                                                    : layout.re_start;
-      const int log_sigma_idx = (data.n_re_terms > 1) ? layout.log_sigma_re_multi[t]
-                                                      : layout.log_sigma_re_idx;
+      const int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, 0);
       double v = params[re_start_t + g];
       if (data.re_parameterization == 1) v *= std::exp(params[log_sigma_idx]);
       eta += v;
@@ -272,7 +271,7 @@ inline double re_blocks_eta(
     if (is_corr) {
       contrib = ws.re_nc_flat[re_base];
     } else if (is_uncorr_nc) {
-      contrib = std::exp(params[layout.log_sigma_re_slopes[t][0]]) * params[re_base];
+      contrib = std::exp(params[ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, 0)]) * params[re_base];
     } else {
       contrib = params[re_base];
     }
@@ -286,7 +285,7 @@ inline double re_blocks_eta(
         if (is_corr) {
           re_slope = ws.re_nc_flat[re_base + 1 + s];
         } else if (is_uncorr_nc) {
-          re_slope = std::exp(params[layout.log_sigma_re_slopes[t][1 + s]]) *
+          re_slope = std::exp(params[ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, 1 + s)]) *
                      params[re_base + 1 + s];
         } else {
           re_slope = params[re_base + 1 + s];
@@ -384,7 +383,7 @@ inline void re_blocks_writeback(
             sigma_lik_grad += ws.lik[t][g * n_coefs + c] *
                               ws.re_nc_flat[re_start_t + g * n_coefs + c];
           }
-          int log_sigma_idx = layout.log_sigma_re_slopes[t][c];
+          int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, c);
           grad[log_sigma_idx] += sigma_lik_grad;
         }
 
@@ -413,7 +412,7 @@ inline void re_blocks_writeback(
         // grad[z_gc] += dLL/d(re_gc) * sigma_c
         // grad[log_sigma_c] += dLL/d(re_gc) * z_gc * sigma_c
         for (int c = 0; c < n_coefs; c++) {
-          double sigma_c = std::exp(params[layout.log_sigma_re_slopes[t][c]]);
+          double sigma_c = std::exp(params[ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, c)]);
           double sigma_lik_grad = 0.0;
           for (int g = 0; g < n_groups; g++) {
             double lik_gc = ws.lik[t][g * n_coefs + c];
@@ -421,7 +420,7 @@ inline void re_blocks_writeback(
             grad[re_start_t + g * n_coefs + c] += lik_gc * sigma_c;
             sigma_lik_grad += lik_gc * z_gc * sigma_c;
           }
-          grad[layout.log_sigma_re_slopes[t][c]] += sigma_lik_grad;
+          grad[ratiod_re::re_log_sigma_idx(layout, data.n_re_terms, t, c)] += sigma_lik_grad;
         }
       } else {
         // Uncorrelated centered: add ws.lik directly
@@ -444,7 +443,7 @@ inline void re_blocks_writeback(
     for (int t = 0; t < n_terms; t++) {
       int re_start_t = (n_terms > 1) ? layout.re_start_multi[t] : layout.re_start;
       int n_groups_t = (n_terms > 1) ? data.re_n_groups_multi[t] : data.n_re_groups;
-      int log_sigma_idx = (n_terms > 1) ? layout.log_sigma_re_multi[t] : layout.log_sigma_re_idx;
+      int log_sigma_idx = ratiod_re::re_log_sigma_idx(layout, n_terms, t, 0);
       double sigma_t = std::exp(params[log_sigma_idx]);
 
       double sigma_lik_grad = 0.0;
