@@ -5,6 +5,7 @@
 #ifndef QUOTR_HMC_SAMPLER_H
 #define QUOTR_HMC_SAMPLER_H
 
+#include "scale_prior.h"
 #include <Rcpp.h>
 #include <vector>
 #include <cmath>
@@ -246,8 +247,8 @@ struct ModelData {
   // 1 = the N(0, I) innovations they are reconstructed from. Only AR1 has a
   // second coordinate; RW1 and RW2 are intrinsic and IID is already unit-scale.
   int temporal_parameterization = 0;
-  double tau_temporal_shape = 1.0;      // Gamma shape for temporal precision
-  double tau_temporal_rate = 0.01;      // Gamma rate for temporal precision
+  double temporal_sigma_prior_U = 3.0;
+  double temporal_sigma_prior_alpha = 0.01;
   // Beta(a, b) on u = (rho + 1) / 2 for an AR1 temporal correlation, which is
   // what priors_default() documents and temporal_ar1(rho_prior =) overrides.
   double temporal_rho_prior_a = ratiod_ar1::RHO_PRIOR_A;
@@ -271,7 +272,8 @@ struct ModelData {
   ratiod_hsgp::HSGPData svc_hsgp_data;  // Shared HSGP basis for all SVC terms
   int svc_hsgp_m_per_dim = 6;           // Basis functions per dimension for SVC-HSGP
   double svc_hsgp_boundary_factor = 1.5;
-  double svc_sigma2_prior_scale = 1.0;  // Half-Cauchy scale for sigma2
+  double svc_sigma_prior_U = 1.0;
+  double svc_sigma_prior_alpha = 0.01;
   // Uniform prior bounds for phi. apply_svc_params() overwrites both from the
   // spec's `range` whenever has_svc, so these carry the same numbers as
   // svc_default_range() in R rather than a second pair a model could run under.
@@ -369,8 +371,8 @@ struct ModelData {
   // TVC (Temporally-Varying Coefficients) structure
   ratiod_tvc::TVCData tvc_data;
   bool has_tvc = false;
-  double tvc_tau_shape = 1.0;           // Gamma shape for TVC precision
-  double tvc_tau_rate = 0.01;           // Gamma rate for TVC precision
+  double tvc_sigma_prior_U = 1.0;
+  double tvc_sigma_prior_alpha = 0.01;
 
   // Dimensions
   int N = 0;
@@ -380,8 +382,8 @@ struct ModelData {
   double sigma_re_scale = 1.0;
   double phi_prior_shape = 1.0;
   double phi_prior_rate = 1.0;
-  double tau_spatial_shape = 1.0;
-  double tau_spatial_rate = 1.0;
+  double spatial_sigma_prior_U = 3.0;
+  double spatial_sigma_prior_alpha = 0.01;
 
   // Model type
   ModelType model_type = ModelType::BINOMIAL;

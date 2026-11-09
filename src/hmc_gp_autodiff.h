@@ -10,6 +10,7 @@
 #include "hmc_cov.h"
 #include "hmc_gp.h"
 #include "autodiff_utils.h"
+#include "scale_prior.h"
 
 namespace ratiod_gp {
 
@@ -216,11 +217,8 @@ T gp_nngp_log_lik_t(
 // PC prior on sigma2: P(sigma > U) = alpha => sigma ~ Exp(rate = -log(alpha)/U)
 template<typename T>
 T log_prior_sigma2_pc_t(const T& sigma2, double U, double alpha) {
-    double rate = -std::log(alpha) / U;
-    T sigma = safe_sqrt(sigma2);
-    // p(sigma) = rate * exp(-rate * sigma)
-    // Jacobian: d(sigma)/d(sigma2) = 1/(2*sigma)
-    return T(std::log(rate)) - rate * sigma - safe_log(T(2.0) * sigma);
+    const T sigma = safe_sqrt(sigma2);
+    return pc_sigma_log_density(sigma, pc_rate(U, alpha)) - safe_log(T(2.0) * sigma);
 }
 
 // PC prior on a marginal sd, sigma ~ Exponential(rate), written on the
@@ -229,8 +227,7 @@ T log_prior_sigma2_pc_t(const T& sigma2, double U, double alpha) {
 // with d sigma / d theta = sigma / 2.
 template<typename T>
 T log_prior_sd_pc_logvar_t(const T& theta, double rate) {
-    T sigma = safe_exp(T(0.5) * theta);
-    return T(std::log(rate) - std::log(2.0)) - T(rate) * sigma + T(0.5) * theta;
+    return ratiod::math::pc_log_density_rate(theta, 0.5, rate);
 }
 
 // Uniform prior on phi within bounds

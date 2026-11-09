@@ -17,8 +17,8 @@ fit_pg_binomial_rsr(
   seed = NULL,
   prior_beta_sd = 10,
   prior_sigma_scale = 2.5,
-  prior_tau_shape = 1,
-  prior_tau_rate = 0.01,
+  prior_sigma_spatial_U = 3,
+  prior_sigma_spatial_alpha = 0.01,
   verbose = TRUE
 )
 }

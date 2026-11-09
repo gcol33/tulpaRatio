@@ -4,7 +4,7 @@
 //
 // Update scheme, ICAR:
 //   1. phi_s | phi_{-s}, beta, tau, y  (univariate MH per site)
-//   2. tau | phi                        (conjugate Gamma for ICAR)
+//   2. tau | phi                        (slice update under the PC SD prior)
 //   3. beta | phi, y                    (block MH with Gaussian proposal)
 //   4. dispersion | rest                (univariate MH on log scale)
 // BYM2 (Knorr-Held and Rue 2002, Scand. J. Stat. 29:597):
@@ -18,6 +18,7 @@
 
 #include <Rcpp.h>
 #include "enum_names.h"
+#include "scale_prior.h"
 #include <tulpa/count_math.h>
 #include <tulpa/precision_math.h>
 #include <vector>
@@ -65,9 +66,11 @@ struct GibbsData {
     // Priors, matching what compute_log_post() applies to the same model so
     // that a fit does not depend on which backend the router picks.
     double sigma_beta = 10.0;         // beta ~ N(0, sigma_beta^2)
-    double sigma_re_scale = 2.5;      // BYM2 sigma_total ~ Half-Cauchy(0, .)
-    double tau_spatial_shape = 1.0;   // ICAR tau ~ Gamma(shape, rate)
-    double tau_spatial_rate = 0.01;
+    double sigma_re_scale = 2.5;
+    double spatial_sigma_prior_U = 3.0;
+    double spatial_sigma_prior_alpha = 0.01;
+    double tvc_sigma_prior_U = 1.0;
+    double tvc_sigma_prior_alpha = 0.01;
 
     // CSR obs-to-site mapping (built once)
     std::vector<int> site_obs_ptr;      // site_obs_ptr[s] = start index
@@ -531,19 +534,13 @@ inline GibbsResult run_gibbs_icar(
             for (int s = 0; s < S; s++) phi[s] += phi_off;
         }
 
-        // ---- 2. Update tau (ICAR precision) via conjugate Gamma ----
+        // ---- 2. Update ICAR precision under the PC scale prior ----
         {
-            // Q is rank S-1 on a connected graph, so the field contributes
-            // tau^{(S-1)/2} exp(-tau * quad / 2) and Gamma(a, b) is conjugate.
             const double quad = icar_quadratic_form(phi.data(), d);
-            const double shape = d.tau_spatial_shape + 0.5 * (S - 1);
-            const double rate = d.tau_spatial_rate + 0.5 * quad;
-
-            if (rate > 0.0) {
-                std::gamma_distribution<double> gamma_dist(shape, 1.0 / rate);
-                tau = gamma_dist(rng);
-                log_tau = std::log(tau);
-            }
+            tau = ratiod_scale::sample_tau(tau, quad, S - 1,
+                d.spatial_sigma_prior_U, d.spatial_sigma_prior_alpha,
+                [&]() { return runif(rng); });
+            log_tau = std::log(tau);
         }
 
         // ---- 3. Update beta via block random-walk MH ----
@@ -668,7 +665,7 @@ inline GibbsResult run_gibbs_icar(
                     }
                 }
 
-                // Update tau[j] via conjugate Gamma (RW1)
+                // Update the RW1 precision under its PC scale prior.
                 double qf = 0.0;
                 for (int gg = 0; gg < d.tvc_n_groups; gg++) {
                     for (int tt = 1; tt < d.tvc_n_times; tt++) {
@@ -678,10 +675,9 @@ inline GibbsResult run_gibbs_icar(
                     }
                 }
                 int rank = (d.tvc_n_times - 1) * d.tvc_n_groups;
-                double shape_t = 0.5 * rank;
-                double rate_t = 0.5 * qf + 0.01;
-                std::gamma_distribution<double> gd_t(shape_t, 1.0 / rate_t);
-                tvc_tau[j] = gd_t(rng);
+                tvc_tau[j] = ratiod_scale::sample_tau(tvc_tau[j], qf, rank,
+                    d.tvc_sigma_prior_U, d.tvc_sigma_prior_alpha,
+                    [&]() { return runif(rng); });
             }
         }
 
@@ -878,7 +874,8 @@ inline double bym2_log_target(const Eigen::VectorXd& x, double sigma, double rho
     lp += beta_log_prior(x.data() + lay.p_num, lay.p_den, d.sigma_beta);
     lp -= 0.5 * icar_quadratic_form(x.data() + lay.phi0(), d);
     for (int s = 0; s < lay.S; s++) lp -= 0.5 * x[lay.theta0() + s] * x[lay.theta0() + s];
-    lp += half_cauchy_log_dens_log_scale(sigma, d.sigma_re_scale);
+    lp += ratiod::math::pc_log_density(std::log(sigma), 1.0,
+        d.spatial_sigma_prior_U, d.spatial_sigma_prior_alpha);
     lp += unif01_log_dens_logit_scale(rho);
     return lp;
 }

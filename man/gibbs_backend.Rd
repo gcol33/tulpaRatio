@@ -6,7 +6,7 @@
 \description{
 Component-wise Gibbs sampler for ICAR spatial models. Uses univariate
 MH updates for spatial effects with the ICAR conditional prior as proposal,
-conjugate Gamma update for spatial precision, and block MH for fixed effects.
+slice update for spatial precision under its PC SD prior, and block MH for fixed effects.
 }
 \details{
 This backend is designed for models where spatial effects dominate the

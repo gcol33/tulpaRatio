@@ -206,19 +206,6 @@ inline T tvc_sum_to_zero_penalty(
 }
 
 // -----------------------------------------------------------------------------
-// Prior on TVC hyperparameters
-// -----------------------------------------------------------------------------
-
-// Log prior for TVC precision (PC prior style)
-// Favors smaller variance = simpler (more constant) coefficients
-// d/d(log_tau) of the Gamma(shape, rate) prior on tau taken with the Jacobian of
-// the log transform, i.e. of (shape-1)*log_tau - rate*tau + log_tau. Derived
-// once so the analytic gradient paths cannot drift from the density again.
-inline double log_prior_tau_gamma_grad(double tau, double shape, double rate) {
-  return shape - rate * tau;
-}
-
-// -----------------------------------------------------------------------------
 // Gradient helpers (for HMC)
 // -----------------------------------------------------------------------------
 

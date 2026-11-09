@@ -18,7 +18,7 @@ A named list of prior parameters.
 Translates a \code{\link[=ratiod_priors]{ratiod_priors()}} specification into the scalars the MCMC
 samplers take: the Normal SD on fixed effects (mean 0), the Half-Cauchy
 scale on random-effect SDs and the Gamma shape and rate on the dispersion
-parameter, plus the fixed precision and zero-inflation priors. A component
+parameter, plus the PC field-scale anchors and zero-inflation priors. A component
 in a family the samplers do not implement is refused, since fitting under
 another prior than the one asked for would go unnoticed.
 }

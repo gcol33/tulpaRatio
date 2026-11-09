@@ -488,8 +488,8 @@ tratio <- function(formula,
       seed = seed,
       prior_beta_sd = pg_priors$sigma_beta,
       prior_sigma_scale = pg_priors$sigma_re_scale,
-      prior_tau_shape = pg_priors$tau_spatial_shape,
-      prior_tau_rate = pg_priors$tau_spatial_rate,
+      prior_sigma_spatial_U = pg_priors$spatial_sigma_prior_U,
+      prior_sigma_spatial_alpha = pg_priors$spatial_sigma_prior_alpha,
       verbose = verbose
     )
 

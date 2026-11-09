@@ -1,5 +1,23 @@
 # tulpaRatio 1.7.3
 
+* Every field scale (temporal, areal, TVC, SVC, and the HSGP spectral paths)
+  carries one PC prior on its standard deviation, P(sigma > U) = alpha, on every
+  sampler path, matching the engine: `ratiod_priors(sigma_temporal =,
+  sigma_spatial =, sigma_tvc =, sigma_svc =)` take `prior_pc(U, alpha)`, with
+  defaults (3, 0.01) for temporal and areal fields and (1, 0.01) for TVC and
+  SVC. The Gamma precision keys are removed. The engine had dropped its temporal
+  Gamma prior, so the spec path no longer compiled against tulpa 0.7.6, and a
+  key rename alone would have run the spec and legacy paths under two priors;
+  on a temporal AR1 fixture both now sit within 0.03 posterior SD of a dense
+  quadrature reference. The HSGP paths read the stated anchors instead of a
+  rounded rate of 4.6 (#217).
+* Gamma and beta-binomial densities, scores and precision derivatives use the
+  engine's exported `precision_math.h` / `count_math.h` on every path (spec,
+  autodiff, H tables, fused and vectorized kernels, Gibbs, collapsed GP and
+  CAR); `src/negbin_math.h` is gone. At precision 1e15 the densities had been
+  off by 0.45 (gamma) and 4.3 (beta-binomial) nats; they now agree with a
+  100-digit reference to 1e-14. Requires tulpa >= 0.7.6 (#215).
+
 * The C++ unit tests exercise the shipped kernels (leapfrog, Hamiltonian,
   Cholesky, inverse logit, densities) through thin probes instead of copies
   written inside the test file; registered exports drop from 126 to 105 (#205).

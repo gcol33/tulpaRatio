@@ -252,8 +252,8 @@ inline void apply_tvc_params(ModelData& data, const Rcpp::List& tvc_params) {
     std::vector<int> tvc_time_index = Rcpp::as<std::vector<int>>(tvc_params["time_index"]);
     std::vector<int> tvc_group_index = Rcpp::as<std::vector<int>>(tvc_params["group_index"]);
     std::vector<double> tvc_X_tvc = Rcpp::as<std::vector<double>>(tvc_params["X_tvc"]);
-    double tvc_tau_shape = Rcpp::as<double>(tvc_params["tau_shape"]);
-    double tvc_tau_rate = Rcpp::as<double>(tvc_params["tau_rate"]);
+    double tvc_sigma_prior_U = Rcpp::as<double>(tvc_params["sigma_prior_U"]);
+    double tvc_sigma_prior_alpha = Rcpp::as<double>(tvc_params["sigma_prior_alpha"]);
 
     // Populate TVC data structure
     data.tvc_data.n_obs = data.N;
@@ -274,8 +274,8 @@ inline void apply_tvc_params(ModelData& data, const Rcpp::List& tvc_params) {
     data.tvc_data.structure = ratiod_tvc::parse_tvc_structure(tvc_structure_str);
 
     // Prior parameters
-    data.tvc_tau_shape = tvc_tau_shape;
-    data.tvc_tau_rate = tvc_tau_rate;
+    data.tvc_sigma_prior_U = tvc_sigma_prior_U;
+    data.tvc_sigma_prior_alpha = tvc_sigma_prior_alpha;
   } else {
     data.tvc_data.n_tvc = 0;
     data.tvc_data.n_times = 0;
@@ -296,7 +296,8 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
     std::vector<double> svc_coords = Rcpp::as<std::vector<double>>(svc_params["coords"]);
     std::vector<int> svc_indices = Rcpp::as<std::vector<int>>(svc_params["svc_indices"]);
     std::vector<double> svc_X_svc = Rcpp::as<std::vector<double>>(svc_params["X_svc"]);
-    double svc_sigma2_scale = Rcpp::as<double>(svc_params["sigma2_prior_scale"]);
+    double svc_U = Rcpp::as<double>(svc_params["sigma_prior_U"]);
+    double svc_alpha = Rcpp::as<double>(svc_params["sigma_prior_alpha"]);
     double svc_phi_lower = Rcpp::as<double>(svc_params["phi_prior_lower"]);
     double svc_phi_upper = Rcpp::as<double>(svc_params["phi_prior_upper"]);
 
@@ -350,7 +351,8 @@ inline void apply_svc_params(ModelData& data, const Rcpp::List& svc_params) {
     }
 
     // Prior parameters
-    data.svc_sigma2_prior_scale = svc_sigma2_scale;
+    data.svc_sigma_prior_U = svc_U;
+    data.svc_sigma_prior_alpha = svc_alpha;
     data.svc_phi_prior_lower = svc_phi_lower;
     data.svc_phi_prior_upper = svc_phi_upper;
   } else {
@@ -555,8 +557,8 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
   int n_temporal_params = Rcpp::as<int>(temporal_params["n_params"]);
   bool temporal_cyclic = Rcpp::as<bool>(temporal_params["cyclic"]);
   bool temporal_shared = Rcpp::as<bool>(temporal_params["shared"]);
-  double tau_temporal_shape = Rcpp::as<double>(temporal_params["tau_shape"]);
-  double tau_temporal_rate = Rcpp::as<double>(temporal_params["tau_rate"]);
+  double temporal_sigma_prior_U = Rcpp::as<double>(temporal_params["sigma_prior_U"]);
+  double temporal_sigma_prior_alpha = Rcpp::as<double>(temporal_params["sigma_prior_alpha"]);
   double temporal_rho_prior_a = temporal_params.containsElementNamed("rho_prior_a")
       ? Rcpp::as<double>(temporal_params["rho_prior_a"]) : ratiod_ar1::RHO_PRIOR_A;
   double temporal_rho_prior_b = temporal_params.containsElementNamed("rho_prior_b")
@@ -638,8 +640,8 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
   data.n_temporal_params = n_temporal_params;
   data.temporal_cyclic = temporal_cyclic;
   data.temporal_shared = temporal_shared;
-  data.tau_temporal_shape = tau_temporal_shape;
-  data.tau_temporal_rate = tau_temporal_rate;
+  data.temporal_sigma_prior_U = temporal_sigma_prior_U;
+  data.temporal_sigma_prior_alpha = temporal_sigma_prior_alpha;
   // Beta anchors on u = (rho + 1) / 2 for an AR1 correlation.
   data.temporal_rho_prior_a = temporal_rho_prior_a;
   data.temporal_rho_prior_b = temporal_rho_prior_b;

@@ -3,6 +3,7 @@
 // Implements ICAR (Intrinsic CAR) prior for areal data
 
 #include "pg_spatial.h"
+#include "scale_prior.h"
 #include <Rcpp.h>
 #include <cmath>
 #include <limits>
@@ -102,18 +103,15 @@ NumericVector update_spatial_icar(
   return phi;
 }
 
-// Update spatial precision tau with gamma prior
-// ICAR precision structure: phi' Q phi where Q_ii = n_neighbors[i], Q_ij = -1 if neighbors
-//
-// Posterior for tau:
-// tau | phi ~ Gamma(a + (J-1)/2, b + 0.5 * phi' Q phi)
+// Update spatial precision under the PC SD prior and the ICAR quadratic form.
 
 double update_tau_icar(
     const NumericVector& phi,
     const List& adj_list,
     const IntegerVector& n_neighbors,
-    double prior_shape,
-    double prior_rate
+    double sigma_prior_U,
+    double sigma_prior_alpha,
+    double tau
 ) {
   int J = phi.size();
 
@@ -135,12 +133,9 @@ double update_tau_icar(
     }
   }
 
-  // Posterior parameters
-  // Note: ICAR has rank J-1 (one constraint), so degrees of freedom is (J-1)/2
-  double post_shape = prior_shape + (J - 1.0) / 2.0;
-  double post_rate = prior_rate + quad_form / 2.0;
-
-  return R::rgamma(post_shape, 1.0 / post_rate);
+  // The connected, sum-to-zero ICAR field has rank J - 1.
+  return ratiod_scale::sample_tau(tau, quad_form, J - 1,
+      sigma_prior_U, sigma_prior_alpha, []() { return R::unif_rand(); });
 }
 
 // ---------------------------------------------------------------------
@@ -168,9 +163,9 @@ static double slice_sample(double x0, LogDensity log_dens, double width) {
   }
 }
 
-PGBym2::PGBym2(const List& adj_list, double scale_factor, double sigma_scale)
+PGBym2::PGBym2(const List& adj_list, double scale_factor, double sigma_prior_U, double sigma_prior_alpha)
   : sigma(1.0), rho(0.5), J_(adj_list.size()),
-    scale_factor_(scale_factor), sigma_scale_(sigma_scale) {
+    scale_factor_(scale_factor), sigma_prior_U_(sigma_prior_U), sigma_prior_alpha_(sigma_prior_alpha) {
   phi = Eigen::VectorXd::Zero(J_);
   theta = Eigen::VectorXd::Zero(J_);
 
@@ -231,10 +226,9 @@ void PGBym2::update_sigma(const Eigen::VectorXd& S, const Eigen::VectorXd& R) {
     std::sqrt(rho) * scale_factor_ * phi + std::sqrt(1.0 - rho) * theta;
   const double A = S.dot(w.cwiseProduct(w));
   const double B = R.dot(w);
-  const double s2 = sigma_scale_ * sigma_scale_;
   auto log_dens = [&](double log_s) {
     const double s = std::exp(log_s);
-    return -0.5 * A * s * s + B * s - std::log1p(s * s / s2) + log_s;
+    return -0.5 * A * s * s + B * s + ratiod::math::pc_log_density(log_s, 1.0, sigma_prior_U_, sigma_prior_alpha_);
   };
   sigma = std::exp(slice_sample(std::log(sigma), log_dens, 1.0));
 }
@@ -265,12 +259,11 @@ void PGBym2::interweave() {
   const Eigen::VectorXd w = b * theta;
   const double qv = v.dot(Q_icar_ * v) / (scale_factor_ * scale_factor_);
   const double qw = w.squaredNorm();
-  const double s2 = sigma_scale_ * sigma_scale_;
 
   auto log_dens_sigma = [&](double log_s) {
     const double s = std::exp(log_s);
     return -(2.0 * J_ - 1.0) * log_s - 0.5 * (qv / rho + qw / (1.0 - rho)) / (s * s)
-           - std::log1p(s * s / s2) + log_s;
+           + ratiod::math::pc_log_density(log_s, 1.0, sigma_prior_U_, sigma_prior_alpha_);
   };
   sigma = std::exp(slice_sample(std::log(sigma), log_dens_sigma, 1.0));
 

@@ -515,10 +515,10 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   data.sigma_re_scale = 1.0;
   data.phi_prior_shape = 1.0;
   data.phi_prior_rate = 0.01;
-  data.tau_spatial_shape = 1.0;
-  data.tau_spatial_rate = 0.01;
-  data.tau_temporal_shape = 1.0;
-  data.tau_temporal_rate = 0.01;
+  data.spatial_sigma_prior_U = 3.0;
+  data.spatial_sigma_prior_alpha = 0.01;
+  data.temporal_sigma_prior_U = 3.0;
+  data.temporal_sigma_prior_alpha = 0.01;
 
   data.X_num_flat.resize(static_cast<size_t>(n_obs) * 2);
   data.y_num.resize(n_obs);
@@ -837,7 +837,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       data.svc_noncentered = want_svc_nc;
       data.svc_gp_view = ratiod_svc::make_svc_gp_view(svc);
     }
-    data.svc_sigma2_prior_scale = 1.0;
+    data.svc_sigma_prior_U = 1.0;
+    data.svc_sigma_prior_alpha = 0.01;
     data.svc_phi_prior_lower = 0.001;
     data.svc_phi_prior_upper = 100.0;
   }
@@ -882,8 +883,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       tvc.X_tvc[i] = data.X_num_flat[static_cast<size_t>(i) * 2 + 1];
     }
     data.has_tvc = true;
-    data.tvc_tau_shape = 1.0;
-    data.tvc_tau_rate = 0.01;
+    data.tvc_sigma_prior_U = 1.0;
+    data.tvc_sigma_prior_alpha = 0.01;
   }
 
   if (want_temporal_gp) {
@@ -1201,6 +1202,66 @@ std::vector<double> draw_params(const ModelData& data, const ParamLayout& layout
 Rcpp::CharacterVector cpp_gradient_fields() {
   Rcpp::CharacterVector out(sizeof(KNOWN_FIELDS) / sizeof(KNOWN_FIELDS[0]));
   for (int i = 0; i < out.size(); i++) out[i] = KNOWN_FIELDS[i];
+  return out;
+}
+
+// Scale-prior contributions at fixed latent fields and fixed likelihood.
+// [[Rcpp::export]]
+Rcpp::List cpp_scale_prior_check(std::string field, double x,
+                                double U = 0.8, double alpha = 0.15) {
+  ModelData data = make_model(field, 40, 8, 5, 42, "binomial", true, "none");
+  const ParamLayout layout = compute_param_layout(data);
+  std::vector<double> params(layout.total_params, 0.0);
+  std::vector<int> slots;
+  std::vector<double> slopes;
+  auto add = [&](int slot, double slope) {
+    if (slot >= 0) { slots.push_back(slot); slopes.push_back(slope); params[slot] = x; }
+  };
+  if (layout.has_spatial) {
+    if (layout.is_bym2) add(layout.log_sigma_bym2_idx, 1.0);
+    else add(layout.log_tau_spatial_idx, -0.5);
+  }
+  if (layout.has_temporal) add(layout.log_tau_temporal_idx, -0.5);
+  if (layout.has_tvc) {
+    for (int j = layout.log_tau_tvc_start; j < layout.log_tau_tvc_end; ++j) add(j, -0.5);
+  }
+  if (layout.is_hsgp) add(layout.log_sigma2_hsgp_idx, 0.5);
+  if (layout.has_svc) {
+    for (int j = layout.log_sigma2_svc_start; j < layout.log_sigma2_svc_end; ++j) add(j, 0.5);
+  }
+  auto set = [&](double u, double a) {
+    data.spatial_sigma_prior_U = data.temporal_sigma_prior_U = u;
+    data.tvc_sigma_prior_U = data.svc_sigma_prior_U = u;
+    data.gp_sigma2_prior_U = u;
+    data.spatial_sigma_prior_alpha = data.temporal_sigma_prior_alpha = a;
+    data.tvc_sigma_prior_alpha = data.svc_sigma_prior_alpha = a;
+    data.gp_sigma2_prior_alpha = a;
+  };
+  set(1.0, 0.01);
+  const double base = compute_log_post(params, data, layout);
+  set(U, alpha);
+  const double changed = compute_log_post(params, data, layout);
+  Rcpp::NumericVector density(slopes.size()), gradient(slopes.size());
+  for (size_t j = 0; j < slopes.size(); ++j) {
+    density[j] = ratiod::math::pc_log_density(x, slopes[j], U, alpha);
+    gradient[j] = ratiod::math::pc_scale_gradient(std::exp(slopes[j] * x), slopes[j], U, alpha);
+  }
+  return Rcpp::List::create(Rcpp::_["delta"] = changed - base,
+      Rcpp::_["slopes"] = slopes, Rcpp::_["density"] = density,
+      Rcpp::_["gradient"] = gradient);
+}
+
+// Draw precision conditionals shared by the PC-prior Gibbs kernels.
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_scale_conditional_draws(int n, double quad, int rank,
+                                               double U, double alpha) {
+  Rcpp::NumericVector out(n);
+  double tau = 1.0;
+  for (int i = -1000; i < n; ++i) {
+    tau = ratiod_scale::sample_tau(tau, quad, rank, U, alpha,
+        []() { return R::unif_rand(); });
+    if (i >= 0) out[i] = tau;
+  }
   return out;
 }
 

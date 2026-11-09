@@ -126,8 +126,8 @@ fit_hmc <- function(formula,
   sigma_re_scale <- sp$sigma_re_scale
   phi_shape <- sp$phi_shape
   phi_rate <- sp$phi_rate
-  tau_temporal_shape <- sp$tau_temporal_shape
-  tau_temporal_rate <- sp$tau_temporal_rate
+  temporal_sigma_prior_U <- sp$temporal_sigma_prior_U
+  temporal_sigma_prior_alpha <- sp$temporal_sigma_prior_alpha
   rho_temporal_ab <- c(a = temporal_params$rho_prior_a,
                        b = temporal_params$rho_prior_b)
   has_re_slopes <- re_params$has_slopes
@@ -400,6 +400,8 @@ fit_hmc <- function(formula,
         bym2_scale       = spatial_info$bym2_scale %||% 1.0,
         Q_inv            = spatial_info$Q_inv,
         L_Q              = spatial_info$L_Q,
+        sigma_prior_U = sp$spatial_sigma_prior_U,
+        sigma_prior_alpha = sp$spatial_sigma_prior_alpha,
         parameterization = spatial_param_v
       )
     } else list()
@@ -416,8 +418,8 @@ fit_hmc <- function(formula,
         n_params  = as.integer(temporal_info$n_temporal_params),
         cyclic    = isTRUE(temporal_info$precision_structure$cyclic),
         shared    = isTRUE(temporal_info$shared %||% TRUE),
-        tau_shape = tau_temporal_shape,
-        tau_rate  = tau_temporal_rate,
+        sigma_prior_U = temporal_sigma_prior_U,
+        sigma_prior_alpha = temporal_sigma_prior_alpha,
         rho_prior_a = rho_temporal_ab[["a"]],
         rho_prior_b = rho_temporal_ab[["b"]]
       )
@@ -651,13 +653,13 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   phi_shape <- sp$phi_shape
   phi_rate <- sp$phi_rate
 
-  tau_spatial_shape <- sp$tau_spatial_shape
-  tau_spatial_rate <- sp$tau_spatial_rate
+  spatial_sigma_prior_U <- sp$spatial_sigma_prior_U
+  spatial_sigma_prior_alpha <- sp$spatial_sigma_prior_alpha
 
 
   # Get temporal prior parameters
-  tau_temporal_shape <- sp$tau_temporal_shape
-  tau_temporal_rate <- sp$tau_temporal_rate
+  temporal_sigma_prior_U <- sp$temporal_sigma_prior_U
+  temporal_sigma_prior_alpha <- sp$temporal_sigma_prior_alpha
   # Beta anchors on u = (rho + 1) / 2 for an AR1 correlation. The block's own
   # rho_prior wins over the model-wide one; both default to Beta(2, 2).
   rho_temporal_ab <- rho_prior_anchors(temporal_info$rho_prior,
@@ -724,8 +726,8 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     n_params = as.integer(temporal_info$n_temporal_params),
     cyclic = temporal_info$precision_structure$cyclic %||% FALSE,
     shared = temporal_info$shared %||% TRUE,
-    tau_shape = tau_temporal_shape,
-    tau_rate = tau_temporal_rate,
+    sigma_prior_U = temporal_sigma_prior_U,
+    sigma_prior_alpha = temporal_sigma_prior_alpha,
     rho_prior_a = rho_temporal_ab[["a"]],
     rho_prior_b = rho_temporal_ab[["b"]],
     # AR1's own coordinate, read only when type = "ar1"
@@ -830,8 +832,8 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     time_index = as.integer(tvc_info$time_index %||% integer(0)),
     group_index = as.integer(tvc_info$group_index %||% integer(0)),
     X_tvc = as.numeric(tvc_info$X_tvc %||% numeric(0)),
-    tau_shape = priors$tvc_tau_shape %||% 2.0,
-    tau_rate = priors$tvc_tau_rate %||% 0.5
+    sigma_prior_U = sp$tvc_sigma_prior_U,
+    sigma_prior_alpha = sp$tvc_sigma_prior_alpha
   )
 
   # SVC (Spatially-Varying Coefficients) parameters
@@ -850,11 +852,10 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     nn_order = as.integer(svc_info$nn_order %||% integer(0)),
     nn_order_inv = as.integer(svc_info$nn_order_inv %||% integer(0)),
     parameterization = svc_info$parameterization,
-    sigma2_prior_scale = svc_info$sigma2_prior_scale %||% 1.0,
     phi_prior_lower = svc_info$phi_prior_lower,
     phi_prior_upper = svc_info$phi_prior_upper,
-    tau_shape = priors$svc_tau_shape %||% 1.0,
-    tau_rate = priors$svc_tau_rate %||% 0.01,
+    sigma_prior_U = sp$svc_sigma_prior_U,
+    sigma_prior_alpha = sp$svc_sigma_prior_alpha,
     svc_approx = svc_info$svc_approx %||% "nngp",
     hsgp_m = as.integer(svc_info$hsgp_m %||% 0L),
     hsgp_c = svc_info$hsgp_c %||% 0.0
@@ -908,8 +909,8 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     sigma_re_scale = sigma_re_scale,
     phi_shape = phi_shape,
     phi_rate = phi_rate,
-    tau_spatial_shape = tau_spatial_shape,
-    tau_spatial_rate = tau_spatial_rate
+    spatial_sigma_prior_U = spatial_sigma_prior_U,
+    spatial_sigma_prior_alpha = spatial_sigma_prior_alpha
   )
 
   gp_params <- gp_bundle(gp_info, priors)
@@ -1368,11 +1369,12 @@ extract_re_for_hmc <- function(formula) {
 #' Prepare spatial structure for HMC
 #' @keywords internal
 prepare_spatial_for_hmc <- function(spatial, data, N) {
-  if (is.null(spatial)) {
+  is_svc <- inherits(spatial, "ratiod_svc")
+  if (is.null(spatial) || is_svc) {
     return(list(
-      type = "none",
-      group = rep(0L, N),
-      n_units = 0L,
+      type = if (is_svc) "svc" else "none",
+      group = if (is_svc) seq_len(N) else rep(0L, N),
+      n_units = if (is_svc) N else 0L,
       adj_row_ptr = integer(1),
       adj_col_idx = integer(0),
       n_neighbors = integer(0),
@@ -1641,11 +1643,10 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
       nn_dist = numeric(0),
       nn_order = integer(0),
       nn_order_inv = integer(0),
-      sigma2_prior_scale = 1.0,
       phi_prior_lower = svc_default_range()[1],
       phi_prior_upper = svc_default_range()[2],
-      tau_shape = 1.0,
-      tau_rate = 0.01
+      sigma_prior_U = 1.0,
+      sigma_prior_alpha = 0.01
     ))
   }
 
@@ -1690,11 +1691,10 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
       nn_dist = numeric(0),
       nn_order = integer(0),
       nn_order_inv = integer(0),
-      sigma2_prior_scale = 1.0,
       phi_prior_lower = svc_range[1],
       phi_prior_upper = svc_range[2],
-      tau_shape = 1.0,
-      tau_rate = 0.01,
+      sigma_prior_U = 1.0,
+      sigma_prior_alpha = 0.01,
       hsgp_m = as.integer(svc$m %||% 6L),
       hsgp_c = svc$c_boundary %||% 1.5
     )
@@ -1721,11 +1721,10 @@ prepare_svc_for_hmc <- function(svc, data, N, X_num) {
       nn_order_inv = as.integer(neighbor_info$nn_order_inv - 1L),
       # A spec built before `parameterization` existed ran centred.
       parameterization = svc$parameterization %||% "centered",
-      sigma2_prior_scale = 1.0,
       phi_prior_lower = svc_range[1],
       phi_prior_upper = svc_range[2],
-      tau_shape = 1.0,
-      tau_rate = 0.01,
+      sigma_prior_U = 1.0,
+      sigma_prior_alpha = 0.01,
       hsgp_m = 0L,
       hsgp_c = 0.0
     )

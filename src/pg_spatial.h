@@ -37,16 +37,14 @@ Rcpp::NumericVector update_spatial_icar(
     double tau
 );
 
-// Update spatial precision tau with gamma prior
-// tau ~ Gamma(a, b)
-// Posterior: tau | phi ~ Gamma(a + (J-1)/2, b + 0.5 * sum(phi * Q * phi))
-// where Q is the precision matrix of ICAR
+// Update spatial precision under the PC prior on sigma = 1 / sqrt(tau).
 double update_tau_icar(
     const Rcpp::NumericVector& phi,
     const Rcpp::List& adj_list,
     const Rcpp::IntegerVector& n_neighbors,
-    double prior_shape,
-    double prior_rate
+    double sigma_prior_U,
+    double sigma_prior_alpha,
+    double tau
 );
 
 // ---------------------------------------------------------------------
@@ -56,7 +54,7 @@ double update_tau_icar(
 // u_s = sigma * (sqrt(rho) * scale_factor * phi_s + sqrt(1 - rho) * theta_s),
 // phi an intrinsic CAR field with precision D - W on a connected graph and
 // sum(phi) = 0, theta iid N(0, 1). The priors are those of the HMC backend:
-// sigma ~ half-Cauchy(0, sigma_scale), rho ~ Uniform(0, 1).
+// P(sigma > sigma_prior_U) = sigma_prior_alpha, rho ~ Uniform(0, 1).
 //
 // Given the Polya-Gamma draws, the binomial likelihood is Gaussian in the
 // linear predictor, exp(kappa_i eta_i - omega_i eta_i^2 / 2). With
@@ -64,7 +62,7 @@ double update_tau_icar(
 // sums S_s = sum omega_i and R_s = sum (kappa_i - omega_i offset_i).
 class PGBym2 {
 public:
-  PGBym2(const Rcpp::List& adj_list, double scale_factor, double sigma_scale);
+  PGBym2(const Rcpp::List& adj_list, double scale_factor, double sigma_prior_U, double sigma_prior_alpha);
 
   // One sweep: phi (block draw under the sum-to-zero constraint), theta,
   // sigma and rho, each from its full conditional, then sigma and rho again
@@ -82,7 +80,8 @@ public:
 private:
   int J_;
   double scale_factor_;
-  double sigma_scale_;
+  double sigma_prior_U_;
+  double sigma_prior_alpha_;
   Eigen::SparseMatrix<double> Q_icar_;
   Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> llt_;
 

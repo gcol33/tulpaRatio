@@ -3,7 +3,7 @@
 #' @description
 #' Component-wise Gibbs sampler for ICAR spatial models. Uses univariate
 #' MH updates for spatial effects with the ICAR conditional prior as proposal,
-#' conjugate Gamma update for spatial precision, and block MH for fixed effects.
+#' slice update for spatial precision under its PC SD prior, and block MH for fixed effects.
 #'
 #' @details
 #' This backend is designed for models where spatial effects dominate the
@@ -154,8 +154,10 @@ fit_gibbs <- function(formula,
     # compute_log_post() scores regardless of which backend runs.
     sigma_beta = sp$sigma_beta,
     sigma_re_scale = sp$sigma_re_scale,
-    tau_spatial_shape = sp$tau_spatial_shape,
-    tau_spatial_rate = sp$tau_spatial_rate
+    spatial_sigma_prior_U = sp$spatial_sigma_prior_U,
+    spatial_sigma_prior_alpha = sp$spatial_sigma_prior_alpha,
+    tvc_sigma_prior_U = sp$tvc_sigma_prior_U,
+    tvc_sigma_prior_alpha = sp$tvc_sigma_prior_alpha
   )
 
   # Add denominator data

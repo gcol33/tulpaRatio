@@ -582,6 +582,8 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
                    spatial_type.c_str());
       }
 
+      data.spatial_sigma_prior_U = Rcpp::as<double>(spatial_params["sigma_prior_U"]);
+      data.spatial_sigma_prior_alpha = Rcpp::as<double>(spatial_params["sigma_prior_alpha"]);
       data.spatial_group   =
           Rcpp::as<std::vector<int>>(spatial_params["group"]);
       data.set_spatial_adjacency(
@@ -648,13 +650,15 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       data.n_temporal_params   = Rcpp::as<int>(temporal_params["n_params"]);
       data.temporal_cyclic     = Rcpp::as<bool>(temporal_params["cyclic"]);
       data.temporal_shared     = Rcpp::as<bool>(temporal_params["shared"]);
-      if (temporal_params.containsElementNamed("tau_shape")) {
-        data.tau_temporal_shape =
-            Rcpp::as<double>(temporal_params["tau_shape"]);
+      data.ar1_rho_prior_a = Rcpp::as<double>(temporal_params["rho_prior_a"]);
+      data.ar1_rho_prior_b = Rcpp::as<double>(temporal_params["rho_prior_b"]);
+      if (temporal_params.containsElementNamed("sigma_prior_U")) {
+        data.temporal_sigma_prior_U =
+            Rcpp::as<double>(temporal_params["sigma_prior_U"]);
       }
-      if (temporal_params.containsElementNamed("tau_rate")) {
-        data.tau_temporal_rate =
-            Rcpp::as<double>(temporal_params["tau_rate"]);
+      if (temporal_params.containsElementNamed("sigma_prior_alpha")) {
+        data.temporal_sigma_prior_alpha =
+            Rcpp::as<double>(temporal_params["sigma_prior_alpha"]);
       }
 
       if ((int)data.temporal_time_idx.size() != N) {

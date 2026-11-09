@@ -227,8 +227,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_pg_binomial_gibbs_spatial
-Rcpp::List cpp_pg_binomial_gibbs_spatial(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, bool store_eta, bool verbose, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_spatial(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
+Rcpp::List cpp_pg_binomial_gibbs_spatial(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_spatial_U, double prior_sigma_spatial_alpha, bool store_eta, bool verbose, int n_threads);
+RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_spatial(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_spatial_USEXP, SEXP prior_sigma_spatial_alphaSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -246,18 +246,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
     Rcpp::traits::input_parameter< double >::type prior_beta_sd(prior_beta_sdSEXP);
     Rcpp::traits::input_parameter< double >::type prior_sigma_re_scale(prior_sigma_re_scaleSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_tau_shape(prior_tau_shapeSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_tau_rate(prior_tau_rateSEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_U(prior_sigma_spatial_USEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_alpha(prior_sigma_spatial_alphaSEXP);
     Rcpp::traits::input_parameter< bool >::type store_eta(store_etaSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_spatial(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads));
+    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_spatial(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha, store_eta, verbose, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_pg_binomial_gibbs_bym2
-Rcpp::List cpp_pg_binomial_gibbs_bym2(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, double scale_factor, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_spatial_scale, bool store_eta, bool verbose, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_bym2(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP scale_factorSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_spatial_scaleSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
+Rcpp::List cpp_pg_binomial_gibbs_bym2(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, double scale_factor, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_spatial_U, double prior_sigma_spatial_alpha, bool store_eta, bool verbose, int n_threads);
+RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_bym2(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP scale_factorSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_spatial_USEXP, SEXP prior_sigma_spatial_alphaSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -275,11 +275,12 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
     Rcpp::traits::input_parameter< double >::type prior_beta_sd(prior_beta_sdSEXP);
     Rcpp::traits::input_parameter< double >::type prior_sigma_re_scale(prior_sigma_re_scaleSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_scale(prior_sigma_spatial_scaleSEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_U(prior_sigma_spatial_USEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_alpha(prior_sigma_spatial_alphaSEXP);
     Rcpp::traits::input_parameter< bool >::type store_eta(store_etaSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_bym2(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, scale_factor, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_scale, store_eta, verbose, n_threads));
+    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_bym2(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, scale_factor, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha, store_eta, verbose, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -392,8 +393,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_pg_binomial_gibbs_rsr
-Rcpp::List cpp_pg_binomial_gibbs_rsr(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, Rcpp::NumericMatrix rsr_design, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, bool store_eta, bool verbose, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_rsr(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP rsr_designSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
+Rcpp::List cpp_pg_binomial_gibbs_rsr(Rcpp::IntegerVector y, Rcpp::IntegerVector n, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, Rcpp::NumericMatrix rsr_design, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_spatial_U, double prior_sigma_spatial_alpha, bool store_eta, bool verbose, int n_threads);
+RcppExport SEXP _tulpaRatio_cpp_pg_binomial_gibbs_rsr(SEXP ySEXP, SEXP nSEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP rsr_designSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_spatial_USEXP, SEXP prior_sigma_spatial_alphaSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -412,12 +413,12 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
     Rcpp::traits::input_parameter< double >::type prior_beta_sd(prior_beta_sdSEXP);
     Rcpp::traits::input_parameter< double >::type prior_sigma_re_scale(prior_sigma_re_scaleSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_tau_shape(prior_tau_shapeSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_tau_rate(prior_tau_rateSEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_U(prior_sigma_spatial_USEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_alpha(prior_sigma_spatial_alphaSEXP);
     Rcpp::traits::input_parameter< bool >::type store_eta(store_etaSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_rsr(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_design, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, store_eta, verbose, n_threads));
+    rcpp_result_gen = Rcpp::wrap(cpp_pg_binomial_gibbs_rsr(y, n, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, rsr_design, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha, store_eta, verbose, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -476,8 +477,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_pg_negbin_gibbs_spatial
-Rcpp::List cpp_pg_negbin_gibbs_spatial(Rcpp::IntegerVector y, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_tau_shape, double prior_tau_rate, double prior_r_shape, double prior_r_rate, double r_init, bool store_eta, bool verbose, int n_threads);
-RcppExport SEXP _tulpaRatio_cpp_pg_negbin_gibbs_spatial(SEXP ySEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_tau_shapeSEXP, SEXP prior_tau_rateSEXP, SEXP prior_r_shapeSEXP, SEXP prior_r_rateSEXP, SEXP r_initSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
+Rcpp::List cpp_pg_negbin_gibbs_spatial(Rcpp::IntegerVector y, Rcpp::NumericMatrix X, Rcpp::IntegerVector re_group, int n_re_groups, Rcpp::IntegerVector spatial_group, int n_spatial_units, Rcpp::List adj_list, Rcpp::IntegerVector n_neighbors, int n_iter, int n_warmup, int thin, double prior_beta_sd, double prior_sigma_re_scale, double prior_sigma_spatial_U, double prior_sigma_spatial_alpha, double prior_r_shape, double prior_r_rate, double r_init, bool store_eta, bool verbose, int n_threads);
+RcppExport SEXP _tulpaRatio_cpp_pg_negbin_gibbs_spatial(SEXP ySEXP, SEXP XSEXP, SEXP re_groupSEXP, SEXP n_re_groupsSEXP, SEXP spatial_groupSEXP, SEXP n_spatial_unitsSEXP, SEXP adj_listSEXP, SEXP n_neighborsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP thinSEXP, SEXP prior_beta_sdSEXP, SEXP prior_sigma_re_scaleSEXP, SEXP prior_sigma_spatial_USEXP, SEXP prior_sigma_spatial_alphaSEXP, SEXP prior_r_shapeSEXP, SEXP prior_r_rateSEXP, SEXP r_initSEXP, SEXP store_etaSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -494,15 +495,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type thin(thinSEXP);
     Rcpp::traits::input_parameter< double >::type prior_beta_sd(prior_beta_sdSEXP);
     Rcpp::traits::input_parameter< double >::type prior_sigma_re_scale(prior_sigma_re_scaleSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_tau_shape(prior_tau_shapeSEXP);
-    Rcpp::traits::input_parameter< double >::type prior_tau_rate(prior_tau_rateSEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_U(prior_sigma_spatial_USEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma_spatial_alpha(prior_sigma_spatial_alphaSEXP);
     Rcpp::traits::input_parameter< double >::type prior_r_shape(prior_r_shapeSEXP);
     Rcpp::traits::input_parameter< double >::type prior_r_rate(prior_r_rateSEXP);
     Rcpp::traits::input_parameter< double >::type r_init(r_initSEXP);
     Rcpp::traits::input_parameter< bool >::type store_eta(store_etaSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pg_negbin_gibbs_spatial(y, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate, prior_r_shape, prior_r_rate, r_init, store_eta, verbose, n_threads));
+    rcpp_result_gen = Rcpp::wrap(cpp_pg_negbin_gibbs_spatial(y, X, re_group, n_re_groups, spatial_group, n_spatial_units, adj_list, n_neighbors, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha, prior_r_shape, prior_r_rate, r_init, store_eta, verbose, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -709,6 +710,35 @@ BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     rcpp_result_gen = Rcpp::wrap(cpp_gradient_fields());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_scale_prior_check
+Rcpp::List cpp_scale_prior_check(std::string field, double x, double U, double alpha);
+RcppExport SEXP _tulpaRatio_cpp_scale_prior_check(SEXP fieldSEXP, SEXP xSEXP, SEXP USEXP, SEXP alphaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
+    Rcpp::traits::input_parameter< double >::type x(xSEXP);
+    Rcpp::traits::input_parameter< double >::type U(USEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_scale_prior_check(field, x, U, alpha));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_scale_conditional_draws
+Rcpp::NumericVector cpp_scale_conditional_draws(int n, double quad, int rank, double U, double alpha);
+RcppExport SEXP _tulpaRatio_cpp_scale_conditional_draws(SEXP nSEXP, SEXP quadSEXP, SEXP rankSEXP, SEXP USEXP, SEXP alphaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type quad(quadSEXP);
+    Rcpp::traits::input_parameter< int >::type rank(rankSEXP);
+    Rcpp::traits::input_parameter< double >::type U(USEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_scale_conditional_draws(n, quad, rank, U, alpha));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1822,7 +1852,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
     {"_tulpaRatio_cpp_pg_binomial_gibbs", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs, 13},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_spatial, 19},
-    {"_tulpaRatio_cpp_pg_binomial_gibbs_bym2", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_bym2, 18},
+    {"_tulpaRatio_cpp_pg_binomial_gibbs_bym2", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_bym2, 19},
     {"_tulpaRatio_cpp_pg_nngp_conditional_probe", (DL_FUNC) &_tulpaRatio_cpp_pg_nngp_conditional_probe, 10},
     {"_tulpaRatio_cpp_pg_nngp_log_density_probe", (DL_FUNC) &_tulpaRatio_cpp_pg_nngp_log_density_probe, 9},
     {"_tulpaRatio_cpp_pg_binomial_gibbs_gp", (DL_FUNC) &_tulpaRatio_cpp_pg_binomial_gibbs_gp, 27},
@@ -1844,6 +1874,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_within_chain_team", (DL_FUNC) &_tulpaRatio_cpp_within_chain_team, 3},
     {"_tulpaRatio_cpp_num_procs", (DL_FUNC) &_tulpaRatio_cpp_num_procs, 0},
     {"_tulpaRatio_cpp_gradient_fields", (DL_FUNC) &_tulpaRatio_cpp_gradient_fields, 0},
+    {"_tulpaRatio_cpp_scale_prior_check", (DL_FUNC) &_tulpaRatio_cpp_scale_prior_check, 4},
+    {"_tulpaRatio_cpp_scale_conditional_draws", (DL_FUNC) &_tulpaRatio_cpp_scale_conditional_draws, 5},
     {"_tulpaRatio_cpp_gradient_dispatch", (DL_FUNC) &_tulpaRatio_cpp_gradient_dispatch, 6},
     {"_tulpaRatio_cpp_gradient_check", (DL_FUNC) &_tulpaRatio_cpp_gradient_check, 16},
     {"_tulpaRatio_cpp_gradient_race", (DL_FUNC) &_tulpaRatio_cpp_gradient_race, 10},

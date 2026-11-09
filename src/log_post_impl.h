@@ -386,9 +386,9 @@ T compute_log_post_impl(
         const int J = data.n_spatial_units;
 
         if (layout.is_bym2) {
-            // BYM2 Riebler: Half-Cauchy on sigma_total
+            // PC prior on the total field SD.
             T log_sigma = params[layout.log_sigma_bym2_idx];
-            log_post = log_post + log_prior_half_cauchy(log_sigma, data.sigma_re_scale);
+            log_post = log_post + ratiod::math::pc_log_density(log_sigma, 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
 
             // Uniform(0,1) = Beta(1,1) on rho with logit Jacobian:
             // log p(logit_rho) = log(rho) + log(1-rho)
@@ -412,9 +412,9 @@ T compute_log_post_impl(
                 }
             }
         } else if (!layout.is_car_proper) {
-            // ICAR: Gamma prior on tau
+            // PC prior on sigma = 1 / sqrt(tau).
             T log_tau = params[layout.log_tau_spatial_idx];
-            log_post = log_post + log_prior_gamma(log_tau, data.tau_spatial_shape, data.tau_spatial_rate);
+            log_post = log_post + ratiod::math::pc_log_density(log_tau, -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
 
             if (spatial_in_params) {
                 T quad_form = icar_quadratic_form_t(phi_spatial, J, data);
@@ -426,7 +426,7 @@ T compute_log_post_impl(
                           phi_spatial_raw_sums, J, data.areal_components));
             }
         } else {
-            // Proper CAR: tau ~ Gamma(shape, rate); rho ~ Beta(a, b) scaled to
+            // Proper CAR: PC scale prior; rho ~ Beta(a, b) scaled to
             // (car_rho_lower, car_rho_upper), with the logit-transform Jacobian
             // folded in (the untransformed density is car_proper::log_prior_rho;
             // the Jacobian log(upper-lower) + log(u) + log(1-u) combines with it
@@ -435,8 +435,7 @@ T compute_log_post_impl(
             // carries the block; log_post_impl_gap names it for the others.
             if constexpr (kDouble) {
                 const double log_tau_sp = params[layout.log_tau_spatial_idx];
-                log_post += (data.tau_spatial_shape - 1.0) * log_tau_sp
-                          - data.tau_spatial_rate * tau_spatial + log_tau_sp;
+                log_post += ratiod::math::pc_log_density(log_tau_sp, -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
 
                 const double u_rho =
                     1.0 / (1.0 + std::exp(-params[layout.logit_rho_car_idx]));
@@ -549,9 +548,9 @@ T compute_log_post_impl(
         T sigma2_hsgp = safe_exp(log_sigma2_hsgp);
         T ls_hsgp = safe_exp(log_ls_hsgp);
 
-        // PC prior on sigma: P(sigma > 1) = 0.01 -> rate 4.6
-        log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
-            log_sigma2_hsgp, 4.6);
+        // PC prior on the spatial field SD.
+        log_post = log_post + ratiod::math::pc_log_density(
+            log_sigma2_hsgp, 0.5, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
 
         // LogNormal(0, 1) on the lengthscale; the -log(ell) of the density and
         // the +log(ell) Jacobian of the log transform cancel.
@@ -648,7 +647,7 @@ T compute_log_post_impl(
         } else {
             // RW1/RW2/AR1: tau-based parameterization
             T log_tau = params[layout.log_tau_temporal_idx];
-            log_post = log_post + log_prior_gamma(log_tau, data.tau_temporal_shape, data.tau_temporal_rate);
+            log_post = log_post + ratiod::math::pc_log_density(log_tau, -0.5, data.temporal_sigma_prior_U, data.temporal_sigma_prior_alpha);
 
             // The augmented constant directions' contribution to the quadratic
             // form, one per group; see temporal_is_intrinsic().
@@ -893,8 +892,8 @@ T compute_log_post_impl(
                 T sigma2_j = safe_exp(log_sigma2);
 
                 // PC prior on sigma
-                log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
-                    log_sigma2, 4.6);
+                log_post = log_post + ratiod::math::pc_log_density(
+                    log_sigma2, 0.5, data.svc_sigma_prior_U, data.svc_sigma_prior_alpha);
 
                 T log_ls = params[layout.range_svc_start + j];
                 T ls_j = safe_exp(log_ls);
@@ -927,10 +926,8 @@ T compute_log_post_impl(
                 T log_sigma2 = params[layout.log_sigma2_svc_start + j];
                 svc_sigma2[j] = safe_exp(log_sigma2);
 
-                T sigma = safe_sqrt(svc_sigma2[j]);
-                double scale = data.svc_sigma2_prior_scale;
-                log_post = log_post - safe_log(T(1.0) + sigma * sigma / T(scale * scale));
-                log_post = log_post + log_sigma2;
+                log_post = log_post + ratiod::math::pc_log_density(
+                    log_sigma2, 0.5, data.svc_sigma_prior_U, data.svc_sigma_prior_alpha);
             }
 
             // Range parameters: uniform on the prior interval, sampled on its
@@ -1010,9 +1007,9 @@ T compute_log_post_impl(
             T log_tau = params[layout.log_tau_tvc_start + j];
             tvc_tau[j] = safe_exp(log_tau);
 
-            // Gamma(shape, rate) on tau + Jacobian for log transform
-            log_post = log_post + log_prior_gamma(log_tau, data.tvc_tau_shape,
-                                                  data.tvc_tau_rate);
+            // PC prior on the field SD, including the log-precision Jacobian.
+            log_post = log_post + ratiod::math::pc_log_density(log_tau, -0.5, data.tvc_sigma_prior_U,
+                                                  data.tvc_sigma_prior_alpha);
         }
 
         // Extract rho (AR1 correlation) parameters if AR1 structure
@@ -1212,9 +1209,9 @@ T compute_log_post_impl(
                 T sigma2_st_hsgp = safe_exp(log_sigma2_st);
                 T lengthscale_st_hsgp = safe_exp(log_ls_st);
 
-                // PC prior on sigma_st_hsgp: rate = 4.6
-                log_post = log_post + ratiod_gp::log_prior_sd_pc_logvar_t(
-                    log_sigma2_st, 4.6);
+                // PC prior on the interaction SD.
+                log_post = log_post + ratiod::math::pc_log_density(
+                    log_sigma2_st, 0.5, data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
 
                 // LogNormal(0,1) on lengthscale
                 log_post = log_post - T(0.5) * log_ls_st * log_ls_st;

@@ -18,8 +18,8 @@ fit_pg_binomial(
   seed = NULL,
   prior_beta_sd = 10,
   prior_sigma_scale = 2.5,
-  prior_tau_shape = 1,
-  prior_tau_rate = 0.01,
+  prior_sigma_spatial_U = 3,
+  prior_sigma_spatial_alpha = 0.01,
   verbose = TRUE
 )
 }
@@ -48,9 +48,9 @@ fit_pg_binomial(
 
 \item{prior_sigma_scale}{Half-Cauchy scale for RE SD (default 2.5)}
 
-\item{prior_tau_shape}{Gamma shape for spatial precision (default 1)}
+\item{prior_sigma_spatial_U}{PC prior SD anchor (default 3)}
 
-\item{prior_tau_rate}{Gamma rate for spatial precision (default 0.01)}
+\item{prior_sigma_spatial_alpha}{PC prior tail probability (default 0.01)}
 
 \item{verbose}{Print progress}
 }

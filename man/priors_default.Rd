@@ -33,6 +33,8 @@ for a negative binomial size or beta-binomial precision.
 \item \strong{Temporal correlation (rho)}: Beta(2, 2) on \code{(rho + 1) / 2}, symmetric
 about \code{rho = 0}.
 \item \strong{Spatial mixing (rho_spatial)}: Beta(1, 1), uniform on (0, 1).
+\item \strong{Temporal and areal field SDs}: PC prior, P(sigma > 3) = 0.01.
+\item \strong{Varying-coefficient field SDs}: PC prior, P(sigma > 1) = 0.01.
 }
 }
 \examples{

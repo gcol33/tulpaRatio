@@ -570,17 +570,43 @@ inline T log_lik_zoib(int y, int n, const T& q, const T& logit_zi, const T& logi
 // that P(sigma > U) = alpha. As a density of the sampled coordinate log tau,
 // lambda exp(-lambda sigma) |d sigma / d log tau| = lambda exp(-lambda sigma)
 // sigma / 2, which is proper at both ends.
+inline double pc_rate(double U, double alpha) {
+    return -std::log(alpha) / U;
+}
+
+// sigma = exp(slope * x). The Jacobian is |slope| * sigma.
+template<class T>
+inline T pc_sigma_log_density(const T& sigma, double lambda) {
+    return T(std::log(lambda)) - T(lambda) * sigma;
+}
+
+template<class T>
+inline T pc_log_density_rate(const T& x, double slope, double lambda) {
+    return pc_sigma_log_density(safe_exp(T(slope) * x), lambda)
+         + T(std::log(std::abs(slope))) + T(slope) * x;
+}
+
+template<class T>
+inline T pc_log_density(const T& x, double slope, double U, double alpha) {
+    return pc_log_density_rate(x, slope, pc_rate(U, alpha));
+}
+
+inline double pc_scale_gradient_rate(double sigma, double slope, double lambda) {
+    return slope * (1.0 - lambda * sigma);
+}
+
+inline double pc_scale_gradient(double sigma, double slope, double U, double alpha) {
+    return pc_scale_gradient_rate(sigma, slope, pc_rate(U, alpha));
+}
+
 template<typename T>
 inline T pc_log_prior_log_precision(const T& log_tau, double U, double alpha) {
-    const double lambda = -std::log(alpha) / U;
-    const T log_sigma = T(-0.5) * log_tau;
-    return T(std::log(0.5 * lambda)) - T(lambda) * safe_exp(log_sigma) + log_sigma;
+    return pc_log_density(log_tau, -0.5, U, alpha);
 }
 
 // Its derivative with respect to log tau: lambda sigma / 2 - 1 / 2.
 inline double pc_log_prior_log_precision_grad(double log_tau, double U, double alpha) {
-    const double lambda = -std::log(alpha) / U;
-    return 0.5 * lambda * std::exp(-0.5 * log_tau) - 0.5;
+    return pc_scale_gradient(std::exp(-0.5 * log_tau), -0.5, U, alpha);
 }
 
 // log(1 - exp(x)) for x < 0, the log mass a zero-truncated distribution keeps.

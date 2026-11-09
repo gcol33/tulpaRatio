@@ -1,3 +1,10 @@
+FIELD_SCALE_PRIORS <- list(
+  sigma_temporal = list(U = 3, prefix = "temporal", label = "Temporal field SD"),
+  sigma_spatial = list(U = 3, prefix = "spatial", label = "Spatial field SD"),
+  sigma_tvc = list(U = 1, prefix = "tvc", label = "TVC field SD"),
+  sigma_svc = list(U = 1, prefix = "svc", label = "SVC field SD")
+)
+
 #' Prior Specification for Ratio Models
 #'
 #' @description
@@ -10,6 +17,10 @@
 #' @param phi Prior for the dispersion parameter. Default: a Gamma prior set
 #'   by family: `prior_gamma(2, 2)` for lognormal, `prior_gamma(2, 0.5)` for
 #'   gamma_gamma and poisson_gamma, `prior_gamma(2, 0.1)` otherwise.
+#' @param sigma_temporal,sigma_spatial PC priors on temporal and areal field SDs.
+#'   Default: `prior_pc(U = 3, alpha = 0.01)`.
+#' @param sigma_tvc,sigma_svc PC priors on varying-coefficient field SDs.
+#'   Default: `prior_pc(U = 1, alpha = 0.01)`.
 #' @param rho_temporal Prior for a temporal autocorrelation, placed on
 #'   `(rho + 1) / 2` so `rho` lives on (-1, 1). Default: `prior_beta(2, 2)`,
 #'   symmetric about `rho = 0`. Applies to `temporal_ar1()`, a
@@ -59,8 +70,22 @@ ratiod_priors <- function(
     sigma = NULL,
     phi = NULL,
     rho_temporal = NULL,
-    rho_spatial = NULL
+    rho_spatial = NULL,
+    sigma_temporal = NULL,
+    sigma_spatial = NULL,
+    sigma_tvc = NULL,
+    sigma_svc = NULL
 ) {
+
+  scales <- list(sigma_temporal = sigma_temporal, sigma_spatial = sigma_spatial,
+                 sigma_tvc = sigma_tvc, sigma_svc = sigma_svc)
+  for (nm in names(scales)) {
+    if (!is.null(scales[[nm]])) {
+      validate_prior(scales[[nm]], nm)
+      if (!identical(scales[[nm]]$distribution, "pc"))
+        stop("`", nm, "` must be prior_pc(U, alpha) on the field SD.", call. = FALSE)
+    }
+  }
 
   # Validate each prior given; NULL keeps the default
   if (!is.null(beta)) validate_prior(beta, "beta")
@@ -75,7 +100,9 @@ ratiod_priors <- function(
       sigma = sigma,
       phi = phi,
       rho_temporal = rho_temporal,
-      rho_spatial = rho_spatial
+      rho_spatial = rho_spatial,
+      sigma_temporal = sigma_temporal, sigma_spatial = sigma_spatial,
+      sigma_tvc = sigma_tvc, sigma_svc = sigma_svc
     ),
     class = "ratiod_priors"
   )
@@ -127,7 +154,8 @@ PRIOR_DISTRIBUTIONS <- list(
   pc = list(
     parameters = c("U", "alpha"), positive = "U",
     validate = function(p) {
-      if (p$alpha <= 0 || p$alpha >= 1)
+      if (!is.numeric(p$alpha) || length(p$alpha) != 1L ||
+          !is.finite(p$alpha) || p$alpha <= 0 || p$alpha >= 1)
         stop("alpha must be in (0, 1)", call. = FALSE)
     },
     derive = function(p) list(rate = -log(p$alpha) / p$U),
@@ -149,7 +177,9 @@ new_prior <- function(distribution, ...) {
   }
   parameters <- parameters[spec$parameters]
   for (nm in spec$positive) {
-    if (parameters[[nm]] <= 0) stop(nm, " must be positive", call. = FALSE)
+    value <- parameters[[nm]]
+    if (!is.numeric(value) || length(value) != 1L || !is.finite(value) || value <= 0)
+      stop(nm, " must be a finite positive scalar", call. = FALSE)
   }
   if (!is.null(spec$validate)) spec$validate(parameters)
   if (!is.null(spec$derive)) parameters <- c(parameters, spec$derive(parameters))
@@ -366,12 +396,15 @@ prior_pc <- function(U = 1, alpha = 0.01) {
 #' (the negative binomial and beta-binomial families).
 #'
 #' @param component One of `"beta"`, `"sigma"`, `"phi"`, `"rho_temporal"`,
-#'   `"rho_spatial"`.
+#'   `"rho_spatial"`, `"sigma_temporal"`, `"sigma_spatial"`, `"sigma_tvc"`,
+#'   `"sigma_svc"`.
 #' @param model_type The family's model type, as `get_hmc_model_type()`
 #'   returns it.
 #' @return A `ratiod_prior` object.
 #' @keywords internal
 default_prior <- function(component, model_type = NULL) {
+  scale <- FIELD_SCALE_PRIORS[[component]]
+  if (!is.null(scale)) return(prior_pc(scale$U, 0.01))
   switch(
     component,
     beta = prior_normal(0, 10),
@@ -398,7 +431,13 @@ default_prior <- function(component, model_type = NULL) {
 #' @keywords internal
 fill_priors <- function(priors, model_type = NULL) {
   priors <- priors %||% ratiod_priors()
-  for (nm in c("beta", "sigma", "phi", "rho_temporal", "rho_spatial")) {
+  obsolete <- c("tau_temporal_shape", "tau_temporal_rate", "tau_spatial_shape",
+                "tau_spatial_rate", "tvc_tau_shape", "tvc_tau_rate",
+                "svc_tau_shape", "svc_tau_rate")
+  if (any(names(priors) %in% obsolete))
+    stop("Precision Gamma priors have been removed; use sigma_temporal, sigma_spatial, sigma_tvc or sigma_svc = prior_pc(U, alpha).", call. = FALSE)
+  for (nm in c("beta", "sigma", "phi", "rho_temporal", "rho_spatial",
+               names(FIELD_SCALE_PRIORS))) {
     if (is.null(priors[[nm]])) priors[[nm]] <- default_prior(nm, model_type)
   }
   priors
@@ -409,7 +448,7 @@ fill_priors <- function(priors, model_type = NULL) {
 #' Translates a [ratiod_priors()] specification into the scalars the MCMC
 #' samplers take: the Normal SD on fixed effects (mean 0), the Half-Cauchy
 #' scale on random-effect SDs and the Gamma shape and rate on the dispersion
-#' parameter, plus the fixed precision and zero-inflation priors. A component
+#' parameter, plus the PC field-scale anchors and zero-inflation priors. A component
 #' in a family the samplers do not implement is refused, since fitting under
 #' another prior than the one asked for would go unnoticed.
 #'
@@ -426,6 +465,10 @@ sampler_priors <- function(priors, model_type) {
                  accepted, component, p[[component]]$distribution, accepted),
          call. = FALSE)
   }
+  for (nm in names(FIELD_SCALE_PRIORS)) {
+    if (!identical(p[[nm]]$distribution, "pc"))
+      stop("`", nm, "` must be prior_pc(U, alpha) on the field SD.", call. = FALSE)
+  }
   if (!identical(p$beta$distribution, "normal") || p$beta$mean != 0) {
     refuse("beta", "prior_normal(0, sd)")
   }
@@ -439,18 +482,18 @@ sampler_priors <- function(priors, model_type) {
       p$rho_spatial$alpha != 1 || p$rho_spatial$beta != 1) {
     refuse("rho_spatial", "prior_beta(1, 1)")
   }
-  list(
+  anchors <- unlist(lapply(names(FIELD_SCALE_PRIORS), function(nm) {
+    prefix <- paste0(FIELD_SCALE_PRIORS[[nm]]$prefix, "_sigma_prior_")
+    stats::setNames(list(p[[nm]]$U, p[[nm]]$alpha), paste0(prefix, c("U", "alpha")))
+  }), recursive = FALSE)
+  c(list(
     sigma_beta = p$beta$sd,
     sigma_re_scale = p$sigma$scale,
     phi_shape = p$phi$shape,
     phi_rate = p$phi$rate,
     rho_temporal = p$rho_temporal,
-    tau_spatial_shape = 1.0,
-    tau_spatial_rate = 0.01,
-    tau_temporal_shape = 1.0,
-    tau_temporal_rate = 0.01,
     zi_prior_sd = 10.0
-  )
+  ), anchors)
 }
 
 #' @rdname ratiod_priors
@@ -479,6 +522,10 @@ print.ratiod_priors <- function(x, ...) {
   print_prior(x$rho_temporal, indent = "  ")
   cat("\n")
 
+  for (nm in names(FIELD_SCALE_PRIORS)) {
+    cat(FIELD_SCALE_PRIORS[[nm]]$label, " (", nm, "):\n", sep = "")
+    print_prior(x[[nm]], indent = "  ")
+  }
   cat("Spatial proportion (rho_spatial):\n")
   print_prior(x$rho_spatial, indent = "  ")
   cat("\nComponents marked default take default_prior() when fitted.\n")
@@ -537,6 +584,8 @@ print_prior <- function(prior, indent = "") {
 #' - **Temporal correlation (rho)**: Beta(2, 2) on `(rho + 1) / 2`, symmetric
 #'   about `rho = 0`.
 #' - **Spatial mixing (rho_spatial)**: Beta(1, 1), uniform on (0, 1).
+#' - **Temporal and areal field SDs**: PC prior, P(sigma > 3) = 0.01.
+#' - **Varying-coefficient field SDs**: PC prior, P(sigma > 1) = 0.01.
 #'
 #' @examples
 #' priors_default(ratiod_negbin_negbin())
@@ -583,10 +632,18 @@ priors_default <- function(family = NULL, spatial = FALSE, temporal = FALSE) {
   }
 
   if (temporal) {
+    cat("Temporal field SD (sigma_temporal):\n")
+    print_prior(defaults$sigma_temporal, indent = "  ")
+    cat("TVC field SD (sigma_tvc):\n")
+    print_prior(defaults$sigma_tvc, indent = "  ")
     cat("Temporal autocorrelation (rho_temporal):\n")
     print_prior(defaults$rho_temporal, indent = "  ")
   }
   if (spatial) {
+    cat("Spatial field SD (sigma_spatial):\n")
+    print_prior(defaults$sigma_spatial, indent = "  ")
+    cat("SVC field SD (sigma_svc):\n")
+    print_prior(defaults$sigma_svc, indent = "  ")
     cat("Spatial mixing (rho_spatial):\n")
     print_prior(defaults$rho_spatial, indent = "  ")
   }

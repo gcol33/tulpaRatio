@@ -45,8 +45,8 @@ NULL
 #' @param seed Random seed for reproducibility
 #' @param prior_beta_sd Prior SD for fixed effects (default 10)
 #' @param prior_sigma_scale Half-Cauchy scale for RE SD (default 2.5)
-#' @param prior_tau_shape Gamma shape for spatial precision (default 1)
-#' @param prior_tau_rate Gamma rate for spatial precision (default 0.01)
+#' @param prior_sigma_spatial_U PC prior SD anchor (default 3)
+#' @param prior_sigma_spatial_alpha PC prior tail probability (default 0.01)
 #' @param verbose Print progress
 #'
 #' @return A ratiod_fit object
@@ -64,8 +64,8 @@ fit_pg_binomial <- function(formula,
                             seed = NULL,
                             prior_beta_sd = 10,
                             prior_sigma_scale = 2.5,
-                            prior_tau_shape = 1,
-                            prior_tau_rate = 0.01,
+                            prior_sigma_spatial_U = 3,
+                            prior_sigma_spatial_alpha = 0.01,
                             verbose = TRUE) {
 
   assert_backend_fits_structures(
@@ -137,8 +137,8 @@ fit_pg_binomial <- function(formula,
       seed = seed,
       prior_beta_sd = prior_beta_sd,
       prior_sigma_scale = prior_sigma_scale,
-      prior_tau_shape = prior_tau_shape,
-      prior_tau_rate = prior_tau_rate,
+      prior_sigma_spatial_U = prior_sigma_spatial_U,
+      prior_sigma_spatial_alpha = prior_sigma_spatial_alpha,
       verbose = verbose
     ))
   }
@@ -206,7 +206,8 @@ fit_pg_binomial <- function(formula,
           thin = as.integer(thin),
           prior_beta_sd = prior_beta_sd,
           prior_sigma_re_scale = prior_sigma_scale,
-          prior_sigma_spatial_scale = prior_sigma_scale,
+          prior_sigma_spatial_U = prior_sigma_spatial_U,
+          prior_sigma_spatial_alpha = prior_sigma_spatial_alpha,
           store_eta = TRUE,
           verbose = verbose,
           n_threads = as.integer(cores)
@@ -228,8 +229,8 @@ fit_pg_binomial <- function(formula,
           thin = as.integer(thin),
           prior_beta_sd = prior_beta_sd,
           prior_sigma_re_scale = prior_sigma_scale,
-          prior_tau_shape = prior_tau_shape,
-          prior_tau_rate = prior_tau_rate,
+          prior_sigma_spatial_U = prior_sigma_spatial_U,
+          prior_sigma_spatial_alpha = prior_sigma_spatial_alpha,
           store_eta = TRUE,
           verbose = verbose,
           n_threads = as.integer(cores)
@@ -1089,8 +1090,8 @@ fit_pg_binomial_rsr <- function(formula,
                                  seed = NULL,
                                  prior_beta_sd = 10,
                                  prior_sigma_scale = 2.5,
-                                 prior_tau_shape = 1,
-                                 prior_tau_rate = 0.01,
+                                 prior_sigma_spatial_U = 3,
+                                 prior_sigma_spatial_alpha = 0.01,
                                  verbose = TRUE) {
 
   if (verbose) {
@@ -1157,8 +1158,8 @@ fit_pg_binomial_rsr <- function(formula,
       thin = as.integer(thin),
       prior_beta_sd = prior_beta_sd,
       prior_sigma_re_scale = prior_sigma_scale,
-      prior_tau_shape = prior_tau_shape,
-      prior_tau_rate = prior_tau_rate,
+      prior_sigma_spatial_U = prior_sigma_spatial_U,
+      prior_sigma_spatial_alpha = prior_sigma_spatial_alpha,
       store_eta = TRUE,
       verbose = verbose,
       n_threads = as.integer(cores)
@@ -1404,8 +1405,8 @@ fit_pg_negbin <- function(formula,
         thin = as.integer(thin),
         prior_beta_sd = prior_beta_sd,
         prior_sigma_re_scale = prior_sigma_scale,
-        prior_tau_shape = 1,
-        prior_tau_rate = 0.01,
+        prior_sigma_spatial_U = 3,
+        prior_sigma_spatial_alpha = 0.01,
         prior_r_shape = prior_r_shape,
         prior_r_rate = prior_r_rate,
         r_init = r_init,

@@ -8,7 +8,8 @@ default_prior(component, model_type = NULL)
 }
 \arguments{
 \item{component}{One of \code{"beta"}, \code{"sigma"}, \code{"phi"}, \code{"rho_temporal"},
-\code{"rho_spatial"}.}
+\code{"rho_spatial"}, \code{"sigma_temporal"}, \code{"sigma_spatial"}, \code{"sigma_tvc"},
+\code{"sigma_svc"}.}
 
 \item{model_type}{The family's model type, as \code{get_hmc_model_type()}
 returns it.}

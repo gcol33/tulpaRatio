@@ -50,9 +50,6 @@ struct TemporalData {
   bool cyclic;                   // Whether RW is cyclic
   bool shared;                   // Whether effect is shared between num/denom
 
-  // Prior parameters
-  double tau_temporal_shape;     // Gamma shape for precision
-  double tau_temporal_rate;      // Gamma rate for precision
 };
 
 // =====================================================================

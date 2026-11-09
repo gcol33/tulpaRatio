@@ -1,5 +1,5 @@
 # The Polya-Gamma BYM2 sampler and HMC target the same posterior: same field,
-# same priors (half-Cauchy on sigma, uniform on rho).
+# same priors (PC on sigma, uniform on rho).
 
 grid_adjacency <- function(k) {
   n <- k * k

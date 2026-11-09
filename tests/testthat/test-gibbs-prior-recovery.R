@@ -29,14 +29,14 @@ gibbs_recovery_fit <- function(setup, spatial, priors, iter = 4000, warmup = 200
   as.matrix(fit$draws)
 }
 
-test_that("ICAR tau recovers its Gamma(shape, rate) prior with zero-trials data", {
+test_that("ICAR SD recovers its PC prior with zero-trials data", {
   skip_on_cran()
   s <- gibbs_recovery_setup()
   car <- spatial_car(s$adj, level = "group", group_var = "site")
   dr <- gibbs_recovery_fit(s, car, list())
 
-  qs <- quantile(dr[, "tau_spatial"], c(0.25, 0.5, 0.75))
-  target <- qgamma(c(0.25, 0.5, 0.75), shape = 1.0, rate = 0.01)
+  qs <- quantile(1 / sqrt(dr[, "tau_spatial"]), c(0.25, 0.5, 0.75))
+  target <- qexp(c(0.25, 0.5, 0.75), rate = -log(0.01) / 3)
   expect_equal(unname(qs), target, tolerance = 0.25)
 })
 
@@ -63,9 +63,9 @@ test_that("BYM2 sigma, rho and the intercept recover their priors with zero-tria
   bym <- spatial_bym2(s$adj, level = "group", group_var = "site")
   priors <- ratiod_priors(beta = prior_normal(0, 0.5))
   dr <- gibbs_recovery_fit(s, bym, priors)
-  scale <- tulpaRatio:::sampler_priors(priors, "binomial")$sigma_re_scale
+  rate <- -log(0.01) / 3
   p <- c(0.25, 0.5, 0.75)
-  expect_equal(unname(quantile(dr[, "sigma_spatial"], p)), scale * tan(pi * p / 2),
+  expect_equal(unname(quantile(dr[, "sigma_spatial"], p)), qexp(p, rate),
                tolerance = 0.25)
   expect_equal(unname(quantile(dr[, "rho_spatial"], p)), p, tolerance = 0.2)
   expect_equal(sd(dr[, "beta_num[1]"]), 0.5, tolerance = 0.3)

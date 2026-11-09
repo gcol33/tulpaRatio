@@ -118,8 +118,10 @@ Rcpp::List cpp_gibbs_spatial(Rcpp::List data_list) {
     };
     d.sigma_beta = prior_or("sigma_beta", 10.0);
     d.sigma_re_scale = prior_or("sigma_re_scale", 2.5);
-    d.tau_spatial_shape = prior_or("tau_spatial_shape", 1.0);
-    d.tau_spatial_rate = prior_or("tau_spatial_rate", 0.01);
+    d.spatial_sigma_prior_U = prior_or("spatial_sigma_prior_U", 3.0);
+    d.spatial_sigma_prior_alpha = prior_or("spatial_sigma_prior_alpha", 0.01);
+    d.tvc_sigma_prior_U = prior_or("tvc_sigma_prior_U", 1.0);
+    d.tvc_sigma_prior_alpha = prior_or("tvc_sigma_prior_alpha", 0.01);
 
     // Convert spatial_group from 1-based to 0-based
     std::vector<int> sg(N);

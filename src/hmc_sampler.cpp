@@ -1162,7 +1162,7 @@ void compute_gradient_analytical(
     phi_temporal = tview.phi;
     grad_temporal_lik.assign(T_len, 0.0);
 
-    // tau prior: Gamma(shape, rate) via log transform
+    // PC prior on the temporal SD, including the log-precision Jacobian.
     tau_temporal_prior_grad(data, layout, tau_temporal, grad.data());
 
     // AR1: extract rho and add prior
@@ -1196,10 +1196,8 @@ void compute_gradient_analytical(
       sigma_u_bym2 = sigma_total * std::sqrt(1.0 - rho_bym2);
       theta_bym2 = &params[layout.theta_bym2_start];
 
-      // Half-Cauchy prior on sigma_total
-      double ratio = sigma_total / data.sigma_re_scale;
-      double ratio_sq = ratio * ratio;
-      grad[layout.log_sigma_bym2_idx] = -2.0 * ratio_sq / (1.0 + ratio_sq) + 1.0;
+      // PC prior on the total spatial SD.
+      grad[layout.log_sigma_bym2_idx] = ratiod::math::pc_scale_gradient(sigma_total, 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
 
       // Uniform(0,1) = Beta(1,1) on rho with logit Jacobian:
       // d/d(logit_rho) [log(rho) + log(1-rho)] = (1-rho) - rho = 1 - 2*rho
@@ -1214,9 +1212,8 @@ void compute_gradient_analytical(
       log_tau_spatial = params[layout.log_tau_spatial_idx];
       tau_spatial = std::exp(log_tau_spatial);
 
-      // Gamma prior on tau via log transform
-      grad[layout.log_tau_spatial_idx] = (data.tau_spatial_shape - 1.0)
-                                         - data.tau_spatial_rate * tau_spatial + 1.0;
+      // PC prior on the spatial SD, including the log-precision Jacobian.
+      grad[layout.log_tau_spatial_idx] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tau_spatial), -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
     }
   }
 
@@ -2605,15 +2602,12 @@ static inline void scatter_re_gradient(
     }
 }
 
-// Temporal tau prior gradient on log-scale
-// d/d(log_tau) = shape - rate*tau
-// (equivalently: (shape-1) - rate*tau + 1 with Jacobian expanded)
+// PC prior on the temporal SD, differentiated on log precision.
 static inline void tau_temporal_prior_grad(
     const ModelData& data, const ParamLayout& layout,
     double tau_temporal, double* grad
 ) {
-    grad[layout.log_tau_temporal_idx] = data.tau_temporal_shape
-                                        - data.tau_temporal_rate * tau_temporal;
+    grad[layout.log_tau_temporal_idx] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tau_temporal), -0.5, data.temporal_sigma_prior_U, data.temporal_sigma_prior_alpha);
 }
 
 // The temporal AR1 correlation at this parameter vector, on (-1, 1). A model
@@ -3704,8 +3698,7 @@ void compute_gradient_icar_collapsed(
                     data, temp_ws, 20, 1e-6,
                     temporal_offset_l.num_ptr(), temporal_offset_l.denom_ptr());
                 double lp = mode_lp + temp_ws.laplace_log_det;
-                lp += (data.tau_spatial_shape - 1.0) * std::log(tau_l) - data.tau_spatial_rate * tau_l
-                      + p[layout.log_tau_spatial_idx];
+                lp += ratiod::math::pc_log_density(p[layout.log_tau_spatial_idx], -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
                 return lp;
             };
             const double eps = 1e-5;
@@ -3722,11 +3715,8 @@ void compute_gradient_icar_collapsed(
         }
 
         // === Part C: Spatial hyperparameter prior gradient (analytical) ===
-        // Gamma(shape, rate) prior on tau, on log scale:
-        // d/d(log_tau)[(shape-1)*log(tau) - rate*tau + log_tau]
-        //   = (shape-1) - rate*tau + 1
-        grad[layout.log_tau_spatial_idx] += (data.tau_spatial_shape - 1.0)
-                                           - data.tau_spatial_rate * tau + 1.0;
+        // PC prior on sigma = 1 / sqrt(tau), differentiated on log precision.
+        grad[layout.log_tau_spatial_idx] += ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tau), -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
 
     } else {
         // ---- BYM2: H-mode analytical gradient ----
@@ -3926,11 +3916,9 @@ void compute_gradient_icar_collapsed(
         }
 
         // === Part C: BYM2 hyperparameter prior gradients ===
-        // Sigma prior: half-Cauchy via d/d(log_sigma)[-log(1 + (sigma/s)^2) + log_sigma]
+        // PC prior on sigma, including the log-SD Jacobian.
         {
-            double ratio_sc = sigma_total / data.sigma_re_scale;
-            double r2 = ratio_sc * ratio_sc;
-            grad[layout.log_sigma_bym2_idx] += -2.0 * r2 / (1.0 + r2) + 1.0;
+            grad[layout.log_sigma_bym2_idx] += ratiod::math::pc_scale_gradient(sigma_total, 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
         }
         // Rho prior: Uniform(0,1) Jacobian: log(rho) + log(1-rho)
         // d/d(logit_rho) = d(log(rho))/d(logit_rho) + d(log(1-rho))/d(logit_rho)
@@ -4012,12 +4000,10 @@ void compute_gradient_icar_collapsed(
 
         // Spatial hyperparameter priors
         if (is_bym2) {
-            double ratio_sc = sigma_total / data.sigma_re_scale;
-            lp += -std::log(1.0 + ratio_sc * ratio_sc) + params[layout.log_sigma_bym2_idx];
+            lp += ratiod::math::pc_log_density(params[layout.log_sigma_bym2_idx], 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
             lp += std::log(rho) + std::log(1.0 - rho);
         } else {
-            lp += (data.tau_spatial_shape - 1.0) * std::log(tau) - data.tau_spatial_rate * tau
-                  + params[layout.log_tau_spatial_idx];
+            lp += ratiod::math::pc_log_density(params[layout.log_tau_spatial_idx], -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
         }
 
         // Phi (dispersion) priors
@@ -4388,12 +4374,8 @@ void compute_gradient_svc_handcoded(
 
     // SVC hyperparameter priors
     for (int j = 0; j < n_svc; j++) {
-        // Half-Cauchy on sigma, d/d(log_sigma2) = -ratio^2/(1+ratio^2) + 1
-        double sigma = std::sqrt(svc_sigma2[j]);
-        double scale = data.svc_sigma2_prior_scale;
-        double ratio = sigma / scale;
-        double ratio_sq = ratio * ratio;
-        grad[layout.log_sigma2_svc_start + j] = -ratio_sq / (1.0 + ratio_sq) + 1.0;
+        // PC prior on sigma, including the log-variance Jacobian.
+        grad[layout.log_sigma2_svc_start + j] = ratiod::math::pc_scale_gradient(std::sqrt(svc_sigma2[j]), 0.5, data.svc_sigma_prior_U, data.svc_sigma_prior_alpha);
     }
 
     // =========================================================================
@@ -4577,7 +4559,7 @@ void compute_gradient_svc_hsgp_handcoded(
 
         // PC prior on sigma
         grad[layout.log_sigma2_svc_start + j] =
-            ratiod_gp::log_prior_sd_pc_logvar_grad(std::log(sigma2_j), 4.6);
+            ratiod::math::pc_scale_gradient(std::sqrt(sigma2_j), 0.5, data.svc_sigma_prior_U, data.svc_sigma_prior_alpha);
 
         // LogNormal(0,1) on lengthscale: d/d(log_ell) = -log_ell
         grad[layout.range_svc_start + j] = -log_ls_j;
@@ -4751,10 +4733,9 @@ void compute_gradient_tvc_handcoded(
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
-    // TVC hyperparameter priors: Gamma on tau at the configured hyperparameters.
+    // PC priors on TVC SDs, differentiated on log precision.
     for (int j = 0; j < n_tvc; j++) {
-        grad[layout.log_tau_tvc_start + j] = ratiod_tvc::log_prior_tau_gamma_grad(
-            tvc_tau[j], data.tvc_tau_shape, data.tvc_tau_rate);
+        grad[layout.log_tau_tvc_start + j] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tvc_tau[j]), -0.5, data.tvc_sigma_prior_U, data.tvc_sigma_prior_alpha);
     }
 
     // AR1: the rho prior in the coordinate the sampler moves
@@ -5117,7 +5098,7 @@ void compute_gradient_hsgp(
 
   // HSGP prior gradients (will be added to by hsgp_compute_gradients_ws)
   grad[layout.log_sigma2_hsgp_idx] =
-      ratiod_gp::log_prior_sd_pc_logvar_grad(std::log(sigma2_hsgp), 4.6);
+      ratiod::math::pc_scale_gradient(std::sqrt(sigma2_hsgp), 0.5, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
 
   // LogNormal(0,1) on lengthscale
   grad[layout.log_lengthscale_hsgp_idx] = -log_lengthscale;
@@ -5127,7 +5108,7 @@ void compute_gradient_hsgp(
     grad[layout.hsgp_beta_start + j] = -hsgp_beta_ptr[j];
   }
 
-  // Temporal prior on tau (Gamma) and rho (Beta)
+  // PC prior on the temporal SD and Beta prior on rho.
   if (layout.has_temporal) {
     tau_temporal_prior_grad(data, layout, tau_temporal, grad.data());
     temporal_rho_prior_grad(data, layout, rho_ar1, grad.data());
@@ -5524,14 +5505,13 @@ void compute_gradient_ms_temporal_handcoded(
 
     // Spatial prior gradients (ICAR/BYM2)
     if (layout.has_spatial && !layout.is_bym2) {
-        // ICAR: Gamma prior on tau_spatial
-        grad[layout.log_tau_spatial_idx] = (data.tau_spatial_shape - 1.0) - data.tau_spatial_rate * tau_spatial + 1.0;
+        // PC prior on the ICAR SD.
+        grad[layout.log_tau_spatial_idx] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tau_spatial), -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
     }
     if (layout.is_bym2) {
         // BYM2 Riebler prior gradients
         double sigma_total = sigma_s_bym2 / std::sqrt(rho_bym2);
-        double ratio = sigma_total / data.sigma_re_scale;
-        grad[layout.log_sigma_bym2_idx] = -2.0 * ratio * ratio / (1.0 + ratio * ratio) + 1.0;
+        grad[layout.log_sigma_bym2_idx] = ratiod::math::pc_scale_gradient(sigma_total, 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
         grad[layout.logit_rho_bym2_idx] = 1.0 - 2.0 * rho_bym2;
     }
 
@@ -5825,19 +5805,18 @@ void compute_gradient_spatiotemporal_handcoded(
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);
     phi_gradient_prior(data, layout, phi_num, phi_denom, grad.data());
 
-    // Spatial prior (ICAR: Gamma on tau)
+    // PC prior on the ICAR SD.
     if (layout.has_spatial && !layout.is_bym2) {
-        grad[layout.log_tau_spatial_idx] = (data.tau_spatial_shape - 1.0) - data.tau_spatial_rate * tau_spatial + 1.0;
+        grad[layout.log_tau_spatial_idx] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tau_spatial), -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
     }
     if (layout.is_bym2) {
         // BYM2 Riebler prior gradients
         double sigma_total = sigma_s_bym2 / std::sqrt(rho_bym2);
-        double ratio = sigma_total / data.sigma_re_scale;
-        grad[layout.log_sigma_bym2_idx] = -2.0 * ratio * ratio / (1.0 + ratio * ratio) + 1.0;
+        grad[layout.log_sigma_bym2_idx] = ratiod::math::pc_scale_gradient(sigma_total, 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
         grad[layout.logit_rho_bym2_idx] = 1.0 - 2.0 * rho_bym2;
     }
 
-    // Temporal prior (Gamma on tau, Beta on rho)
+    // PC prior on the temporal SD and Beta prior on rho.
     if (layout.has_temporal) {
         tau_temporal_prior_grad(data, layout, tau_temporal, grad.data());
         temporal_rho_prior_grad(data, layout, rho_ar1, grad.data());
@@ -5865,8 +5844,8 @@ void compute_gradient_spatiotemporal_handcoded(
     // HSGP-ST hyperparameter priors: PC on sigma, LogNormal(0, 1) on the
     // lengthscale. The field's own contribution to both arrives below.
     if (data.st_is_hsgp) {
-        grad[layout.log_sigma2_st_hsgp_idx] = ratiod_gp::log_prior_sd_pc_logvar_grad(
-            params[layout.log_sigma2_st_hsgp_idx], 4.6);
+        grad[layout.log_sigma2_st_hsgp_idx] = ratiod::math::pc_scale_gradient(std::exp(0.5 * params[layout.log_sigma2_st_hsgp_idx]),
+            0.5, data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
         grad[layout.log_lengthscale_st_hsgp_idx] =
             -params[layout.log_lengthscale_st_hsgp_idx];
     }
@@ -6462,12 +6441,11 @@ void compute_gradient_composite(
 
     // ICAR/BYM2/pCAR spatial priors
     if (has_icar_bym2 && !layout.is_bym2) {
-        grad[layout.log_tau_spatial_idx] = (data.tau_spatial_shape - 1.0) - data.tau_spatial_rate * tau_spatial + 1.0;
+        grad[layout.log_tau_spatial_idx] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tau_spatial), -0.5, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
     }
     if (has_icar_bym2 && layout.is_bym2) {
         double sigma_total = sigma_s_bym2 / std::sqrt(rho_bym2);
-        double ratio = sigma_total / data.sigma_re_scale;
-        grad[layout.log_sigma_bym2_idx] = -2.0 * ratio * ratio / (1.0 + ratio * ratio) + 1.0;
+        grad[layout.log_sigma_bym2_idx] = ratiod::math::pc_scale_gradient(sigma_total, 1.0, data.spatial_sigma_prior_U, data.spatial_sigma_prior_alpha);
         grad[layout.logit_rho_bym2_idx] = 1.0 - 2.0 * rho_bym2;
     }
     if (has_icar_bym2 && layout.is_car_proper) {
@@ -6506,9 +6484,7 @@ void compute_gradient_composite(
     // range slots are carried onto u (svc_range_grads_to_coord).
     if (has_svc_nngp) {
         for (int j = 0; j < n_svc; j++) {
-            const double ratio = std::sqrt(svc_sigma2_c[j]) / data.svc_sigma2_prior_scale;
-            const double ratio_sq = ratio * ratio;
-            grad[layout.log_sigma2_svc_start + j] += -ratio_sq / (1.0 + ratio_sq) + 1.0;
+            grad[layout.log_sigma2_svc_start + j] += ratiod::math::pc_scale_gradient(std::sqrt(svc_sigma2_c[j]), 0.5, data.svc_sigma_prior_U, data.svc_sigma_prior_alpha);
         }
         if (!data.svc_noncentered) {
             RATIOD_TLS_WORKSPACE(ratiod_svc::SVCGradWorkspace, svc_scratch);
@@ -6522,8 +6498,8 @@ void compute_gradient_composite(
 
     // HSGP priors
     if (layout.is_hsgp && data.has_hsgp) {
-        grad[layout.log_sigma2_hsgp_idx] = ratiod_gp::log_prior_sd_pc_logvar_grad(
-            params[layout.log_sigma2_hsgp_idx], 4.6);
+        grad[layout.log_sigma2_hsgp_idx] = ratiod::math::pc_scale_gradient(std::exp(0.5 * params[layout.log_sigma2_hsgp_idx]),
+            0.5, data.gp_sigma2_prior_U, data.gp_sigma2_prior_alpha);
         double log_ls = params[layout.log_lengthscale_hsgp_idx];
         grad[layout.log_lengthscale_hsgp_idx] = -log_ls;  // LogNormal(0,1) prior
         // N(0,I) prior on beta
@@ -6538,11 +6514,10 @@ void compute_gradient_composite(
         temporal_rho_prior_grad(data, layout, rho_ar1, grad.data());
     }
 
-    // TVC priors: Gamma on tau at the configured hyperparameters.
+    // PC priors on TVC SDs, differentiated on log precision.
     if (layout.has_tvc && data.has_tvc) {
         for (int j = 0; j < n_tvc; j++) {
-            grad[layout.log_tau_tvc_start + j] = ratiod_tvc::log_prior_tau_gamma_grad(
-                tvc_tau_buf[j], data.tvc_tau_shape, data.tvc_tau_rate);
+            grad[layout.log_tau_tvc_start + j] = ratiod::math::pc_scale_gradient(1.0 / std::sqrt(tvc_tau_buf[j]), -0.5, data.tvc_sigma_prior_U, data.tvc_sigma_prior_alpha);
             if (data.tvc_data.structure == ratiod_temporal::TemporalType::AR1) {
                 double u = (tvc_rho_buf[j] + 1.0) / 2.0;
                 grad[layout.logit_rho_tvc_start + j] = ratiod_ar1::log_prior_logit_rho_grad(
@@ -6554,8 +6529,8 @@ void compute_gradient_composite(
     // SVC-HSGP priors: PC prior on sigma, LogNormal(0,1) on lengthscale, N(0,I) on beta
     if (layout.has_svc && data.has_svc && data.svc_is_hsgp) {
         for (int j = 0; j < n_svc; j++) {
-            grad[layout.log_sigma2_svc_start + j] = ratiod_gp::log_prior_sd_pc_logvar_grad(
-                params[layout.log_sigma2_svc_start + j], 4.6);
+            grad[layout.log_sigma2_svc_start + j] = ratiod::math::pc_scale_gradient(std::exp(0.5 * params[layout.log_sigma2_svc_start + j]),
+                0.5, data.svc_sigma_prior_U, data.svc_sigma_prior_alpha);
             // LogNormal(0,1) on lengthscale: d/d(log_ls) [-0.5*log_ls^2] = -log_ls
             double log_ls_j = params[layout.range_svc_start + j];
             grad[layout.range_svc_start + j] = -log_ls_j;
@@ -6614,8 +6589,8 @@ void compute_gradient_composite(
                 data.spatiotemporal_data.rho_prior_b);
         }
         if (data.st_is_hsgp) {
-            grad[layout.log_sigma2_st_hsgp_idx] = ratiod_gp::log_prior_sd_pc_logvar_grad(
-                params[layout.log_sigma2_st_hsgp_idx], 4.6);
+            grad[layout.log_sigma2_st_hsgp_idx] = ratiod::math::pc_scale_gradient(std::exp(0.5 * params[layout.log_sigma2_st_hsgp_idx]),
+                0.5, data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
             grad[layout.log_lengthscale_st_hsgp_idx] =
                 -params[layout.log_lengthscale_st_hsgp_idx];
         }
@@ -10336,6 +10311,8 @@ static void apply_gp_params(ModelData& data, const Rcpp::List& gp) {
 
   const std::vector<double> coords = Rcpp::as<std::vector<double>>(gp["coords"]);
   const bool shared = Rcpp::as<bool>(gp["shared"]);
+  data.gp_sigma2_prior_U = Rcpp::as<double>(gp["sigma2_prior_U"]);
+  data.gp_sigma2_prior_alpha = Rcpp::as<double>(gp["sigma2_prior_alpha"]);
 
   if (gp_type == "gp") {
     data.spatial_type = SpatialType::GP;
@@ -10359,8 +10336,6 @@ static void apply_gp_params(ModelData& data, const Rcpp::List& gp) {
     data.gp_data.nu = Rcpp::as<double>(gp["nu"]);
     data.gp_data.shared = shared;
 
-    data.gp_sigma2_prior_U = Rcpp::as<double>(gp["sigma2_prior_U"]);
-    data.gp_sigma2_prior_alpha = Rcpp::as<double>(gp["sigma2_prior_alpha"]);
     data.gp_phi_prior_lower = Rcpp::as<double>(gp["phi_prior_lower"]);
     data.gp_phi_prior_upper = Rcpp::as<double>(gp["phi_prior_upper"]);
 
@@ -10446,8 +10421,8 @@ static void apply_prior_params(ModelData& data, const Rcpp::List& prior_params) 
   data.sigma_re_scale = Rcpp::as<double>(prior_params["sigma_re_scale"]);
   data.phi_prior_shape = Rcpp::as<double>(prior_params["phi_shape"]);
   data.phi_prior_rate = Rcpp::as<double>(prior_params["phi_rate"]);
-  data.tau_spatial_shape = Rcpp::as<double>(prior_params["tau_spatial_shape"]);
-  data.tau_spatial_rate = Rcpp::as<double>(prior_params["tau_spatial_rate"]);
+  data.spatial_sigma_prior_U = Rcpp::as<double>(prior_params["spatial_sigma_prior_U"]);
+  data.spatial_sigma_prior_alpha = Rcpp::as<double>(prior_params["spatial_sigma_prior_alpha"]);
 }
 
 ModelData build_model_data(

@@ -4,6 +4,7 @@
 // Reference: Zhou et al. (2012) "Lognormal and Gamma Mixed Negative Binomial Regression"
 
 #include "pg_negbin.h"
+#include "scale_prior.h"
 #include <tulpa/count_math.h>
 #include "pg_binomial.h"
 #include "pg_rng.h"
@@ -898,8 +899,8 @@ List pg_negbin_gibbs_spatial(
     int thin,
     double prior_beta_sd,
     double prior_sigma_re_scale,
-    double prior_tau_shape,
-    double prior_tau_rate,
+    double prior_sigma_spatial_U,
+    double prior_sigma_spatial_alpha,
     double prior_r_shape,
     double prior_r_rate,
     double r_init,
@@ -1065,9 +1066,7 @@ List pg_negbin_gibbs_spatial(
     }
 
     // Update tau (spatial precision)
-    // Prior: tau ~ Gamma(shape, rate)
-    // Posterior: tau ~ Gamma(shape + (S-1)/2, rate + Q/2)
-    // where Q = sum over edges (phi_i - phi_j)^2 / 2
+    // PC prior on sigma = 1 / sqrt(tau), conditioned on the ICAR quadratic form.
     double Q = 0.0;
     for (int s = 0; s < n_spatial_units; s++) {
       IntegerVector neighbors = adj_list[s];
@@ -1080,9 +1079,8 @@ List pg_negbin_gibbs_spatial(
       }
     }
 
-    double tau_shape = prior_tau_shape + (n_spatial_units - 1.0) / 2.0;
-    double tau_rate = prior_tau_rate + Q / 2.0;
-    tau = R::rgamma(tau_shape, 1.0 / tau_rate);
+    tau = ratiod_scale::sample_tau(tau, Q, n_spatial_units - 1,
+        prior_sigma_spatial_U, prior_sigma_spatial_alpha, []() { return R::unif_rand(); });
 
     // Update spatial_contrib
     for (int i = 0; i < N; i++) {
@@ -1217,8 +1215,8 @@ Rcpp::List cpp_pg_negbin_gibbs_spatial(
     int thin,
     double prior_beta_sd,
     double prior_sigma_re_scale,
-    double prior_tau_shape,
-    double prior_tau_rate,
+    double prior_sigma_spatial_U,
+    double prior_sigma_spatial_alpha,
     double prior_r_shape,
     double prior_r_rate,
     double r_init,
@@ -1229,7 +1227,7 @@ Rcpp::List cpp_pg_negbin_gibbs_spatial(
   return ratiod::pg_negbin_gibbs_spatial(
     y, X, re_group, n_re_groups, spatial_group, n_spatial_units,
     adj_list, n_neighbors, n_iter, n_warmup, thin,
-    prior_beta_sd, prior_sigma_re_scale, prior_tau_shape, prior_tau_rate,
+    prior_beta_sd, prior_sigma_re_scale, prior_sigma_spatial_U, prior_sigma_spatial_alpha,
     prior_r_shape, prior_r_rate, r_init, store_eta, verbose, n_threads
   );
 }

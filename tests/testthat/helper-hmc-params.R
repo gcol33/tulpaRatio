@@ -39,8 +39,8 @@ fixture_temporal_params <- function(n, time_idx = rep(0L, n),
     n_params = as.integer(n_times * n_groups),
     cyclic = cyclic,
     shared = TRUE,
-    tau_shape = 2.0,
-    tau_rate = 0.5,
+    sigma_prior_U = 3.0,
+    sigma_prior_alpha = 0.01,
     # GP-specific fields (required even for non-GP types)
     time_values = numeric(0),
     cov_type = "exponential",
@@ -59,8 +59,8 @@ fixture_prior_params <- function() {
     sigma_re_scale = 2.5,
     phi_shape = 2.0,
     phi_rate = 0.1,
-    tau_spatial_shape = 1.0,
-    tau_spatial_rate = 0.01
+    spatial_sigma_prior_U = 3.0,
+    spatial_sigma_prior_alpha = 0.01
   )
 }
 fixture_zi_params <- function(n) {

@@ -6,6 +6,7 @@
 #define RATIOD_HMC_GP_H
 
 #include <vector>
+#include "autodiff_utils.h"
 #include <cmath>
 #include <random>
 #include <type_traits>
@@ -231,7 +232,7 @@ struct MultiscaleGPData {
 // written on theta = log(sigma^2): log p(theta) = const - rate * sigma +
 // theta / 2 (ratiod_gp::log_prior_sd_pc_logvar_t is the density).
 inline double log_prior_sd_pc_logvar_grad(double theta, double rate) {
-  return 0.5 - 0.5 * rate * std::exp(0.5 * theta);
+  return ratiod::math::pc_scale_gradient_rate(std::exp(0.5 * theta), 0.5, rate);
 }
 
 // Log prior for range with PC-style (favor larger ranges = simpler models)

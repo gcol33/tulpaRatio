@@ -11,7 +11,11 @@ ratiod_priors(
   sigma = NULL,
   phi = NULL,
   rho_temporal = NULL,
-  rho_spatial = NULL
+  rho_spatial = NULL,
+  sigma_temporal = NULL,
+  sigma_spatial = NULL,
+  sigma_tvc = NULL,
+  sigma_svc = NULL
 )
 
 \method{print}{ratiod_priors}(x, ...)
@@ -36,6 +40,12 @@ multi-scale short-term arm; each block's own \code{rho_prior} overrides it.}
 
 \item{rho_spatial}{Prior for spatial proportion (BYM2). Default:
 \code{prior_beta(1, 1)} (uniform).}
+
+\item{sigma_temporal, sigma_spatial}{PC priors on temporal and areal field SDs.
+Default: \code{prior_pc(U = 3, alpha = 0.01)}.}
+
+\item{sigma_tvc, sigma_svc}{PC priors on varying-coefficient field SDs.
+Default: \code{prior_pc(U = 1, alpha = 0.01)}.}
 
 \item{x}{A \code{ratiod_priors} object from \code{\link[=ratiod_priors]{ratiod_priors()}}, or a single
 \code{ratiod_prior} from a \verb{prior_*()} constructor.}

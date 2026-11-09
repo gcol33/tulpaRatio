@@ -454,8 +454,8 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
     int thin = 1,
     double prior_beta_sd = 10.0,
     double prior_sigma_re_scale = 2.5,
-    double prior_tau_shape = 1.0,
-    double prior_tau_rate = 0.01,
+    double prior_sigma_spatial_U = 3.0,
+    double prior_sigma_spatial_alpha = 0.01,
     bool store_eta = false,
     bool verbose = true,
     int n_threads = 1
@@ -584,7 +584,7 @@ Rcpp::List cpp_pg_binomial_gibbs_spatial(
     phi = ratiod::update_spatial_icar(kappa, omega, offset, spatial_group, adj_list, n_neighbors, tau);
 
     // 7. Update tau (spatial precision)
-    tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_tau_shape, prior_tau_rate);
+    tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_sigma_spatial_U, prior_sigma_spatial_alpha, tau);
 
     // Save draws
     if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {
@@ -657,7 +657,8 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
     int thin = 1,
     double prior_beta_sd = 10.0,
     double prior_sigma_re_scale = 2.5,
-    double prior_sigma_spatial_scale = 2.5,
+    double prior_sigma_spatial_U = 3.0,
+    double prior_sigma_spatial_alpha = 0.01,
     bool store_eta = false,
     bool verbose = true,
     int n_threads = 1
@@ -690,7 +691,7 @@ Rcpp::List cpp_pg_binomial_gibbs_bym2(
   Rcpp::NumericVector re(n_re_groups, 0.0);
   double sigma_re = 1.0;
   ratiod::HalfCauchyScale sigma_re_prior;
-  ratiod::PGBym2 bym2(adj_list, scale_factor, prior_sigma_spatial_scale);
+  ratiod::PGBym2 bym2(adj_list, scale_factor, prior_sigma_spatial_U, prior_sigma_spatial_alpha);
   Eigen::VectorXd u = bym2.effect();
   Eigen::VectorXd S(n_spatial_units), R(n_spatial_units);
   Rcpp::NumericVector omega(N, 1.0);
@@ -1827,8 +1828,8 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
     int thin = 1,
     double prior_beta_sd = 10.0,
     double prior_sigma_re_scale = 2.5,
-    double prior_tau_shape = 1.0,
-    double prior_tau_rate = 0.01,
+    double prior_sigma_spatial_U = 3.0,
+    double prior_sigma_spatial_alpha = 0.01,
     bool store_eta = false,
     bool verbose = true,
     int n_threads = 1
@@ -1997,7 +1998,7 @@ Rcpp::List cpp_pg_binomial_gibbs_rsr(
     for (int s = 0; s < S; s++) phi[s] = phi_e[s];
 
     // 9. Update tau (spatial precision)
-    tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_tau_shape, prior_tau_rate);
+    tau = ratiod::update_tau_icar(phi, adj_list, n_neighbors, prior_sigma_spatial_U, prior_sigma_spatial_alpha, tau);
 
     // Save draws
     if (iter >= n_warmup && (iter - n_warmup) % thin == 0) {

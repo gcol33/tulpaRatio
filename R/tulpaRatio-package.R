@@ -167,5 +167,7 @@ utils::globalVariables(c(
   "cpp_test_precision_spec_h",
   "cpp_test_precision_spec",
   "cpp_test_precision_beta_spec",
-  "cpp_test_precision_beta_spec_h"
+  "cpp_test_precision_beta_spec_h",
+  "cpp_scale_prior_check",
+  "cpp_scale_conditional_draws"
 ))
