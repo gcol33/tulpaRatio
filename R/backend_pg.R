@@ -1,3 +1,61 @@
+pg_run_chains <- function(n, seed, verbose, call) {
+  lapply(seq_len(n), function(chain) {
+    if (verbose && n > 1L) cat(sprintf("\n=== Chain %d/%d ===\n", chain, n))
+    if (!is.null(seed)) set.seed(seed + chain - 1L)
+    call(chain)
+  })
+}
+
+pg_beta_block <- function(X, field = "beta", prefix = "") {
+  variables <- colnames(X)
+  if (is.null(variables)) variables <- paste0(field, "[", seq_len(ncol(X)), "]")
+  else variables <- paste0(prefix, variables)
+  stats::setNames(rep(field, ncol(X)), variables)
+}
+
+pg_re_block <- function(re_info) {
+  if (re_info$n_groups > 0L) c(sigma_re = "sigma_re") else character(0)
+}
+
+pg_stack <- function(chain_results, field) {
+  values <- lapply(chain_results, `[[`, field)
+  if (is.null(values[[1L]])) return(NULL)
+  if (is.null(dim(values[[1L]]))) unlist(values, use.names = FALSE)
+  else do.call(rbind, values)
+}
+
+pg_assemble_fit <- function(chain_results, formula, data, family, iter, warmup,
+                            thin, blocks, combined_fields = c("eta", "beta", "re"),
+                            internal_extra = list(), ...) {
+  n_chains <- length(chain_results)
+  first <- chain_results[[1L]][[unname(blocks[1L])]]
+  n_save <- nrow(first)
+  draws <- array(NA_real_, c(n_save, n_chains, length(blocks)),
+    dimnames = list(iteration = seq_len(n_save), chain = seq_len(n_chains),
+                    variable = names(blocks)))
+  for (field in unique(unname(blocks))) {
+    columns <- which(blocks == field)
+    for (chain in seq_len(n_chains)) {
+      values <- chain_results[[chain]][[field]]
+      if (length(values) != n_save * length(columns))
+        stop("PG draw block has an inconsistent size: ", field, call. = FALSE)
+      draws[, chain, columns] <- values
+    }
+  }
+  internal <- setNames(lapply(combined_fields, function(field)
+    pg_stack(chain_results, field)), combined_fields)
+  if (!is.null(chain_results[[1L]]$eta)) {
+    eta <- array(NA_real_, c(n_save, n_chains, ncol(chain_results[[1L]]$eta)))
+    for (chain in seq_len(n_chains)) eta[, chain, ] <- chain_results[[chain]]$eta
+    internal$eta_array <- eta
+  }
+  internal <- c(internal, internal_extra, list(chain_results = chain_results))
+  structure(c(list(draws = draws, formula = formula, data = data, family = family,
+    backend = "pg", iter = iter, warmup = warmup, thin = thin, chains = n_chains,
+    n_save = n_save * n_chains, n_save_per_chain = n_save, .internal = internal),
+    list(...)), class = "ratiod_fit")
+}
+
 #' Polya-Gamma Backend for Binomial Models
 #'
 #' @description
@@ -174,24 +232,13 @@ fit_pg_binomial <- function(formula,
   }
 
   # Run multiple chains sequentially (R's RNG is not thread-safe)
-  chain_results <- vector("list", chains)
-
-  for (chain in seq_len(chains)) {
-    if (verbose && chains > 1) {
-      cat(sprintf("\n=== Chain %d/%d ===\n", chain, chains))
-    }
-
-    # Set different seed for each chain
-    if (!is.null(seed)) {
-      set.seed(seed + chain - 1)
-    }
-
+  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
     if (has_spatial) {
       if (is_bym2) {
         # BYM2 spatial model
         scale_factor <- spatial$scale_factor %||% 1.0
 
-        chain_results[[chain]] <- cpp_pg_binomial_gibbs_bym2(
+        cpp_pg_binomial_gibbs_bym2(
           y = as.integer(y),
           n = as.integer(trials),
           X = X,
@@ -214,7 +261,7 @@ fit_pg_binomial <- function(formula,
         )
       } else {
         # ICAR spatial model
-        chain_results[[chain]] <- cpp_pg_binomial_gibbs_spatial(
+        cpp_pg_binomial_gibbs_spatial(
           y = as.integer(y),
           n = as.integer(trials),
           X = X,
@@ -237,9 +284,9 @@ fit_pg_binomial <- function(formula,
         )
       }
 
-    } else if (re_info$n_groups > 0) {
+    } else {
       # Fit with random effects only
-      chain_results[[chain]] <- cpp_tulpa_pg_binomial_gibbs(
+      cpp_tulpa_pg_binomial_gibbs(
         y = as.integer(y),
         n = as.integer(trials),
         X = X,
@@ -255,40 +302,19 @@ fit_pg_binomial <- function(formula,
         n_threads = as.integer(cores)
       )
 
-    } else {
-      # No random effects - add dummy group
-      chain_results[[chain]] <- cpp_tulpa_pg_binomial_gibbs(
-        y = as.integer(y),
-        n = as.integer(trials),
-        X = X,
-        group = as.integer(rep(1L, length(y))),
-        n_groups = 0L,
-        n_iter = n_iter,
-        n_warmup = n_warmup,
-        thin = as.integer(thin),
-        prior_beta_sd = prior_beta_sd,
-        prior_sigma_scale = prior_sigma_scale,
-        store_eta = TRUE,
-        verbose = verbose,
-        n_threads = as.integer(cores)
-      )
     }
-  }
+
+  })
 
   # Convert to ratiod_fit format with multi-chain support
-  fit <- convert_pg_to_ratiod_fit(
-    fit_raw = chain_results,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial,
-    X = X,
-    re_info = re_info,
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = chains
-  )
+  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+    blocks = c(pg_beta_block(X), pg_re_block(re_info),
+      if (has_spatial) {
+        if (is_bym2) c(sigma_spatial = "sigma_spatial", rho = "rho")
+        else c(tau_spatial = "tau")
+      }),
+    combined_fields = c("eta", "beta", "re", "spatial", "phi_scaled", "theta"),
+    internal_extra = list(X = X, re_info = re_info), spatial = spatial)
 
   return(fit)
 }
@@ -400,149 +426,6 @@ prepare_spatial_for_pg <- function(spatial, data, formula) {
 }
 
 
-#' Convert PG fit to ratiod_fit object
-#'
-#' @param fit_raw List of chain results (each element is a single chain's output)
-#' @param chains Number of chains
-#' @keywords internal
-convert_pg_to_ratiod_fit <- function(fit_raw, formula, data, family,
-                                    spatial, X, re_info, iter, warmup, thin,
-                                    chains = 1) {
-
-  # fit_raw is now a list of chain results
-  n_chains <- length(fit_raw)
-  n_save_per_chain <- nrow(fit_raw[[1]]$beta)
-  n_save_total <- n_save_per_chain * n_chains
-
-  # Create draws in format compatible with posterior package
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(ncol(X)), "]")
-  }
-
-  # Determine if spatial model
-  is_bym2 <- !is.null(spatial) && !is.null(spatial$type) &&
-             tolower(spatial$type) == "bym2"
-
-  # Build draws array with chain dimension: [iteration, chain, parameter]
-  # For compatibility with posterior package
-  n_params <- ncol(fit_raw[[1]]$beta)
-  if (re_info$n_groups > 0) n_params <- n_params + 1  # sigma_re
-  if (!is.null(spatial)) {
-    if (is_bym2) {
-      n_params <- n_params + 2  # sigma_spatial, rho
-    } else {
-      n_params <- n_params + 1  # tau_spatial
-    }
-  }
-
-  # Create 3D array for draws: [iteration, chain, variable]
-  draws_array <- array(NA_real_,
-                       dim = c(n_save_per_chain, n_chains, n_params))
-
-  # Build parameter names
-  param_names <- beta_names
-  if (re_info$n_groups > 0) {
-    param_names <- c(param_names, "sigma_re")
-  }
-  if (!is.null(spatial)) {
-    if (is_bym2) {
-      param_names <- c(param_names, "sigma_spatial", "rho")
-    } else {
-      param_names <- c(param_names, "tau_spatial")
-    }
-  }
-  dimnames(draws_array) <- list(
-    iteration = seq_len(n_save_per_chain),
-    chain = seq_len(n_chains),
-    variable = param_names
-  )
-
-  # Fill in the draws from each chain
-  for (c in seq_len(n_chains)) {
-    chain_fit <- fit_raw[[c]]
-    col_idx <- 1
-
-    # Fixed effects
-    for (j in seq_len(ncol(chain_fit$beta))) {
-      draws_array[, c, col_idx] <- chain_fit$beta[, j]
-      col_idx <- col_idx + 1
-    }
-
-    # Random effects SD
-    if (re_info$n_groups > 0) {
-      draws_array[, c, col_idx] <- chain_fit$sigma_re
-      col_idx <- col_idx + 1
-    }
-
-    # Spatial parameters
-    if (!is.null(spatial)) {
-      if (is_bym2) {
-        draws_array[, c, col_idx] <- chain_fit$sigma_spatial
-        col_idx <- col_idx + 1
-        draws_array[, c, col_idx] <- chain_fit$rho
-        col_idx <- col_idx + 1
-      } else {
-        draws_array[, c, col_idx] <- chain_fit$tau
-        col_idx <- col_idx + 1
-      }
-    }
-  }
-
-  # Also create combined eta array for ratio computation: [iteration, chain, obs]
-  n_obs <- ncol(fit_raw[[1]]$eta)
-  eta_array <- array(NA_real_,
-                     dim = c(n_save_per_chain, n_chains, n_obs))
-  for (c in seq_len(n_chains)) {
-    eta_array[, c, ] <- fit_raw[[c]]$eta
-  }
-
-  # Combine internal components from all chains for backwards compatibility
-  # Stack matrices row-wise for methods that expect 2D format
-  combined_beta <- do.call(rbind, lapply(fit_raw, `[[`, "beta"))
-  combined_re <- do.call(rbind, lapply(fit_raw, `[[`, "re"))
-  combined_eta <- do.call(rbind, lapply(fit_raw, `[[`, "eta"))
-  combined_spatial <- if (!is.null(fit_raw[[1]]$spatial)) {
-    do.call(rbind, lapply(fit_raw, `[[`, "spatial"))
-  } else NULL
-
-  # Create ratiod_fit object
-  fit <- list(
-    draws = draws_array,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial,
-    backend = "pg",
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = n_chains,
-    n_save = n_save_total,
-    n_save_per_chain = n_save_per_chain,
-    # Store raw components for ratio computation
-    .internal = list(
-      eta = combined_eta,
-      eta_array = eta_array,  # 3D array version
-      beta = combined_beta,
-      re = combined_re,
-      spatial = combined_spatial,
-      phi_scaled = if (!is.null(fit_raw[[1]]$phi_scaled)) {
-        do.call(rbind, lapply(fit_raw, `[[`, "phi_scaled"))
-      } else NULL,
-      theta = if (!is.null(fit_raw[[1]]$theta)) {
-        do.call(rbind, lapply(fit_raw, `[[`, "theta"))
-      } else NULL,
-      X = X,
-      re_info = re_info,
-      chain_results = fit_raw  # Keep original chain results for diagnostics
-    )
-  )
-
-  class(fit) <- "ratiod_fit"
-  return(fit)
-}
-
 
 #' Check if PG backend is appropriate
 #'
@@ -631,18 +514,8 @@ fit_pg_binomial_gp <- function(formula,
   n_warmup <- as.integer(warmup)
 
   # Run chains
-  chain_results <- vector("list", chains)
-
-  for (chain in seq_len(chains)) {
-    if (verbose && chains > 1) {
-      cat(sprintf("\n=== Chain %d/%d ===\n", chain, chains))
-    }
-
-    if (!is.null(seed)) {
-      set.seed(seed + chain - 1)
-    }
-
-    chain_results[[chain]] <- cpp_pg_binomial_gibbs_gp(
+  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
+    cpp_pg_binomial_gibbs_gp(
       y = as.integer(y),
       n = as.integer(trials),
       X = X,
@@ -673,132 +546,24 @@ fit_pg_binomial_gp <- function(formula,
       verbose = verbose,
       n_threads = as.integer(cores)
     )
-  }
+
+  })
 
   # Convert to ratiod_fit format
-  fit <- convert_pg_gp_to_ratiod_fit(
-    fit_raw = chain_results,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial,
-    X = X,
-    re_info = re_info,
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = chains
-  )
+  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+    blocks = c(pg_beta_block(X), c(sigma2_gp = "sigma2_gp", phi_gp = "phi_gp"),
+               pg_re_block(re_info)),
+    combined_fields = c("eta", "beta", "re"),
+    internal_extra = list(
+      w_gp = pg_stack(chain_results, "gp"),
+      gp_hyper = data.frame(sigma2 = pg_stack(chain_results, "sigma2_gp"),
+                            phi = pg_stack(chain_results, "phi_gp")),
+      gp_coords = spatial$unique_coords, gp_obs_to_loc = spatial$obs_to_loc,
+      X = X, re_info = re_info), spatial = spatial, spatial_type = "gp")
 
   return(fit)
 }
 
-
-#' Convert PG GP fit to ratiod_fit object
-#' @keywords internal
-convert_pg_gp_to_ratiod_fit <- function(fit_raw, formula, data, family,
-                                         spatial, X, re_info, iter, warmup, thin,
-                                         chains = 1) {
-
-  n_chains <- length(fit_raw)
-  n_save_per_chain <- nrow(fit_raw[[1]]$beta)
-  n_save_total <- n_save_per_chain * n_chains
-
-  # Create draws in format compatible with posterior package
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(ncol(X)), "]")
-  }
-
-  # Count parameters
-  n_params <- ncol(fit_raw[[1]]$beta) + 2  # beta + sigma2_gp + phi_gp
-  if (re_info$n_groups > 0) n_params <- n_params + 1  # sigma_re
-
-  # Create 3D array for draws: [iteration, chain, variable]
-  draws_array <- array(NA_real_,
-                       dim = c(n_save_per_chain, n_chains, n_params))
-
-  # Build parameter names
-  param_names <- c(beta_names, "sigma2_gp", "phi_gp")
-  if (re_info$n_groups > 0) {
-    param_names <- c(param_names, "sigma_re")
-  }
-
-  dimnames(draws_array) <- list(
-    iteration = seq_len(n_save_per_chain),
-    chain = seq_len(n_chains),
-    variable = param_names
-  )
-
-  # Fill in the draws from each chain
-  for (c in seq_len(n_chains)) {
-    chain_fit <- fit_raw[[c]]
-    col_idx <- 1
-
-    # Fixed effects
-    for (j in seq_len(ncol(chain_fit$beta))) {
-      draws_array[, c, col_idx] <- chain_fit$beta[, j]
-      col_idx <- col_idx + 1
-    }
-
-    # GP hyperparameters
-    draws_array[, c, col_idx] <- chain_fit$sigma2_gp
-    col_idx <- col_idx + 1
-    draws_array[, c, col_idx] <- chain_fit$phi_gp
-    col_idx <- col_idx + 1
-
-    # Random effects SD
-    if (re_info$n_groups > 0) {
-      draws_array[, c, col_idx] <- chain_fit$sigma_re
-      col_idx <- col_idx + 1
-    }
-  }
-
-  # Combine internal components
-  combined_beta <- do.call(rbind, lapply(fit_raw, `[[`, "beta"))
-  combined_re <- do.call(rbind, lapply(fit_raw, `[[`, "re"))
-  combined_eta <- do.call(rbind, lapply(fit_raw, `[[`, "eta"))
-  # The field draws, one column per unique LOCATION, stacked in the same chain
-  # order as the fixed effects beside them. The per-chain hyperparameters are
-  # stacked the same way, so a draw of the field and the (sigma2, phi) it was
-  # drawn under share a row -- what kriging it onto new coordinates needs.
-  combined_w_gp <- do.call(rbind, lapply(fit_raw, `[[`, "gp"))
-  combined_gp_hyper <- data.frame(
-    sigma2 = unlist(lapply(fit_raw, `[[`, "sigma2_gp"), use.names = FALSE),
-    phi = unlist(lapply(fit_raw, `[[`, "phi_gp"), use.names = FALSE)
-  )
-
-  fit <- list(
-    draws = draws_array,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial,
-    spatial_type = "gp",
-    backend = "pg",
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = n_chains,
-    n_save = n_save_total,
-    n_save_per_chain = n_save_per_chain,
-    .internal = list(
-      eta = combined_eta,
-      beta = combined_beta,
-      re = combined_re,
-      w_gp = combined_w_gp,
-      gp_hyper = combined_gp_hyper,
-      gp_coords = spatial$unique_coords,
-      gp_obs_to_loc = spatial$obs_to_loc,
-      X = X,
-      re_info = re_info,
-      chain_results = fit_raw
-    )
-  )
-
-  class(fit) <- "ratiod_fit"
-  return(fit)
-}
 
 
 #' Fit binomial model with multiscale temporal using Polya-Gamma Gibbs sampling
@@ -883,18 +648,8 @@ fit_pg_binomial_temporal <- function(formula,
   n_warmup <- as.integer(warmup)
 
   # Run chains
-  chain_results <- vector("list", chains)
-
-  for (chain in seq_len(chains)) {
-    if (verbose && chains > 1) {
-      cat(sprintf("\n=== Chain %d/%d ===\n", chain, chains))
-    }
-
-    if (!is.null(seed)) {
-      set.seed(seed + chain - 1)
-    }
-
-    chain_results[[chain]] <- cpp_pg_binomial_gibbs_temporal(
+  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
+    cpp_pg_binomial_gibbs_temporal(
       y = as.integer(y),
       n = as.integer(trials),
       X = X,
@@ -912,163 +667,27 @@ fit_pg_binomial_temporal <- function(formula,
       verbose = verbose,
       n_threads = as.integer(cores)
     )
-  }
+
+  })
 
   # Convert to ratiod_fit format
-  fit <- convert_pg_temporal_to_ratiod_fit(
-    fit_raw = chain_results,
-    formula = formula,
-    data = data,
-    family = family,
-    temporal = temporal,
-    X = X,
-    re_info = re_info,
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = chains
-  )
+  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+    blocks = c(pg_beta_block(X),
+      if (temporal$trend != "none") c(sigma_trend = "sigma_trend"),
+      if (!is.null(temporal$seasonal) && temporal$seasonal > 0)
+        c(sigma_seasonal = "sigma_seasonal"),
+      if (temporal$short_term != "none") c(sigma_short = "sigma_short"),
+      if (temporal$short_term == "ar1") c(rho_short = "rho_short"),
+      pg_re_block(re_info)),
+    internal_extra = list(
+      temporal_draws = setNames(lapply(c("trend", "seasonal", "short_term"),
+        function(field) pg_stack(chain_results, field)),
+        c("trend", "seasonal", "short_term")), X = X, re_info = re_info),
+    temporal = temporal)
 
   return(fit)
 }
 
-
-#' Convert PG temporal fit to ratiod_fit object
-#' @keywords internal
-convert_pg_temporal_to_ratiod_fit <- function(fit_raw, formula, data, family,
-                                               temporal, X, re_info, iter, warmup, thin,
-                                               chains = 1) {
-
-  n_chains <- length(fit_raw)
-  n_save_per_chain <- nrow(fit_raw[[1]]$beta)
-  n_save_total <- n_save_per_chain * n_chains
-
-  # Create draws in format compatible with posterior package
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(ncol(X)), "]")
-  }
-
-  # Count hyperparameters
-  n_hyper <- 0
-  hyper_names <- character(0)
-
-  if (temporal$trend != "none") {
-    n_hyper <- n_hyper + 1
-    hyper_names <- c(hyper_names, "sigma2_trend")
-  }
-  if (!is.null(temporal$seasonal) && temporal$seasonal > 0) {
-    n_hyper <- n_hyper + 1
-    hyper_names <- c(hyper_names, "sigma2_seasonal")
-  }
-  if (temporal$short_term != "none") {
-    n_hyper <- n_hyper + 1
-    hyper_names <- c(hyper_names, "sigma2_short")
-    if (temporal$short_term == "ar1") {
-      n_hyper <- n_hyper + 1
-      hyper_names <- c(hyper_names, "rho_short")
-    }
-  }
-
-  n_params <- ncol(fit_raw[[1]]$beta) + n_hyper
-  if (re_info$n_groups > 0) n_params <- n_params + 1
-
-  # Create 3D array for draws
-  draws_array <- array(NA_real_,
-                       dim = c(n_save_per_chain, n_chains, n_params))
-
-  # Build parameter names
-  param_names <- c(beta_names, hyper_names)
-  if (re_info$n_groups > 0) {
-    param_names <- c(param_names, "sigma_re")
-  }
-
-  dimnames(draws_array) <- list(
-    iteration = seq_len(n_save_per_chain),
-    chain = seq_len(n_chains),
-    variable = param_names
-  )
-
-  # Fill in the draws from each chain
-  for (c in seq_len(n_chains)) {
-    chain_fit <- fit_raw[[c]]
-    col_idx <- 1
-
-    # Fixed effects
-    for (j in seq_len(ncol(chain_fit$beta))) {
-      draws_array[, c, col_idx] <- chain_fit$beta[, j]
-      col_idx <- col_idx + 1
-    }
-
-    # Temporal hyperparameters
-    if (temporal$trend != "none" && !is.null(chain_fit$sigma2_trend)) {
-      draws_array[, c, col_idx] <- chain_fit$sigma2_trend
-      col_idx <- col_idx + 1
-    }
-    if (!is.null(temporal$seasonal) && temporal$seasonal > 0 && !is.null(chain_fit$sigma2_seasonal)) {
-      draws_array[, c, col_idx] <- chain_fit$sigma2_seasonal
-      col_idx <- col_idx + 1
-    }
-    if (temporal$short_term != "none" && !is.null(chain_fit$sigma2_short)) {
-      draws_array[, c, col_idx] <- chain_fit$sigma2_short
-      col_idx <- col_idx + 1
-      if (temporal$short_term == "ar1" && !is.null(chain_fit$rho_short)) {
-        draws_array[, c, col_idx] <- chain_fit$rho_short
-        col_idx <- col_idx + 1
-      }
-    }
-
-    # Random effects SD
-    if (re_info$n_groups > 0) {
-      draws_array[, c, col_idx] <- chain_fit$sigma_re
-      col_idx <- col_idx + 1
-    }
-  }
-
-  # Combine internal components
-  combined_beta <- do.call(rbind, lapply(fit_raw, `[[`, "beta"))
-  combined_re <- do.call(rbind, lapply(fit_raw, `[[`, "re"))
-  combined_eta <- do.call(rbind, lapply(fit_raw, `[[`, "eta"))
-
-  # Extract temporal draws
-  temporal_draws <- list()
-  if (!is.null(fit_raw[[1]]$trend)) {
-    temporal_draws$trend <- do.call(rbind, lapply(fit_raw, `[[`, "trend"))
-  }
-  if (!is.null(fit_raw[[1]]$seasonal)) {
-    temporal_draws$seasonal <- do.call(rbind, lapply(fit_raw, `[[`, "seasonal"))
-  }
-  if (!is.null(fit_raw[[1]]$short_term)) {
-    temporal_draws$short_term <- do.call(rbind, lapply(fit_raw, `[[`, "short_term"))
-  }
-
-  fit <- list(
-    draws = draws_array,
-    formula = formula,
-    data = data,
-    family = family,
-    temporal = temporal,
-    backend = "pg",
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = n_chains,
-    n_save = n_save_total,
-    n_save_per_chain = n_save_per_chain,
-    .internal = list(
-      eta = combined_eta,
-      beta = combined_beta,
-      re = combined_re,
-      temporal_draws = temporal_draws,
-      X = X,
-      re_info = re_info,
-      chain_results = fit_raw
-    )
-  )
-
-  class(fit) <- "ratiod_fit"
-  return(fit)
-}
 
 
 #' Fit PG binomial with RSR (Restricted Spatial Regression)
@@ -1131,18 +750,8 @@ fit_pg_binomial_rsr <- function(formula,
   n_warmup <- as.integer(warmup)
 
   # Run chains
-  chain_results <- vector("list", chains)
-
-  for (chain in seq_len(chains)) {
-    if (verbose && chains > 1) {
-      cat(sprintf("\n=== Chain %d/%d ===\n", chain, chains))
-    }
-
-    if (!is.null(seed)) {
-      set.seed(seed + chain - 1)
-    }
-
-    chain_results[[chain]] <- cpp_pg_binomial_gibbs_rsr(
+  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
+    cpp_pg_binomial_gibbs_rsr(
       y = as.integer(y),
       n = as.integer(trials),
       X = X,
@@ -1164,116 +773,19 @@ fit_pg_binomial_rsr <- function(formula,
       verbose = verbose,
       n_threads = as.integer(cores)
     )
-  }
+
+  })
 
   # Convert to ratiod_fit
-  fit <- convert_pg_rsr_to_ratiod_fit(
-    chain_results = chain_results,
-    formula = formula,
-    data = data,
-    family = family,
-    X = X,
-    re_info = re_info,
-    spatial_info = spatial_info,
-    chains = chains,
-    iter = iter,
-    warmup = warmup,
-    thin = thin
-  )
+  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+    blocks = c(pg_beta_block(X), pg_re_block(re_info), c(tau_spatial = "tau")),
+    combined_fields = c("eta", "beta", "re", "spatial", "spatial_raw"),
+    internal_extra = list(X = X, re_info = re_info, spatial_info = spatial_info),
+    spatial = spatial_info, spatial_type = "rsr")
 
   return(fit)
 }
 
-
-#' Convert PG RSR results to ratiod_fit
-#' @keywords internal
-convert_pg_rsr_to_ratiod_fit <- function(chain_results, formula, data, family,
-                                          X, re_info, spatial_info,
-                                          chains, iter, warmup, thin) {
-  n_chains <- length(chain_results)
-  p <- ncol(X)
-  n_re <- re_info$n_groups
-  n_spatial <- spatial_info$n_units
-  n_save_per_chain <- nrow(chain_results[[1]]$beta)
-  n_save_total <- n_save_per_chain * n_chains
-
-  # Parameter names
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(p), "]")
-  }
-
-  param_names <- beta_names
-  if (n_re > 0) {
-    param_names <- c(param_names, "sigma_re")
-  }
-  if (n_spatial > 0) {
-    param_names <- c(param_names, "tau_spatial")
-  }
-
-  # Create 3D array: [iterations, chains, parameters]
-  n_params <- length(param_names)
-  draws_array <- array(dim = c(n_save_per_chain, n_chains, n_params),
-                       dimnames = list(NULL, paste0("chain:", seq_len(n_chains)), param_names))
-
-  for (c in seq_len(n_chains)) {
-    chain_fit <- chain_results[[c]]
-
-    col_idx <- 1
-    # Fixed effects
-    for (j in seq_len(p)) {
-      draws_array[, c, col_idx] <- chain_fit$beta[, j]
-      col_idx <- col_idx + 1
-    }
-    # Sigma_re
-    if (n_re > 0) {
-      draws_array[, c, col_idx] <- chain_fit$sigma_re
-      col_idx <- col_idx + 1
-    }
-    # Tau (convert to SD for consistency)
-    if (n_spatial > 0) {
-      draws_array[, c, col_idx] <- chain_fit$tau
-      col_idx <- col_idx + 1
-    }
-  }
-
-  # Combine spatial draws
-  combined_spatial <- do.call(rbind, lapply(chain_results, `[[`, "spatial"))
-  combined_spatial_raw <- do.call(rbind, lapply(chain_results, `[[`, "spatial_raw"))
-  combined_beta <- do.call(rbind, lapply(chain_results, `[[`, "beta"))
-  combined_re <- do.call(rbind, lapply(chain_results, `[[`, "re"))
-  combined_eta <- do.call(rbind, lapply(chain_results, `[[`, "eta"))
-
-  fit <- list(
-    draws = draws_array,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial_info,
-    spatial_type = "rsr",
-    backend = "pg",
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = n_chains,
-    n_save = n_save_total,
-    n_save_per_chain = n_save_per_chain,
-    .internal = list(
-      beta = combined_beta,
-      re = combined_re,
-      eta = combined_eta,
-      spatial = combined_spatial,
-      spatial_raw = combined_spatial_raw,
-      X = X,
-      re_info = re_info,
-      spatial_info = spatial_info,
-      chain_results = chain_results
-    )
-  )
-
-  class(fit) <- "ratiod_fit"
-  return(fit)
-}
 
 
 # =============================================================================
@@ -1377,21 +889,11 @@ fit_pg_negbin <- function(formula,
   n_warmup <- as.integer(warmup)
 
   # Run chains
-  chain_results <- vector("list", chains)
-
-  for (chain in seq_len(chains)) {
-    if (verbose && chains > 1) {
-      cat(sprintf("\n=== Chain %d/%d ===\n", chain, chains))
-    }
-
-    if (!is.null(seed)) {
-      set.seed(seed + chain - 1)
-    }
-
+  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
     if (has_spatial) {
       spatial_info <- prepare_spatial_for_pg(spatial, data, formula)
 
-      chain_results[[chain]] <- cpp_pg_negbin_gibbs_spatial(
+      cpp_pg_negbin_gibbs_spatial(
         y = as.integer(y),
         X = X,
         re_group = re_info$group_idx,
@@ -1415,7 +917,7 @@ fit_pg_negbin <- function(formula,
         n_threads = as.integer(cores)
       )
     } else {
-      chain_results[[chain]] <- cpp_pg_negbin_gibbs(
+      cpp_pg_negbin_gibbs(
         y = as.integer(y),
         X = X,
         group = re_info$group_idx,
@@ -1433,22 +935,15 @@ fit_pg_negbin <- function(formula,
         n_threads = as.integer(cores)
       )
     }
-  }
+
+  })
 
   # Convert to ratiod_fit
-  fit <- convert_pg_negbin_to_ratiod_fit(
-    fit_raw = chain_results,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial,
-    X = X,
-    re_info = re_info,
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = chains
-  )
+  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+    blocks = c(pg_beta_block(X), c(r = "r"), pg_re_block(re_info),
+               if (has_spatial) c(tau_spatial = "tau")),
+    combined_fields = c("eta", "beta", "re", "spatial"),
+    internal_extra = list(X = X, re_info = re_info), spatial = spatial)
 
   return(fit)
 }
@@ -1531,18 +1026,8 @@ fit_pg_negbin_negbin <- function(formula,
   n_warmup <- as.integer(warmup)
 
   # Run chains
-  chain_results <- vector("list", chains)
-
-  for (chain in seq_len(chains)) {
-    if (verbose && chains > 1) {
-      cat(sprintf("\n=== Chain %d/%d ===\n", chain, chains))
-    }
-
-    if (!is.null(seed)) {
-      set.seed(seed + chain - 1)
-    }
-
-    chain_results[[chain]] <- cpp_pg_negbin_negbin_gibbs(
+  chain_results <- pg_run_chains(chains, seed, verbose, function(chain) {
+    cpp_pg_negbin_negbin_gibbs(
       y_num = as.integer(y_num),
       y_denom = as.integer(y_denom),
       X_num = X_num,
@@ -1563,243 +1048,16 @@ fit_pg_negbin_negbin <- function(formula,
       verbose = verbose,
       n_threads = as.integer(cores)
     )
-  }
+
+  })
 
   # Convert to ratiod_fit
-  fit <- convert_pg_negbin_negbin_to_ratiod_fit(
-    fit_raw = chain_results,
-    formula = formula,
-    data = data,
-    family = family,
-    X_num = X_num,
-    X_denom = X_denom,
-    re_info = re_info,
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = chains
-  )
+  fit <- pg_assemble_fit(chain_results, formula, data, family, iter, warmup, thin,
+    blocks = c(pg_beta_block(X_num, "beta_num", "num_"),
+               pg_beta_block(X_denom, "beta_denom", "denom_"),
+               c(r_num = "r_num", r_denom = "r_denom"), pg_re_block(re_info)),
+    combined_fields = c("eta_num", "eta_denom", "beta_num", "beta_denom", "re"),
+    internal_extra = list(X_num = X_num, X_denom = X_denom, re_info = re_info))
 
-  return(fit)
-}
-
-
-#' Convert PG NegBin fit to ratiod_fit object
-#' @keywords internal
-convert_pg_negbin_to_ratiod_fit <- function(fit_raw, formula, data, family,
-                                             spatial, X, re_info, iter, warmup, thin,
-                                             chains = 1) {
-
-  n_chains <- length(fit_raw)
-  n_save_per_chain <- nrow(fit_raw[[1]]$beta)
-  n_save_total <- n_save_per_chain * n_chains
-  has_spatial <- !is.null(spatial)
-
-  # Parameter names
-  beta_names <- colnames(X)
-  if (is.null(beta_names)) {
-    beta_names <- paste0("beta[", seq_len(ncol(X)), "]")
-  }
-
-  # Count parameters
-  n_params <- ncol(fit_raw[[1]]$beta) + 1  # beta + r
-  if (re_info$n_groups > 0) n_params <- n_params + 1  # sigma_re
-  if (has_spatial) n_params <- n_params + 1  # tau
-
-  # Create 3D array for draws
-  draws_array <- array(NA_real_,
-                       dim = c(n_save_per_chain, n_chains, n_params))
-
-  # Build parameter names
-  param_names <- c(beta_names, "r")
-  if (re_info$n_groups > 0) {
-    param_names <- c(param_names, "sigma_re")
-  }
-  if (has_spatial) {
-    param_names <- c(param_names, "tau_spatial")
-  }
-
-  dimnames(draws_array) <- list(
-    iteration = seq_len(n_save_per_chain),
-    chain = seq_len(n_chains),
-    variable = param_names
-  )
-
-  # Fill draws
-  for (c in seq_len(n_chains)) {
-    chain_fit <- fit_raw[[c]]
-    col_idx <- 1
-
-    # Fixed effects
-    for (j in seq_len(ncol(chain_fit$beta))) {
-      draws_array[, c, col_idx] <- chain_fit$beta[, j]
-      col_idx <- col_idx + 1
-    }
-
-    # Dispersion
-    draws_array[, c, col_idx] <- chain_fit$r
-    col_idx <- col_idx + 1
-
-    # Sigma_re
-    if (re_info$n_groups > 0) {
-      draws_array[, c, col_idx] <- chain_fit$sigma_re
-      col_idx <- col_idx + 1
-    }
-
-    # Tau
-    if (has_spatial) {
-      draws_array[, c, col_idx] <- chain_fit$tau
-      col_idx <- col_idx + 1
-    }
-  }
-
-  # Combine internals
-  combined_beta <- do.call(rbind, lapply(fit_raw, `[[`, "beta"))
-  combined_re <- do.call(rbind, lapply(fit_raw, `[[`, "re"))
-  combined_eta <- do.call(rbind, lapply(fit_raw, `[[`, "eta"))
-  combined_spatial <- if (has_spatial) {
-    do.call(rbind, lapply(fit_raw, `[[`, "spatial"))
-  } else NULL
-
-  fit <- list(
-    draws = draws_array,
-    formula = formula,
-    data = data,
-    family = family,
-    spatial = spatial,
-    backend = "pg",
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = n_chains,
-    n_save = n_save_total,
-    n_save_per_chain = n_save_per_chain,
-    .internal = list(
-      eta = combined_eta,
-      beta = combined_beta,
-      re = combined_re,
-      spatial = combined_spatial,
-      X = X,
-      re_info = re_info,
-      chain_results = fit_raw
-    )
-  )
-
-  class(fit) <- "ratiod_fit"
-  return(fit)
-}
-
-
-#' Convert PG NegBin-NegBin fit to ratiod_fit object
-#' @keywords internal
-convert_pg_negbin_negbin_to_ratiod_fit <- function(fit_raw, formula, data, family,
-                                                    X_num, X_denom, re_info,
-                                                    iter, warmup, thin, chains = 1) {
-
-  n_chains <- length(fit_raw)
-  n_save_per_chain <- nrow(fit_raw[[1]]$beta_num)
-  n_save_total <- n_save_per_chain * n_chains
-
-  # Parameter names
-  p_num <- ncol(X_num)
-  p_denom <- ncol(X_denom)
-
-  beta_num_names <- colnames(X_num)
-  if (is.null(beta_num_names)) {
-    beta_num_names <- paste0("beta_num[", seq_len(p_num), "]")
-  } else {
-    beta_num_names <- paste0("num_", beta_num_names)
-  }
-
-  beta_denom_names <- colnames(X_denom)
-  if (is.null(beta_denom_names)) {
-    beta_denom_names <- paste0("beta_denom[", seq_len(p_denom), "]")
-  } else {
-    beta_denom_names <- paste0("denom_", beta_denom_names)
-  }
-
-  # Count parameters
-  n_params <- p_num + p_denom + 2  # betas + r_num + r_denom
-  if (re_info$n_groups > 0) n_params <- n_params + 1  # sigma_re
-
-  # Create 3D array
-  draws_array <- array(NA_real_,
-                       dim = c(n_save_per_chain, n_chains, n_params))
-
-  # Build parameter names
-  param_names <- c(beta_num_names, beta_denom_names, "r_num", "r_denom")
-  if (re_info$n_groups > 0) {
-    param_names <- c(param_names, "sigma_re")
-  }
-
-  dimnames(draws_array) <- list(
-    iteration = seq_len(n_save_per_chain),
-    chain = seq_len(n_chains),
-    variable = param_names
-  )
-
-  # Fill draws
-  for (c in seq_len(n_chains)) {
-    chain_fit <- fit_raw[[c]]
-    col_idx <- 1
-
-    # Numerator betas
-    for (j in seq_len(p_num)) {
-      draws_array[, c, col_idx] <- chain_fit$beta_num[, j]
-      col_idx <- col_idx + 1
-    }
-
-    # Denominator betas
-    for (j in seq_len(p_denom)) {
-      draws_array[, c, col_idx] <- chain_fit$beta_denom[, j]
-      col_idx <- col_idx + 1
-    }
-
-    # Dispersions
-    draws_array[, c, col_idx] <- chain_fit$r_num
-    col_idx <- col_idx + 1
-    draws_array[, c, col_idx] <- chain_fit$r_denom
-    col_idx <- col_idx + 1
-
-    # Sigma_re
-    if (re_info$n_groups > 0) {
-      draws_array[, c, col_idx] <- chain_fit$sigma_re
-      col_idx <- col_idx + 1
-    }
-  }
-
-  # Combine internals
-  combined_beta_num <- do.call(rbind, lapply(fit_raw, `[[`, "beta_num"))
-  combined_beta_denom <- do.call(rbind, lapply(fit_raw, `[[`, "beta_denom"))
-  combined_re <- do.call(rbind, lapply(fit_raw, `[[`, "re"))
-  combined_eta_num <- do.call(rbind, lapply(fit_raw, `[[`, "eta_num"))
-  combined_eta_denom <- do.call(rbind, lapply(fit_raw, `[[`, "eta_denom"))
-
-  fit <- list(
-    draws = draws_array,
-    formula = formula,
-    data = data,
-    family = family,
-    backend = "pg",
-    iter = iter,
-    warmup = warmup,
-    thin = thin,
-    chains = n_chains,
-    n_save = n_save_total,
-    n_save_per_chain = n_save_per_chain,
-    .internal = list(
-      eta_num = combined_eta_num,
-      eta_denom = combined_eta_denom,
-      beta_num = combined_beta_num,
-      beta_denom = combined_beta_denom,
-      re = combined_re,
-      X_num = X_num,
-      X_denom = X_denom,
-      re_info = re_info,
-      chain_results = fit_raw
-    )
-  )
-
-  class(fit) <- "ratiod_fit"
   return(fit)
 }

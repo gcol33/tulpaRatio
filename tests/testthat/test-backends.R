@@ -292,7 +292,7 @@ test_that("prepare_spatial_for_pg errors without group_var for group level", {
   )
 })
 
-test_that("convert_pg_to_ratiod_fit creates valid ratiod_fit object", {
+test_that("PG assembly creates a valid ratiod_fit object", {
   # Create minimal chain result structure
   n_save <- 50
   p <- 2
@@ -333,18 +333,16 @@ test_that("convert_pg_to_ratiod_fit creates valid ratiod_fit object", {
   df <- data.frame(y = 1:N, x = rnorm(N), site = factor(rep(1:n_re, length.out = N)))
   family <- ratiod_binomial()
 
-  fit <- tulpaRatio:::convert_pg_to_ratiod_fit(
-    fit_raw = list(chain_result),  # Single chain
+  fit <- tulpaRatio:::pg_assemble_fit(
+    chain_results = list(chain_result),
     formula = formula_obj,
     data = df,
     family = family,
-    spatial = NULL,
-    X = X,
-    re_info = re_info,
+    blocks = c(tulpaRatio:::pg_beta_block(X), sigma_re = "sigma_re"),
+    internal_extra = list(X = X, re_info = re_info),
     iter = 100,
     warmup = 50,
-    thin = 1,
-    chains = 1
+    thin = 1
   )
 
   expect_s3_class(fit, "ratiod_fit")
