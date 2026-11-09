@@ -1101,17 +1101,16 @@ struct PrecisionBlock {
     return pv.dot(M.selfadjointView<Eigen::Lower>() * pv);
   }
 
-  // Sample momentum for block: solve L^T * p = z (back-substitution)
+  // L L' is the momentum covariance Q.
   void sample_momentum(double* p_full, std::mt19937& rng) const {
     std::normal_distribution<double> normal(0.0, 1.0);
-    std::vector<double> z(size);
-    for (int i = 0; i < size; i++) z[i] = normal(rng);
-    double* pb = p_full + start;
-    Eigen::Map<const Eigen::MatrixXd> L(L_chol.data(), size, size);
-    Eigen::Map<const Eigen::VectorXd> zv(z.data(), size);
-    Eigen::Map<Eigen::VectorXd> pv(pb, size);
-    pv.noalias() = L.transpose().triangularView<Eigen::Upper>().solve(zv);
+    Eigen::VectorXd z(size);
+    for (int i = 0; i < size; ++i) z[i] = normal(rng);
+    Eigen::Map<const Eigen::MatrixXd> L(L_chol.data(),size,size);
+    Eigen::Map<Eigen::VectorXd> p(p_full+start,size);
+    p.noalias() = L.triangularView<Eigen::Lower>()*z;
   }
+
 };
 
 // =====================================================================
@@ -1189,33 +1188,17 @@ struct KroneckerBlock {
     return qf;
   }
 
-  // Sample momentum: p ~ N(0, M) where M = Qs ⊗ Qt
-  // p = (Ls ⊗ Lt)^{-T} * z = vec(Ls^{-T} * Z * Lt^{-1})
-  // where Z is S×T standard normal
+  // The column-major S by T layout has covariance Qt (x) Qs.
   void sample_momentum(double* p_full, std::mt19937& rng) const {
-    std::normal_distribution<double> normal(0.0, 1.0);
-    int ST = S * T;
-    // Generate Z ~ N(0,I) as S×T matrix
-    std::vector<double> Z(ST);
-    for (int i = 0; i < ST; i++) Z[i] = normal(rng);
-
-    double* pb = p_full + start;
-    Eigen::Map<Eigen::MatrixXd> Zm(Z.data(), S, T);
-    Eigen::Map<const Eigen::MatrixXd> Lsm(Ls.data(), S, S);
-    Eigen::Map<const Eigen::MatrixXd> Ltm(Lt.data(), T, T);
-    Eigen::Map<Eigen::MatrixXd> Pm(pb, S, T);
-
-    // (Ls ⊗ Lt)^{-T} * z = vec(Ls^{-T} * Z * Lt^{-1})
-    // Step 1: solve Ls^T * tmp = Z  →  tmp = Ls^{-T} * Z
-    Eigen::MatrixXd tmp = Lsm.transpose().triangularView<Eigen::Upper>().solve(Zm);
-    // Step 2: solve tmp2 * Lt^T = tmp  →  tmp2 = tmp * Lt^{-T}
-    //   which is (Lt^{-T} * tmp^T)^T = (Lt * tmp^T)^{-T}
-    //   Actually: tmp2 * Lt^T = tmp → tmp2 = tmp * Lt^{-T}
-    //   Transpose: Lt^{-1} * tmp^T → solve Lt * Y = tmp^T → Y = Lt^{-1} * tmp^T
-    //   Then result = Y^T
-    Eigen::MatrixXd Y = Ltm.triangularView<Eigen::Lower>().solve(tmp.transpose());
-    Pm = Y.transpose();
+    std::normal_distribution<double> normal(0.0,1.0);
+    Eigen::MatrixXd Z(S,T);
+    for (int i = 0; i < S*T; ++i) Z.data()[i] = normal(rng);
+    Eigen::Map<const Eigen::MatrixXd> Lsm(Ls.data(),S,S), Ltm(Lt.data(),T,T);
+    Eigen::MatrixXd left = Lsm.triangularView<Eigen::Lower>()*Z;
+    Eigen::Map<Eigen::MatrixXd> out(p_full+start,S,T);
+    out.noalias() = left*Ltm.transpose().triangularView<Eigen::Upper>();
   }
+
 };
 
 // =====================================================================
@@ -1416,24 +1399,18 @@ struct SparseGMRFBlock {
     return pv.dot(sol);
   }
 
-  // Sample momentum p ~ N(0, Q):  p = L^T * z where LL^T = Q
+  // P Q P' = L L', so P' L z has covariance Q.
   void sample_momentum(double* p_full, std::mt19937& rng) const {
     if (!factorized) return;
-    int ST = S * T;
-    std::normal_distribution<double> normal(0.0, 1.0);
+    const int ST = S*T;
+    std::normal_distribution<double> normal(0.0,1.0);
     Eigen::VectorXd z(ST);
-    for (int i = 0; i < ST; i++) z[i] = normal(rng);
-
-    // P * Q * P^T = L * L^T  →  p ~ N(0, Q) needs p = P^T * L^T * P * z
-    // But simpler: p_perm = L^T * z ~ N(0, L^T L) = N(0, PQP^T)
-    // Then p = P^T * p_perm ~ N(0, P^T PQP^T P) = N(0, Q) ✓
-    auto perm = llt.permutationP();
-    Eigen::SparseMatrix<double> L_mat = llt.matrixL();
-    Eigen::VectorXd p_perm = L_mat.transpose() * z;  // L^T * z
-    Eigen::VectorXd p_vec = perm.transpose() * p_perm;  // P^T * (L^T * z)
-    double* pb = p_full + start;
-    std::memcpy(pb, p_vec.data(), ST * sizeof(double));
+    for (int i = 0; i < ST; ++i) z[i] = normal(rng);
+    Eigen::VectorXd permuted = llt.matrixL()*z;
+    Eigen::Map<Eigen::VectorXd> out(p_full+start,ST);
+    out.noalias() = llt.permutationP().transpose()*permuted;
   }
+
 };
 
 // =====================================================================
@@ -1508,49 +1485,64 @@ struct DenseMassMatrix {
   // Uses Eigen LLT for Cholesky decomposition
   bool update_from_covariance(const double* cov, int n_samples);
 
-  // Sample momentum: p ~ N(0, M) where M = C^{-1}
-  // DIAG: p[i] = z * sqrt_mass_diag[i]
-  // BLOCK_DIAG: diagonal for non-block params, L^{-T} z for block params
-  // DENSE: solve L^T * p = z  (back-substitution)
-  // Uses Eigen triangular solve for dense case (n>=16) for SIMD acceleration.
+  bool has_precision_overrides() const {
+    return precision_block.active || kronecker_block.active ||
+           (sparse_gmrf.active && sparse_gmrf.factorized);
+  }
+
+  void advance_position(double* q, const double* p, double epsilon, double* velocity) const;
+
+  // Overridden coordinates are independent of the complementary base metric.
+  void mask_precision_ranges(Eigen::MatrixXd& C, int offset = 0) const {
+    for (int i = 0; i < C.rows(); ++i) if (in_precision_block(offset+i)) {
+      C.row(i).setZero(); C.col(i).setZero(); C(i,i) = 1.0;
+    }
+  }
+
   void sample_momentum(double* p, std::mt19937& rng) const {
-    std::normal_distribution<double> normal(0.0, 1.0);
+    std::normal_distribution<double> normal(0.0,1.0);
+    const bool overrides = has_precision_overrides();
     if (type == MassMatrixType::BLOCK_DIAG && adapted) {
-      // First: diagonal for all params
-      for (int i = 0; i < n; i++) {
-        p[i] = normal(rng) * sqrt_mass_diag[i];
-      }
-      // Then: overwrite block params with correlated samples
-      for (const auto& blk : blocks) {
-        if (blk.adapted) {
-          blk.sample_momentum(p, rng);
+      for (int i = 0; i < n; ++i) p[i] = normal(rng)*sqrt_mass_diag[i];
+      for (const auto& blk : blocks) if (blk.adapted) {
+        bool overlap = false;
+        for (int i = 0; i < blk.size; ++i) overlap |= in_precision_block(blk.start+i);
+        if (!overlap) blk.sample_momentum(p,rng);
+        else {
+          Eigen::MatrixXd C(blk.size,blk.size);
+          for(int j=0;j<blk.size;++j) for(int i=0;i<blk.size;++i)
+            C(i,j) = blk.inv_mass[j*4+i];
+          mask_precision_ranges(C,blk.start);
+          Eigen::MatrixXd L = C.llt().matrixL();
+          std::normal_distribution<double> block_normal(0.0,1.0);
+          Eigen::VectorXd z(blk.size);
+          for(int i=0;i<blk.size;++i) z[i] = block_normal(rng);
+          Eigen::Map<Eigen::VectorXd> out(p+blk.start,blk.size);
+          out = L.transpose().triangularView<Eigen::Upper>().solve(z);
         }
       }
     } else if (type == MassMatrixType::DIAG || !adapted) {
-      for (int i = 0; i < n; i++) {
-        p[i] = normal(rng) * sqrt_mass_diag[i];
-      }
+      for (int i = 0; i < n; ++i) p[i] = normal(rng)*sqrt_mass_diag[i];
     } else {
-      // Dense: p = L^{-T} z where LL^T = C (inv_mass)
-      // We need p ~ N(0, C^{-1}), so sample z ~ N(0, I), then p = L^{-T} z
-      std::vector<double> z(n);
-      for (int i = 0; i < n; i++) {
-        z[i] = normal(rng);
-      }
-      if (n >= 16) {
-        Eigen::Map<const Eigen::MatrixXd> Lm(L_inv_mass.data(), n, n);
-        Eigen::Map<const Eigen::VectorXd> zv(z.data(), n);
-        Eigen::Map<Eigen::VectorXd> pv(p, n);
-        // Solve L^T * p = z: transpose L then use upper-triangular solve
-        pv.noalias() = Lm.transpose().triangularView<Eigen::Upper>().solve(zv);
+      Eigen::VectorXd z(n);
+      for (int i = 0; i < n; ++i) z[i] = normal(rng);
+      Eigen::Map<Eigen::VectorXd> out(p,n);
+      if (overrides) {
+        Eigen::Map<const Eigen::MatrixXd> base(inv_mass_dense.data(),n,n);
+        Eigen::MatrixXd C = base;
+        mask_precision_ranges(C);
+        Eigen::MatrixXd L = C.llt().matrixL();
+        out = L.transpose().triangularView<Eigen::Upper>().solve(z);
+      } else if (n >= 16) {
+        Eigen::Map<const Eigen::MatrixXd> L(L_inv_mass.data(),n,n);
+        out.noalias() = L.transpose().triangularView<Eigen::Upper>().solve(z);
       } else {
-        ratiod_linalg::tri_solve_upper_transpose(L_inv_mass.data(), z.data(), p, n);
+        ratiod_linalg::tri_solve_upper_transpose(L_inv_mass.data(),z.data(),p,n);
       }
     }
-    // Precision/Kronecker blocks override their param ranges
-    if (precision_block.active) precision_block.sample_momentum(p, rng);
-    if (kronecker_block.active) kronecker_block.sample_momentum(p, rng);
-    if (sparse_gmrf.active && sparse_gmrf.factorized) sparse_gmrf.sample_momentum(p, rng);
+    if (precision_block.active) precision_block.sample_momentum(p,rng);
+    if (kronecker_block.active) kronecker_block.sample_momentum(p,rng);
+    if (sparse_gmrf.active && sparse_gmrf.factorized) sparse_gmrf.sample_momentum(p,rng);
   }
 
   // Check if param i belongs to a precision, kronecker, or sparse GMRF block
@@ -1570,118 +1562,70 @@ struct DenseMassMatrix {
   // Kinetic energy: 0.5 * p^T * C * p  where C = M^{-1}
   // Uses Eigen BLAS for dense case (n>=16) for SIMD acceleration.
   double kinetic_energy(const double* p) const {
-    // Precision/Kronecker/Sparse blocks: compute their contribution separately
-    double ke_prec = 0.0;
-    if (precision_block.active) ke_prec += precision_block.quadform(p);
-    if (kronecker_block.active) ke_prec += kronecker_block.quadform(p);
-    if (sparse_gmrf.active && sparse_gmrf.factorized) ke_prec += sparse_gmrf.quadform(p);
-
+    if (has_precision_overrides()) {
+      std::vector<double> velocity(n);
+      inv_mass_times_p(p,velocity.data());
+      double ke = 0.0;
+      for(int i=0;i<n;++i) ke += p[i]*velocity[i];
+      return 0.5*ke;
+    }
     if (type == MassMatrixType::BLOCK_DIAG && adapted) {
       double ke = 0.0;
-      for (int i = 0; i < n; i++) {
-        if (!in_block[i] && !in_precision_block(i)) {
-          ke += inv_mass_diag[i] * p[i] * p[i];
-        }
-      }
+      for (int i = 0; i < n; ++i)
+        if (!in_block[i]) ke += inv_mass_diag[i]*p[i]*p[i];
       for (const auto& blk : blocks) {
-        if (blk.adapted) {
-          ke += blk.quadform(p);
-        } else {
-          for (int i = blk.start; i < blk.start + blk.size; i++) {
-            if (!in_precision_block(i))
-              ke += inv_mass_diag[i] * p[i] * p[i];
-          }
-        }
+        if (blk.adapted) ke += blk.quadform(p);
+        else for(int i=blk.start;i<blk.start+blk.size;++i) ke += inv_mass_diag[i]*p[i]*p[i];
       }
-      return 0.5 * (ke + ke_prec);
-    } else if (type == MassMatrixType::DIAG || !adapted) {
-      if (!precision_block.active && !kronecker_block.active) {
-        return 0.5 * ratiod_linalg::weighted_norm_squared(p, inv_mass_diag.data(), n);
-      }
-      // Skip precision block params in diagonal sum
-      double ke = 0.0;
-      for (int i = 0; i < n; i++) {
-        if (!in_precision_block(i))
-          ke += inv_mass_diag[i] * p[i] * p[i];
-      }
-      return 0.5 * (ke + ke_prec);
-    } else if (n >= 16) {
-      // Dense: full matrix handles all params including precision block range
-      // But if precision blocks are active, we need to exclude their range
-      // from the dense contribution and add the precision block contribution instead.
-      // For simplicity: if precision blocks active, fall back to per-element
-      if (precision_block.active || kronecker_block.active) {
-        double ke = 0.0;
-        for (int i = 0; i < n; i++) {
-          if (in_precision_block(i)) continue;
-          for (int j = 0; j < n; j++) {
-            if (in_precision_block(j)) continue;
-            ke += p[i] * inv_mass_dense[static_cast<size_t>(j) * n + i] * p[j];
-          }
-        }
-        return 0.5 * (ke + ke_prec);
-      }
-      Eigen::Map<const Eigen::MatrixXd> Am(inv_mass_dense.data(), n, n);
-      Eigen::Map<const Eigen::VectorXd> pv(p, n);
-      return 0.5 * pv.dot(Am.selfadjointView<Eigen::Lower>() * pv);
-    } else {
-      return 0.5 * ratiod_linalg::quadratic_form(p, inv_mass_dense.data(), n);
+      return 0.5*ke;
     }
+    if (type == MassMatrixType::DIAG || !adapted)
+      return 0.5*ratiod_linalg::weighted_norm_squared(p,inv_mass_diag.data(),n);
+    if (n >= 16) {
+      Eigen::Map<const Eigen::MatrixXd> C(inv_mass_dense.data(),n,n);
+      Eigen::Map<const Eigen::VectorXd> pv(p,n);
+      return 0.5*pv.dot(C.selfadjointView<Eigen::Lower>()*pv);
+    }
+    return 0.5*ratiod_linalg::quadratic_form(p,inv_mass_dense.data(),n);
   }
 
-  // Compute C * p (for leapfrog position update: q += eps * C * p)
-  // Result written to `result` buffer.
-  // Uses Eigen BLAS for dense case (n>=16) for SIMD acceleration.
-  void inv_mass_times_p(const double* p, double* result) const {
-    if (type == MassMatrixType::BLOCK_DIAG && adapted) {
-      for (int i = 0; i < n; i++) {
-        result[i] = inv_mass_diag[i] * p[i];
-      }
-      for (const auto& blk : blocks) {
-        if (blk.adapted) {
-          double tmp[4];
-          blk.matvec(p, tmp);
-          for (int i = 0; i < blk.size; i++) {
-            result[blk.start + i] = tmp[i];
-          }
+  // scale is applied to the inverse-mass product for the position increment.
+  void inv_mass_times_p(const double* p, double* result, double scale = 1.0) const {
+    std::vector<double> complement;
+    const double* base_p = p;
+    if (has_precision_overrides()) {
+      complement.assign(p,p+n);
+      for(int i=0;i<n;++i) if(in_precision_block(i)) complement[i] = 0.0;
+      base_p = complement.data();
+    }
+    if (type == MassMatrixType::DIAG || !adapted || type == MassMatrixType::BLOCK_DIAG) {
+      for(int i=0;i<n;++i) result[i] = scale*inv_mass_diag[i]*base_p[i];
+      if (type == MassMatrixType::BLOCK_DIAG && adapted)
+        for(const auto& blk : blocks) if(blk.adapted) {
+          double tmp[4]; blk.matvec(base_p,tmp);
+          for(int i=0;i<blk.size;++i) result[blk.start+i] = scale*tmp[i];
         }
-      }
-    } else if (type == MassMatrixType::DIAG || !adapted) {
-      for (int i = 0; i < n; i++) {
-        result[i] = inv_mass_diag[i] * p[i];
-      }
-    } else if (n >= 16) {
-      Eigen::Map<const Eigen::MatrixXd> Am(inv_mass_dense.data(), n, n);
-      Eigen::Map<const Eigen::VectorXd> pv(p, n);
-      Eigen::Map<Eigen::VectorXd> rv(result, n);
-      rv.noalias() = Am.selfadjointView<Eigen::Lower>() * pv;
     } else {
-      ratiod_linalg::symmatvec(inv_mass_dense.data(), p, result, n);
+      if(n >= 16) {
+        Eigen::Map<const Eigen::MatrixXd> C(inv_mass_dense.data(),n,n);
+        Eigen::Map<const Eigen::VectorXd> pv(base_p,n);
+        Eigen::Map<Eigen::VectorXd> out(result,n);
+        out.noalias() = C.selfadjointView<Eigen::Lower>()*pv;
+      } else ratiod_linalg::symmatvec(inv_mass_dense.data(),base_p,result,n);
+      if(scale != 1.0) for(int i=0;i<n;++i) result[i] *= scale;
     }
-    // Precision/Kronecker blocks override their param ranges
-    if (precision_block.active) {
-      std::vector<double> tmp(precision_block.size);
-      precision_block.matvec(p, tmp.data());
-      for (int i = 0; i < precision_block.size; i++) {
-        result[precision_block.start + i] = tmp[i];
-      }
-    }
-    if (kronecker_block.active) {
-      int ST = kronecker_block.S * kronecker_block.T;
-      std::vector<double> tmp(ST);
-      kronecker_block.matvec(p, tmp.data());
-      for (int i = 0; i < ST; i++) {
-        result[kronecker_block.start + i] = tmp[i];
-      }
-    }
-    if (sparse_gmrf.active && sparse_gmrf.factorized) {
-      int ST = sparse_gmrf.S * sparse_gmrf.T;
-      std::vector<double> tmp(ST);
-      sparse_gmrf.inv_mass_matvec(p, tmp.data());
-      for (int i = 0; i < ST; i++) {
-        result[sparse_gmrf.start + i] = tmp[i];
-      }
-    }
+    const auto overwrite = [&](int start, int size, const auto& product) {
+      std::vector<double> tmp(size);
+      product(tmp.data());
+      for(int i=0;i<size;++i) result[start+i] = scale*tmp[i];
+    };
+    if(precision_block.active) overwrite(precision_block.start,precision_block.size,
+      [&](double* tmp) { precision_block.matvec(p,tmp); });
+    if(kronecker_block.active) overwrite(kronecker_block.start,kronecker_block.S*kronecker_block.T,
+      [&](double* tmp) { kronecker_block.matvec(p,tmp); });
+    if(sparse_gmrf.active && sparse_gmrf.factorized)
+      overwrite(sparse_gmrf.start,sparse_gmrf.S*sparse_gmrf.T,
+        [&](double* tmp) { sparse_gmrf.inv_mass_matvec(p,tmp); });
   }
 
   // Compute diag(C) * p — uses diagonal only, even when dense is available.
@@ -2107,7 +2051,7 @@ double find_reasonable_epsilon(
 );
 
 // Dense-mass-aware version: uses full DenseMassMatrix for momentum, leapfrog, and kinetic energy
-double find_reasonable_epsilon_dense(
+double find_reasonable_epsilon(
     const std::vector<double>& q,
     const ModelData& data,
     const ParamLayout& layout,

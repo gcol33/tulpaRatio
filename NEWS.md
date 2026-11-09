@@ -1,5 +1,18 @@
 # tulpaRatio 1.7.3
 
+* The HMC samplers integrate through one metric concept (identity, diagonal,
+  dense / block), one templated leapfrog and one step-size search. This also
+  fixes the momentum factor orientation and kinetic energy under precision,
+  Kronecker and sparse blocks, which the hand-rolled in-place leapfrog had
+  double-counted or omitted (#183). The H-mode gradients and the vectorized
+  residuals are composed from one set of per-margin structs, `Ratio<Num, Den>`
+  (#188, #189); the temporal RW1 / RW2 / AR1 / IID prior is one production
+  density shared by the temporal block, TVC and the tests, which now test the
+  density that runs (#194); random-effect block gradients read one scale index
+  helper (#195). Fixed-seed draws and analytic gradients are byte-identical on
+  the 18 reference fixtures; the TVC IID density gains its `-n log(2 pi) / 2`
+  normalizer.
+
 * The Polya-Gamma coefficient draws have the right conditional covariance: with
   the precision factored as Q = L L', the noise is now L^-T z, whose covariance
   is Q^-1, where L^-1 z had covariance L^-1 L^-T. On an exact two-coefficient

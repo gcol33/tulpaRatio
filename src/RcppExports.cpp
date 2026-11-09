@@ -1567,6 +1567,47 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_metric_step
+Rcpp::List cpp_test_metric_step(std::string type, std::string block, int n, double epsilon, bool extreme);
+RcppExport SEXP _tulpaRatio_cpp_test_metric_step(SEXP typeSEXP, SEXP blockSEXP, SEXP nSEXP, SEXP epsilonSEXP, SEXP extremeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type block(blockSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< bool >::type extreme(extremeSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_metric_step(type, block, n, epsilon, extreme));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_metric_epsilon
+Rcpp::List cpp_test_metric_epsilon(std::string type, int n);
+RcppExport SEXP _tulpaRatio_cpp_test_metric_epsilon(SEXP typeSEXP, SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_metric_epsilon(type, n));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_metric_geometry
+Rcpp::List cpp_test_metric_geometry(std::string type, std::string block, int n, int n_draws);
+RcppExport SEXP _tulpaRatio_cpp_test_metric_geometry(SEXP typeSEXP, SEXP blockSEXP, SEXP nSEXP, SEXP n_drawsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type block(blockSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_metric_geometry(type, block, n, n_draws));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_negbin_math
 Rcpp::NumericVector cpp_test_negbin_math(int y, double phi);
 RcppExport SEXP _tulpaRatio_cpp_test_negbin_math(SEXP ySEXP, SEXP phiSEXP) {
@@ -1964,6 +2005,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_st_gp_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_log_lik, 14},
     {"_tulpaRatio_cpp_test_st_gp_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_margin_normalizer, 13},
     {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},
+    {"_tulpaRatio_cpp_test_metric_step", (DL_FUNC) &_tulpaRatio_cpp_test_metric_step, 5},
+    {"_tulpaRatio_cpp_test_metric_epsilon", (DL_FUNC) &_tulpaRatio_cpp_test_metric_epsilon, 2},
+    {"_tulpaRatio_cpp_test_metric_geometry", (DL_FUNC) &_tulpaRatio_cpp_test_metric_geometry, 4},
     {"_tulpaRatio_cpp_test_negbin_math", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_math, 2},
     {"_tulpaRatio_cpp_test_negbin_spec", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_spec, 5},
     {"_tulpaRatio_cpp_test_precision_jet", (DL_FUNC) &_tulpaRatio_cpp_test_precision_jet, 3},

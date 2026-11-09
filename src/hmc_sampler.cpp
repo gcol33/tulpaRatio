@@ -3,6 +3,7 @@
 // Provides Stan-free Bayesian inference for all ratiod models
 
 #include "hmc_sampler.h"
+#include "hmc_integrator.h"
 #include <tulpa/walnuts.h>
 #include "omp_chain_team.h"
 #include "omp_thread_scope.h"
@@ -44,6 +45,19 @@
 using namespace Rcpp;
 
 namespace ratiod_hmc {
+
+void DenseMassMatrix::advance_position(double* q, const double* p, double epsilon,
+                                       double* velocity) const {
+  if (type == MassMatrixType::BLOCK_DIAG && adapted && !has_precision_overrides()) {
+    inv_mass_times_p(p,velocity);
+    ratiod_linalg::axpy_weighted(epsilon,inv_mass_diag.data(),p,q,n);
+    for (const auto& block : blocks) if (block.adapted)
+      for (int i = 0; i < block.size; ++i) {
+        const int j = block.start+i;
+        q[j] += epsilon*(velocity[j]-inv_mass_diag[j]*p[j]);
+      }
+  } else advance_metric_position(*this,q,p,n,epsilon,velocity);
+}
 
 // =====================================================================
 // Dense mass matrix: Cholesky decomposition via Eigen
@@ -7530,51 +7544,35 @@ public:
 // Leapfrog integrator
 // =====================================================================
 
-LeapfrogResult leapfrog_step(
-    const std::vector<double>& q,
-    const std::vector<double>& p,
-    double epsilon,
-    const ModelData& data,
-    const ParamLayout& layout
-) {
-  int n = q.size();
-  LeapfrogResult result;
-  result.q = q;
-  result.p = p;
-  result.divergent = false;
-
-  std::vector<double> grad(n);
-
-  // Half step for momentum
-  compute_gradient(result.q, data, layout, grad);
-  for (int i = 0; i < n; i++) {
-    result.p[i] += 0.5 * epsilon * grad[i];
-  }
-
-  // Full step for position
-  for (int i = 0; i < n; i++) {
-    result.q[i] += epsilon * result.p[i];
-  }
-
-  // Half step for momentum (fused gradient + log_prob)
-  compute_gradient(result.q, data, layout, grad, &result.log_prob);
-  for (int i = 0; i < n; i++) {
-    result.p[i] += 0.5 * epsilon * grad[i];
-  }
-
-  if (!std::isfinite(result.log_prob)) {
-    result.divergent = true;
-  }
-
-  // Also check for extreme parameter values
-  for (int i = 0; i < n; i++) {
-    if (std::abs(result.q[i]) > 1e10 || !std::isfinite(result.q[i])) {
-      result.divergent = true;
-      break;
-    }
-  }
-
+template<class Metric>
+LeapfrogResultWithGrad integrate_copy(const std::vector<double>& q,
+    const std::vector<double>& p, double epsilon, const Metric& metric,
+    const ModelData& data, const ParamLayout& layout,
+    const std::vector<double>* initial_grad = nullptr) {
+  LeapfrogResultWithGrad result;
+  result.q = q; result.p = p;
+  result.grad.resize(q.size());
+  if (initial_grad) result.grad = *initial_grad;
+  else compute_gradient(q,data,layout,result.grad);
+  std::vector<double> displacement(q.size());
+  const auto evaluate = [&](const double*,double*,double& lp) {
+    compute_gradient(result.q,data,layout,result.grad,&lp);
+  };
+  result.divergent = metric_leapfrog(result.q.data(),result.p.data(),result.grad.data(),
+      q.size(),epsilon,metric,displacement.data(),evaluate,result.log_prob);
   return result;
+}
+
+inline LeapfrogResult without_gradient(LeapfrogResultWithGrad result) {
+  LeapfrogResult out;
+  out.q = std::move(result.q); out.p = std::move(result.p);
+  out.log_prob = result.log_prob; out.divergent = result.divergent;
+  return out;
+}
+
+LeapfrogResult leapfrog_step(const std::vector<double>& q, const std::vector<double>& p,
+    double epsilon, const ModelData& data, const ParamLayout& layout) {
+  return without_gradient(integrate_copy(q,p,epsilon,IdentityMetric{int(q.size())},data,layout));
 }
 
 // =====================================================================
@@ -7604,285 +7602,35 @@ std::vector<double> compute_diagonal_mass(
   return mass;
 }
 
-// Leapfrog step with diagonal mass matrix
-LeapfrogResult leapfrog_step_mass(
-    const std::vector<double>& q,
-    const std::vector<double>& p,
-    double epsilon,
-    const std::vector<double>& inv_mass,  // inverse mass (1/M)
-    const ModelData& data,
-    const ParamLayout& layout
-) {
-  int n = q.size();
-  LeapfrogResult result;
-  result.q = q;
-  result.p = p;
-  result.divergent = false;
-
-  std::vector<double> grad(n);
-
-  // Half step for momentum
-  compute_gradient(result.q, data, layout, grad);
-  for (int i = 0; i < n; i++) {
-    result.p[i] += 0.5 * epsilon * grad[i];
-  }
-
-  // Full step for position (scaled by inverse mass)
-  for (int i = 0; i < n; i++) {
-    result.q[i] += epsilon * inv_mass[i] * result.p[i];
-  }
-
-  // Half step for momentum (fused gradient + log_prob)
-  compute_gradient(result.q, data, layout, grad, &result.log_prob);
-  for (int i = 0; i < n; i++) {
-    result.p[i] += 0.5 * epsilon * grad[i];
-  }
-
-  if (!std::isfinite(result.log_prob)) {
-    result.divergent = true;
-  }
-
-  // Check for extreme parameter values
-  for (int i = 0; i < n; i++) {
-    if (std::abs(result.q[i]) > 1e10 || !std::isfinite(result.q[i])) {
-      result.divergent = true;
-      break;
-    }
-  }
-
-  return result;
+LeapfrogResult leapfrog_step_mass(const std::vector<double>& q,
+    const std::vector<double>& p, double epsilon, const std::vector<double>& inv_mass,
+    const ModelData& data, const ParamLayout& layout) {
+  return without_gradient(integrate_copy(q,p,epsilon,DiagonalMetric{inv_mass},data,layout));
 }
 
-double find_reasonable_epsilon(
-    const std::vector<double>& q,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::mt19937& rng
-) {
-  // Stan-style algorithm: start at epsilon=1, double or halve until
-  // acceptance probability crosses 0.5
-  int n = q.size();
-
-  std::normal_distribution<double> normal(0.0, 1.0);
-  std::vector<double> p(n);
-  for (int i = 0; i < n; i++) {
-    p[i] = normal(rng);
-  }
-
-  // Fused: compute gradient + log_post in a single O(N) pass
-  // (eliminates redundant compute_log_post call)
-  double log_prob_init;
-  std::vector<double> grad_init(n);
-  compute_gradient(q, data, layout, grad_init, &log_prob_init);
-  double kinetic_init = 0.5 * ratiod_linalg::norm_squared(p.data(), n);
-  double H_init = -log_prob_init + kinetic_init;
-
-  double epsilon = 1.0;
-
-  LeapfrogResult lf = leapfrog_step(q, p, epsilon, data, layout);
-  double kinetic_new = 0.5 * ratiod_linalg::norm_squared(lf.p.data(), n);
-  double H_new = -lf.log_prob + kinetic_new;
-  double delta_H = H_new - H_init;
-
-  // Determine direction: if accept prob > 0.5, increase; else decrease
-  // accept_prob = exp(-delta_H), so > 0.5 iff delta_H < log(2)
-  int direction = (!std::isfinite(delta_H) || delta_H > std::log(2.0)) ? -1 : 1;
-
-  for (int iter = 0; iter < 50; iter++) {
-    if (direction == 1) {
-      epsilon *= 2.0;
-    } else {
-      epsilon *= 0.5;
-    }
-
-    if (epsilon < 1e-10 || epsilon > 1e5) break;
-
-    lf = leapfrog_step(q, p, epsilon, data, layout);
-    if (!std::isfinite(lf.log_prob)) {
-      if (direction == 1) break;  // Was increasing, hit instability
-      continue;  // Was decreasing, keep going
-    }
-
-    kinetic_new = 0.5 * ratiod_linalg::norm_squared(lf.p.data(), n);
-    H_new = -lf.log_prob + kinetic_new;
-    delta_H = H_new - H_init;
-
-    // Stop when we cross the 0.5 acceptance threshold
-    if (direction == 1 && (!std::isfinite(delta_H) || delta_H > std::log(2.0))) break;
-    if (direction == -1 && std::isfinite(delta_H) && delta_H < std::log(2.0)) break;
-  }
-
-  return std::max(1e-10, std::min(epsilon, 1e3));
-}
-
-// Mass-aware version: uses diagonal mass matrix for leapfrog and kinetic energy
-double find_reasonable_epsilon(
-    const std::vector<double>& q,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::mt19937& rng,
-    const std::vector<double>& inv_mass
-) {
-  int n = q.size();
-
-  std::normal_distribution<double> normal(0.0, 1.0);
-  std::vector<double> p(n);
-  // Sample p ~ N(0, M) where M = diag(1/inv_mass)
-  for (int i = 0; i < n; i++) {
-    p[i] = normal(rng) / std::sqrt(inv_mass[i]);
-  }
-
-  // Fused: compute gradient + log_post in a single O(N) pass
-  double log_prob_init;
-  std::vector<double> grad_init(n);
-  compute_gradient(q, data, layout, grad_init, &log_prob_init);
-  double kinetic_init = 0.0;
-  for (int i = 0; i < n; i++) {
-    kinetic_init += p[i] * p[i] * inv_mass[i];
-  }
-  kinetic_init *= 0.5;
-  double H_init = -log_prob_init + kinetic_init;
-
-  double epsilon = 1.0;
-
-  LeapfrogResult lf = leapfrog_step_mass(q, p, epsilon, inv_mass, data, layout);
-  double kinetic_new = 0.0;
-  for (int i = 0; i < n; i++) {
-    kinetic_new += lf.p[i] * lf.p[i] * inv_mass[i];
-  }
-  kinetic_new *= 0.5;
-  double H_new = -lf.log_prob + kinetic_new;
-  double delta_H = H_new - H_init;
-
-  int direction = (!std::isfinite(delta_H) || delta_H > std::log(2.0)) ? -1 : 1;
-
-  for (int iter = 0; iter < 50; iter++) {
-    if (direction == 1) {
-      epsilon *= 2.0;
-    } else {
-      epsilon *= 0.5;
-    }
-
-    if (epsilon < 1e-10 || epsilon > 1e5) break;
-
-    lf = leapfrog_step_mass(q, p, epsilon, inv_mass, data, layout);
-    if (!std::isfinite(lf.log_prob)) {
-      if (direction == 1) break;
-      continue;
-    }
-
-    kinetic_new = 0.0;
-    for (int i = 0; i < n; i++) {
-      kinetic_new += lf.p[i] * lf.p[i] * inv_mass[i];
-    }
-    kinetic_new *= 0.5;
-    H_new = -lf.log_prob + kinetic_new;
-    delta_H = H_new - H_init;
-
-    if (direction == 1 && (!std::isfinite(delta_H) || delta_H > std::log(2.0))) break;
-    if (direction == -1 && std::isfinite(delta_H) && delta_H < std::log(2.0)) break;
-  }
-
-  return std::max(1e-10, std::min(epsilon, 1e3));
-}
-
-// Dense-mass-aware version: uses full DenseMassMatrix for momentum sampling,
-// leapfrog integration, and kinetic energy computation.
-// This ensures the step size is calibrated for the rotated phase space
-// dynamics of the dense mass matrix, not just the diagonal approximation.
-double find_reasonable_epsilon_dense(
-    const std::vector<double>& q,
-    const ModelData& data,
-    const ParamLayout& layout,
-    std::mt19937& rng,
-    const DenseMassMatrix& mass
-) {
-  int n = q.size();
-
-  // Sample momentum using the full dense mass matrix: p ~ N(0, M)
-  std::vector<double> p(n);
-  // const_cast is safe here - sample_momentum only reads rng state
-  const_cast<DenseMassMatrix&>(mass).sample_momentum(p.data(), rng);
-
-  // Compute gradient + log_post
-  double log_prob_init;
-  std::vector<double> grad_init(n);
-  compute_gradient(q, data, layout, grad_init, &log_prob_init);
-
-  // Kinetic energy using full dense mass matrix
-  double kinetic_init = mass.kinetic_energy(p.data());
-  double H_init = -log_prob_init + kinetic_init;
-
-  double epsilon = 1.0;
-
-  // Single leapfrog step using dense mass matrix
-  auto do_leapfrog = [&](const std::vector<double>& q_in,
-                         const std::vector<double>& p_in,
-                         double eps) -> std::pair<std::vector<double>, std::vector<double>> {
-    std::vector<double> q_out = q_in;
-    std::vector<double> p_out = p_in;
-    std::vector<double> grad(n);
-    compute_gradient(q_out, data, layout, grad);
-
-    // Half step for momentum
-    for (int i = 0; i < n; i++) p_out[i] += 0.5 * eps * grad[i];
-
-    // Full step for position: q += eps * M^{-1} * p
-    std::vector<double> Mp(n);
-    mass.inv_mass_times_p(p_out.data(), Mp.data());
-    for (int i = 0; i < n; i++) q_out[i] += eps * Mp[i];
-
-    // Compute gradient at new position
-    compute_gradient(q_out, data, layout, grad);
-
-    // Half step for momentum
-    for (int i = 0; i < n; i++) p_out[i] += 0.5 * eps * grad[i];
-
-    return {q_out, p_out};
+template<class Metric>
+double find_epsilon(const std::vector<double>& q, const ModelData& data,
+    const ParamLayout& layout, std::mt19937& rng, const Metric& metric) {
+  std::vector<double> params(q.size()), grad(q.size());
+  const auto evaluate = [&](const double* x, double* g, double& lp) {
+    std::copy(x,x+q.size(),params.begin());
+    compute_gradient(params,data,layout,grad,&lp);
+    std::copy(grad.begin(),grad.end(),g);
   };
+  return metric_find_epsilon(q,metric,rng,evaluate);
+}
 
-  auto [q_new, p_new] = do_leapfrog(q, p, epsilon);
-
-  // Check if log_prob is finite at new position
-  double log_prob_new;
-  std::vector<double> grad_new(n);
-  compute_gradient(q_new, data, layout, grad_new, &log_prob_new);
-
-  double kinetic_new = mass.kinetic_energy(p_new.data());
-  double H_new = -log_prob_new + kinetic_new;
-  double delta_H = H_new - H_init;
-
-  int direction = (!std::isfinite(delta_H) || delta_H > std::log(2.0)) ? -1 : 1;
-
-  for (int iter = 0; iter < 50; iter++) {
-    if (direction == 1) {
-      epsilon *= 2.0;
-    } else {
-      epsilon *= 0.5;
-    }
-
-    if (epsilon < 1e-10 || epsilon > 1e5) break;
-
-    auto [q_try, p_try] = do_leapfrog(q, p, epsilon);
-
-    double lp_try;
-    std::vector<double> grad_try(n);
-    compute_gradient(q_try, data, layout, grad_try, &lp_try);
-
-    if (!std::isfinite(lp_try)) {
-      if (direction == 1) break;
-      continue;
-    }
-
-    kinetic_new = mass.kinetic_energy(p_try.data());
-    H_new = -lp_try + kinetic_new;
-    delta_H = H_new - H_init;
-
-    if (direction == 1 && (!std::isfinite(delta_H) || delta_H > std::log(2.0))) break;
-    if (direction == -1 && std::isfinite(delta_H) && delta_H < std::log(2.0)) break;
-  }
-
-  return std::max(1e-10, std::min(epsilon, 1e3));
+double find_reasonable_epsilon(const std::vector<double>& q, const ModelData& data,
+    const ParamLayout& layout, std::mt19937& rng) {
+  return find_epsilon(q,data,layout,rng,IdentityMetric{int(q.size())});
+}
+double find_reasonable_epsilon(const std::vector<double>& q, const ModelData& data,
+    const ParamLayout& layout, std::mt19937& rng, const std::vector<double>& inv_mass) {
+  return find_epsilon(q,data,layout,rng,DiagonalMetric{inv_mass});
+}
+double find_reasonable_epsilon(const std::vector<double>& q, const ModelData& data,
+    const ParamLayout& layout, std::mt19937& rng, const DenseMassMatrix& mass) {
+  return find_epsilon(q,data,layout,rng,mass);
 }
 
 // =====================================================================
@@ -7924,49 +7672,8 @@ LeapfrogResultWithGrad leapfrog_step_with_grad(
     double epsilon, const std::vector<double>& inv_mass,
     bool use_mass, const ModelData& data, const ParamLayout& layout) {
 
-  int n = q.size();
-  LeapfrogResultWithGrad result;
-  result.q = q;
-  result.p = p;
-  result.grad.resize(n);
-  result.divergent = false;
-
-  // Half step for momentum using provided gradient
-  for (int i = 0; i < n; i++) {
-    result.p[i] += 0.5 * epsilon * grad[i];
-  }
-
-  // Full step for position
-  if (use_mass) {
-    for (int i = 0; i < n; i++) {
-      result.q[i] += epsilon * inv_mass[i] * result.p[i];
-    }
-  } else {
-    for (int i = 0; i < n; i++) {
-      result.q[i] += epsilon * result.p[i];
-    }
-  }
-
-  // Compute gradient and log_prob at new position (fused: single O(N) pass)
-  compute_gradient(result.q, data, layout, result.grad, &result.log_prob);
-
-  // Half step for momentum using new gradient
-  for (int i = 0; i < n; i++) {
-    result.p[i] += 0.5 * epsilon * result.grad[i];
-  }
-
-  // Check for divergence
-  if (!std::isfinite(result.log_prob)) {
-    result.divergent = true;
-  }
-  for (int i = 0; i < n; i++) {
-    if (std::abs(result.q[i]) > 1e10 || !std::isfinite(result.q[i])) {
-      result.divergent = true;
-      break;
-    }
-  }
-
-  return result;
+  if (use_mass) return integrate_copy(q,p,epsilon,DiagonalMetric{inv_mass},data,layout,&grad);
+  return integrate_copy(q,p,epsilon,IdentityMetric{int(q.size())},data,layout,&grad);
 }
 
 // One leapfrog leaf of a NUTS tree. A non-finite energy error means the step
@@ -8115,7 +7822,8 @@ double nuts_compute_hamiltonian_fast(double log_prob, const double* p,
 bool nuts_check_uturn_fast(const double* q_minus, const double* q_plus,
                            const double* p_minus, const double* p_plus,
                            const DenseMassMatrix& mass, double* scratch, int n) {
-  if (mass.type == MassMatrixType::BLOCK_DIAG && mass.adapted) {
+  if ((mass.type == MassMatrixType::BLOCK_DIAG && mass.adapted) ||
+      mass.has_precision_overrides()) {
     // Block-diagonal: use inv_mass_times_p which handles blocks correctly
     mass.inv_mass_times_p(p_plus, scratch);
     double dot_fwd = 0.0;
@@ -8177,95 +7885,16 @@ LeapfrogInPlaceResult leapfrog_step_inplace(
     const DenseMassMatrix& mass,
     const ModelData& data, const ParamLayout& layout) {
 
-  double* q = ws.q_at(slot);
-  double* p = ws.p_at(slot);
-  double* grad = ws.grad_at(slot);
-  int n = ws.n;
-
+  const int n = ws.n;
+  const auto evaluate = [&](const double* q, double* grad, double& lp) {
+    std::memcpy(ws.params_buf.data(),q,n*sizeof(double));
+    ws.gradient_fn(ws.params_buf,data,layout,ws.grad_buf,&lp);
+    std::memcpy(grad,ws.grad_buf.data(),n*sizeof(double));
+  };
   LeapfrogInPlaceResult result;
-  result.divergent = false;
-
-  // Half step for momentum using current gradient
-  ratiod_linalg::axpy(0.5 * epsilon, grad, p, n);
-
-  // Full step for position: q += eps * C * p
-  if (!mass.adapted) {
-    // Identity mass: q += eps * p
-    ratiod_linalg::axpy(epsilon, p, q, n);
-  } else if (mass.type == MassMatrixType::BLOCK_DIAG) {
-    // Block-diagonal: diagonal for non-block params, dense for block params
-    // First pass: diagonal for all params
-    ratiod_linalg::axpy_weighted(epsilon, mass.inv_mass_diag.data(), p, q, n);
-    // Second pass: overwrite block params with dense contribution
-    for (const auto& blk : mass.blocks) {
-      if (blk.adapted) {
-        double tmp[4];
-        blk.matvec(p, tmp);
-        for (int i = 0; i < blk.size; i++) {
-          // Undo diagonal contribution, apply block contribution
-          q[blk.start + i] += epsilon * (tmp[i] - mass.inv_mass_diag[blk.start + i] * p[blk.start + i]);
-        }
-      }
-    }
-  } else if (mass.type == MassMatrixType::DIAG) {
-    // Diagonal: q[i] += eps * inv_mass[i] * p[i]
-    ratiod_linalg::axpy_weighted(epsilon, mass.inv_mass_diag.data(), p, q, n);
-  } else {
-    // Dense: q += eps * C * p  (Eigen BLAS for n>=16, scalar fallback below)
-    if (n >= 16) {
-      Eigen::Map<const Eigen::MatrixXd> Am(mass.inv_mass_dense.data(), n, n);
-      Eigen::Map<const Eigen::VectorXd> pv(p, n);
-      Eigen::Map<Eigen::VectorXd> qv(q, n);
-      qv.noalias() += epsilon * (Am.selfadjointView<Eigen::Lower>() * pv);
-    } else {
-      ratiod_linalg::axpy_matvec(epsilon, mass.inv_mass_dense.data(), p, q, n);
-    }
-  }
-  // Precision/Kronecker blocks: undo base contribution, apply block M^{-1}
-  if (mass.precision_block.active) {
-    const auto& pb = mass.precision_block;
-    std::vector<double> tmp(pb.size);
-    pb.matvec(p, tmp.data());
-    for (int i = 0; i < pb.size; i++) {
-      // Undo the diagonal (or dense) contribution that was already applied
-      q[pb.start + i] -= epsilon * mass.inv_mass_diag[pb.start + i] * p[pb.start + i];
-      // Apply precision block contribution
-      q[pb.start + i] += epsilon * tmp[i];
-    }
-  }
-  if (mass.kronecker_block.active) {
-    const auto& kb = mass.kronecker_block;
-    int ST = kb.S * kb.T;
-    std::vector<double> tmp(ST);
-    kb.matvec(p, tmp.data());
-    for (int i = 0; i < ST; i++) {
-      q[kb.start + i] -= epsilon * mass.inv_mass_diag[kb.start + i] * p[kb.start + i];
-      q[kb.start + i] += epsilon * tmp[i];
-    }
-  }
-
-  // Compute gradient + log_prob at new position (fused: single O(N) pass)
-  // Uses pre-resolved function pointer to skip 15+ branch dispatch per leapfrog step
-  std::memcpy(ws.params_buf.data(), q, n * sizeof(double));
-  ws.gradient_fn(ws.params_buf, data, layout, ws.grad_buf, &ws.logp_at(slot));
-  std::memcpy(grad, ws.grad_buf.data(), n * sizeof(double));
+  result.divergent = metric_leapfrog(ws.q_at(slot),ws.p_at(slot),ws.grad_at(slot),n,
+      epsilon,mass,ws.dense_scratch.data(),evaluate,ws.logp_at(slot));
   result.log_prob = ws.logp_at(slot);
-
-  // Half step for momentum using new gradient
-  ratiod_linalg::axpy(0.5 * epsilon, grad, p, n);
-
-  // Divergence check (skip param scan if log_prob already non-finite)
-  if (!std::isfinite(result.log_prob)) {
-    result.divergent = true;
-  } else {
-    for (int i = 0; i < n; i++) {
-      if (std::abs(q[i]) > 1e10 || !std::isfinite(q[i])) {
-        result.divergent = true;
-        break;
-      }
-    }
-  }
-
   return result;
 }
 
@@ -9269,7 +8898,7 @@ HMCResultCpp run_hmc_chain_cpp(
       // Use dense-aware version when dense mass is adapted, so the step size
       // is calibrated for the rotated phase space (not just the diagonal).
       if (use_mass_matrix && mass.type == MassMatrixType::DENSE && mass.adapted) {
-        epsilon = find_reasonable_epsilon_dense(q, data, layout, rng, mass);
+        epsilon = find_reasonable_epsilon(q, data, layout, rng, mass);
       } else if (use_mass_matrix) {
         epsilon = find_reasonable_epsilon(q, data, layout, rng, mass.inv_mass_diag);
       } else {

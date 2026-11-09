@@ -389,6 +389,18 @@ cpp_test_st_ar1_margin_normalizer <- function(rho, n_spatial, n_times, type = "I
     .Call(`_tulpaRatio_cpp_test_st_ar1_margin_normalizer`, rho, n_spatial, n_times, type)
 }
 
+cpp_test_metric_step <- function(type, block, n = 5L, epsilon = 0.15, extreme = FALSE) {
+    .Call(`_tulpaRatio_cpp_test_metric_step`, type, block, n, epsilon, extreme)
+}
+
+cpp_test_metric_epsilon <- function(type, n = 5L) {
+    .Call(`_tulpaRatio_cpp_test_metric_epsilon`, type, n)
+}
+
+cpp_test_metric_geometry <- function(type, block, n = 5L, n_draws = 20000L) {
+    .Call(`_tulpaRatio_cpp_test_metric_geometry`, type, block, n, n_draws)
+}
+
 cpp_test_negbin_math <- function(y, phi) {
     .Call(`_tulpaRatio_cpp_test_negbin_math`, y, phi)
 }
