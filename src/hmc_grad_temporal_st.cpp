@@ -394,7 +394,7 @@ void compute_gradient_spatiotemporal_handcoded(
     // ST interaction prior on tau_st (PC prior on sigma_st)
     grad[layout.log_tau_st_idx] = ratiod::math::pc_log_prior_log_precision_grad(
         std::log(tau_st), data.st_sigma2_prior_U, data.st_sigma2_prior_alpha);
-    // tau_st2 removed — single tau for all ST types
+    // Every interaction type carries one precision, tau_st.
 
     // ST interaction ranges: uniform inside the bounds, so each carries only
     // its log Jacobian. Outside them the density is -inf and the state is

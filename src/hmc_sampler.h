@@ -513,7 +513,6 @@ struct ParamLayout {
 
   // Spatiotemporal interaction parameters
   int log_tau_st_idx;                                // Log precision for ST interaction
-  int log_tau_st2_idx;                               // Second precision (Type IV)
   int logit_rho_st_idx;                              // AR1 autocorrelation if ST temporal is AR1
   int log_phi_st_space_idx;                          // Log spatial range (GP-based)
   int log_phi_st_time_idx;                           // Log temporal range (GP-based)

@@ -1,5 +1,22 @@
 # tulpaRatio 1.7.3
 
+* The engine NUTS route forwards fixed-step HMC, the metric, WALNUTS and the
+  automatic acceptance target, and reports the engine's leapfrog counts and
+  starting Hamiltonians. It also carries automatic ICAR, disconnected BYM2 with
+  per-component centring, and single-group RW1, RW2, AR1 and cyclic RW1/RW2
+  fields. A temporal field shared with one process only reaches that process.
+  Over three seeds each, these routes agree with the legacy sampler within
+  0.14 posterior SD in the means and 0.25 SD in the 10/50/90% quantiles, with
+  zero engine divergences (#176).
+
+* The HMC sampler is split by concern with one gradient registry for dispatch
+  and naming and one fixed-effect predictor helper. Seeded draws on 21 chain
+  fixtures and 1,400 captured gradient evaluations are byte-identical (#192).
+
+* Unused sampler routines, Rcpp exports and the CUDA stubs are removed;
+  `gpu_available()` and `gpu_info()` are documented as driver-library
+  detection, with fitting on the CPU (#185).
+
 * Field-scale NUTS, fixed-trajectory HMC and WALNUTS sample RW1, RW2, AR1,
   ICAR, proper CAR, GP/NNGP, temporal GP, multiscale, TVC and SVC fields in a
   partial coordinate fixed before sampling from the prior and likelihood

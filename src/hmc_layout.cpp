@@ -422,9 +422,6 @@ ParamLayout compute_param_layout(const ModelData& data) {
     // log_tau for interaction precision
     layout.log_tau_st_idx = idx++;
 
-    // Second precision removed for Type IV (single tau suffices)
-    layout.log_tau_st2_idx = -1;
-
     // AR1 rho, where the interaction's time margin is one it reads. A Type I
     // interaction is iid over the whole grid and a Type III's time margin is
     // unstructured, so neither has a correlation to estimate; allocating one
@@ -472,7 +469,6 @@ ParamLayout compute_param_layout(const ModelData& data) {
   } else {
     layout.st_collapsed = false;
     layout.log_tau_st_idx = -1;
-    layout.log_tau_st2_idx = -1;
     layout.logit_rho_st_idx = -1;
     layout.log_phi_st_space_idx = -1;
     layout.log_phi_st_time_idx = -1;
