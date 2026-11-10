@@ -324,7 +324,8 @@ inline StPriorGrad st_interaction_prior_grad(
     const int total_rank = st_gmrf_rank(st);
     // The number of time-margin copies the AR1 log|R(rho)| is counted over:
     // one per unit (II), or rank(Q_s) of them under the Kronecker product (IV).
-    const int n_time_copies = space_margin ? S - 1 : S;
+    const int n_time_copies = space_margin ?
+        S - tulpa::st_partition_count(st.spatial_partition) : S;
 
     if (ar1) {
       // The time margin is proper, so its log-determinant moves with rho.

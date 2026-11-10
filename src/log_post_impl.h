@@ -984,6 +984,7 @@ T compute_log_post_impl(
     // Spatiotemporal interaction priors
     const T* st_delta = nullptr;
     std::vector<T> st_delta_nc;
+    std::vector<T> st_delta_components;
 
     if (layout.has_spatiotemporal &&
         data.spatiotemporal_data.type != STType::NONE) {
@@ -1068,7 +1069,7 @@ T compute_log_post_impl(
                 log_post = log_post - T(0.5) * z_sq - T(0.5 * ST * std::log(2.0 * M_PI));
 
                 log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                    st_delta, S, T_st, true, true
+                    st_delta, S, T_st, true, true, st_data.spatial_partition
                 );
                 T st_norm;
                 if (!ratiod_spatiotemporal::st_margin_normalizer(
@@ -1103,7 +1104,7 @@ T compute_log_post_impl(
                 // tau grows, which would leave z free to drift along the
                 // directions Q does not constrain.
                 log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                    z_or_delta, S, T_st, true, true
+                    z_or_delta, S, T_st, true, true, st_data.spatial_partition
                 );
             } else if (data.st_is_hsgp) {
                 // HSGP-ST: spectral basis interaction (centered). Each basis
@@ -1138,7 +1139,7 @@ T compute_log_post_impl(
                 // Soft sum-to-zero constraint for identifiability, and the
                 // normalizer of the subspace it leaves
                 log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                    st_delta, S, T_st, true, true
+                    st_delta, S, T_st, true, true, st_data.spatial_partition
                 );
                 T st_norm;
                 if (!ratiod_spatiotemporal::st_margin_normalizer(
@@ -1148,6 +1149,13 @@ T compute_log_post_impl(
                 log_post = log_post + st_norm;
             }
         }
+    }
+
+    if (st_delta && !data.spatiotemporal_data.spatial_partition.trivial()) {
+        const auto& st = data.spatiotemporal_data;
+        st_delta_components.assign(st_delta, st_delta + st.n_params);
+        tulpa::center_st_margins(st_delta_components, st.n_spatial, st.n_times, st.spatial_partition);
+        st_delta = st_delta_components.data();
     }
 
     // Zero-inflation / One-inflation parameters

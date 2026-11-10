@@ -139,6 +139,7 @@ const char* const KNOWN_FIELDS[] = {
   "icar_ms", "bym2_ms", "icar_st", "bym2_st",
   "icar_disconnected", "bym2_disconnected", "icar_disconnected_rw1", "st4", "st4_nc", "st4_ar1",
   "st4_ar1_nc", "st2", "st2_rw2", "st2_ar1", "st3", "icar_st_nc", "st2_nc",
+  "st4_rw2", "st4_rw2_nc", "st4_rw2_cyclic", "st4_rw2_cyclic_nc",
   "st2_rw2_nc", "st2_ar1_nc", "st2_cyclic", "st2_cyclic_nc", "st3_nc",
   "stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
   "stgp_nc", "stgp_gneiting_nc", "stgp_collapsed", "stgp_gneiting_collapsed",
@@ -379,6 +380,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   // ever build a Type I interaction; this is the field that checks the
   // handcoded Type IV Kronecker block against finite differences.
   const bool want_st4 = (field == "st4" || field == "st4_nc" ||
+                         field == "st4_rw2" || field == "st4_rw2_nc" ||
+                         field == "st4_rw2_cyclic" || field == "st4_rw2_cyclic_nc" ||
                          field == "st4_ar1" || field == "st4_ar1_nc" ||
                          field == "gp_st4" || field == "gp_temporal_st4" ||
                          field == "msgp_st4" || field == "gp_collapsed_st4" ||
@@ -1035,8 +1038,11 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
       // R(rho) is what the layout allocates logit_rho_st_idx for.
       st.temporal_type = (field == "st4_ar1" || field == "st4_ar1_nc")
                             ? ratiod_temporal::TemporalType::AR1
+                        : (field == "st4_rw2" || field == "st4_rw2_nc" ||
+                           field == "st4_rw2_cyclic" || field == "st4_rw2_cyclic_nc")
+                            ? ratiod_temporal::TemporalType::RW2
                             : ratiod_temporal::TemporalType::RW1;
-      st.temporal_cyclic = false;
+      st.temporal_cyclic = field == "st4_rw2_cyclic" || field == "st4_rw2_cyclic_nc";
     } else if (want_st2) {
       // Type II reads only the time margin, so it carries no adjacency. Its
       // three arms are the three temporal precisions.
@@ -1151,6 +1157,8 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
   if (want_rsr) data.rsr = numerator_design_restriction(data);
   if (want_rtr) data.rtr = numerator_design_restriction(data);
   prepare_temporal_restriction(data);
+  if (data.has_spatiotemporal && !data.st_is_hsgp && data.st_parameterization != 2)
+    tulpa::setup_st_spatial_partition(data.spatiotemporal_data);
 
   return data;
 }

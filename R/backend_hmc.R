@@ -218,9 +218,7 @@ fit_hmc <- function(formula,
   temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
   st_supported <- !isTRUE(st_params$has_spatiotemporal) ||
     (st_params$type %in% c("I", "II", "III", "IV", "separable", "nonsep_gp") &&
-     st_params$parameterization != "collapsed" &&
-     (isTRUE(st_params$st_is_hsgp) || !st_params$type %in% c("III", "IV") ||
-      is.null(areal_components(spatiotemporal$spatial$adjacency))))
+     st_params$parameterization != "collapsed")
   specs_eligible <- use_specs_path &&
     !is.null(MODEL_TYPES[[model_type]]$n_processes) &&
     zi_supported &&

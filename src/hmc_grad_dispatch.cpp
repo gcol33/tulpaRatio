@@ -127,6 +127,7 @@ bool default_gradient_mode(GradientMode mode) {
 
 bool needs_arena(const ModelData& data, const ParamLayout& layout) {
   return data.rsr.active || data.rtr.active ||
+      (layout.has_spatiotemporal && !data.spatiotemporal_data.spatial_partition.trivial()) ||
       (layout.has_spatiotemporal &&
        ratiod_spatiotemporal::st_noncentered_gp(data.st_parameterization,
                                                data.st_is_hsgp,

@@ -1734,6 +1734,12 @@ private:
         if (layout.has_tvc)
             tulpa::s2z_centre_blocks(row + layout.tvc_w_start,
                 data.tvc_data.n_groups * data.tvc_data.n_tvc, data.tvc_data.n_times);
+        if (layout.has_spatiotemporal && !data.spatiotemporal_data.spatial_partition.trivial()) {
+            const auto& st = data.spatiotemporal_data;
+            std::vector<double> field(row + layout.st_delta_start, row + layout.st_delta_end);
+            tulpa::center_st_margins(field, st.n_spatial, st.n_times, st.spatial_partition);
+            std::copy(field.begin(), field.end(), row + layout.st_delta_start);
+        }
         if (layout.has_temporal)
             data.temporal_restricted_slopes.remove(row + layout.temporal_start);
         // The intrinsic multiscale arms enter eta centred, and the R side

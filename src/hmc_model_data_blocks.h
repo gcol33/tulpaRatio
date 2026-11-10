@@ -233,6 +233,8 @@ inline void apply_st_params(ModelData& data, const Rcpp::List& st_params) {
       data.spatiotemporal_data.n_spatial = data.st_hsgp_data.m_total;
       data.spatiotemporal_data.n_params = data.st_hsgp_data.m_total * st_n_times;
     }
+    if (!data.st_is_hsgp && data.st_parameterization != 2)
+      tulpa::setup_st_spatial_partition(data.spatiotemporal_data);
   } else {
     data.spatiotemporal_data.type = STType::NONE;
   }

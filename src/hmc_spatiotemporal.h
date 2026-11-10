@@ -10,6 +10,7 @@
 #include <limits>
 #include "hmc_cov.h"
 #include <tulpa/st_gp_kernel.h>
+#include <tulpa/st_margins.h>
 #include "hmc_temporal.h"
 #include "hmc_svc.h"
 #include "autodiff_utils.h"
@@ -95,6 +96,7 @@ enum class NonsepType {
 
 // Main spatiotemporal data container
 struct SpatiotemporalData {
+  tulpa::GraphPartition spatial_partition;
   STType type;
   bool shared;
 
@@ -268,7 +270,7 @@ inline Scalar type_iii_log_prior(
     const Scalar& tau,
     const std::vector<int>& adj_row_ptr,
     const std::vector<int>& adj_col_idx,
-    int rank_deficiency = 1  // 1 for ICAR
+    int rank_deficiency
 ) {
   Scalar log_prior = Scalar(0.0);
   int rank = S - rank_deficiency;
@@ -309,92 +311,17 @@ inline Scalar type_iv_log_prior(
     const std::vector<int>& adj_row_ptr,
     const std::vector<int>& adj_col_idx,
     TemporalType temp_type,
-    bool cyclic
+    bool cyclic,
+    int rank_space
 ) {
-  // For Type IV, we compute the Kronecker quadratic form
-  // delta' (Q_s (x) Q_t) delta
-
-  // Step 1: Compute Q_s * delta for each time point
-  // Q_s[i,j] = n_neighbors[i] if i==j, -1 if neighbors, 0 otherwise
-  std::vector<std::vector<Scalar>> Q_s_delta(T, std::vector<Scalar>(S, Scalar(0.0)));
-
-  for (int t = 0; t < T; t++) {
-    for (int i = 0; i < S; i++) {
-      Scalar val = Scalar(0.0);
-      int n_neigh = adj_row_ptr[i + 1] - adj_row_ptr[i];
-      val = val + Scalar(n_neigh) * delta[i * T + t];  // Diagonal: n_neighbors
-
-      for (int idx = adj_row_ptr[i]; idx < adj_row_ptr[i + 1]; idx++) {
-        int j = adj_col_idx[idx] - 1;  // 0-based
-        val = val - delta[j * T + t];  // Off-diagonal: -1
-      }
-      Q_s_delta[t][i] = val;
-    }
-  }
-
-  // Step 2: Compute delta[*,t1]' Q_s delta[*,t2] for all t1, t2
-  std::vector<std::vector<Scalar>> inner_prods(T, std::vector<Scalar>(T, Scalar(0.0)));
-
-  for (int t1 = 0; t1 < T; t1++) {
-    for (int t2 = 0; t2 < T; t2++) {
-      Scalar ip = Scalar(0.0);
-      for (int s = 0; s < S; s++) {
-        ip = ip + delta[s * T + t1] * Q_s_delta[t2][s];
-      }
-      inner_prods[t1][t2] = ip;
-    }
-  }
-
-  // Step 3: Apply temporal quadratic form
-  Scalar quad = Scalar(0.0);
-
-  if (temp_type == TemporalType::RW1) {
-    // RW1: Q_t[t,t] = 2 (interior), 1 (boundary); Q_t[t,t+1] = -1
-    for (int t = 0; t < T - 1; t++) {
-      // (delta[*,t] - delta[*,t+1])' Q_s (delta[*,t] - delta[*,t+1])
-      // = inner_prods[t,t] - 2*inner_prods[t,t+1] + inner_prods[t+1,t+1]
-      quad = quad + inner_prods[t][t] - Scalar(2.0) * inner_prods[t][t + 1]
-                  + inner_prods[t + 1][t + 1];
-    }
-    if (cyclic) {
-      quad = quad + inner_prods[T-1][T-1] - Scalar(2.0) * inner_prods[T-1][0]
-                  + inner_prods[0][0];
-    }
-  } else if (temp_type == TemporalType::RW2) {
-    // RW2: second differences
-    for (int t = 0; t < T - 2; t++) {
-      // (delta[*,t] - 2*delta[*,t+1] + delta[*,t+2])' Q_s (...)
-      std::vector<Scalar> diff2(S);
-      for (int s = 0; s < S; s++) {
-        diff2[s] = delta[s * T + t] - Scalar(2.0) * delta[s * T + t + 1]
-                 + delta[s * T + t + 2];
-      }
-      // Apply Q_s to diff2
-      for (int s = 0; s < S; s++) {
-        Scalar Qs_diff2 = Scalar(0.0);
-        int n_neigh = adj_row_ptr[s + 1] - adj_row_ptr[s];
-        Qs_diff2 = Qs_diff2 + Scalar(n_neigh) * diff2[s];
-        for (int idx = adj_row_ptr[s]; idx < adj_row_ptr[s + 1]; idx++) {
-          int j = adj_col_idx[idx] - 1;
-          Qs_diff2 = Qs_diff2 - diff2[j];
-        }
-        quad = quad + diff2[s] * Qs_diff2;
-      }
-    }
-    // Cyclic extension if needed
-  } else if (temp_type == TemporalType::AR1 && T >= 2) {
-    // R(rho) contracted against the spatial inner products. R is tridiagonal,
-    // so only the diagonal, its interior, and the first off-diagonal of
-    // inner_prods survive -- the same two sums ratiod_ar1's scalar quadratic
-    // form takes over x[t]^2 and x[t] x[t-1].
-    Scalar interior = Scalar(0.0);
-    for (int t = 1; t < T - 1; t++) interior = interior + inner_prods[t][t];
-    Scalar cross = Scalar(0.0);
-    for (int t = 1; t < T; t++) cross = cross + inner_prods[t][t - 1];
-    quad = inner_prods[0][0] + inner_prods[T - 1][T - 1]
-         + (Scalar(1.0) + rho * rho) * interior
-         - Scalar(2.0) * rho * cross;
-  }
+  const Scalar quad = tulpa::st_kronecker_quadratic(delta, S, T,
+      adj_row_ptr, adj_col_idx, [&](const std::vector<Scalar>& difference) {
+          if (temp_type == TemporalType::RW1)
+              return ratiod_temporal::rw1_quadratic_form_t(difference, T, cyclic);
+          if (temp_type == TemporalType::RW2)
+              return ratiod_temporal::rw2_quadratic_form_t(difference, T, cyclic);
+          return ratiod_ar1::ar1_quadratic_form(difference.data(), T, rho);
+      });
 
   // Compute log-determinant contribution
   // For Kronecker: log|Q_s (x) Q_t| = rank(Q_t)*log|Q_s|_+ + rank(Q_s)*log|Q_t|_+
@@ -402,7 +329,6 @@ inline Scalar type_iv_log_prior(
   // is dropped with the other constants; the AR1 time margin's is not, since
   // log|R(rho)| = log(1 - rho^2) moves with the sampled correlation.
 
-  int rank_space = S - 1;  // ICAR rank deficiency
   int rank_time = st_time_rank(temp_type, T, cyclic);
 
   int total_rank = rank_space * rank_time;
@@ -474,31 +400,26 @@ inline int st_gmrf_rank(const SpatiotemporalData& st) {
   switch (st.type) {
     case STType::TYPE_I:   return S * T;
     case STType::TYPE_II:  return S * rank_time;
-    case STType::TYPE_III: return (S - 1) * T;
-    case STType::TYPE_IV:  return (S - 1) * rank_time;
+    case STType::TYPE_III: return (S - tulpa::st_partition_count(st.spatial_partition)) * T;
+    case STType::TYPE_IV:  return (S - tulpa::st_partition_count(st.spatial_partition)) * rank_time;
     default:               return 0;
   }
 }
 
-// How many null directions of Q the sum-to-zero penalties pin: the row sums
-// pin each time's spatial constant, the column sums each unit's temporal
-// constant. Under the non-centered parameterization those directions carry a
-// tau-free proper prior on z, so they drop out of the tau normalizer; the
-// null directions they leave free (an RW2 margin's linear trends) keep
-// theirs. Type I is full rank; Type II's time margin has a constant null
-// direction per unit when it is RW1 or RW2; Type III's ICAR margin has one
-// per time; Type IV's Kronecker null space contains both families, sharing
-// the grand constant.
+// Spatial sums constrain each graph component at each time; temporal sums
+// constrain each site's constant. Their intersection has one constant per
+// component. These coordinates carry a tau-free prior when noncentered.
 inline int st_constrained_null_dim(const SpatiotemporalData& st) {
   const int S = st.n_spatial;
   const int T = st.n_times;
   const bool time_null = st.temporal_type == TemporalType::RW1 ||
                          st.temporal_type == TemporalType::RW2;
+  const int components = tulpa::st_partition_count(st.spatial_partition);
   switch (st.type) {
     case STType::TYPE_I:   return 0;
     case STType::TYPE_II:  return time_null ? S : 0;
-    case STType::TYPE_III: return T;
-    case STType::TYPE_IV:  return T + (time_null ? S - 1 : 0);
+    case STType::TYPE_III: return components * T;
+    case STType::TYPE_IV:  return components * T + (time_null ? S - components : 0);
     default:               return 0;
   }
 }
@@ -512,16 +433,12 @@ inline int st_noncentered_tau_power(const SpatiotemporalData& st) {
   return st_gmrf_rank(st) + st_constrained_null_dim(st) - st.n_params;
 }
 
-// The centered density's correction to its tau normalizer, times two. The
-// sum-to-zero penalties constrain the row and column sums of delta, S + T - 1
-// directions; in their hard limit the field lives on the subspace they leave,
-// whose normalizer counts only the directions Q makes proper there. The
-// per-type priors count rank(Q), which is right only where every constrained
-// direction is a null direction of Q (Type IV with an RW margin); the
-// constrained directions Q makes proper (all of them for Type I and the GP
-// types) are taken back out here.
+// Twice the centered log-tau correction: the constraints remove S + C(T-1)
+// coordinates for C spatial components. Only the constrained null directions
+// were absent from the unconstrained precision's rank.
 inline int st_centered_tau_correction(const SpatiotemporalData& st) {
-  const int n_constraints = st.n_spatial + st.n_times - 1;
+  const int components = tulpa::st_partition_count(st.spatial_partition);
+  const int n_constraints = st.n_spatial + components * (st.n_times - 1);
   return st_constrained_null_dim(st) - n_constraints;
 }
 
@@ -532,24 +449,17 @@ inline bool st_ar1_margin_pinned(const SpatiotemporalData& st) {
          st.temporal_type == TemporalType::AR1 && st.n_times >= 2;
 }
 
-// The part of a Knorr-Held interaction's margin-penalty normalizer that moves
-// with an AR1 time margin's rho. In the penalty's hard limit the normalizer
-// gains 0.5 log|A Q^-1 A'| over the pinned directions Q makes proper, A
-// orthonormal. Split the pinned space as (1_S (x) R^T) + (1_S-perp (x) 1_T):
-// under Type II, Q = tau (I_S (x) R(rho)) is proper on both, contributing
-// log|R^-1| = -log(1 - rho^2) from the first and (S - 1) log(1' R^-1 1) from
-// the second; under Type IV the first is the ICAR null space, so only the
-// second remains. With 1' R^-1 1 = correlation_sum(rho) / (1 - rho^2), and
-// the tau part left to st_centered_tau_correction:
-//   Type II  0.5 [(S - 1) log c(rho) - S log(1 - rho^2)]
-//   Type IV  0.5 (S - 1) [log c(rho) - log(1 - rho^2)]
+// The AR1 constraint normalizer counts S-C spatial contrasts for C components.
+// The covariance sum gives 1' R^-1 1 through its stationary variance factor;
+// Type II also constrains one proper temporal copy in the spatial mean.
 template <typename Scalar>
 inline Scalar st_ar1_margin_log_normalizer(const Scalar& rho,
                                            const SpatiotemporalData& st) {
   if (!st_ar1_margin_pinned(st)) return Scalar(0.0);
   const int S = st.n_spatial;
-  const double n_log_det = (st.type == STType::TYPE_II) ? S : S - 1;
-  return Scalar(0.5 * (S - 1)) *
+  const int contrasts = S - tulpa::st_partition_count(st.spatial_partition);
+  const double n_log_det = (st.type == STType::TYPE_II) ? S : contrasts;
+  return Scalar(0.5 * contrasts) *
              safe_log(ratiod_ar1::correlation_sum(rho, st.n_times)) -
          Scalar(0.5 * n_log_det) * safe_log(ratiod_ar1::one_minus_rho2(rho));
 }
@@ -558,8 +468,9 @@ inline double st_ar1_margin_log_normalizer_drho(double rho,
                                                 const SpatiotemporalData& st) {
   if (!st_ar1_margin_pinned(st)) return 0.0;
   const int S = st.n_spatial;
-  const double n_log_det = (st.type == STType::TYPE_II) ? S : S - 1;
-  return 0.5 * (S - 1) * ratiod_ar1::dcorrelation_sum_drho(rho, st.n_times) /
+  const int contrasts = S - tulpa::st_partition_count(st.spatial_partition);
+  const double n_log_det = (st.type == STType::TYPE_II) ? S : contrasts;
+  return 0.5 * contrasts * ratiod_ar1::dcorrelation_sum_drho(rho, st.n_times) /
              ratiod_ar1::correlation_sum(rho, st.n_times) -
          0.5 * n_log_det * ratiod_ar1::dlog_one_minus_rho2_drho(rho);
 }
@@ -633,11 +544,12 @@ inline void st_apply_time_margin(const SpatiotemporalData& st, const double* x,
       }
     } else if (st.temporal_type == TemporalType::RW2) {
       for (int t = 0; t < T; t++) os[t] = 0.0;
-      for (int k = 0; k + 2 < T; k++) {
-        const double d2 = xs[k] - 2.0 * xs[k + 1] + xs[k + 2];
+      for (int k = 0; T >= 3 && k < (st.temporal_cyclic ? T : T - 2); k++) {
+        const int next = (k + 1) % T, after = (k + 2) % T;
+        const double d2 = xs[k] - 2.0 * xs[next] + xs[after];
         os[k] += d2;
-        os[k + 1] -= 2.0 * d2;
-        os[k + 2] += d2;
+        os[next] -= 2.0 * d2;
+        os[after] += d2;
       }
     } else if (st.temporal_type == TemporalType::AR1 && T >= 2) {
       ratiod_ar1::ar1_precision_apply(xs, T, rho, os);
@@ -696,12 +608,14 @@ inline Scalar spatiotemporal_log_prior(
 
     case STType::TYPE_III:
       return type_iii_log_prior(delta, S, T, tau,
-                                st_data.adj_row_ptr, st_data.adj_col_idx);
+          st_data.adj_row_ptr, st_data.adj_col_idx,
+          tulpa::st_partition_count(st_data.spatial_partition));
 
     case STType::TYPE_IV:
       return type_iv_log_prior(delta, S, T, tau, tau2, rho,
                                st_data.adj_row_ptr, st_data.adj_col_idx,
-                               st_data.temporal_type, st_data.temporal_cyclic);
+          st_data.temporal_type, st_data.temporal_cyclic,
+          S - tulpa::st_partition_count(st_data.spatial_partition));
 
     case STType::SEPARABLE:
     case STType::NONSEP_GP: {
@@ -760,35 +674,10 @@ inline Scalar st_sum_to_zero_penalty(
     int S,
     int T,
     bool marginal_space = true,
-    bool marginal_time = true
+    bool marginal_time = true,
+    const tulpa::GraphPartition& partition = tulpa::GraphPartition{}
 ) {
-  Scalar penalty = Scalar(0.0);
-
-  if (marginal_space) {
-    // For each time point, spatial effects sum to zero
-    const double lambda_s = tulpa::s2z_precision(S);
-    for (int t = 0; t < T; t++) {
-      Scalar sum = Scalar(0.0);
-      for (int s = 0; s < S; s++) {
-        sum = sum + delta[s * T + t];
-      }
-      penalty = penalty - Scalar(0.5 * lambda_s) * sum * sum;
-    }
-  }
-
-  if (marginal_time) {
-    // For each spatial unit, temporal effects sum to zero
-    const double lambda_t = tulpa::s2z_precision(T);
-    for (int s = 0; s < S; s++) {
-      Scalar sum = Scalar(0.0);
-      for (int t = 0; t < T; t++) {
-        sum = sum + delta[s * T + t];
-      }
-      penalty = penalty - Scalar(0.5 * lambda_t) * sum * sum;
-    }
-  }
-
-  return penalty;
+  return tulpa::st_margin_penalty(delta, S, T, marginal_space, marginal_time, partition);
 }
 
 } // namespace ratiod_spatiotemporal

@@ -7,6 +7,7 @@
 #include <tulpa/field_setup_api.h>
 #include <tulpa/field_range.h>
 #include <tulpa/st_hsgp_kernel.h>
+#include <tulpa/st_margins.h>
 #include <tulpa/pg_api.h>
 #include "pg_engine.h"
 #include <tulpa/likelihood.h>
@@ -670,6 +671,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       tulpa::prepare_field(data, tulpa::FieldSetup::ST_HSGP);
     }
     data.st_parameterization = Rcpp::as<std::string>(st_params["parameterization"]) == "noncentered" ? 1 : 0;
+    if (data.st_margin_centering) tulpa::setup_st_spatial_partition(st);
     data.st_sigma2_prior_U = Rcpp::as<double>(st_params["sigma2_prior_U"]);
     data.st_sigma2_prior_alpha = Rcpp::as<double>(st_params["sigma2_prior_alpha"]);
     data.st_rho_prior_a = Rcpp::as<double>(st_params["rho_prior_a"]);

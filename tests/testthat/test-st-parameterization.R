@@ -47,6 +47,15 @@ test_that("the non-centred GP interaction is a change of variables of the centre
   }
 })
 
+test_that("cyclic RW2 interaction gradients match the scored density", {
+  for (field in c("st4_rw2", "st4_rw2_nc", "st4_rw2_cyclic", "st4_rw2_cyclic_nc"))
+    for (mode in c("handcoded", "arena")) {
+      r <- tulpaRatio:::cpp_gradient_check(field, mode = mode)
+      expect_lt(max(abs(r$analytic - r$finite_diff) / pmax(1, abs(r$finite_diff))),
+        1e-4, label = paste(field, mode))
+    }
+})
+
 test_that("both AR1 interaction coordinates normalize the constrained Gaussian", {
   correlations <- c(-.6, 0, .5, .9)
   for (field in c("st2_ar1", "st2_ar1_nc", "st4_ar1", "st4_ar1_nc")) {
