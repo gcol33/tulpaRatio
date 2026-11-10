@@ -255,18 +255,36 @@ inline Jet3<S> safe_max(const Jet3<S>& a, const Jet3<S>& b) {
 // links are known here only through their value and first derivative.
 template <typename S>
 inline Jet3<S> prob_logit(const Jet3<S>& eta, ratiod_link::LinkType link) {
-  if (link == ratiod_link::LinkType::PROBIT ||
-      link == ratiod_link::LinkType::CLOGLOG) {
-    Rcpp::stop("the probit and cloglog links have no third-order expansion here");
+  const double x = coef_value(eta.v);
+  if (link == ratiod_link::LinkType::PROBIT) {
+    const double av = std::exp(ratiod_link::log_normal_pdf(x) - ratiod_link::log_normal_cdf(x));
+    const double bv = std::exp(ratiod_link::log_normal_pdf(x) - ratiod_link::log_normal_cdf(-x));
+    const S a = math::lift_unary(eta.v, av, -x * av - av * av);
+    const S b = math::lift_unary(eta.v, bv, -x * bv + bv * bv);
+    const S d1 = a + b;
+    const S ap = -eta.v * a - a * a;
+    const S bp = -eta.v * b + b * b;
+    const S d2 = ap + bp;
+    const S d3 = -d1 - eta.v * d2 - 2.0 * a * ap + 2.0 * b * bp;
+    return compose(eta, math::prob_logit(eta.v, link), d1, d2, d3);
+  }
+  if (link == ratiod_link::LinkType::CLOGLOG) {
+    const S e = coef_exp(eta.v);
+    const double ev = std::exp(x);
+    const double pv = -std::expm1(-ev);
+    const S p = math::lift_unary(eta.v, pv, ev * std::exp(-ev));
+    const S d1 = e / p;
+    const S d2 = d1 * (1.0 + e - d1);
+    const S d3 = d2 * (1.0 + e - 2.0 * d1) + d1 * e;
+    return compose(eta, math::prob_logit(eta.v, link), d1, d2, d3);
   }
   return eta;
 }
 
 template <typename S>
 inline Jet3<S> link_mean(const Jet3<S>& eta, ratiod_link::LinkType link) {
-  if (link != ratiod_link::LinkType::LOG) {
-    Rcpp::stop("only the log link of a mean has a third-order expansion here");
-  }
+  if (link == ratiod_link::LinkType::IDENTITY) return eta;
+  if (link == ratiod_link::LinkType::INVERSE) return Jet3<S>(1.0) / eta;
   return safe_exp(eta);
 }
 

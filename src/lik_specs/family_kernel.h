@@ -12,38 +12,6 @@ constexpr bool continuous_response = std::is_same<Margin,margins::Gamma>::value 
                                      std::is_same<Margin,margins::Lognormal>::value;
 
 template<class Margin, class T>
-T margin_likelihood(double y, int n, const T& eta, const T& phi,
-                    tulpa::ZIType zi, const T& logit_zi, const T& logit_oi) {
-    using namespace margins;
-    using namespace ratiod::math;
-    using std::exp;
-    if constexpr (std::is_same<Margin,Binomial>::value) {
-        switch (zi) {
-            case tulpa::ZIType::ZI_BINOMIAL: return log_lik_zi_binomial(int(y),n,eta,logit_zi);
-            case tulpa::ZIType::HURDLE_BINOMIAL: return log_lik_hurdle_binomial(int(y),n,eta,logit_zi);
-            case tulpa::ZIType::OI_BINOMIAL: return log_lik_oi_binomial(int(y),n,eta,logit_oi);
-            case tulpa::ZIType::ZOIB: return log_lik_zoib(int(y),n,eta,logit_zi,logit_oi);
-            default: return log_lik_binomial(int(y),n,eta);
-        }
-    } else if constexpr (std::is_same<Margin,BetaBinomial>::value) {
-        return log_lik_beta_binomial(int(y),n,eta,phi);
-    } else if constexpr (std::is_same<Margin,Lognormal>::value) {
-        return log_lik_lognormal(y,eta,phi);
-    } else {
-        const T mu = exp(eta);
-        if constexpr (std::is_same<Margin,Poisson>::value) {
-            if (zi == tulpa::ZIType::ZI_POISSON) return ratiod_zi::zi_poisson_lpmf_logit(int(y),mu,logit_zi);
-            if (zi == tulpa::ZIType::HURDLE_POISSON) return ratiod_zi::hurdle_poisson_lpmf_logit(int(y),mu,logit_zi);
-            return margins::evaluate<Poisson>(y,0,eta,phi,&mu);
-        } else if constexpr (std::is_same<Margin,NegBin>::value) {
-            if (zi == tulpa::ZIType::ZI_NEGBIN) return ratiod_zi::zi_negbin_lpmf_logit(int(y),mu,phi,logit_zi);
-            if (zi == tulpa::ZIType::HURDLE_NEGBIN) return ratiod_zi::hurdle_negbin_lpmf_logit(int(y),mu,phi,logit_zi);
-            return log_lik_negbin(int(y),mu,phi);
-        } else return log_lik_gamma(y,phi,mu);
-    }
-}
-
-template<class Margin, class T>
 T extra_prior(const T& log_phi, const tulpa::ModelData& data) {
     if constexpr (Margin::prior == margins::Prior::Gamma)
         return log_prior_gamma(log_phi,data.phi_prior_shape,data.phi_prior_rate);
@@ -64,10 +32,24 @@ T family_likelihood(int i, const T* eta, const T& logit_zi, const T& logit_oi,
     T pn(1.0), pd(1.0);
     if constexpr (Num::n_extra) pn = exp(params[layout.extra_offset]);
     if constexpr (Den::n_extra) pd = exp(params[layout.extra_offset+Num::n_extra]);
-    T ll = margin_likelihood<Num>(yn,n,eta[0],pn,data.zi_type,logit_zi,logit_oi);
+    T num_eta = eta[0];
+    if (!r.exposure.empty()) {
+        if constexpr (std::is_same<Num,margins::Lognormal>::value)
+            num_eta = num_eta + T(std::log(r.exposure[i]));
+        else if (r.num_link == ratiod_link::LinkType::LOG)
+            num_eta = num_eta + T(std::log(r.exposure[i]));
+        else {
+            const T mean = ratiod::math::link_mean(num_eta, r.num_link) * T(r.exposure[i]);
+            if (!(ratiod::math::get_value(mean) > 0)) return T(-INFINITY);
+            num_eta = ratiod::math::safe_log(mean);
+        }
+    }
+    const auto num_link = r.exposure.empty() ? r.num_link :
+        (std::is_same<Num,margins::Lognormal>::value ? r.num_link : ratiod_link::LinkType::LOG);
+    T ll = margins::linked_density<Num>(yn,n,num_eta,pn,data.zi_type,logit_zi,logit_oi,num_link,r.zi_link,r.oi_link);
     if constexpr (!std::is_same<Den,margins::NoMargin>::value) {
         const double yd = continuous_response<Den> ? r.y_denom_cont[i] : r.y_denom[i];
-        ll = ll + margin_likelihood<Den>(yd,0,eta[1],pd,tulpa::ZIType::NONE,logit_zi,logit_oi);
+        ll = ll + margins::linked_density<Den>(yd,0,eta[1],pd,tulpa::ZIType::NONE,logit_zi,logit_oi,r.denom_link);
     }
     if (i == 0) {
         if constexpr (Num::n_extra) ll = ll + extra_prior<Num>(params[layout.extra_offset],data);

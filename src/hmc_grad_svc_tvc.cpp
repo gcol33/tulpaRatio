@@ -221,6 +221,7 @@ void compute_gradient_svc_hsgp_handcoded(
                                        data.svc_hsgp_data, hsgp_ws);
 
         // Store f_j and accumulate into svc_eta
+        tulpa::s2z_centre_component(hsgp_ws.hsgp_f.data(), 0, N);
         std::memcpy(&svc_f_all[j * N], hsgp_ws.hsgp_f.data(), N * sizeof(double));
         for (int i = 0; i < N; i++) {
             svc_eta[i] += data.svc_data.X_svc[i * n_svc + j] * hsgp_ws.hsgp_f[i];
@@ -315,6 +316,7 @@ using VectorXd = Eigen::VectorXd;
         ratiod_hsgp::hsgp_evaluate_ws(beta_j, sigma2_j, lengthscale_j,
                                        data.svc_hsgp_data, hsgp_ws);
 
+        tulpa::s2z_centre_component(hsgp_ws.grad_f.data(), 0, N);
         // Compute HSGP gradients for beta_j, sigma2_j, lengthscale_j
         double grad_log_sigma2_j, grad_log_lengthscale_j;
         ratiod_hsgp::hsgp_compute_gradients_ws(beta_j, sigma2_j, lengthscale_j,
@@ -444,17 +446,9 @@ void compute_gradient_tvc_handcoded(
     // Precompute TVC contribution to linear predictor (pre-allocated buffer)
     // =========================================================================
     double* tvc_eta = tvc_scratch.eta.data();
-    std::fill(tvc_eta, tvc_eta + data.N, 0.0);
-    for (int i = 0; i < data.N; i++) {
-        int t = data.tvc_data.time_index[i] - 1;  // 0-based
-        int g = data.tvc_data.group_index[i] - 1;  // 0-based
-
-        for (int j = 0; j < n_tvc; j++) {
-            double x_ij = data.tvc_data.X_tvc[i * n_tvc + j];
-            double w_jgt = tvc_w_flat[(g * n_tvc + j) * n_times + t];
-            tvc_eta[i] += x_ij * w_jgt;
-        }
-    }
+    std::vector<double> eta_centered;
+    ratiod_tvc::compute_tvc_eta(tvc_scratch.w_flat, data.tvc_data, eta_centered);
+    std::copy(eta_centered.begin(), eta_centered.end(), tvc_eta);
 
     // =========================================================================
     // Data likelihood loop (vectorized eta + per-obs scatter)
@@ -495,6 +489,7 @@ void compute_gradient_tvc_handcoded(
             obs_log_lik, fuse_lp, phi_num, phi_denom, vec_grad_ws());
     }
 
+    std::vector<double> tvc_likelihood_gradient(n_w, 0.0);
     // Scatter residuals to RE and TVC gradients
     for (int i = 0; i < N; i++) {
         if (layout.has_re && data.re_group[i] > 0) {
@@ -508,9 +503,12 @@ void compute_gradient_tvc_handcoded(
         for (int j = 0; j < n_tvc; j++) {
             double x_ij = data.tvc_data.X_tvc[i * n_tvc + j];
             int w_idx = (g * n_tvc + j) * n_times + t;
-            grad[layout.tvc_w_start + w_idx] += dLL_dtvc * x_ij;
+            tvc_likelihood_gradient[w_idx] += dLL_dtvc * x_ij;
         }
     }
+
+    tulpa::s2z_centre_blocks(tvc_likelihood_gradient.data(), n_groups * n_tvc, n_times);
+    for (int k = 0; k < n_w; ++k) grad[layout.tvc_w_start + k] += tvc_likelihood_gradient[k];
 
     re_gradient_nc_transform(data, layout, params.data(), grad.data(), sigma_re);
 

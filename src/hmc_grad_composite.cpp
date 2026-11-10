@@ -205,15 +205,7 @@ void compute_gradient_composite(
         for (int k = 0; k < n_w; k++) tvc_w_flat_buf[k] = params[layout.tvc_w_start + k];
 
         // Precompute TVC eta contribution
-        tvc_eta_precomp.assign(N, 0.0);
-        for (int i = 0; i < N; i++) {
-            int t = data.tvc_data.time_index[i] - 1;
-            int g = data.tvc_data.group_index[i] - 1;
-            for (int j = 0; j < n_tvc; j++) {
-                int w_idx = (g * n_tvc + j) * n_tvc_times + t;
-                tvc_eta_precomp[i] += data.tvc_data.X_tvc[i * n_tvc + j] * tvc_w_flat_buf[w_idx];
-            }
-        }
+        ratiod_tvc::compute_tvc_eta(tvc_w_flat_buf, data.tvc_data, tvc_eta_precomp);
     }
 
     // --- SVC, on either approximation ---
@@ -289,7 +281,7 @@ void compute_gradient_composite(
         latent_view.read(params.data(), layout.latent_loading_start,
                          layout.latent_factor_start, N, data.latent_n_factors,
                          data.latent_shared,
-                         static_cast<ratiod_latent::LatentConstraint>(data.latent_constraint));
+                         static_cast<tulpa::bilinear::LatentConstraint>(data.latent_constraint));
         latent_d_num.assign(N, 0.0);
         latent_d_denom.assign(N, 0.0);
     }
@@ -977,6 +969,7 @@ void compute_gradient_composite(
 
     // TVC structural prior gradients
     if (layout.has_tvc && data.has_tvc) {
+        tulpa::s2z_centre_blocks(grad_tvc_w.data(), n_tvc_groups * n_tvc, n_tvc_times);
         // Initialize TVC gradient workspace
         RATIOD_TLS_WORKSPACE(ratiod_tvc::TVCGradientWS, tvc_grad_ws);
         RATIOD_TLS_WORKSPACE(std::vector<double>, tvc_grad_w_buf);

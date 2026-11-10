@@ -18,11 +18,11 @@ This backend implements:
 \item Zero-inflation and hurdle models
 }
 
-With \code{options(tulpaRatio.use_specs = TRUE)}, the engine's likelihood
-callback route supports the ratio and exposure families, multiple chains,
-crossed random intercepts, and correlated random slopes. It also supports
-sampled ICAR/BYM2 fields, automatic ICAR coordinates, and single-group
-automatic or centered RW1/RW2/AR1 temporal effects, including cyclic walks.
+The engine's likelihood callback route is the default for supported structures.
+It supports ratio and exposure families, multiple chains, random effects,
+sampled ICAR/BYM2 fields, temporal walks and Gaussian processes, multiscale
+temporal effects, varying coefficients, latent factors and Knorr-Held interactions.
+\code{options(tulpaRatio.use_specs = FALSE)} selects the model sampler.
 Sampler controls select NUTS, fixed-step HMC, WALNUTS and the metric.
 
 \strong{Supported model families:}

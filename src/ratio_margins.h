@@ -2,6 +2,9 @@
 #define TULPARATIO_RATIO_MARGINS_H
 
 #include "ratio_math.h"
+#include "enum_names.h"
+#include "taylor_jet.h"
+#include <tulpa/types.h>
 #include <tulpa/ad_scalar_math.h>
 #include <cmath>
 #include <type_traits>
@@ -152,6 +155,7 @@ struct Observation {
 
 struct Result {
     double ll = 0.0, residual = 0.0, extra = 0.0, neg_hess = 0.0;
+    double zi = 0.0, oi = 0.0;
 };
 
 struct NoMargin {
@@ -379,6 +383,218 @@ template<class Num, class Den = NoMargin> struct Ratio {
         return a.ll + b.ll;
     }
 };
+
+} }
+
+namespace ratiod_zi {
+
+using ratiod::math::get_value;
+using ratiod::math::log1m_exp;
+using ratiod::math::log_add_exp;
+using ratiod::math::log_inv_logit;
+using ratiod::math::log1m_inv_logit;
+using ratiod::math::log_lik_poisson;
+using ratiod::math::log_lik_negbin;
+using ratiod::math::negbin_log_p0;
+
+
+enum class ZIType {
+  NONE,
+  ZI_POISSON,
+  ZI_NEGBIN,
+  HURDLE_POISSON,
+  HURDLE_NEGBIN,
+  ZI_BINOMIAL,
+  HURDLE_BINOMIAL,
+  OI_BINOMIAL,
+  ZOIB
+};
+
+
+inline constexpr ratiod_enum::EnumName<ZIType> ZI_TYPE_NAMES[] = {
+  {"none", ZIType::NONE},
+  {"zi_poisson", ZIType::ZI_POISSON},
+  {"zi_negbin", ZIType::ZI_NEGBIN},
+  {"hurdle_poisson", ZIType::HURDLE_POISSON},
+  {"hurdle_negbin", ZIType::HURDLE_NEGBIN},
+  {"zi_binomial", ZIType::ZI_BINOMIAL},
+  {"hurdle_binomial", ZIType::HURDLE_BINOMIAL},
+  {"oi_binomial", ZIType::OI_BINOMIAL},
+  {"zoib", ZIType::ZOIB}};
+
+inline ZIType parse_zi_type(const std::string& s) {
+  return ratiod_enum::parse_enum(ZI_TYPE_NAMES, s, "zero/one inflation type");
+}
+
+
+
+
+
+
+
+template<typename T>
+inline T zi_poisson_lpmf_logit(int y, const T& mu, const T& logit_zi) {
+  if (y == 0) {
+
+    return log_add_exp(log_inv_logit(logit_zi), log1m_inv_logit(logit_zi) - mu);
+  }
+  return log1m_inv_logit(logit_zi) + log_lik_poisson(y, mu);
+}
+
+
+template<typename T>
+inline T zi_negbin_lpmf_logit(int y, const T& mu, const T& phi, const T& logit_zi) {
+  if (y == 0) {
+
+    return log_add_exp(log_inv_logit(logit_zi),
+                       log1m_inv_logit(logit_zi) + negbin_log_p0(mu, phi));
+  }
+  return log1m_inv_logit(logit_zi) + log_lik_negbin(y, mu, phi);
+}
+
+
+
+
+
+
+
+template<typename T>
+inline T truncated_poisson_lpmf(int y, const T& mu) {
+  if (y <= 0) return T(-std::numeric_limits<double>::infinity());
+  return log_lik_poisson(y, mu) - log1m_exp(-mu);
+}
+
+
+template<typename T>
+inline T truncated_negbin_lpmf(int y, const T& mu, const T& phi) {
+  if (y <= 0) return T(-std::numeric_limits<double>::infinity());
+  return log_lik_negbin(y, mu, phi) - log1m_exp(negbin_log_p0(mu, phi));
+}
+
+
+
+template<typename T>
+inline T hurdle_poisson_lpmf_logit(int y, const T& mu, const T& logit_theta) {
+
+  if (y == 0) return log1m_inv_logit(logit_theta);
+  return log_inv_logit(logit_theta) + truncated_poisson_lpmf(y, mu);
+}
+
+
+template<typename T>
+inline T hurdle_negbin_lpmf_logit(int y, const T& mu, const T& phi, const T& logit_theta) {
+  if (y == 0) return log1m_inv_logit(logit_theta);
+  return log_inv_logit(logit_theta) + truncated_negbin_lpmf(y, mu, phi);
+}
+
+
+
+
+
+
+
+
+template<typename T>
+inline T zi_log_likelihood(
+    int y, const T& mu, const T& phi, const T& logit_zi_or_theta,
+    ZIType zi_type) {
+
+  switch (zi_type) {
+    case ZIType::ZI_POISSON:
+      return zi_poisson_lpmf_logit(y, mu, logit_zi_or_theta);
+
+    case ZIType::ZI_NEGBIN:
+      return zi_negbin_lpmf_logit(y, mu, phi, logit_zi_or_theta);
+
+    case ZIType::HURDLE_POISSON:
+      return hurdle_poisson_lpmf_logit(y, mu, logit_zi_or_theta);
+
+    case ZIType::HURDLE_NEGBIN:
+      return hurdle_negbin_lpmf_logit(y, mu, phi, logit_zi_or_theta);
+
+    case ZIType::NONE:
+    default:
+
+      if (get_value(phi) > 0) {
+        return log_lik_negbin(y, mu, phi);
+      } else {
+        return log_lik_poisson(y, mu);
+      }
+  }
+}
+
+}
+
+namespace tulpaRatio { namespace margins {
+template<class Margin, class T>
+T linked_density(double y, int n, const T& predictor, const T& phi,
+                    tulpa::ZIType zi, const T& zi_predictor, const T& oi_predictor,
+                    ratiod_link::LinkType link = ratiod_link::LinkType::LOG,
+                    ratiod_link::LinkType zi_link = ratiod_link::LinkType::LOGIT,
+                    ratiod_link::LinkType oi_link = ratiod_link::LinkType::LOGIT) {
+    using namespace margins;
+    using namespace ratiod::math;
+    using std::exp;
+    const T logit_zi = prob_logit(zi_predictor, zi_link);
+    const T logit_oi = prob_logit(oi_predictor, oi_link);
+    T eta = predictor;
+    if constexpr (std::is_same<Margin,Binomial>::value || std::is_same<Margin,BetaBinomial>::value)
+        eta = prob_logit(predictor, link);
+    else if constexpr (!std::is_same<Margin,Lognormal>::value) {
+        if (link != ratiod_link::LinkType::LOG) {
+            const T mean = link_mean(predictor, link);
+            if (!(get_value(mean) > 0)) return T(-std::numeric_limits<double>::infinity());
+            eta = safe_log(mean);
+        }
+    }
+    if constexpr (std::is_same<Margin,Binomial>::value) {
+        switch (zi) {
+            case tulpa::ZIType::ZI_BINOMIAL: return log_lik_zi_binomial(int(y),n,eta,logit_zi);
+            case tulpa::ZIType::HURDLE_BINOMIAL: return log_lik_hurdle_binomial(int(y),n,eta,logit_zi);
+            case tulpa::ZIType::OI_BINOMIAL: return log_lik_oi_binomial(int(y),n,eta,logit_oi);
+            case tulpa::ZIType::ZOIB: return log_lik_zoib(int(y),n,eta,logit_zi,logit_oi);
+            default: return log_lik_binomial(int(y),n,eta);
+        }
+    } else if constexpr (std::is_same<Margin,BetaBinomial>::value) {
+        return log_lik_beta_binomial(int(y),n,eta,phi);
+    } else if constexpr (std::is_same<Margin,Lognormal>::value) {
+        return log_lik_lognormal(y,eta,phi);
+    } else {
+        const T mu = safe_exp(eta);
+        if constexpr (std::is_same<Margin,Poisson>::value) {
+            if (zi == tulpa::ZIType::ZI_POISSON) return ratiod_zi::zi_poisson_lpmf_logit(int(y),mu,logit_zi);
+            if (zi == tulpa::ZIType::HURDLE_POISSON) return ratiod_zi::hurdle_poisson_lpmf_logit(int(y),mu,logit_zi);
+            return margins::evaluate<Poisson>(y,0,eta,phi,&mu);
+        } else if constexpr (std::is_same<Margin,NegBin>::value) {
+            if (zi == tulpa::ZIType::ZI_NEGBIN) return ratiod_zi::zi_negbin_lpmf_logit(int(y),mu,phi,logit_zi);
+            if (zi == tulpa::ZIType::HURDLE_NEGBIN) return ratiod_zi::hurdle_negbin_lpmf_logit(int(y),mu,phi,logit_zi);
+            return log_lik_negbin(int(y),mu,phi);
+        } else return log_lik_gamma(y,phi,mu);
+    }
+}
+
+template<class Margin>
+Result linked_result(double y, int n, double eta, double phi,
+    tulpa::ZIType inflation, double zi, double oi, ratiod_link::LinkType link,
+    ratiod_link::LinkType zi_link = ratiod_link::LinkType::LOGIT,
+    ratiod_link::LinkType oi_link = ratiod_link::LinkType::LOGIT) {
+    using J = ratiod::jet::Jet3<double>;
+    const J jet = linked_density<Margin>(y, n, J::line(eta, 1), J(phi),
+        inflation, J(zi), J(oi), link, zi_link, oi_link);
+    Result out;
+    out.ll = jet.v;
+    out.residual = jet.d1;
+    out.neg_hess = -jet.d2;
+    using D = fwd::Dual;
+    const auto derivative = [&](int seed) {
+        return linked_density<Margin>(y, n, D(eta), D(phi, seed == 0),
+            inflation, D(zi, seed == 1), D(oi, seed == 2), link, zi_link, oi_link).grad;
+    };
+    if constexpr (Margin::n_extra) out.extra = derivative(0) * (Margin::log_extra ? phi : 1.0);
+    out.zi = derivative(1);
+    out.oi = derivative(2);
+    return out;
+}
 
 } }
 #endif

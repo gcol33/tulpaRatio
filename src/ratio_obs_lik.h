@@ -8,7 +8,7 @@
 
 #include <limits>
 #include "autodiff_utils.h"
-#include "hmc_zi.h"
+#include "ratio_margins.h"
 
 namespace ratiod {
 

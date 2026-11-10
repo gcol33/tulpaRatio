@@ -8,7 +8,7 @@
 #include <vector>
 #include <cmath>
 #include "hmc_temporal_autodiff.h"  // Templated RW1/RW2/AR1 implementations
-#include <tulpa/soft_sum_to_zero.h>  // s2z_precision
+#include <tulpa/sum_to_zero.h>  // s2z_precision
 
 namespace ratiod_tvc {
 
@@ -94,7 +94,7 @@ inline T tvc_log_prior(
       T rho_j = (tvc_data.structure == TemporalType::AR1) ? rho[j] : T(0.0);
       log_prior = ratiod_temporal::temporal_log_prior(w_jg, n_times, tvc_data.structure,
           ratiod::math::safe_log(tau[j]), tau[j], rho_j, tvc_data.cyclic,
-          1, false, log_prior);
+          1, tvc_data.structure == TemporalType::RW1 || tvc_data.structure == TemporalType::RW2, log_prior);
     }
   }
 
@@ -117,6 +117,8 @@ inline void compute_tvc_eta(
   const int n_times = tvc_data.n_times;
   const int n_tvc = tvc_data.n_tvc;
 
+  std::vector<T> centered = w_flat;
+  tulpa::s2z_centre_blocks(centered.data(), tvc_data.n_groups * n_tvc, n_times);
   eta_tvc.assign(N, T(0.0));
 
   for (int i = 0; i < N; i++) {
@@ -126,42 +128,9 @@ inline void compute_tvc_eta(
     for (int j = 0; j < n_tvc; j++) {
       // w_flat layout: [g * n_tvc * n_times + j * n_times + t]
       eta_tvc[i] = eta_tvc[i] + T(tvc_data.X_tvc[i * n_tvc + j])
-                              * w_flat[(g * n_tvc + j) * n_times + t];
+                              * centered[(g * n_tvc + j) * n_times + t];
     }
   }
-}
-
-// -----------------------------------------------------------------------------
-// Sum-to-zero constraint for identifiability
-// -----------------------------------------------------------------------------
-
-// Apply soft sum-to-zero constraint to TVC (for each term and group). Each
-// pinned sum runs over the n_times coefficients of one (group, term), so the
-// precision is s2z_precision(n_times); it is derived here rather than taken
-// from the caller so no call site can pass a kappa where a precision is meant.
-template <typename T>
-inline T tvc_sum_to_zero_penalty(
-    const std::vector<T>& w_flat,
-    const TVCData& tvc_data
-) {
-  int n_times = tvc_data.n_times;
-  int n_tvc = tvc_data.n_tvc;
-  int n_groups = tvc_data.n_groups;
-
-  const double lambda = tulpa::s2z_precision(n_times);
-  T penalty = T(0.0);
-
-  for (int g = 0; g < n_groups; g++) {
-    for (int j = 0; j < n_tvc; j++) {
-      T sum = T(0.0);
-      for (int t = 0; t < n_times; t++) {
-        sum = sum + w_flat[(g * n_tvc + j) * n_times + t];
-      }
-      penalty = penalty - T(0.5 * lambda) * sum * sum;
-    }
-  }
-
-  return penalty;
 }
 
 // -----------------------------------------------------------------------------

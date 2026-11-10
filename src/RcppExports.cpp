@@ -901,6 +901,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_st_ar1_zero_density
+Rcpp::List cpp_st_ar1_zero_density(std::string field, Rcpp::NumericVector correlations);
+RcppExport SEXP _tulpaRatio_cpp_st_ar1_zero_density(SEXP fieldSEXP, SEXP correlationsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type correlations(correlationsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_st_ar1_zero_density(field, correlations));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_st_collapsed_exactness
 double cpp_st_collapsed_exactness(std::string field, int n_draws, unsigned int seed, int n_obs, int n_units, int n_times);
 RcppExport SEXP _tulpaRatio_cpp_st_collapsed_exactness(SEXP fieldSEXP, SEXP n_drawsSEXP, SEXP seedSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP) {
@@ -1846,6 +1858,27 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_linked_margin
+Rcpp::NumericVector cpp_test_linked_margin(std::string family, double y, int n, double eta, double phi, std::string link, std::string inflation, double zi, double oi, std::string zi_link, std::string oi_link);
+RcppExport SEXP _tulpaRatio_cpp_test_linked_margin(SEXP familySEXP, SEXP ySEXP, SEXP nSEXP, SEXP etaSEXP, SEXP phiSEXP, SEXP linkSEXP, SEXP inflationSEXP, SEXP ziSEXP, SEXP oiSEXP, SEXP zi_linkSEXP, SEXP oi_linkSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< double >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< std::string >::type link(linkSEXP);
+    Rcpp::traits::input_parameter< std::string >::type inflation(inflationSEXP);
+    Rcpp::traits::input_parameter< double >::type zi(ziSEXP);
+    Rcpp::traits::input_parameter< double >::type oi(oiSEXP);
+    Rcpp::traits::input_parameter< std::string >::type zi_link(zi_linkSEXP);
+    Rcpp::traits::input_parameter< std::string >::type oi_link(oi_linkSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_linked_margin(family, y, n, eta, phi, link, inflation, zi, oi, zi_link, oi_link));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_test_collapsed_gp_reference
 Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta, int y, int n, double sigma);
 RcppExport SEXP _tulpaRatio_cpp_test_collapsed_gp_reference(SEXP betaSEXP, SEXP ySEXP, SEXP nSEXP, SEXP sigmaSEXP) {
@@ -2059,8 +2092,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_tulpaRatio_run_nuts_specs
-Rcpp::List cpp_tulpaRatio_run_nuts_specs(Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::List X_list, Rcpp::List cfg_list, Rcpp::NumericVector init, int n_iter, int n_warmup, int max_treedepth, double adapt_delta, int seed, bool verbose, std::string gradient_mode, double sigma_beta, double phi_prior_shape, double phi_prior_rate, double sigma_prior_scale, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List temporal_params, int n_chains, int n_threads, int L, std::string metric, bool walnuts);
-RcppExport SEXP _tulpaRatio_cpp_tulpaRatio_run_nuts_specs(SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_listSEXP, SEXP cfg_listSEXP, SEXP initSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP max_treedepthSEXP, SEXP adapt_deltaSEXP, SEXP seedSEXP, SEXP verboseSEXP, SEXP gradient_modeSEXP, SEXP sigma_betaSEXP, SEXP phi_prior_shapeSEXP, SEXP phi_prior_rateSEXP, SEXP sigma_prior_scaleSEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP, SEXP n_chainsSEXP, SEXP n_threadsSEXP, SEXP LSEXP, SEXP metricSEXP, SEXP walnutsSEXP) {
+Rcpp::List cpp_tulpaRatio_run_nuts_specs(Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::List X_list, Rcpp::List cfg_list, Rcpp::NumericVector init, int n_iter, int n_warmup, int max_treedepth, double adapt_delta, int seed, bool verbose, std::string gradient_mode, double sigma_beta, double phi_prior_shape, double phi_prior_rate, double sigma_prior_scale, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List temporal_params, int n_chains, int n_threads, int L, std::string metric, bool walnuts, Rcpp::Nullable<Rcpp::List> svc_spec, Rcpp::Nullable<Rcpp::List> tvc_spec, Rcpp::Nullable<Rcpp::List> latent_spec, Rcpp::Nullable<Rcpp::List> st_spec);
+RcppExport SEXP _tulpaRatio_cpp_tulpaRatio_run_nuts_specs(SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_listSEXP, SEXP cfg_listSEXP, SEXP initSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP max_treedepthSEXP, SEXP adapt_deltaSEXP, SEXP seedSEXP, SEXP verboseSEXP, SEXP gradient_modeSEXP, SEXP sigma_betaSEXP, SEXP phi_prior_shapeSEXP, SEXP phi_prior_rateSEXP, SEXP sigma_prior_scaleSEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP, SEXP n_chainsSEXP, SEXP n_threadsSEXP, SEXP LSEXP, SEXP metricSEXP, SEXP walnutsSEXP, SEXP svc_specSEXP, SEXP tvc_specSEXP, SEXP latent_specSEXP, SEXP st_specSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2090,7 +2123,11 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type L(LSEXP);
     Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
     Rcpp::traits::input_parameter< bool >::type walnuts(walnutsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_tulpaRatio_run_nuts_specs(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type svc_spec(svc_specSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type tvc_spec(tvc_specSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type latent_spec(latent_specSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type st_spec(st_specSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_tulpaRatio_run_nuts_specs(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts, svc_spec, tvc_spec, latent_spec, st_spec));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2174,6 +2211,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_gradient_race", (DL_FUNC) &_tulpaRatio_cpp_gradient_race, 10},
     {"_tulpaRatio_cpp_logpost_at", (DL_FUNC) &_tulpaRatio_cpp_logpost_at, 8},
     {"_tulpaRatio_cpp_st_gp_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_st_gp_nc_coordinate_spread, 3},
+    {"_tulpaRatio_cpp_st_ar1_zero_density", (DL_FUNC) &_tulpaRatio_cpp_st_ar1_zero_density, 2},
     {"_tulpaRatio_cpp_st_collapsed_exactness", (DL_FUNC) &_tulpaRatio_cpp_st_collapsed_exactness, 6},
     {"_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread, 6},
     {"_tulpaRatio_cpp_polygamma", (DL_FUNC) &_tulpaRatio_cpp_polygamma, 2},
@@ -2244,6 +2282,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_precision_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
+    {"_tulpaRatio_cpp_test_linked_margin", (DL_FUNC) &_tulpaRatio_cpp_test_linked_margin, 11},
     {"_tulpaRatio_cpp_test_collapsed_gp_reference", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_gp_reference, 4},
     {"_tulpaRatio_cpp_test_collapsed_margin", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_margin, 8},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
@@ -2260,7 +2299,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_runtime_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_runtime_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_pg_binomial_gibbs", (DL_FUNC) &_tulpaRatio_cpp_tulpa_pg_binomial_gibbs, 13},
-    {"_tulpaRatio_cpp_tulpaRatio_run_nuts_specs", (DL_FUNC) &_tulpaRatio_cpp_tulpaRatio_run_nuts_specs, 26},
+    {"_tulpaRatio_cpp_tulpaRatio_run_nuts_specs", (DL_FUNC) &_tulpaRatio_cpp_tulpaRatio_run_nuts_specs, 30},
     {"_tulpaRatio_cpp_vi_fit", (DL_FUNC) &_tulpaRatio_cpp_vi_fit, 20},
     {NULL, NULL, 0}
 };

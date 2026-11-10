@@ -287,19 +287,13 @@ inline void tvc_prior_gradients_ws(
         }
     }
 
-    // Add soft sum-to-zero penalty gradients. Same precision the penalty in
-    // tvc_sum_to_zero_penalty derives, over the same n_times-long sum.
-    const double lambda = tulpa::s2z_precision(n_times);
-    for (int g = 0; g < n_groups; g++) {
-        for (int j = 0; j < n_tvc; j++) {
-            int offset = (g * n_tvc + j) * n_times;
-            double sum = 0.0;
-            for (int t = 0; t < n_times; t++) {
-                sum += w_flat[offset + t];
-            }
-            for (int t = 0; t < n_times; t++) {
-                ws.grad_w[offset + t] -= lambda * sum;
-            }
+    if (tvc_data.structure == TemporalType::RW1 || tvc_data.structure == TemporalType::RW2) {
+        for (int g = 0; g < n_groups; ++g) for (int j = 0; j < n_tvc; ++j) {
+            const int off = (g * n_tvc + j) * n_times;
+            const double sum = tulpa::s2z_component_sum(w_flat, off, n_times);
+            const double mean = sum / n_times;
+            for (int t = 0; t < n_times; ++t) ws.grad_w[off + t] -= tau[j] * mean;
+            ws.grad_log_tau[j] += .5 - .5 * tau[j] * sum * mean;
         }
     }
 }

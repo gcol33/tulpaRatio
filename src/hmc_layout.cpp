@@ -399,7 +399,7 @@ ParamLayout compute_param_layout(const ModelData& data) {
   if (layout.has_latent && data.latent_n_factors > 0) {
     // Lower-triangular loadings (hmc_latent.h)
     layout.latent_loading_start = idx;
-    idx += ratiod_latent::n_loadings(
+    idx += tulpa::bilinear::n_loadings(
         ratiod_latent::n_processes(data.latent_shared), data.latent_n_factors);
     layout.latent_loading_end = idx;
 

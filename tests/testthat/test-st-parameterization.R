@@ -46,3 +46,27 @@ test_that("the non-centred GP interaction is a change of variables of the centre
               label = field)
   }
 })
+
+test_that("both AR1 interaction coordinates normalize the constrained Gaussian", {
+  correlations <- c(-.6, 0, .5, .9)
+  for (field in c("st2_ar1", "st2_ar1_nc", "st4_ar1", "st4_ar1_nc")) {
+    r <- tulpaRatio:::cpp_st_ar1_zero_density(field, correlations)
+    S <- r$S; nt <- r$T
+    Qs <- matrix(0, S, S)
+    for (s in seq_len(S)) {
+      neighbors <- r$col_idx[seq.int(r$row_ptr[s] + 1L, r$row_ptr[s + 1L])]
+      Qs[s, neighbors] <- -1
+      Qs[s, s] <- length(neighbors)
+    }
+    if (startsWith(field, "st2")) Qs <- diag(S)
+    rows <- kronecker(matrix(1, S, S), diag(nt)) / (.001 * S)^2
+    columns <- kronecker(diag(S), matrix(1, nt, nt)) / (.001 * nt)^2
+    reference <- vapply(correlations, function(rho) {
+      Qt <- diag(c(1, rep(1 + rho^2, nt - 2L), 1))
+      Qt[row(Qt) == col(Qt) + 1L | col(Qt) == row(Qt) + 1L] <- -rho
+      .5 * as.numeric(determinant(kronecker(Qs, Qt) + rows + columns)$modulus)
+    }, numeric(1))
+    expect_lt(max(abs((r$value - r$value[2L]) - (reference - reference[2L]))),
+      1e-3, label = field)
+  }
+})

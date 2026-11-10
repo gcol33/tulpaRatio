@@ -9,6 +9,7 @@
 namespace tulpaRatio {
 
 enum class ResponseShape { Trials, Count, Positive, Exposure };
+enum class LinkDomain { Probability, Positive, LogLocation };
 
 struct FamilyEntry {
     const char* name;
@@ -24,6 +25,7 @@ struct FamilyEntry {
     tulpa::LikelihoodFn<tulpa::arena::Var> likelihood_arena;
     tulpa::FullGradFn gradient;
     bool legacy_likelihood;
+    LinkDomain num_domain, denom_domain;
 };
 
 const std::vector<FamilyEntry>& family_entries();

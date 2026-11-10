@@ -17,7 +17,7 @@
 #include "autodiff_utils.h"
 
 #include <tulpa/sum_to_zero.h>  // rw1_rank / rw2_rank / s2z_aug_* / component sums
-#include "hmc_temporal_nc.h"     // the intrinsic arms' non-centred coordinate
+#include <tulpa/temporal_nc.h>     // the intrinsic arms' non-centred coordinate
 
 namespace ratiod_temporal {
 
@@ -70,7 +70,7 @@ inline void ms_arm_effects(const std::vector<T>& block, int order, bool cyclic,
     for (int t = 0; t < n; t++) out[t] = block[t];
     return;
   }
-  ratiod_temporal_nc::rw_nc_forward(block.data(), n, order, cyclic,
+  tulpa_temporal_nc::rw_nc_forward(block.data(), n, order, cyclic,
                                     safe_sqrt(sigma2), out.data());
 }
 
@@ -251,12 +251,12 @@ inline T multiscale_temporal_log_lik(
   // Trend component
   if (temp_data.trend_type == TemporalType::RW1 && !trend.empty()) {
     log_lik = log_lik + (nc
-        ? ratiod_temporal_nc::rw_nc_log_prior(
+        ? tulpa_temporal_nc::rw_nc_log_prior(
               trend.data(), static_cast<int>(trend.size()), 1, false)
         : rw1_log_lik(trend, sigma2_trend, false, true));
   } else if (temp_data.trend_type == TemporalType::RW2 && !trend.empty()) {
     log_lik = log_lik + (nc
-        ? ratiod_temporal_nc::rw_nc_log_prior(
+        ? tulpa_temporal_nc::rw_nc_log_prior(
               trend.data(), static_cast<int>(trend.size()), 2, false)
         : rw2_log_lik(trend, sigma2_trend, false, true));
   }
@@ -264,7 +264,7 @@ inline T multiscale_temporal_log_lik(
   // Seasonal component (always cyclic RW1)
   if (temp_data.seasonal_period > 0 && !seasonal.empty()) {
     log_lik = log_lik + (nc
-        ? ratiod_temporal_nc::rw_nc_log_prior(
+        ? tulpa_temporal_nc::rw_nc_log_prior(
               seasonal.data(), static_cast<int>(seasonal.size()), 1, true)
         : rw1_log_lik(seasonal, sigma2_seasonal, true, true));
   }

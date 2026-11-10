@@ -8,6 +8,8 @@ struct RatioConfig {
     std::string zi = "none";
     std::string num_link = "logit";
     std::string denom_link = "log";
+    std::string zi_link = "logit";
+    std::string oi_link = "logit";
 };
 }
 #endif

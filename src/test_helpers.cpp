@@ -15,7 +15,7 @@
 #include "linalg_fast.h"
 #include "hmc_temporal.h"
 #include "hmc_temporal_multiscale.h"
-#include "hmc_zi.h"
+#include "ratio_margins.h"
 #include "hmc_spatiotemporal.h"
 #ifdef _OPENMP
 #include <omp.h>

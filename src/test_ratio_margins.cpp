@@ -1,5 +1,29 @@
 #include <Rcpp.h>
+
 #include "ratio_margins.h"
+
+// [[Rcpp::export]]
+Rcpp::NumericVector cpp_test_linked_margin(std::string family, double y, int n,
+    double eta, double phi, std::string link, std::string inflation = "none",
+    double zi = -0.6, double oi = -1.0, std::string zi_link = "logit",
+    std::string oi_link = "logit") {
+    using namespace tulpaRatio::margins;
+    ratiod_link::LinkType l, zl, ol;
+    if (!ratiod_link::parse_link(link, l) || !ratiod_link::parse_link(zi_link, zl) ||
+        !ratiod_link::parse_link(oi_link, ol)) Rcpp::stop("Unknown link");
+    const auto type = static_cast<tulpa::ZIType>(ratiod_zi::parse_zi_type(inflation));
+    Result r;
+    if (family == "binomial") r = linked_result<Binomial>(y,n,eta,phi,type,zi,oi,l,zl,ol);
+    else if (family == "beta_binomial") r = linked_result<BetaBinomial>(y,n,eta,phi,type,zi,oi,l,zl,ol);
+    else if (family == "poisson") r = linked_result<Poisson>(y,n,eta,phi,type,zi,oi,l,zl,ol);
+    else if (family == "negbin") r = linked_result<NegBin>(y,n,eta,phi,type,zi,oi,l,zl,ol);
+    else if (family == "gamma") r = linked_result<Gamma>(y,n,eta,phi,type,zi,oi,l,zl,ol);
+    else if (family == "lognormal") r = linked_result<Lognormal>(y,n,eta,phi,type,zi,oi,l,zl,ol);
+    else Rcpp::stop("Unknown margin");
+    return Rcpp::NumericVector::create(Rcpp::Named("ll")=r.ll,
+        Rcpp::Named("score")=r.residual,Rcpp::Named("extra")=r.extra,
+        Rcpp::Named("curvature")=r.neg_hess,Rcpp::Named("zi")=r.zi,Rcpp::Named("oi")=r.oi);
+}
 
 namespace ratiod_hmc { Rcpp::NumericMatrix residual_accumulation_probe(); }
 namespace ratiod_hmc {

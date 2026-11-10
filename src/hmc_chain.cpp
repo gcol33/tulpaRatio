@@ -1731,6 +1731,11 @@ private:
                 row[layout.temporal_start + i] = phi_store[i];
             }
         }
+        if (layout.has_tvc)
+            tulpa::s2z_centre_blocks(row + layout.tvc_w_start,
+                data.tvc_data.n_groups * data.tvc_data.n_tvc, data.tvc_data.n_times);
+        if (layout.has_temporal)
+            data.temporal_restricted_slopes.remove(row + layout.temporal_start);
         // The intrinsic multiscale arms enter eta centred, and the R side
         // adds the stored field straight back into eta, so the stored draw
         // is the centred one: an uncentred draw would report -- and predict
@@ -1770,6 +1775,7 @@ private:
             if (trend_intrinsic_store) {
                 (void)tulpa::s2z_centre_component(row, layout.trend_start,
                                                   n_trend_store);
+                data.ms_trend_restricted_slopes.remove(row + layout.trend_start);
             }
             if (seasonal_store) {
                 (void)tulpa::s2z_centre_component(row, layout.seasonal_start,

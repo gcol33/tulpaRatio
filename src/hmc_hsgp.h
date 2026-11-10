@@ -13,13 +13,15 @@
 #include <type_traits>
 #include <RcppEigen.h>
 #include "autodiff_utils.h"
-#include "hsgp_spectral.h"
+#include <tulpa/hsgp_spectral.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 namespace ratiod_hsgp {
+using tulpa_hsgp_spectral::spectral_density;
+using tulpa_hsgp_spectral::spectral_log_lengthscale_derivative;
 
 // HSGP data structure
 struct HSGPData {

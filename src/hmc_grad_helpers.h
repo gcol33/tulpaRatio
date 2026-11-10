@@ -339,10 +339,10 @@ static inline void temporal_gmrf_prior_grad(
 
         std::vector<double> gz(T_len, 0.0);
         double g_log_sigma2 = 0.0;
-        ratiod_temporal_nc::rw_nc_grouped_backward(
+        tulpa_temporal_nc::rw_nc_grouped_backward(
             g_proj.data(), z_temporal, data.n_times, data.n_temporal_groups,
             order, data.temporal_cyclic, sigma, gz.data(), &g_log_sigma2);
-        ratiod_temporal_nc::rw_nc_grouped_log_prior_grad(
+        tulpa_temporal_nc::rw_nc_grouped_log_prior_grad(
             z_temporal, data.n_times, data.n_temporal_groups, order,
             data.temporal_cyclic, gz.data());
 

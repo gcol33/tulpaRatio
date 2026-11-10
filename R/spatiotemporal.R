@@ -78,7 +78,9 @@ NULL
 #'   targets is an approximation, exact for a Gaussian likelihood. It needs a
 #'   log-concave family with canonical links (binomial, Poisson-gamma,
 #'   negative binomial, gamma-gamma, lognormal) without zero inflation. An
-#'   HSGP spatial margin is sampled centered. Ignored outside the HMC backend.
+#'   HSGP spatial margin uses innovation coordinates by default in the engine.
+#'   Its temporal precision and sum constraint determine the transform. The
+#'   model sampler uses centered HSGP coefficients. Ignored outside the HMC backend.
 #' @param nonsep_type For `type = "nonsep_gp"`: `"product"` (the separable
 #'   covariance) or `"gneiting"` (Gneiting 2002). An additive covariance is not
 #'   among them: on a complete `S x T` grid its rank is `S + T - 1`, and the
@@ -232,6 +234,8 @@ spatiotemporal <- function(spatial,
   # Normalize type
   type <- match.arg(type)
   if (type == "iid") type <- "I"
+  if (missing(parameterization) && inherits(spatial, "ratiod_hsgp"))
+    parameterization <- "noncentered"
   parameterization <- match.arg(parameterization)
   nonsep_type <- match.arg(nonsep_type)
   is_gp_type <- type %in% c("separable", "nonsep_gp")

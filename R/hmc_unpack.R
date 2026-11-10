@@ -367,7 +367,7 @@ layout_st_block <- function(cur, st_info) {
 
   # A non-centred Knorr-Held interaction stores z with delta = z / sqrt(tau)
   noncentered <- st_info$type %in% c("I", "II", "III", "IV") && !is_hsgp &&
-    identical(st_info$parameterization, "noncentered")
+    identical(st_info$stored_parameterization %||% st_info$parameterization, "noncentered")
   # A collapsed GP interaction is integrated out and has no slots; its draws
   # come from the sampler separately
   collapsed <- is_gp && identical(st_info$parameterization, "collapsed")
@@ -654,7 +654,8 @@ unpack_temporal <- function(samples, lay, temporal_info) {
                      n_groups = as.integer(temporal_info$n_groups),
                      shared = temporal_info$shared %||% TRUE),
                 temporal_gp_fields(temporal_info))
-    field <- cpp_temporal_gp_field(unname(as.matrix(x)),
+    field <- if (params$gp_parameterization == "centered") x else
+      cpp_temporal_gp_field(unname(as.matrix(x)),
                                    samples[, lay$log_sigma2],
                                    samples[, lay$logit_phi], params)
     dimnames(field) <- dimnames(x)
@@ -793,7 +794,8 @@ unpack_svc <- function(samples, lay, spatial_info) {
       fields[[j]] <- if (is.null(basis)) {
         NULL
       } else {
-        hsgp_field(beta_j, out$sigma2[, j], out$phi[, j], basis$phi, basis$eigenvalues)
+        field <- hsgp_field(beta_j, out$sigma2[, j], out$phi[, j], basis$phi, basis$eigenvalues)
+        sweep(field, 1L, rowMeans(field), "-")
       }
     }
   } else {
@@ -938,6 +940,12 @@ unpack_st <- function(samples, lay, st_delta_draws = NULL) {
 #' @keywords internal
 unpack_tvc <- function(samples, lay) {
   if (identical(lay$type, "none")) return(NULL)
+  field <- block_draws(samples, lay$w)
+  for (first in seq.int(1L, ncol(field), by = lay$n_times)) {
+    columns <- seq.int(first, length.out = lay$n_times)
+    block <- field[, columns, drop = FALSE]
+    field[, columns] <- sweep(block, 1L, rowMeans(block), "-")
+  }
   out <- list(
     type = "tvc",
     n_tvc = lay$n_tvc,
@@ -945,7 +953,7 @@ unpack_tvc <- function(samples, lay) {
     n_groups = lay$n_groups,
     names = lay$names,
     tau = exp(samples[, lay$log_tau, drop = FALSE]),
-    field = block_draws(samples, lay$w)
+    field = field
   )
   if (length(lay$logit_rho) > 0L) {
     out$rho <- 2 * inv_logit(samples[, lay$logit_rho, drop = FALSE]) - 1

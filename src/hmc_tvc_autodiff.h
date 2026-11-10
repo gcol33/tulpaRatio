@@ -27,9 +27,6 @@ using ratiod_tvc::tvc_log_prior;
 using ratiod_tvc::compute_tvc_eta;
 
 
-// The sum-to-zero constraint is ratiod_tvc::tvc_sum_to_zero_penalty in
-// hmc_tvc.h, templated over the scalar type and shared with the plain sampler.
-
 } // namespace ratiod_tvc_ad
 
 #endif // RATIOD_HMC_TVC_AUTODIFF_H

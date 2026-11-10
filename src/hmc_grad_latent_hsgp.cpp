@@ -32,7 +32,7 @@ void compute_gradient_latent_handcoded(
     ratiod_latent::LatentView lv;
     lv.read(params.data(), layout.latent_loading_start, layout.latent_factor_start,
             N, data.latent_n_factors, data.latent_shared,
-            static_cast<ratiod_latent::LatentConstraint>(data.latent_constraint));
+            static_cast<tulpa::bilinear::LatentConstraint>(data.latent_constraint));
 
     beta_gradient_prior(data, layout, beta_num, beta_denom, grad.data());
     re_gradient_prior(data, layout, re, grad.data(), sigma_re);

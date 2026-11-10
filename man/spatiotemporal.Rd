@@ -61,7 +61,9 @@ interaction's field-against-hyperparameter funnel; the marginal it
 targets is an approximation, exact for a Gaussian likelihood. It needs a
 log-concave family with canonical links (binomial, Poisson-gamma,
 negative binomial, gamma-gamma, lognormal) without zero inflation. An
-HSGP spatial margin is sampled centered. Ignored outside the HMC backend.}
+HSGP spatial margin uses innovation coordinates by default in the engine.
+Its temporal precision and sum constraint determine the transform. The
+model sampler uses centered HSGP coefficients. Ignored outside the HMC backend.}
 
 \item{nonsep_type}{For \code{type = "nonsep_gp"}: \code{"product"} (the separable
 covariance) or \code{"gneiting"} (Gneiting 2002). An additive covariance is not

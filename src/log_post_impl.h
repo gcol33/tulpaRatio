@@ -31,6 +31,7 @@
 #include "hmc_icar_collapsed.h"   // Collapsed ICAR/BYM2 marginal (double only)
 #include "hmc_car_proper.h"       // Proper CAR precision and log-determinant
 #include "ratio_obs_lik.h"         // One observation's log-likelihood
+#include <tulpa/st_hsgp_kernel.h>
 #include "st_gp_laplace.h"         // Collapsed GP interaction (double only)
 
 // Expects these to be defined by including hmc_sampler.h first:
@@ -329,7 +330,7 @@ T compute_log_post_impl(
                 (data.temporal_type == TemporalType::RW2) ? 2 : 1;
             const T sigma_rw = T(1.0) / safe_sqrt(tau_temporal);
             std::vector<T> eff_rw(n_rw, T(0.0));
-            ratiod_temporal_nc::rw_nc_grouped_forward(
+            tulpa_temporal_nc::rw_nc_grouped_forward(
                 z_temporal.data(), data.n_times, data.n_temporal_groups,
                 order_rw, data.temporal_cyclic, sigma_rw, eff_rw.data());
             phi_temporal = eff_rw;
@@ -648,7 +649,7 @@ T compute_log_post_impl(
                 // field through the transform alone.
                 const int order_rw =
                     (data.temporal_type == TemporalType::RW2) ? 2 : 1;
-                log_post = log_post + ratiod_temporal_nc::rw_nc_grouped_log_prior(
+                log_post = log_post + tulpa_temporal_nc::rw_nc_grouped_log_prior(
                     z_temporal.data(), data.n_times, data.n_temporal_groups,
                     order_rw, data.temporal_cyclic);
 
@@ -676,6 +677,10 @@ T compute_log_post_impl(
         }
     }
 
+    if (layout.has_temporal)
+        log_post = log_post + data.temporal_restricted_slopes.log_density(
+            params.data() + layout.temporal_start, data.temporal_parameterization == 1);
+
     // Multiscale temporal parameters and priors
     // The blocks the sampler moves in, and the effects they contribute to eta.
     // The two are the same values in the centred coordinate and differ by the
@@ -700,6 +705,8 @@ T compute_log_post_impl(
             ms_sigma2_trend = safe_exp(log_sigma2_trend);
 
             int n_trend = layout.trend_end - layout.trend_start;
+            log_post = log_post + data.ms_trend_restricted_slopes.log_density(
+                params.data() + layout.trend_start, ms_data.noncentered);
             ms_trend_block.resize(n_trend);
             for (int t = 0; t < n_trend; t++) {
                 ms_trend_block[t] = params[layout.trend_start + t];
@@ -815,6 +822,7 @@ T compute_log_post_impl(
                 std::vector<T> f_j;
                 ratiod_hsgp::hsgp_evaluate_t(beta_j.data(), sigma2_j, ls_j,
                                              data.svc_hsgp_data, f_j);
+                tulpa::s2z_centre_component(f_j.data(), 0, n_obs);
                 for (int i = 0; i < n_obs; i++) {
                     svc_eta[i] = svc_eta[i]
                         + f_j[i] * T(data.svc_data.X_svc[i * n_svc + j]);
@@ -942,11 +950,6 @@ T compute_log_post_impl(
             tvc_w_flat, data.tvc_data, tvc_tau, tvc_rho
         );
 
-        // Soft sum-to-zero constraint for identifiability
-        log_post = log_post + ratiod_tvc::tvc_sum_to_zero_penalty(
-            tvc_w_flat, data.tvc_data
-        );
-
         // Precompute TVC contribution to linear predictor
         tvc_eta.resize(n_obs, T(0.0));
         ratiod_tvc_ad::compute_tvc_eta(tvc_w_flat, data.tvc_data, tvc_eta);
@@ -962,17 +965,17 @@ T compute_log_post_impl(
         const int N = data.N;
         const int P = ratiod_latent::n_processes(data.latent_shared);
         const auto constraint =
-            static_cast<ratiod_latent::LatentConstraint>(data.latent_constraint);
+            static_cast<tulpa::bilinear::LatentConstraint>(data.latent_constraint);
 
         const T* theta = &params[layout.latent_loading_start];
         const T* raw = &params[layout.latent_factor_start];
         std::vector<T> lam, f;
-        ratiod_latent::loadings(theta, P, K, lam);
-        ratiod_latent::constrain_scores(raw, N, K, constraint, f);
+        tulpa::bilinear::loadings(theta, P, K, lam);
+        tulpa::bilinear::constrain_scores(raw, N, K, constraint, f);
 
-        log_post = log_post + ratiod_latent::loadings_log_prior(
+        log_post = log_post + tulpa::bilinear::loadings_log_prior(
             theta, P, K, data.latent_sigma_prior_rate, data.latent_offdiag_sd);
-        log_post = log_post + ratiod_latent::scores_log_prior(raw, N * K);
+        log_post = log_post + tulpa::bilinear::scores_log_prior(raw, N * K);
 
         ratiod_latent::process_effects(f, lam, N, P, K, latent_eta_num,
                                        latent_eta_denom);
@@ -1092,6 +1095,8 @@ T compute_log_post_impl(
                 // directions the sum-to-zero penalty on z pins
                 const int tau_power = ratiod_spatiotemporal::st_noncentered_tau_power(st_data);
                 log_post = log_post + T(0.5 * tau_power) * safe_log(tau_st);
+                log_post = log_post + ratiod_spatiotemporal::st_ar1_margin_log_normalizer(
+                    rho_st, st_data);
 
                 // Sum-to-zero on z. In the hard limit this is the constraint on
                 // delta = z / sqrt(tau); held on z, its strength does not fade as
@@ -1105,7 +1110,6 @@ T compute_log_post_impl(
                 // function j gets an independent temporal GMRF with precision
                 // tau_st / S(lambda_j).
                 st_delta = z_or_delta;
-                const int M = data.st_hsgp_data.m_total;
 
                 T log_sigma2_st = params[layout.log_sigma2_st_hsgp_idx];
                 T log_ls_st = params[layout.log_lengthscale_st_hsgp_idx];
@@ -1119,47 +1123,9 @@ T compute_log_post_impl(
                 // LogNormal(0,1) on lengthscale
                 log_post = log_post - T(0.5) * log_ls_st * log_ls_st;
 
-                int rank_t = ratiod_spatiotemporal::st_time_rank(
-                    st_data.temporal_type, T_st, st_data.temporal_cyclic);
-                const bool st_hsgp_ar1 =
-                    (st_data.temporal_type == TemporalType::AR1 && T_st >= 2);
-                if (st_hsgp_ar1) {
-                    // One log|R(rho)| per basis function.
-                    log_post = log_post + T(0.5 * M) *
-                               safe_log(ratiod_ar1::one_minus_rho2(rho_st));
-                }
-
-                for (int j = 0; j < M; j++) {
-                    T S_j = ratiod_hsgp::spectral_density(
-                        data.st_hsgp_data.eigenvalues[j], sigma2_st_hsgp,
-                        lengthscale_st_hsgp, data.st_hsgp_data.n_dim);
-                    T S_j_floor = (get_value(S_j) < 1e-10) ? T(1e-10) : S_j;
-                    T prec_j = tau_st / S_j_floor;
-
-                    // GMRF quadratic form: -0.5 * prec_j * delta_j' Q_t delta_j
-                    const T* dj = &st_delta[j * T_st];
-                    T qf = T(0.0);
-                    if (st_data.temporal_type == TemporalType::RW1) {
-                        for (int t = 1; t < T_st; t++) {
-                            T d1 = dj[t] - dj[t - 1];
-                            qf = qf + d1 * d1;
-                        }
-                    } else if (st_data.temporal_type == TemporalType::RW2) {
-                        for (int t = 2; t < T_st; t++) {
-                            T d2 = dj[t] - T(2.0) * dj[t - 1] + dj[t - 2];
-                            qf = qf + d2 * d2;
-                        }
-                    } else if (st_hsgp_ar1) {
-                        qf = ratiod_ar1::ar1_quadratic_form(dj, T_st, rho_st);
-                    }
-                    log_post = log_post + T(0.5 * rank_t) * safe_log(prec_j)
-                                        - T(0.5) * prec_j * qf;
-
-                    // Soft sum-to-zero per basis function
-                    T sum_j = T(0.0);
-                    for (int t = 0; t < T_st; t++) sum_j = sum_j + dj[t];
-                    log_post = log_post - T(0.5 * tulpa::s2z_precision(T_st)) * sum_j * sum_j;
-                }
+                log_post = log_post + tulpa_st_hsgp::log_density(st_delta,
+                    tau_st, rho_st, sigma2_st_hsgp, lengthscale_st_hsgp,
+                    st_data, data.st_hsgp_data);
             } else {
                 // Centered parameterization (ICAR/BYM2 spatial)
                 st_delta = z_or_delta;

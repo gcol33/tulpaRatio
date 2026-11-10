@@ -13,11 +13,11 @@
 #' - RW1/RW2/AR1 temporal random effects
 #' - Zero-inflation and hurdle models
 #'
-#' With `options(tulpaRatio.use_specs = TRUE)`, the engine's likelihood
-#' callback route supports the ratio and exposure families, multiple chains,
-#' crossed random intercepts, and correlated random slopes. It also supports
-#' sampled ICAR/BYM2 fields, automatic ICAR coordinates, and single-group
-#' automatic or centered RW1/RW2/AR1 temporal effects, including cyclic walks.
+#' The engine's likelihood callback route is the default for supported structures.
+#' It supports ratio and exposure families, multiple chains, random effects,
+#' sampled ICAR/BYM2 fields, temporal walks and Gaussian processes, multiscale
+#' temporal effects, varying coefficients, latent factors and Knorr-Held interactions.
+#' `options(tulpaRatio.use_specs = FALSE)` selects the model sampler.
 #' Sampler controls select NUTS, fixed-step HMC, WALNUTS and the metric.
 #'
 #' **Supported model families:**
@@ -202,7 +202,7 @@ fit_hmc <- function(formula,
   concurrent_chains <- min(cores, chains)
   n_threads_within <- as.integer(cores %/% concurrent_chains)
 
-  use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", FALSE)) ||
+  use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", TRUE)) ||
     identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
   zi_type_str <- zi_info$type %||% "none"
   zi_supported <- zi_type_str %in% MODEL_TYPES[[model_type]]$spec_inflation
@@ -210,36 +210,34 @@ fit_hmc <- function(formula,
   n_re_terms_v <- hmc_data$n_re_terms %||% 0L
   spatial_type_v <- spatial_info$type %||% "none"
   spatial_param_v <- spatial_info$parameterization %||% "standard"
-  spatial_supported <- identical(spatial_type_v, "none") ||
+  spatial_supported <- spatial_type_v %in% c("none", "svc") ||
     (spatial_type_v %in% c("icar", "bym2") &&
      !identical(spatial_param_v, "collapsed") &&
      is.null(spatial_info$rsr_basis))
   temporal_type_v <- temporal_info$type %||% "none"
-  temporal_supported <- identical(temporal_type_v, "none") ||
-    (temporal_type_v %in% c("rw1", "rw2", "ar1") &&
-     (temporal_info$parameterization %||% "centered") %in% c("auto", "centered") &&
-     (identical(temporal_info$n_groups, 1L) || identical(temporal_type_v, "ar1")) &&
-     (identical(temporal_info$parameterization, "centered") ||
-      identical(temporal_info$n_groups, 1L)) &&
-     is.null(temporal_info$rtr_basis))
+  temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
+  st_supported <- !isTRUE(st_params$has_spatiotemporal) ||
+    (st_params$type %in% c("I", "II", "III", "IV", "separable", "nonsep_gp") &&
+     st_params$parameterization != "collapsed" &&
+     (isTRUE(st_params$st_is_hsgp) || !st_params$type %in% c("III", "IV") ||
+      is.null(areal_components(spatiotemporal$spatial$adjacency))))
   specs_eligible <- use_specs_path &&
     !is.null(MODEL_TYPES[[model_type]]$n_processes) &&
-    family_canonical_links(family, model_type) &&
     zi_supported &&
     spatial_supported &&
     temporal_supported &&
-    identical(latent_info$type, "none") &&
-    isFALSE(svc_params$has_svc) &&
-    isFALSE(tvc_params$has_tvc) &&
-    isFALSE(st_params$has_spatiotemporal)
+    (!isTRUE(tvc_params$has_tvc) || tvc_params$structure != "gp") &&
+    st_supported
 
   if (specs_eligible) {
-    num_link   <- MODEL_TYPES[[model_type]]$num_link
-    denom_link <- MODEL_TYPES[[model_type]]$denom_link
+    links <- family_links(family, model_type)
+    num_link <- links$num
+    denom_link <- links$denom %||% "log"
     cfg <- list(family = model_type, zi = zi_type_str,
-                num_link = num_link, denom_link = denom_link)
+                num_link = num_link, denom_link = denom_link,
+                zi_link = links$zi, oi_link = links$oi)
     if (identical(MODEL_TYPES[[model_type]]$responses[["denom"]],"exposure"))
-      cfg$offsets <- list(log(hmc_data$y_denom_cont))
+      cfg$exposure <- as.numeric(hmc_data$y_denom_cont)
     has_zi_block <- !(zi_type_str %in% c("none", "oi_binomial"))
     has_oi_block <- zi_type_str %in% c("oi_binomial", "zoib")
     if (has_zi_block) cfg$X_zi <- zi_info$X_zi
@@ -261,46 +259,10 @@ fit_hmc <- function(formula,
       sum(re_params$n_groups_vec * re_params$n_coefs_vec) +
         sum(re_params$n_coefs_vec) + sum(re_params$n_chol_vec)
     } else if (n_re_groups_v > 0L) 1L + n_re_groups_v else 0L
-    p_spatial_n <- switch(spatial_type_v,
-      icar = 1L + (spatial_info$n_units %||% 0L),
-      bym2 = 2L + 2L * (spatial_info$n_units %||% 0L),
-      0L
-    )
-    p_temporal_n <- if (temporal_type_v %in% TEMPORAL_TYPES_SINGLE) {
-      hyper <- if (temporal_type_v == "ar1") 2L else 1L
-      hyper + (temporal_info$n_temporal_params %||% 0L)
-    } else 0L
-    p_zi_n <- if (has_zi_block) ncol(zi_info$X_zi) else 0L
-    p_oi_n <- if (has_oi_block) ncol(zi_info$X_oi) else 0L
-
-    q_init_spec <- as.numeric(q_init)
-    need_reorder <- (n_extra_per_family > 0L) &&
-      (p_re_n > 0L || p_spatial_n > 0L || p_temporal_n > 0L ||
-       has_zi_block || has_oi_block)
-    if (need_reorder) {
-      s <- 1L
-      beta_seg <- q_init_spec[s:(s + p_total_design - 1L)]; s <- s + p_total_design
-      re_seg <- if (p_re_n > 0L) {
-        v <- q_init_spec[s:(s + p_re_n - 1L)]; s <- s + p_re_n; v
-      } else numeric(0)
-      extras_seg <- if (n_extra_per_family > 0L) {
-        v <- q_init_spec[s:(s + n_extra_per_family - 1L)]; s <- s + n_extra_per_family; v
-      } else numeric(0)
-      spatial_seg <- if (p_spatial_n > 0L) {
-        v <- q_init_spec[s:(s + p_spatial_n - 1L)]; s <- s + p_spatial_n; v
-      } else numeric(0)
-      temporal_seg <- if (p_temporal_n > 0L) {
-        v <- q_init_spec[s:(s + p_temporal_n - 1L)]; s <- s + p_temporal_n; v
-      } else numeric(0)
-      zi_seg <- if (p_zi_n > 0L) {
-        v <- q_init_spec[s:(s + p_zi_n - 1L)]; s <- s + p_zi_n; v
-      } else numeric(0)
-      oi_seg <- if (p_oi_n > 0L) {
-        v <- q_init_spec[s:(s + p_oi_n - 1L)]; s <- s + p_oi_n; v
-      } else numeric(0)
-      q_init_spec <- c(beta_seg, re_seg, spatial_seg, temporal_seg,
-                       zi_seg, oi_seg, extras_seg)
-    }
+    extra_indices <- p_total_design + p_re_n + seq_len(n_extra_per_family)
+    spec_order <- c(setdiff(seq_along(q_init), extra_indices), extra_indices)
+    q_init_spec <- as.numeric(q_init[spec_order])
+    p_spatial_n <- if (spatial_type_v %in% c("icar", "bym2")) spatial_info$n_units else 0L
 
     re_params_spec <- re_params
 
@@ -322,22 +284,9 @@ fit_hmc <- function(formula,
       )
     } else list()
 
-    temporal_params_spec <- if (p_temporal_n > 0L) {
-      list(
-        type      = temporal_type_v,
-        time_idx  = as.integer(temporal_info$time_index),
-        group_idx = as.integer(temporal_info$group_index),
-        n_times   = as.integer(temporal_info$n_times),
-        n_groups  = as.integer(temporal_info$n_groups),
-        n_params  = as.integer(temporal_info$n_temporal_params),
-        cyclic    = isTRUE(temporal_info$precision_structure$cyclic),
-        shared    = isTRUE(temporal_info$shared %||% TRUE),
-        parameterization = temporal_info$parameterization %||% "centered",
-        sigma_prior_U = temporal_sigma_prior_U,
-        sigma_prior_alpha = temporal_sigma_prior_alpha,
-        rho_prior_a = rho_temporal_ab[["a"]],
-        rho_prior_b = rho_temporal_ab[["b"]]
-      )
+    temporal_params_spec <- if (!temporal_type_v %in% c("none", "tvc")) {
+      temporal_params$parameterization <- temporal_info$parameterization %||% "centered"
+      temporal_params
     } else list()
 
     fit_raw <- cpp_tulpaRatio_run_nuts_specs(
@@ -362,6 +311,10 @@ fit_hmc <- function(formula,
       re_params         = re_params_spec,
       spatial_params    = spatial_params_spec,
       temporal_params   = temporal_params_spec,
+      svc_spec          = svc_params,
+      tvc_spec          = tvc_params,
+      latent_spec       = latent_params,
+      st_spec           = st_params,
       n_chains          = as.integer(chains),
       n_threads         = as.integer(cores),
       L                 = as.integer(L),
@@ -369,23 +322,15 @@ fit_hmc <- function(formula,
       walnuts           = isTRUE(walnuts)
     )
 
-    if (need_reorder) {
-      S <- if (chains > 1L) fit_raw$samples[[1L]] else fit_raw$samples
-      n_total <- ncol(S)
-      off <- 0L
-      beta_cols <- if (p_total_design > 0L) (off + 1L):(off + p_total_design) else integer(0); off <- off + p_total_design
-      re_cols   <- if (p_re_n > 0L)         (off + 1L):(off + p_re_n)         else integer(0); off <- off + p_re_n
-      sp_cols   <- if (p_spatial_n > 0L)    (off + 1L):(off + p_spatial_n)    else integer(0); off <- off + p_spatial_n
-      t_cols    <- if (p_temporal_n > 0L)   (off + 1L):(off + p_temporal_n)   else integer(0); off <- off + p_temporal_n
-      zi_cols   <- if (p_zi_n > 0L)         (off + 1L):(off + p_zi_n)         else integer(0); off <- off + p_zi_n
-      oi_cols   <- if (p_oi_n > 0L)         (off + 1L):(off + p_oi_n)         else integer(0); off <- off + p_oi_n
-      ex_cols   <- if (n_extra_per_family > 0L) (off + 1L):n_total            else integer(0)
-      new_order <- c(beta_cols, re_cols, ex_cols,
-                     sp_cols, t_cols, zi_cols, oi_cols)
-      fit_raw$samples <- if (chains > 1L) {
-        lapply(fit_raw$samples, function(x) x[,new_order,drop=FALSE])
-      } else S[,new_order,drop=FALSE]
-    }
+    restore_order <- order(spec_order)
+    fit_raw$samples <- if (chains > 1L) {
+      lapply(fit_raw$samples, function(x) x[, restore_order, drop = FALSE])
+    } else fit_raw$samples[, restore_order, drop = FALSE]
+
+    if (temporal_type_v == "gp") temporal_info$stored_parameterization <- "centered"
+    if (isTRUE(st_params$has_spatiotemporal))
+      spatiotemporal_info$stored_parameterization <- "centered"
+
   } else {
     fit_raw <- cpp_hmc_fit(
       q_init = q_init,
@@ -962,7 +907,8 @@ temporal_gp_fields <- function(temporal_info, priors = list()) {
     gp_sigma2_prior_alpha = priors$temporal_gp_sigma2_prior_alpha %||% 0.01,
     gp_phi_prior_lower = temporal_info$phi_prior_lower %||% 0.01,
     gp_phi_prior_upper = temporal_info$phi_prior_upper %||% 10.0,
-    gp_parameterization = temporal_info$parameterization %||% "noncentered"
+    gp_parameterization = temporal_info$stored_parameterization %||%
+      temporal_info$parameterization %||% "noncentered"
   )
 }
 

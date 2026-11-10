@@ -6,6 +6,14 @@
 
 namespace tulpaRatio {
 
+template<class Margin>
+constexpr LinkDomain margin_link_domain() {
+    if constexpr (std::is_same<Margin,margins::Binomial>::value ||
+                  std::is_same<Margin,margins::BetaBinomial>::value) return LinkDomain::Probability;
+    if constexpr (std::is_same<Margin,margins::Lognormal>::value) return LinkDomain::LogLocation;
+    return LinkDomain::Positive;
+}
+
 template<class Num, class Den = margins::NoMargin>
 FamilyEntry make_family_entry(const char* name, const char* spec_name,
     const char* link, std::vector<std::string> zi, tulpa::FullGradFn gradient,
@@ -15,7 +23,8 @@ FamilyEntry make_family_entry(const char* name, const char* spec_name,
         lik::continuous_response<Num> ? ResponseShape::Positive : ResponseShape::Count,
         single ? fixed : lik::continuous_response<Den> ? ResponseShape::Positive : ResponseShape::Count,
         &lik::family_likelihood<Num,Den,double>,
-        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient,legacy_likelihood};
+        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient,legacy_likelihood,
+        margin_link_domain<Num>(),margin_link_domain<Den>()};
 }
 
 const std::vector<FamilyEntry>& family_entries() {
@@ -56,7 +65,17 @@ tulpa::LikelihoodSpec build_ratio_likelihood_spec(const RatioConfig& cfg) {
     const auto& entry = family_entry(cfg.family);
     if (std::find(entry.zi.begin(),entry.zi.end(),cfg.zi) == entry.zi.end())
         Rcpp::stop("Family '%s' does not support inflation '%s'",cfg.family.c_str(),cfg.zi.c_str());
-    if (cfg.num_link != entry.num_link || (entry.processes > 1 && cfg.denom_link != entry.denom_link))
+    const auto valid = [](const std::string& name, LinkDomain domain) {
+        ratiod_link::LinkType link;
+        if (!ratiod_link::parse_link(name, link)) return false;
+        if (domain == LinkDomain::Probability) return ratiod_link::is_probability_link(link);
+        if (domain == LinkDomain::LogLocation) return link == ratiod_link::LinkType::LOG;
+        return link == ratiod_link::LinkType::LOG || link == ratiod_link::LinkType::IDENTITY ||
+               link == ratiod_link::LinkType::INVERSE;
+    };
+    if (!valid(cfg.num_link, entry.num_domain) ||
+        (entry.processes > 1 && !valid(cfg.denom_link, entry.denom_domain)) ||
+        !valid(cfg.zi_link, LinkDomain::Probability) || !valid(cfg.oi_link, LinkDomain::Probability))
         Rcpp::stop("Unsupported likelihood links for family '%s'",cfg.family.c_str());
     tulpa::LikelihoodSpec spec;
     spec.name=entry.spec_name;
@@ -64,7 +83,8 @@ tulpa::LikelihoodSpec build_ratio_likelihood_spec(const RatioConfig& cfg) {
     spec.n_extra_params=entry.n_extra;
     spec.ll_double=entry.likelihood;
     spec.ll_arena=entry.likelihood_arena;
-    if (cfg.zi == "none") spec.gradient_fn=entry.gradient;
+    if (cfg.zi == "none" && cfg.num_link == entry.num_link &&
+        cfg.denom_link == entry.denom_link) spec.gradient_fn=entry.gradient;
     return spec;
 }
 
@@ -102,6 +122,7 @@ Rcpp::NumericVector cpp_test_family_likelihood(std::string family, double shape,
     cfg.family=family; cfg.num_link=entry.num_link;
     const auto spec=build_ratio_likelihood_spec(cfg);
     lik::ResponseData response{{3},{8},{3.0},{4.0}};
+    ratiod_link::parse_link(cfg.num_link, response.num_link);
     tulpa::ModelData data;
     data.phi_prior_shape=shape; data.phi_prior_rate=rate; data.sigma_re_scale=scale;
     tulpa::ParamLayout layout;

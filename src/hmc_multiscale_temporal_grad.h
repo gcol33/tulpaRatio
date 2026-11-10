@@ -348,7 +348,7 @@ inline void multiscale_temporal_prior_gradients(
     if (n_trend > 0) {
         if (nc) {
             const int order = ms_arm_order(temp_data.trend_type);
-            const int d = ratiod_temporal_nc::nc_normal_dim(n_trend, order, false);
+            const int d = tulpa_temporal_nc::nc_normal_dim(n_trend, order, false);
             for (int k = 0; k < d; k++) grads.grad_trend[k] = -trend[k];
         } else if (temp_data.trend_type == TemporalType::RW1) {
             rw1_grad_phi(trend, n_trend, sigma2_trend, grads.grad_trend.data(), true);
@@ -362,7 +362,7 @@ inline void multiscale_temporal_prior_gradients(
     // Seasonal component (cyclic RW1)
     if (n_seasonal > 0 && temp_data.seasonal_period > 0) {
         if (nc) {
-            const int d = ratiod_temporal_nc::nc_normal_dim(n_seasonal, 1, true);
+            const int d = tulpa_temporal_nc::nc_normal_dim(n_seasonal, 1, true);
             for (int k = 0; k < d; k++) grads.grad_seasonal[k] = -seasonal[k];
         } else {
             rw1_cyclic_grad_phi(seasonal, n_seasonal, sigma2_seasonal, grads.grad_seasonal.data(), true);
@@ -439,7 +439,7 @@ inline void project_ms_lik_gradients(
                     const MSArmCoordinate& arm) {
         if (n <= 0 || arm.block == nullptr) return;
         std::vector<double> gz(n, 0.0);
-        ratiod_temporal_nc::rw_nc_backward(
+        tulpa_temporal_nc::rw_nc_backward(
             g, arm.effects, arm.block, n, order, cyclic,
             std::sqrt(arm.sigma2), gz.data(), arm.grad_log_sigma2);
         for (int k = 0; k < n; k++) g[k] = gz[k];

@@ -193,6 +193,10 @@ cpp_st_gp_nc_coordinate_spread <- function(field = "stgp_nc", n_draws = 5L, seed
     .Call(`_tulpaRatio_cpp_st_gp_nc_coordinate_spread`, field, n_draws, seed)
 }
 
+cpp_st_ar1_zero_density <- function(field, correlations) {
+    .Call(`_tulpaRatio_cpp_st_ar1_zero_density`, field, correlations)
+}
+
 cpp_st_collapsed_exactness <- function(field = "stgp_collapsed", n_draws = 4L, seed = 42L, n_obs = 200L, n_units = 9L, n_times = 4L) {
     .Call(`_tulpaRatio_cpp_st_collapsed_exactness`, field, n_draws, seed, n_obs, n_units, n_times)
 }
@@ -473,6 +477,10 @@ cpp_test_precision_beta_spec_h <- function(y, n, phi) {
     .Call(`_tulpaRatio_cpp_test_precision_beta_spec_h`, y, n, phi)
 }
 
+cpp_test_linked_margin <- function(family, y, n, eta, phi, link, inflation = "none", zi = -0.6, oi = -1.0, zi_link = "logit", oi_link = "logit") {
+    .Call(`_tulpaRatio_cpp_test_linked_margin`, family, y, n, eta, phi, link, inflation, zi, oi, zi_link, oi_link)
+}
+
 cpp_test_collapsed_gp_reference <- function(beta, y, n, sigma) {
     .Call(`_tulpaRatio_cpp_test_collapsed_gp_reference`, beta, y, n, sigma)
 }
@@ -537,8 +545,8 @@ cpp_tulpa_pg_binomial_gibbs <- function(y, n, X, group, n_groups, n_iter = 2000L
     .Call(`_tulpaRatio_cpp_tulpa_pg_binomial_gibbs`, y, n, X, group, n_groups, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_scale, store_eta, verbose, n_threads)
 }
 
-cpp_tulpaRatio_run_nuts_specs <- function(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth = 10L, adapt_delta = 0.8, seed = 1L, verbose = FALSE, gradient_mode = "A_r", sigma_beta = 2.5, phi_prior_shape = 1.0, phi_prior_rate = 0.01, sigma_prior_scale = 1.0, re_params, spatial_params, temporal_params, n_chains = 1L, n_threads = 1L, L = 0L, metric = "auto", walnuts = FALSE) {
-    .Call(`_tulpaRatio_cpp_tulpaRatio_run_nuts_specs`, y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts)
+cpp_tulpaRatio_run_nuts_specs <- function(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth = 10L, adapt_delta = 0.8, seed = 1L, verbose = FALSE, gradient_mode = "A_r", sigma_beta = 2.5, phi_prior_shape = 1.0, phi_prior_rate = 0.01, sigma_prior_scale = 1.0, re_params, spatial_params, temporal_params, n_chains = 1L, n_threads = 1L, L = 0L, metric = "auto", walnuts = FALSE, svc_spec = NULL, tvc_spec = NULL, latent_spec = NULL, st_spec = NULL) {
+    .Call(`_tulpaRatio_cpp_tulpaRatio_run_nuts_specs`, y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts, svc_spec, tvc_spec, latent_spec, st_spec)
 }
 
 cpp_vi_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose = TRUE) {

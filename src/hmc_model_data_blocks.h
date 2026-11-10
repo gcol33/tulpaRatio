@@ -19,6 +19,7 @@
 #include "cov_type_code.h"
 #include "hmc_temporal_gp.h"
 #include "hmc_temporal_multiscale.h"
+#include "temporal_restriction_setup.h"
 
 namespace ratiod_hmc {
 
@@ -529,6 +530,7 @@ inline void apply_temporal_params(ModelData& data, const Rcpp::List& temporal_pa
   // Beta anchors on u = (rho + 1) / 2 for an AR1 correlation.
   data.temporal_rho_prior_a = temporal_rho_prior_a;
   data.temporal_rho_prior_b = temporal_rho_prior_b;
+  prepare_temporal_restriction(data);
 }
 
 }  // namespace ratiod_hmc

@@ -2,7 +2,7 @@
 // Catch2 tests for hmc_zi.h (zero-inflation functions)
 
 #include "catch.hpp"
-#include "../hmc_zi.h"
+#include "../ratio_margins.h"
 #include <cmath>
 
 using namespace ratiod_zi;

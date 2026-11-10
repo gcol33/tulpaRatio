@@ -23,6 +23,7 @@
 #include <vector>
 
 #include <tulpa/soft_sum_to_zero.h>
+#include <tulpa/st_hsgp_kernel.h>
 
 #include "ar1_shared.h"
 #include "hmc_hsgp.h"
@@ -228,87 +229,32 @@ inline StPriorGrad st_interaction_prior_grad(
   // the S x T margins below do not apply to it.
   // -----------------------------------------------------------------------
   if (is_hsgp) {
-    const int M = hsgp.m_total;
-    const int rank_t = st_time_rank(st.temporal_type, T, st.temporal_cyclic);
-    double drho_sum = 0.0;   // d/d(rho) of the summed quadratic forms, weighted by prec_j
-
-    for (int j = 0; j < M; j++) {
-      const double omega_sq = hsgp.eigenvalues[j];
-      const double S_j = ratiod_hsgp::spectral_density(omega_sq, sigma2_hsgp,
-                                                          lengthscale_hsgp, hsgp.n_dim);
-      const double S_j_safe = std::max(S_j, 1e-10);
-      const double prec_j = tau / S_j_safe;
-
-      const double* dj = &delta[j * T];
-      double* gj = &grad_delta[j * T];
-      double qf = 0.0;
-
-      if (st.temporal_type == TemporalType::RW1) {
-        for (int t = 0; t < T; t++) {
-          double g = 0.0;
-          if (t > 0) { g += prec_j * (dj[t-1] - dj[t]); qf += (dj[t] - dj[t-1]) * (dj[t] - dj[t-1]); }
-          if (t < T - 1) g += prec_j * (dj[t+1] - dj[t]);
-          gj[t] = grad_delta_lik[j * T + t] + g;
-        }
-      } else if (st.temporal_type == TemporalType::RW2) {
-        for (int t = 0; t < T; t++) {
-          double g = 0.0;
-          if (t >= 2) g -= prec_j * (dj[t-2] - 2.0 * dj[t-1] + dj[t]);
-          if (t >= 1 && t < T - 1) g += 2.0 * prec_j * (dj[t-1] - 2.0 * dj[t] + dj[t+1]);
-          if (t < T - 2) g -= prec_j * (dj[t] - 2.0 * dj[t+1] + dj[t+2]);
-          gj[t] = grad_delta_lik[j * T + t] + g;
-        }
-        for (int t = 2; t < T; t++) {
-          const double d2 = dj[t-2] - 2.0 * dj[t-1] + dj[t];
-          qf += d2 * d2;
-        }
-      } else if (st.temporal_type == TemporalType::AR1 && T >= 2) {
-        RATIOD_TLS_WORKSPACE(std::vector<double>, r_dj);
-        r_dj.resize(T);
-        ratiod_ar1::ar1_precision_apply(dj, T, rho, r_dj.data());
-        for (int t = 0; t < T; t++) {
-          gj[t] = grad_delta_lik[j * T + t] - prec_j * r_dj[t];
-          qf += dj[t] * r_dj[t];
-        }
-        double interior = 0.0;
-        for (int t = 1; t < T - 1; t++) interior += dj[t] * dj[t];
-        double cross = 0.0;
-        for (int t = 1; t < T; t++) cross += dj[t] * dj[t-1];
-        drho_sum += prec_j * ratiod_ar1::ar1_quadratic_form_drho(interior, cross, rho);
-      } else {
-        for (int t = 0; t < T; t++) gj[t] = grad_delta_lik[j * T + t];
-      }
-
-      // Soft sum-to-zero over time, per basis function.
-      double sum_j = 0.0;
-      for (int t = 0; t < T; t++) sum_j += dj[t];
-      const double push_j = tulpa::s2z_precision(T) * sum_j;
-      for (int t = 0; t < T; t++) gj[t] -= push_j;
-
-      out.log_tau += 0.5 * rank_t - 0.5 * prec_j * qf;
-      out.log_prior += 0.5 * rank_t * std::log(prec_j) - 0.5 * prec_j * qf
-                     - 0.5 * tulpa::s2z_precision(T) * sum_j * sum_j;
-
-      // Both spectral hyperparameters enter only through S_j.
-      const double dLogPrior_dS = -0.5 * rank_t / S_j_safe
-                                + 0.5 * tau * qf / (S_j_safe * S_j_safe);
-      const double dS_dsigma2 = S_j_safe / sigma2_hsgp;
-      out.log_sigma2_hsgp += dLogPrior_dS * dS_dsigma2 * sigma2_hsgp;
-      const double dS_dl = S_j_safe * ratiod_hsgp::spectral_log_lengthscale_derivative(
-          omega_sq, lengthscale_hsgp, hsgp.n_dim) / lengthscale_hsgp;
-      out.log_lengthscale_hsgp += dLogPrior_dS * dS_dl * lengthscale_hsgp;
+    std::vector<double> applied(T);
+    for (int j = 0; j < hsgp.m_total; ++j) {
+      const double spectrum = tulpa_st_hsgp::coefficient_spectrum(
+          hsgp.eigenvalues[j], sigma2_hsgp, lengthscale_hsgp, hsgp.n_dim);
+      const double* x = delta + j * T;
+      tulpa_st_hsgp::time_apply(x, T, static_cast<int>(st.temporal_type),
+          st.temporal_cyclic, rho, applied.data());
+      double sum = 0.0;
+      for (int k = 0; k < T; ++k) sum += x[k];
+      for (int k = 0; k < T; ++k)
+        grad_delta[j * T + k] = grad_delta_lik[j * T + k] -
+            (tau / spectrum) * applied[k] - tulpa::s2z_precision(T) * sum;
     }
-
-    if (st.temporal_type == TemporalType::AR1 && T >= 2) {
-      // Each basis function carries its own log|R(rho)|, so the log-determinant
-      // term counts M of them.
-      const double omr2 = ratiod_ar1::one_minus_rho2(rho);
-      out.log_prior += 0.5 * M * std::log(omr2);
-      const double grad_rho = 0.5 * M * ratiod_ar1::dlog_one_minus_rho2_drho(rho)
-                            - 0.5 * drho_sum;
-      out.logit_rho += grad_rho * ratiod_ar1::drho_dlogit(rho);
-    }
-
+    std::vector<fwd::Dual> values(ST);
+    for (int k = 0; k < ST; ++k) values[k] = fwd::Dual(delta[k]);
+    const auto density = [&](int axis) {
+      return tulpa_st_hsgp::log_density(values.data(), fwd::Dual(tau, axis == 0 ? tau : 0.0),
+        fwd::Dual(rho, axis == 1 ? ratiod_ar1::drho_dlogit(rho) : 0.0),
+        fwd::Dual(sigma2_hsgp, axis == 2 ? sigma2_hsgp : 0.0),
+        fwd::Dual(lengthscale_hsgp, axis == 3 ? lengthscale_hsgp : 0.0), st, hsgp);
+    };
+    const auto first = density(0);
+    out.log_prior = first.val; out.log_tau = first.grad;
+    out.logit_rho = density(1).grad;
+    out.log_sigma2_hsgp = density(2).grad;
+    out.log_lengthscale_hsgp = density(3).grad;
     return out;
   }
 
@@ -456,7 +402,10 @@ inline StPriorGrad st_interaction_prior_grad(
     for (int t = 0; t < T; t++) out.log_prior -= 0.5 * lambda_s * row_sums_buf[t] * row_sums_buf[t];
     for (int s = 0; s < S; s++) out.log_prior -= 0.5 * lambda_t * col_sums_buf[s] * col_sums_buf[s];
 
-    if (!use_nc) {
+    if (use_nc) {
+      out.log_prior += st_ar1_margin_log_normalizer(rho, st);
+      grad_rho += st_ar1_margin_log_normalizer_drho(rho, st);
+    } else {
       // The margin penalty's normalizer (st_margin_normalizer)
       if (st.type == STType::SEPARABLE || st.type == STType::NONSEP_GP) {
         const StGpMarginNormalizer nz =

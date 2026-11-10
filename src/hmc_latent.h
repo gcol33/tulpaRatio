@@ -29,90 +29,14 @@
 #include <cmath>
 
 #include "autodiff_utils.h"
+#include <tulpa/bilinear_factor.h>
 
 namespace ratiod_latent {
 
-enum class LatentConstraint { SUM_TO_ZERO = 0, FIRST_ZERO = 1 };
+
 
 // Processes a factor can load on.
 inline int n_processes(bool shared) { return shared ? 2 : 1; }
-
-// Free loadings of a lower-triangular P x K matrix.
-inline int n_loadings(int P, int K) {
-  int n = 0;
-  for (int k = 0; k < K; k++) n += P - k;
-  return n;
-}
-
-// Lambda (row-major, Lambda[p * K + k]) from the loading block.
-template <typename T>
-inline void loadings(const T* theta, int P, int K, std::vector<T>& lam) {
-  lam.assign(static_cast<size_t>(P) * K, T(0.0));
-  int j = 0;
-  for (int k = 0; k < K; k++) {
-    for (int p = k; p < P; p++, j++) {
-      lam[p * K + k] = (p == k) ? ratiod::math::safe_exp(theta[j]) : theta[j];
-    }
-  }
-}
-
-// Log prior of the loading block: a PC prior (exponential with rate
-// `rate`) on each diagonal loading, with the log-scale Jacobian, and
-// N(0, sd_off^2) on each off-diagonal loading.
-template <typename T>
-inline T loadings_log_prior(const T* theta, int P, int K, double rate,
-                            double sd_off) {
-  T lp = T(0.0);
-  int j = 0;
-  for (int k = 0; k < K; k++) {
-    for (int p = k; p < P; p++, j++) {
-      if (p == k) {
-        lp = lp + T(std::log(rate)) + theta[j]
-                - T(rate) * ratiod::math::safe_exp(theta[j]);
-      } else {
-        lp = lp - T(0.5 / (sd_off * sd_off)) * theta[j] * theta[j];
-      }
-    }
-  }
-  return lp;
-}
-
-// d(loadings_log_prior)/d(theta), added to `g`.
-inline void loadings_log_prior_grad(const double* theta, int P, int K,
-                                    double rate, double sd_off, double* g) {
-  int j = 0;
-  for (int k = 0; k < K; k++) {
-    for (int p = k; p < P; p++, j++) {
-      g[j] += (p == k) ? 1.0 - rate * std::exp(theta[j])
-                       : -theta[j] / (sd_off * sd_off);
-    }
-  }
-}
-
-// The scores the linear predictors read, from the raw scores.
-template <typename T>
-inline void constrain_scores(const T* raw, int N, int K,
-                             LatentConstraint constraint, std::vector<T>& f) {
-  f.assign(raw, raw + static_cast<size_t>(N) * K);
-  for (int k = 0; k < K; k++) {
-    T shift = T(0.0);
-    if (constraint == LatentConstraint::SUM_TO_ZERO) {
-      for (int i = 0; i < N; i++) shift = shift + f[i * K + k];
-      shift = shift / T(static_cast<double>(N));
-    } else {
-      shift = raw[k];
-    }
-    for (int i = 0; i < N; i++) f[i * K + k] = f[i * K + k] - shift;
-  }
-}
-
-// log N(raw; 0, I), up to its constant.
-template <typename T>
-inline T scores_log_prior(const T* raw, int n) {
-  T q = T(0.0);
-  for (int j = 0; j < n; j++) q = q + raw[j] * raw[j];
-  return T(-0.5) * q;
-}
 
 // Each process's latent contribution to its linear predictor.
 template <typename T>
@@ -135,21 +59,21 @@ inline void process_effects(const std::vector<T>& f, const std::vector<T>& lam,
 struct LatentView {
   int N = 0, P = 0, K = 0;
   int loading_start = -1, score_start = -1;
-  LatentConstraint constraint = LatentConstraint::SUM_TO_ZERO;
+  tulpa::bilinear::LatentConstraint constraint = tulpa::bilinear::LatentConstraint::SUM_TO_ZERO;
   std::vector<double> lam, f, eta_num, eta_denom;
 
   bool active() const { return K > 0; }
 
   void read(const double* params, int loading_start_, int score_start_,
-            int N_, int K_, bool shared, LatentConstraint constraint_) {
+            int N_, int K_, bool shared, tulpa::bilinear::LatentConstraint constraint_) {
     N = N_;
     K = K_;
     P = n_processes(shared);
     loading_start = loading_start_;
     score_start = score_start_;
     constraint = constraint_;
-    loadings(params + loading_start, P, K, lam);
-    constrain_scores(params + score_start, N, K, constraint, f);
+    tulpa::bilinear::loadings(params + loading_start, P, K, lam);
+    tulpa::bilinear::constrain_scores(params + score_start, N, K, constraint, f);
     process_effects(f, lam, N, P, K, eta_num, eta_denom);
   }
 
@@ -179,7 +103,7 @@ struct LatentView {
         g_theta[j] += (p == k) ? s * lam[p * K + k] : s;
       }
     }
-    loadings_log_prior_grad(theta, P, K, rate, sd_off, g_theta);
+    tulpa::bilinear::loadings_log_prior_grad(theta, P, K, rate, sd_off, g_theta);
 
     // dL/df_ik = sum_p Lambda[p, k] dL/d(eta_p,i), then through the
     // constraint: centring projects out each factor's mean, the first-zero
@@ -195,7 +119,7 @@ struct LatentView {
     for (int k = 0; k < K; k++) {
       double total = 0.0;
       for (int i = 0; i < N; i++) total += gf[i * K + k];
-      if (constraint == LatentConstraint::SUM_TO_ZERO) {
+      if (constraint == tulpa::bilinear::LatentConstraint::SUM_TO_ZERO) {
         const double mean = total / static_cast<double>(N);
         for (int i = 0; i < N; i++) g_raw[i * K + k] += gf[i * K + k] - mean;
       } else {

@@ -15,7 +15,7 @@
 #include "linalg_fast.h"
 #include "hmc_temporal.h"
 #include "hmc_temporal_gp.h"
-#include "hmc_zi.h"
+#include "ratio_margins.h"
 #include "link_function.h"
 #include "spatial_field_constraint.h"
 #include "hmc_svc.h"
@@ -27,6 +27,7 @@
 #include "hmc_hsgp.h"
 #include "hmc_tvc.h"
 #include "rsr.h"
+#include <tulpa/restricted_slopes.h>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 
@@ -344,6 +345,8 @@ struct ModelData {
   // orthonormal basis of that restriction's covariates.
   ratiod_rsr::Restriction rsr;
   ratiod_rsr::Restriction rtr;
+  tulpa::RestrictedSlopes temporal_restricted_slopes;
+  tulpa::RestrictedSlopes ms_trend_restricted_slopes;
 
   // Latent factors for unmeasured confounders
   bool has_latent = false;
@@ -2128,7 +2131,7 @@ inline bool temporal_rw_nc(const ModelData& data, const ParamLayout& layout) {
          (data.temporal_type == TemporalType::RW1 ||
           data.temporal_type == TemporalType::RW2) &&
          data.temporal_parameterization == 1 &&
-         ratiod_temporal_nc::nc_applies(
+         tulpa_temporal_nc::nc_applies(
              data.n_times,
              data.temporal_type == TemporalType::RW2 ? 2 : 1,
              data.temporal_cyclic);
@@ -2184,7 +2187,7 @@ inline const double* temporal_effects(
     const double sigma =
         1.0 / std::sqrt(std::exp(params[layout.log_tau_temporal_idx]));
     buf.assign(n, 0.0);
-    ratiod_temporal_nc::rw_nc_grouped_forward(
+    tulpa_temporal_nc::rw_nc_grouped_forward(
         z, data.n_times, data.n_temporal_groups,
         data.temporal_type == TemporalType::RW2 ? 2 : 1,
         data.temporal_cyclic, sigma, buf.data());

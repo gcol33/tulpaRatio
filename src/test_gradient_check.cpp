@@ -21,6 +21,7 @@
 #include "log_post_impl.h"
 
 #include "hmc_field_coordinates.h"
+#include "temporal_restriction_setup.h"
 using namespace ratiod_hmc;
 
 namespace {
@@ -1149,6 +1150,7 @@ ModelData make_model(const std::string& field_in, int n_obs, int n_units,
 
   if (want_rsr) data.rsr = numerator_design_restriction(data);
   if (want_rtr) data.rtr = numerator_design_restriction(data);
+  prepare_temporal_restriction(data);
 
   return data;
 }
@@ -1642,6 +1644,26 @@ double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
   return hi - lo;
 }
 
+// [[Rcpp::export]]
+Rcpp::List cpp_st_ar1_zero_density(std::string field, Rcpp::NumericVector correlations) {
+  ModelData data = make_model(field, 40, 9, 4, 19);
+  const ParamLayout layout = compute_param_layout(data);
+  std::vector<double> q = draw_params(data, layout, get_n_params(data), 19);
+  const auto& st = data.spatiotemporal_data;
+  std::fill(q.begin() + layout.st_delta_start, q.begin() + layout.st_delta_end, 0.0);
+  q[layout.log_tau_st_idx] = 0.0;
+  Rcpp::NumericVector values(correlations.size());
+  for (int i = 0; i < correlations.size(); ++i) {
+    const double rho = correlations[i];
+    q[layout.logit_rho_st_idx] = std::log((1.0 + rho) / (1.0 - rho));
+    values[i] = compute_log_post(q, data, layout) - ratiod_ar1::log_prior_rho(
+        rho, st.rho_prior_a, st.rho_prior_b);
+  }
+  return Rcpp::List::create(Rcpp::Named("value") = values,
+    Rcpp::Named("S") = st.n_spatial, Rcpp::Named("T") = st.n_times,
+    Rcpp::Named("row_ptr") = st.adj_row_ptr, Rcpp::Named("col_idx") = st.adj_col_idx);
+}
+
 // For a likelihood Gaussian in the interaction (lognormal), the collapsed
 // interaction's Laplace step is exact: p(y, delta | rest) =
 // p(y | rest) N(delta; dh, H^-1) for every delta. So the centred density at
@@ -1753,10 +1775,10 @@ double cpp_ms_temporal_nc_coordinate_spread(std::string field = "ms_temporal_nc"
   for (int d = 0; d < n_draws; d++) {
     std::vector<double> z(n_total), phi(n_total);
     for (int k = 0; k < n_total; k++) z[k] = rnorm(rng);
-    ratiod_temporal_nc::rw_nc_grouped_forward(z.data(), n, n_groups, order,
+    tulpa_temporal_nc::rw_nc_grouped_forward(z.data(), n, n_groups, order,
                                               cyclic, sigma, phi.data());
 
-    const double lp_nc = ratiod_temporal_nc::rw_nc_grouped_log_prior(
+    const double lp_nc = tulpa_temporal_nc::rw_nc_grouped_log_prior(
         z.data(), n, n_groups, order, cyclic);
     const double lp_centred =
         nc_reference_log_prior(phi.data(), n, n_groups, order, cyclic, sigma2);

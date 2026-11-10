@@ -1,5 +1,5 @@
 #include <Rcpp.h>
-#include "hsgp_spectral.h"
+#include <tulpa/hsgp_spectral.h>
 
 // [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_hsgp_spectrum(Rcpp::NumericVector eigenvalues,
@@ -18,7 +18,7 @@ Rcpp::NumericMatrix cpp_hsgp_spectrum(Rcpp::NumericVector eigenvalues,
         for (int j = 0; j < eigenvalues.size(); ++j) {
             if (!R_finite(eigenvalues[j]) || eigenvalues[j] < 0)
                 Rcpp::stop("HSGP eigenvalues must be finite and nonnegative.");
-            out(i, j) = ratiod_hsgp::spectral_density(
+            out(i, j) = tulpa_hsgp_spectral::spectral_density(
                 eigenvalues[j], sigma2[i], lengthscale[i], dimension, kernel);
         }
     }
