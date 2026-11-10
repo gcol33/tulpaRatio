@@ -6,6 +6,12 @@
 
 namespace tulpaRatio {
 
+inline std::vector<int> zero_based_indices(SEXP values) {
+    auto out = Rcpp::as<std::vector<int>>(values);
+    for (int& index : out) --index;
+    return out;
+}
+
 inline tulpa::HSGPData spectral_basis(const Rcpp::List& sp, int N) {
     Rcpp::NumericMatrix phi = sp["basis"];
     tulpa::HSGPData out;
@@ -99,14 +105,9 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
         g.nn_idx = Rcpp::as<std::vector<int>>(gp["nn_idx"]);
         g.nn_dist = Rcpp::as<std::vector<double>>(gp["nn_dist"]);
         g.nn_neighbor_dist = Rcpp::as<std::vector<double>>(gp["nn_neighbor_dist"]);
-        auto zero_based = [](SEXP v) {
-            auto out = Rcpp::as<std::vector<int>>(v);
-            for (int& i : out) --i;
-            return out;
-        };
-        g.nn_order = zero_based(gp["nn_order"]);
-        g.nn_order_inv = zero_based(gp["nn_order_inv"]);
-        g.obs_to_loc = zero_based(gp["gp_obs_to_loc"]);
+        g.nn_order = zero_based_indices(gp["nn_order"]);
+        g.nn_order_inv = zero_based_indices(gp["nn_order_inv"]);
+        g.obs_to_loc = zero_based_indices(gp["gp_obs_to_loc"]);
         if (g.obs_to_loc.size() != static_cast<size_t>(data.N)) Rcpp::stop("GP location map must have N entries");
         for (int i : g.obs_to_loc) if (i < 0 || i >= n) Rcpp::stop("GP location index outside field");
         const std::string cov = Rcpp::as<std::string>(gp["cov_type"]);

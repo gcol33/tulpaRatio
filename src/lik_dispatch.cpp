@@ -92,6 +92,14 @@ tulpa::LikelihoodSpec build_ratio_likelihood_spec(const RatioConfig& cfg) {
         spec.eta_weights_fn=entry.weights;
         spec.eta_weights_arena_fn=entry.weights_arena;
     }
+    const auto positive_eta = [](const std::string& link) {
+        return link == "identity" || link == "inverse";
+    };
+    if (positive_eta(cfg.num_link) || (entry.processes > 1 && positive_eta(cfg.denom_link))) {
+        spec.working_eta.assign(entry.processes, 0.0);
+        spec.working_eta[0] = positive_eta(cfg.num_link) ? 1.0 : 0.0;
+        if (entry.processes > 1) spec.working_eta[1] = positive_eta(cfg.denom_link) ? 1.0 : 0.0;
+    }
     return spec;
 }
 
