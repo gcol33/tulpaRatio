@@ -17,15 +17,22 @@ namespace ratiod_cov {
 using namespace ratiod::math;
 
 // Covariance function types
-enum class CovType { EXPONENTIAL, MATERN, GAUSSIAN, SPHERICAL };
+enum class CovType { EXPONENTIAL, MATERN, GAUSSIAN, SPHERICAL, MATERN52 };
 
 // The cov = names, in the order of the integer codes R/spatial.R's
 // cov_type_code() sends
 inline constexpr ratiod_enum::EnumName<CovType> COV_TYPE_NAMES[] = {
   {"exponential", CovType::EXPONENTIAL}, {"matern", CovType::MATERN},
-  {"gaussian", CovType::GAUSSIAN},       {"spherical", CovType::SPHERICAL}};
+  {"gaussian", CovType::GAUSSIAN},       {"spherical", CovType::SPHERICAL},
+  {"matern52", CovType::MATERN52}};
 
-inline CovType parse_cov_type(const std::string& s) {
+inline CovType parse_cov_type(const std::string& s, double nu = 1.5) {
+  if (s == "matern") {
+    if (nu == 0.5) return CovType::EXPONENTIAL;
+    if (nu == 1.5) return CovType::MATERN;
+    if (nu == 2.5) return CovType::MATERN52;
+    Rcpp::stop("Matern smoothness must be 0.5, 1.5 or 2.5");
+  }
   return ratiod_enum::parse_enum(COV_TYPE_NAMES, s, "covariance");
 }
 
@@ -85,6 +92,8 @@ inline T compute_cov(double d, const T& sigma2, const T& phi, CovType cov_type) 
       return cov_exponential(d, sigma2, phi);
     case CovType::MATERN:
       return cov_matern32(d, sigma2, phi);
+    case CovType::MATERN52:
+      return cov_matern52(d, sigma2, phi);
     case CovType::GAUSSIAN:
       return cov_gaussian(d, sigma2, phi);
     case CovType::SPHERICAL:
@@ -102,6 +111,11 @@ inline double dcov_dphi(double d, double sigma2, double phi, double cov_val,
                         CovType cov_type) {
   if (d < 1e-10) return 0.0;
   switch (cov_type) {
+    case CovType::MATERN52: {
+      const double u = std::sqrt(5.0) * d / phi;
+      return cov_val * u * u * (1.0 + u) /
+        (3.0 * phi * (1.0 + u + u * u / 3.0));
+    }
     case CovType::EXPONENTIAL:
       // k = s exp(-d/phi); dk/dphi = k d / phi^2
       return cov_val * d / (phi * phi);

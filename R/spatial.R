@@ -580,8 +580,8 @@ is_connected <- function(adjacency) {
 #'   `~ lon + lat`), or a character vector of length 2 with column names.
 #' @param cov Covariance function: `"exponential"` (default), `"matern"`,
 #'   `"gaussian"`, or `"spherical"`.
-#' @param nu Smoothness parameter for Matern covariance. Common values:
-#'   - 0.5: Equivalent to exponential (rough, once mean-square differentiable)
+#' @param nu Supported smoothness values for Matern covariance:
+#'   - 0.5: Exponential covariance
 #'   - 1.5: Once differentiable (moderate smoothness)
 #'   - 2.5: Twice differentiable (smooth)
 #'   Ignored for non-Matern covariance functions.
@@ -617,7 +617,7 @@ is_connected <- function(adjacency) {
 #'
 #' - **Exponential**: \eqn{C(d) = \exp(-d/\phi)}
 #' - **Matern**: \eqn{C(d) = \frac{2^{1-\nu}}{\Gamma(\nu)} (\sqrt{2\nu} d/\phi)^\nu K_\nu(\sqrt{2\nu} d/\phi)}
-#' - **Gaussian**: \eqn{C(d) = \exp(-(d/\phi)^2)}
+#' - **Gaussian**: \eqn{C(d) = \exp(-0.5(d/\phi)^2)}
 #' - **Spherical**: \eqn{C(d) = 1 - 1.5(d/\phi) + 0.5(d/\phi)^3} for \eqn{d < \phi}
 #'
 #' **NNGP approximation**: For computational tractability, we use the
@@ -709,8 +709,8 @@ spatial_gp <- function(coords,
 
   # Validate nu for Matern
   if (cov == "matern") {
-    if (!is.numeric(nu) || length(nu) != 1 || nu <= 0) {
-      stop("`nu` must be a positive number for Matern covariance", call. = FALSE)
+    if (!is.numeric(nu) || length(nu) != 1 || is.na(nu) || !(nu %in% c(.5, 1.5, 2.5))) {
+      stop("`nu` must be a positive supported smoothness: 0.5, 1.5 or 2.5", call. = FALSE)
     }
   }
 
@@ -1700,12 +1700,18 @@ validate_svc <- function(svc, data, X) {
 #'
 #' @param cov One of "exponential", "matern", "gaussian", "spherical"
 #'
-#' @return Integer code in 0:3
+#' @param nu Matern smoothness: 0.5, 1.5 or 2.5
+#' @return Integer code in 0:4
 #'
 #' @keywords internal
-cov_type_code <- function(cov) {
+cov_type_code <- function(cov, nu = 1.5) {
   known <- cpp_enum_names("cov")
   cov <- cov %||% "exponential"
+  if (identical(cov, "matern")) {
+    if (identical(nu, .5)) cov <- "exponential"
+    else if (identical(nu, 2.5)) cov <- "matern52"
+    else if (!identical(nu, 1.5)) stop("Matern smoothness must be 0.5, 1.5 or 2.5")
+  }
   code <- match(cov, known)
   if (length(code) != 1L || is.na(code)) {
     stop(sprintf("Unknown covariance '%s'. One of %s.",

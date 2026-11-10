@@ -4,13 +4,15 @@
 \alias{cov_type_code}
 \title{Covariance code for the compiled kernel family}
 \usage{
-cov_type_code(cov)
+cov_type_code(cov, nu = 1.5)
 }
 \arguments{
 \item{cov}{One of "exponential", "matern", "gaussian", "spherical"}
+
+\item{nu}{Matern smoothness: 0.5, 1.5 or 2.5}
 }
 \value{
-Integer code in 0:3
+Integer code in 0:4
 }
 \description{
 The integer the C++ covariance family is selected by, from the name a

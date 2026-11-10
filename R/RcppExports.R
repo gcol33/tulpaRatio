@@ -41,6 +41,10 @@ cpp_get_max_threads <- function() {
     .Call(`_tulpaRatio_cpp_get_max_threads`)
 }
 
+cpp_test_spatial_covariance <- function(distance, variance, range, covariance, nu = 1.5) {
+    .Call(`_tulpaRatio_cpp_test_spatial_covariance`, distance, variance, range, covariance, nu)
+}
+
 cpp_hsgp_spectrum <- function(eigenvalues, sigma2, lengthscale, dimension, kernel) {
     .Call(`_tulpaRatio_cpp_hsgp_spectrum`, eigenvalues, sigma2, lengthscale, dimension, kernel)
 }

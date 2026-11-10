@@ -56,6 +56,7 @@ utils::globalVariables(c(
   "cpp_flatten_3d_rowmajor",
   "cpp_crt_mean",
   "cpp_enum_names",
+  "cpp_test_spatial_covariance",
   "cpp_ess_fit",
   "cpp_gibbs_spatial",
   "cpp_gpu_available",

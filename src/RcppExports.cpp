@@ -179,6 +179,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_spatial_covariance
+Rcpp::NumericMatrix cpp_test_spatial_covariance(Rcpp::NumericVector distance, double variance, double range, std::string covariance, double nu);
+RcppExport SEXP _tulpaRatio_cpp_test_spatial_covariance(SEXP distanceSEXP, SEXP varianceSEXP, SEXP rangeSEXP, SEXP covarianceSEXP, SEXP nuSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type distance(distanceSEXP);
+    Rcpp::traits::input_parameter< double >::type variance(varianceSEXP);
+    Rcpp::traits::input_parameter< double >::type range(rangeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type covariance(covarianceSEXP);
+    Rcpp::traits::input_parameter< double >::type nu(nuSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_spatial_covariance(distance, variance, range, covariance, nu));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_hsgp_spectrum
 Rcpp::NumericMatrix cpp_hsgp_spectrum(Rcpp::NumericVector eigenvalues, Rcpp::NumericVector sigma2, Rcpp::NumericVector lengthscale, int dimension, int kernel);
 RcppExport SEXP _tulpaRatio_cpp_hsgp_spectrum(SEXP eigenvaluesSEXP, SEXP sigma2SEXP, SEXP lengthscaleSEXP, SEXP dimensionSEXP, SEXP kernelSEXP) {
@@ -2173,6 +2188,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_gpu_info", (DL_FUNC) &_tulpaRatio_cpp_gpu_info, 0},
     {"_tulpaRatio_cpp_hmc_fit", (DL_FUNC) &_tulpaRatio_cpp_hmc_fit, 31},
     {"_tulpaRatio_cpp_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_get_max_threads, 0},
+    {"_tulpaRatio_cpp_test_spatial_covariance", (DL_FUNC) &_tulpaRatio_cpp_test_spatial_covariance, 5},
     {"_tulpaRatio_cpp_hsgp_spectrum", (DL_FUNC) &_tulpaRatio_cpp_hsgp_spectrum, 5},
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
     {"_tulpaRatio_cpp_ratio_family_entries", (DL_FUNC) &_tulpaRatio_cpp_ratio_family_entries, 0},

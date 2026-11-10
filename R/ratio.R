@@ -1032,7 +1032,7 @@ predict_spatial_gp <- function(object, coords.0, return_spatial) {
     w_train = w_train,
     sigma2 = draws[, "sigma2_gp"],
     phi = draws[, "phi_gp"],
-    cov_type = cov_type_code(gp$cov),
+    cov_type = cov_type_code(gp$cov, gp$nu %||% 1.5),
     nn = min(gp$nn, nrow(gp$unique_coords))
   )
 
@@ -1285,7 +1285,7 @@ predict_spatial_gp_pg <- function(object, coords.0, return_spatial) {
     w_train = w_gp,
     sigma2 = hyper$sigma2,
     phi = hyper$phi,
-    cov_type = cov_type_code(object$spatial$cov),
+    cov_type = cov_type_code(object$spatial$cov, object$spatial$nu %||% 1.5),
     nn = object$spatial$nn %||% 15L
   )
 

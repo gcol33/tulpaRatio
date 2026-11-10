@@ -24,9 +24,9 @@ spatial_gp(
 \item{cov}{Covariance function: \code{"exponential"} (default), \code{"matern"},
 \code{"gaussian"}, or \code{"spherical"}.}
 
-\item{nu}{Smoothness parameter for Matern covariance. Common values:
+\item{nu}{Supported smoothness values for Matern covariance:
 \itemize{
-\item 0.5: Equivalent to exponential (rough, once mean-square differentiable)
+\item 0.5: Exponential covariance
 \item 1.5: Once differentiable (moderate smoothness)
 \item 2.5: Twice differentiable (smooth)
 Ignored for non-Matern covariance functions.
@@ -80,7 +80,7 @@ range parameter \eqn{\phi}:
 \itemize{
 \item \strong{Exponential}: \eqn{C(d) = \exp(-d/\phi)}
 \item \strong{Matern}: \eqn{C(d) = \frac{2^{1-\nu}}{\Gamma(\nu)} (\sqrt{2\nu} d/\phi)^\nu K_\nu(\sqrt{2\nu} d/\phi)}
-\item \strong{Gaussian}: \eqn{C(d) = \exp(-(d/\phi)^2)}
+\item \strong{Gaussian}: \eqn{C(d) = \exp(-0.5(d/\phi)^2)}
 \item \strong{Spherical}: \eqn{C(d) = 1 - 1.5(d/\phi) + 0.5(d/\phi)^3} for \eqn{d < \phi}
 }
 

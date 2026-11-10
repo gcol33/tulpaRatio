@@ -292,7 +292,8 @@ static void apply_gp_params(ModelData& data, const Rcpp::List& gp) {
     data.gp_data.obs_to_loc = zero_based(Rcpp::as<std::vector<int>>(gp["gp_obs_to_loc"]));
     data.gp_data.nn_order = zero_based(Rcpp::as<std::vector<int>>(gp["nn_order"]));
     data.gp_data.nn_order_inv = zero_based(Rcpp::as<std::vector<int>>(gp["nn_order_inv"]));
-    data.gp_data.cov_type = ratiod_cov::parse_cov_type(Rcpp::as<std::string>(gp["cov_type"]));
+    data.gp_data.cov_type = ratiod_cov::parse_cov_type(
+        Rcpp::as<std::string>(gp["cov_type"]), Rcpp::as<double>(gp["nu"]));
     data.gp_data.nu = Rcpp::as<double>(gp["nu"]);
     data.gp_data.shared = shared;
 
@@ -532,4 +533,16 @@ int cpp_get_max_threads() {
   #else
   return 1;
   #endif
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix cpp_test_spatial_covariance(Rcpp::NumericVector distance,
+    double variance, double range, std::string covariance, double nu = 1.5) {
+    const auto type = ratiod_cov::parse_cov_type(covariance, nu);
+    Rcpp::NumericMatrix out(distance.size(), 2);
+    for (R_xlen_t i = 0; i < distance.size(); ++i) {
+        out(i, 0) = ratiod_cov::compute_cov(distance[i], variance, range, type);
+        out(i, 1) = ratiod_cov::dcov_dphi(distance[i], variance, range, out(i, 0), type);
+    }
+    return out;
 }

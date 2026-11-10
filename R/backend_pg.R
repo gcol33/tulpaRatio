@@ -501,7 +501,7 @@ fit_pg_binomial_gp <- function(formula,
     message(sprintf("  Covariance: %s", spatial$cov))
   }
 
-  cov_type <- cov_type_code(spatial$cov)
+  cov_type <- cov_type_code(spatial$cov, spatial$nu %||% 1.5)
 
   # Get neighbor info
   nn_info <- spatial$neighbor_info
