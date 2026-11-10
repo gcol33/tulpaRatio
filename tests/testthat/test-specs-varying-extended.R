@@ -27,14 +27,17 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
     field <- field - mean(field)
     if (factor) {
       field <- .3 * rnorm(n)
-      field <- field - mean(field)
+      if (kind == "first_zero") field[1L] <- 0 else field <- field - mean(field)
     }
     num_eta <- (if (paired) 3 else .2) + (if (paired) .4 else .5) * d$x +
       if (factor) field else field * d$x
     if (paired) {
       denominator_field <- if (kind %in% c("unshared", "tvc_unshared")) 0 else
         if (factor) -.6 * field else field * d$x
-      if (kind == "factor_two") denominator_field <- denominator_field + .2 * rnorm(n)
+      if (kind == "factor_two") {
+        second_field <- .2 * rnorm(n)
+        denominator_field <- denominator_field + second_field - mean(second_field)
+      }
       denom_eta <- 1 + .2 * d$x + denominator_field
       d$y <- rpois(n, exp(num_eta))
       d$denom <- rgamma(n, shape = 30, rate = 30 / exp(denom_eta))
@@ -61,9 +64,13 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
         shared = kind != "unshared"))
     fit <- bridge19_pair(args, name, seed)
     b <- as.matrix(fit$draws)
-    expect_true(all(abs(colMeans(b)[1:2] - beta) < .3), info = paste(name, seed))
-    recovered <- colMeans(fitted(fit, summary = FALSE)$numerator)
+    expected_beta <- if (paired) c(beta, 1, .2) else beta
+    expect_true(all(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta) < .3), info = paste(name, seed))
+    prediction <- fitted(fit, summary = FALSE)
+    recovered <- colMeans(prediction$numerator)
     expect_lt(sqrt(mean(((recovered - truth) / if (paired) truth else 1)^2)),
       if (paired) .3 else .12, label = paste(name, seed, "recovery"))
+    if (paired) expect_lt(sqrt(mean(((colMeans(prediction$denominator) - exp(denom_eta)) / exp(denom_eta))^2)),
+      .3, label = paste(name, seed, "denominator recovery"))
   }
 })

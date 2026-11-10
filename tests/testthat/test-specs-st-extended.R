@@ -80,9 +80,13 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
         adapt_delta = .99, gradient_mode = "A_r"))
     fit <- bridge19_pair(args, name, seed)
     b <- as.matrix(fit$draws)
-    expect_true(all(abs(colMeans(b)[1:2] - beta) < .2), info = paste(name, seed))
-    recovered <- colMeans(fitted(fit, summary = FALSE)$numerator)
+    expected_beta <- if (paired) c(beta, 1, .2) else beta
+    expect_true(all(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta) < .2), info = paste(name, seed))
+    prediction <- fitted(fit, summary = FALSE)
+    recovered <- colMeans(prediction$numerator)
     expect_lt(if (paired) sqrt(mean(((recovered - truth) / truth)^2)) else max(abs(recovered - truth)),
       if (paired) .3 else .1, label = paste(name, seed, "recovery"))
+    if (paired) expect_lt(sqrt(mean(((colMeans(prediction$denominator) - denominator) / denominator)^2)),
+      .3, label = paste(name, seed, "denominator recovery"))
   }
 })

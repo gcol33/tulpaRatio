@@ -30,10 +30,10 @@ test_that("centred and non-centred interactions give the same tau", {
           spatial = spatial_car(d$adj, spatial_level = "group", group_var = "region"),
           temporal = temporal_rw1("year"), type = ty, parameterization = par),
         control = list(iter = 1000, chains = 2, seed = 1)))
-      as.matrix(fit$draws)[, "tau_st"]
+      log(as.matrix(fit$draws)[, "tau_st"])
     })
     expect_lt(abs(mean(tau[[1]]) - mean(tau[[2]])) / sd(tau[[1]]), 0.5,
-              label = sprintf("Type %s: centred %.2f, non-centred %.2f",
+              label = sprintf("Type %s: centred log precision %.2f, non-centred %.2f",
                               ty, mean(tau[[1]]), mean(tau[[2]])))
   }
 })
@@ -61,13 +61,16 @@ test_that("both AR1 interaction coordinates normalize the constrained Gaussian",
   for (field in c("st2_ar1", "st2_ar1_nc", "st4_ar1", "st4_ar1_nc")) {
     r <- tulpaRatio:::cpp_st_ar1_zero_density(field, correlations)
     S <- r$S; nt <- r$T
-    Qs <- matrix(0, S, S)
-    for (s in seq_len(S)) {
-      neighbors <- r$col_idx[seq.int(r$row_ptr[s] + 1L, r$row_ptr[s + 1L])]
-      Qs[s, neighbors] <- -1
-      Qs[s, s] <- length(neighbors)
+    Qs <- diag(S)
+    if (startsWith(field, "st4")) {
+      Qs <- matrix(0, S, S)
+      for (s in seq_len(S)) {
+        at <- r$row_ptr[s] + seq_len(r$row_ptr[s + 1L] - r$row_ptr[s])
+        neighbors <- r$col_idx[at]
+        Qs[s, neighbors] <- -1
+        Qs[s, s] <- length(neighbors)
+      }
     }
-    if (startsWith(field, "st2")) Qs <- diag(S)
     rows <- kronecker(matrix(1, S, S), diag(nt)) / (.001 * S)^2
     columns <- kronecker(diag(S), matrix(1, nt, nt)) / (.001 * nt)^2
     reference <- vapply(correlations, function(rho) {
