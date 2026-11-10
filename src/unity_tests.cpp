@@ -1,0 +1,17 @@
+#include <RcppEigen.h>
+
+#include "test_chain_concurrency.cpp"
+#include "test_gradient_check.cpp"
+#include "test_helpers.cpp"
+#include "test_hmc_grad_probes.cpp"
+#include "test_hmc_metric.cpp"
+#include "test_multiscale_prior.cpp"
+#include "test_negbin_spec.cpp"
+#include "test_precision_jet.cpp"
+#include "test_precision_legacy.cpp"
+#include "test_precision_spec.cpp"
+#include "test_ratio_margins.cpp"
+#include "test_ratio_math.cpp"
+#include "test_scalar_math.cpp"
+#include "test_tls_workspace.cpp"
+#include "test_vi.cpp"

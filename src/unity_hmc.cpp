@@ -1,0 +1,16 @@
+#include <RcppEigen.h>
+
+#include "hmc_chain.cpp"
+#include "hmc_exports.cpp"
+#include "hmc_grad_analytical.cpp"
+#include "hmc_grad_areal_collapsed.cpp"
+#include "hmc_grad_composite.cpp"
+#include "hmc_grad_dispatch.cpp"
+#include "hmc_grad_gp.cpp"
+#include "hmc_grad_latent_hsgp.cpp"
+#include "hmc_grad_modes.cpp"
+#include "hmc_grad_svc_tvc.cpp"
+#include "hmc_grad_temporal_st.cpp"
+#include "hmc_integrator.cpp"
+#include "hmc_layout.cpp"
+#include "hmc_mass.cpp"
