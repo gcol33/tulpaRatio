@@ -472,11 +472,11 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   if (n_chains == 1) {
     tulpa::get_nuts_fn()(&data,&layout,init_vec.data(),layout.total_params,
       n_iter,n_warmup,max_treedepth,adapt_delta,static_cast<unsigned int>(seed),
-      verbose ? 1 : 0,&control,nullptr,results.data());
+      verbose ? 1 : 0,&control,nullptr,0.0,results.data());
   } else {
     tulpa::get_nuts_chains_fn()(&data,&layout,init_vec.data(),layout.total_params,n_chains,
       n_iter,n_warmup,max_treedepth,adapt_delta,static_cast<unsigned int>(seed),
-      verbose ? 1 : 0,&control,nullptr,results.data());
+      verbose ? 1 : 0,&control,nullptr,nullptr,results.data());
   }
   Rcpp::List samples(n_chains),log_prob(n_chains),accept_prob(n_chains),
              divergent(n_chains),treedepth(n_chains),n_leapfrog(n_chains),energy(n_chains);
