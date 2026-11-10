@@ -98,6 +98,8 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
         data.gp_collapsed = param == "collapsed";
         data.gp_parameterization = (param == "noncentered" || param == "auto") ? 1 : 0;
         data.auto_gp_coordinates = param == "auto";
+        data.conditional_gp_coordinates = gp.containsElementNamed("conditional_coordinates") &&
+            Rcpp::as<bool>(gp["conditional_coordinates"]);
         auto& g = data.gp_data;
         g.n_obs = n;
         g.nn = Rcpp::as<int>(gp["nn"]);

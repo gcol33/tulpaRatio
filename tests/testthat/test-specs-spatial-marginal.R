@@ -7,7 +7,7 @@ test_that("engine marginal and joint spatial posteriors agree across three seeds
   fields <- list(
     icar = function() spatial_car(fixture$adjacency, group_var = 'unit'),
     bym2 = function() spatial_bym2(fixture$adjacency, group_var = 'unit'),
-    gp = function() spatial_gp(~ lon + lat, scale_coords = FALSE, nn = 5L))
+    gp = function() spatial_gp(~ lon + lat, scale_coords = FALSE, nn = 5L, parameterization = 'collapsed'))
   fn <- 'cpp_tulpaRatio_run_nuts_specs'
   ns <- asNamespace('tulpaRatio')
   on.exit(if (methods::is(get0(fn, envir = ns, inherits = FALSE), 'functionWithTrace'))
@@ -29,6 +29,7 @@ test_that("engine marginal and joint spatial posteriors agree across three seeds
         gradient_mode = 'A_r')))
     suppressMessages(untrace(fn, where = ns))
     expect_true(is.list(capture$args))
+    if (name == 'gp') expect_true(isTRUE(capture$args$spatial_params$gp$conditional_coordinates))
     outer <- if (name == 'icar') 3L else 4L
     args <- capture$args
     args$spatial_params$parameterization <- 'collapsed'

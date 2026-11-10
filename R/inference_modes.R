@@ -481,30 +481,36 @@ LIKELIHOOD_BACKENDS <- c("hmc", "ess", "sghmc", "sgld", "vi")
 #' @return `invisible(TRUE)`, or an error naming the restriction
 #' @keywords internal
 assert_backend_fits_likelihood <- function(backend, family, structures = list()) {
-  model_type <- get_hmc_model_type(family)
-  if (family_handcoded(family, model_type)) return(invisible(TRUE))
-
-  links <- family_links(family, model_type)
-  odd_links <- unique(setdiff(unlist(links[c("num", "denom", "zi", "oi")]),
-                              LINKS_CANONICAL))
-  what <- if (!isTRUE(MODEL_TYPES[[model_type]]$handcoded)) {
-    sprintf("the %s likelihood", model_type)
-  } else {
-    sprintf("the %s link", paste(odd_links, collapse = ", "))
-  }
+  what <- canonical_likelihood_requirement(family)
+  if (is.null(what)) return(invisible(TRUE))
   if (!backend %in% LIKELIHOOD_BACKENDS) {
     stop(sprintf(paste0(
       "The %s backend fits the canonical links of its own likelihoods only, ",
       "and this family needs %s. Use `mode = \"hmc\"`."),
       backend, what), call. = FALSE)
   }
-  if (identical(structures$spatial$parameterization, "collapsed")) {
-    stop(sprintf(paste0(
-      "A collapsed spatial field is marginalized under the canonical links ",
-      "of the original likelihoods only, and this family needs %s. Sample ",
-      "the field with another `parameterization`."), what), call. = FALSE)
-  }
+  if (!identical(backend, "hmc") && identical(structures$spatial$parameterization, "collapsed"))
+    assert_legacy_collapsed_likelihood(family)
   invisible(TRUE)
+}
+
+canonical_likelihood_requirement <- function(family) {
+  model_type <- get_hmc_model_type(family)
+  if (family_handcoded(family, model_type)) return(NULL)
+  links <- family_links(family, model_type)
+  odd_links <- unique(setdiff(unlist(links[c("num", "denom", "zi", "oi")]), LINKS_CANONICAL))
+  if (!isTRUE(MODEL_TYPES[[model_type]]$handcoded))
+    sprintf("the %s likelihood", model_type) else
+    sprintf("the %s link", paste(odd_links, collapse = ", "))
+}
+
+assert_legacy_collapsed_likelihood <- function(family) {
+  what <- canonical_likelihood_requirement(family)
+  if (is.null(what)) return(invisible(TRUE))
+  stop(sprintf(paste0(
+    "A collapsed spatial field is marginalized under the canonical links ",
+    "of the original likelihoods only, and this family needs %s. Sample ",
+    "the field with another `parameterization`."), what), call. = FALSE)
 }
 
 

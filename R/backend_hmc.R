@@ -193,15 +193,17 @@ fit_hmc <- function(formula,
 
   if (specs_eligible && identical(spatial_param_v, "collapsed")) {
     spatial_info$parameterization <- spatial_params$parameterization <- "auto"
-    if (identical(spatial_type_v, "gp"))
+    if (identical(spatial_type_v, "gp")) {
       gp_info$parameterization <- gp_params$parameterization <- "auto"
+      gp_params$conditional_coordinates <- TRUE
+    }
     spatial_param_v <- "auto"
   }
   if (st_collapsed_gp) {
     if (specs_eligible) spatiotemporal_info$parameterization <- "noncentered" else
       st_params$parameterization <- "collapsed"
   }
-  validate_legacy_collapsed(spatial_info, temporal_info, spatial)
+  validate_legacy_collapsed(spatial_info, temporal_info, spatial, family)
 
   # Initialize parameters
   q_init <- initialize_hmc_params_full(
@@ -480,7 +482,7 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   temporal_info <- prepare_temporal_for_hmc(temporal, data, hmc_data$N)
   temporal_info$time_levels <- temporal$time_levels
   temporal_info$rtr_basis <- rtr_basis(temporal, data)
-  if (validate_collapsed) validate_legacy_collapsed(spatial_info, temporal_info, spatial)
+  if (validate_collapsed) validate_legacy_collapsed(spatial_info, temporal_info, spatial, family)
 
   # Prepare the inflation design implied by the family specification.
   zi_info <- prepare_zi_for_hmc(zi, data, hmc_data$N, family)

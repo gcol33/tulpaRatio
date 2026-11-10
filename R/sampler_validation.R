@@ -1,5 +1,6 @@
-validate_legacy_collapsed <- function(spatial_info, temporal_info, spatial) {
+validate_legacy_collapsed <- function(spatial_info, temporal_info, spatial, family) {
   if (!identical(spatial_info$parameterization, "collapsed")) return(invisible(NULL))
+  assert_legacy_collapsed_likelihood(family)
   if (!is.null(spatial$component)) {
     stop("The legacy collapsed spatial sampler requires a connected graph; ",
          "this adjacency has several components or an island.", call. = FALSE)
