@@ -33,6 +33,8 @@ test_that("spatial bridge posteriors agree with the model sampler and simulated 
       gp_spherical = spatial_gp(~ lon + lat, scale_coords = FALSE, nn = 5L, cov = 'spherical'),
       hsgp = spatial_hsgp(~ lon + lat, scale_coords = FALSE, m = 3L),
       multiscale = spatial_multiscale(~ lon + lat, scale_coords = FALSE, m = 3L),
+      multiscale_lbfgs = spatial_multiscale(~ lon + lat, scale_coords = FALSE, m = 3L,
+        sampler = 'lbfgs'),
       rsr_icar = spatial_rsr(spatial_car(adjacency, group_var = 'unit'), ~ x),
       rsr_bym2 = spatial_rsr(spatial_bym2(adjacency, group_var = 'unit'), ~ x),
       rsr_car = spatial_rsr(spatial_car(adjacency, group_var = 'unit', proper = TRUE), ~ x),

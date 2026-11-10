@@ -10,7 +10,8 @@ test_that("engine marginal and joint spatial posteriors agree across three seeds
     gp = function() spatial_gp(~ lon + lat, scale_coords = FALSE, nn = 5L))
   fn <- 'cpp_tulpaRatio_run_nuts_specs'
   ns <- asNamespace('tulpaRatio')
-  on.exit(suppressMessages(untrace(fn, where = ns)), add = TRUE)
+  on.exit(if (methods::is(get0(fn, envir = ns, inherits = FALSE), 'functionWithTrace'))
+    suppressMessages(untrace(fn, where = ns)), add = TRUE)
   for (seed in c(18L, 181L, 182L)) for (name in names(fields)) {
     capture <- new.env(parent = emptyenv())
     suppressMessages(trace(fn, where = ns, print = FALSE,
