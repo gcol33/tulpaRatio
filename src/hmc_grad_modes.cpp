@@ -26,7 +26,7 @@ double compute_log_post(
     bool skip_obs_loop,
     const double* precomputed_tgp_log_prior
 ) {
-  if (field_coordinates && !field_coordinates->entries.empty()) {
+  if (field_coordinates && !field_coordinates->empty()) {
     std::vector<double> x;
     const double jacobian = field_coordinates->forward(params, x);
     FieldCoordinateScope raw(nullptr);

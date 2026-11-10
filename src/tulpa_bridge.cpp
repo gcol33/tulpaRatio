@@ -1,4 +1,5 @@
-#include <Rcpp.h>
+#include <RcppEigen.h>
+#include "spatial_model_data.h"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -13,6 +14,8 @@
 #include <tulpa/likelihood.h>
 #include <tulpa/model_data.h>
 #include <tulpa/param_layout.h>
+#include <tulpa/field_coordinates.h>
+#include <tulpa/spatial_reconstruction.h>
 
 #include "lik_specs/family_registry.h"
 #include "lik_specs/lik_helpers.h"
@@ -325,66 +328,8 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     if (data.n_re_groups > 0 || data.n_re_terms > 0) spec.gradient_fn=nullptr;
   }
 
-  if (spatial_params.containsElementNamed("type")) {
-    const std::string spatial_type =
-        Rcpp::as<std::string>(spatial_params["type"]);
-    if (spatial_type != "none" && !spatial_type.empty()) {
-      const std::string param =
-          spatial_params.containsElementNamed("parameterization")
-            ? Rcpp::as<std::string>(spatial_params["parameterization"])
-            : std::string("standard");
-      if (param == "collapsed") {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: collapsed spatial "
-                   "parameterisations are not yet supported on the spec path. "
-                   "Use the legacy backend.");
-      }
-      if (spatial_type == "icar") {
-        data.spatial_type = tulpa::SpatialType::ICAR;
-        data.auto_spatial_coordinates = param == "auto";
-      } else if (spatial_type == "bym2") {
-        data.spatial_type = tulpa::SpatialType::BYM2;
-      } else {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: spatial type '%s' is not "
-                   "yet supported on the spec path. Supported: 'icar', 'bym2'.",
-                   spatial_type.c_str());
-      }
-      data.spatial_component_centering = true;
-
-      data.spatial_sigma_prior_U = Rcpp::as<double>(spatial_params["sigma_prior_U"]);
-      data.spatial_sigma_prior_alpha = Rcpp::as<double>(spatial_params["sigma_prior_alpha"]);
-      data.spatial_group   =
-          Rcpp::as<std::vector<int>>(spatial_params["group"]);
-      data.set_spatial_adjacency(
-          Rcpp::as<int>(spatial_params["n_units"]),
-          Rcpp::as<std::vector<int>>(spatial_params["adj_row_ptr"]),
-          Rcpp::as<std::vector<int>>(spatial_params["adj_col_idx"]),
-          Rcpp::as<std::vector<int>>(spatial_params["n_neighbors"]));
-      if (spatial_params.containsElementNamed("bym2_scale")) {
-        std::vector<double> precision;
-        if (spatial_params.containsElementNamed("node_prec") &&
-            !Rf_isNull(spatial_params["node_prec"]))
-          precision = Rcpp::as<std::vector<double>>(spatial_params["node_prec"]);
-        data.set_bym2_scaling(Rcpp::as<double>(spatial_params["bym2_scale"]),
-                             std::move(precision));
-      }
-      if (spatial_params.containsElementNamed("Q_inv") &&
-          spatial_params.containsElementNamed("L_Q")) {
-        SEXP qi = spatial_params["Q_inv"];
-        SEXP lq = spatial_params["L_Q"];
-        if (!Rf_isNull(qi) && !Rf_isNull(lq)) {
-          data.spatial_Q_inv = Rcpp::as<std::vector<double>>(qi);
-          data.spatial_L_Q   = Rcpp::as<std::vector<double>>(lq);
-        }
-      }
-      if ((int)data.spatial_group.size() != N) {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: spatial_params$group length "
-                   "(%d) must equal N (%d).",
-                   (int)data.spatial_group.size(), N);
-      }
-
-      spec.gradient_fn = nullptr;
-    }
-  }
+  const int p_spatial_block = tulpaRatio::apply_spatial_model_data(data, spatial_params);
+  if (p_spatial_block > 0) spec.gradient_fn = nullptr;
 
   if (temporal_params.containsElementNamed("type")) {
     const std::string temporal_type =
@@ -719,6 +664,15 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   tulpa::OmpCapScope thread_cap(n_threads);
   std::vector<double> init_vec;
   for (int c=0;c<n_chains;++c) init_vec.insert(init_vec.end(),initial.begin(),initial.end());
+  if (cfg_list.containsElementNamed("initialize") && Rcpp::as<bool>(cfg_list["initialize"]) &&
+      data.has_gp && data.gp_range_prior.type == tulpa::RangePriorType::UNIFORM) {
+    const tulpa::LogRangeCoordinate range{layout.log_phi_gp_idx,
+        data.gp_range_prior.lower, data.gp_range_prior.upper};
+    for (int c = 0; c < n_chains; ++c) {
+      double& value = init_vec[c * layout.total_params + range.index];
+      value = range.interior(value);
+    }
+  }
   std::vector<tulpa::NUTSResult> results(n_chains);
   if (n_chains == 1) {
     tulpa::get_nuts_fn()(&data,&layout,init_vec.data(),layout.total_params,
@@ -733,6 +687,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
              divergent(n_chains),treedepth(n_chains),n_leapfrog(n_chains),energy(n_chains);
   Rcpp::NumericVector epsilon(n_chains);
   Rcpp::CharacterVector samplers(n_chains);
+  Rcpp::List spatial_fields(n_chains), unstructured_fields(n_chains);
   for (int c=0;c<n_chains;++c) {
     auto& result=results[c];
     const int n=result.n_sample;
@@ -762,6 +717,15 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     const std::string sampler(result.sampler);
     samplers[c]=sampler == "nuts" ? "NUTS" : sampler;
     epsilon[c]=result.epsilon;
+    if (layout.is_icar_collapsed || layout.is_bym2_collapsed) {
+      std::vector<double> phi(static_cast<size_t>(n) * data.n_spatial_units);
+      std::vector<double> theta(layout.is_bym2_collapsed ? phi.size() : 0);
+      tulpa::get_spatial_reconstruction_fn()(&data, &layout, result.samples, n,
+        static_cast<unsigned int>(seed) ^ (0x9e3779b9U + static_cast<unsigned int>(c)), true,
+        phi.data(), theta.empty() ? nullptr : theta.data());
+      spatial_fields[c] = row_major_matrix(phi.data(), n, data.n_spatial_units);
+      if (!theta.empty()) unstructured_fields[c] = row_major_matrix(theta.data(), n, data.n_spatial_units);
+    }
     result.free_buffers();
   }
   const auto pack = [n_chains](const Rcpp::List& x) -> SEXP {
@@ -772,5 +736,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     Rcpp::Named("n_leapfrog")=pack(n_leapfrog),Rcpp::Named("treedepth")=pack(treedepth),
     Rcpp::Named("divergent")=pack(divergent),Rcpp::Named("epsilon")=epsilon,
     Rcpp::Named("energy")=pack(energy),
-    Rcpp::Named("sampler")=Rcpp::as<std::string>(samplers[0]));
+    Rcpp::Named("sampler")=Rcpp::as<std::string>(samplers[0]),
+    Rcpp::Named("icar_phi_star")=(layout.is_icar_collapsed || layout.is_bym2_collapsed) ? pack(spatial_fields) : R_NilValue,
+    Rcpp::Named("bym2_theta_star")=layout.is_bym2_collapsed ? pack(unstructured_fields) : R_NilValue);
 }

@@ -165,6 +165,34 @@ fit_hmc <- function(formula,
     }
   }
 
+  use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", TRUE)) ||
+    identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
+  zi_type_str <- zi_info$type %||% "none"
+  zi_supported <- zi_type_str %in% MODEL_TYPES[[model_type]]$spec_inflation
+  n_re_groups_v <- hmc_data$n_re_groups %||% 0L
+  n_re_terms_v <- hmc_data$n_re_terms %||% 0L
+  spatial_type_v <- spatial_info$type %||% "none"
+  spatial_param_v <- spatial_info$parameterization %||% "standard"
+  spatial_supported <- spatial_type_v %in% c("none", "svc", "icar", "bym2",
+    "car_proper", "gp", "hsgp", "multiscale_gp") &&
+    (!identical(spatial_param_v, "collapsed") ||
+     (spatial_type_v %in% c("icar", "bym2", "gp") && identical(zi_type_str, "none")))
+  temporal_type_v <- temporal_info$type %||% "none"
+  temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
+  st_supported <- !isTRUE(st_params$has_spatiotemporal) ||
+    (st_params$type %in% c("I", "II", "III", "IV", "separable", "nonsep_gp") &&
+     st_params$parameterization != "collapsed")
+  specs_eligible <- use_specs_path &&
+    !is.null(MODEL_TYPES[[model_type]]$n_processes) &&
+    zi_supported && spatial_supported && temporal_supported &&
+    (!isTRUE(tvc_params$has_tvc) || tvc_params$structure != "gp") && st_supported
+
+  if (specs_eligible && identical(spatial_type_v, "gp") && identical(spatial_param_v, "collapsed")) {
+    spatial_info$parameterization <- spatial_params$parameterization <-
+      gp_info$parameterization <- gp_params$parameterization <- "auto"
+    spatial_param_v <- "auto"
+  }
+
   # Initialize parameters
   q_init <- initialize_hmc_params_full(
     hmc_data, model_type, spatial_info, temporal_info, zi_info, latent_info,
@@ -202,36 +230,11 @@ fit_hmc <- function(formula,
   concurrent_chains <- min(cores, chains)
   n_threads_within <- as.integer(cores %/% concurrent_chains)
 
-  use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", TRUE)) ||
-    identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
-  zi_type_str <- zi_info$type %||% "none"
-  zi_supported <- zi_type_str %in% MODEL_TYPES[[model_type]]$spec_inflation
-  n_re_groups_v <- hmc_data$n_re_groups %||% 0L
-  n_re_terms_v <- hmc_data$n_re_terms %||% 0L
-  spatial_type_v <- spatial_info$type %||% "none"
-  spatial_param_v <- spatial_info$parameterization %||% "standard"
-  spatial_supported <- spatial_type_v %in% c("none", "svc") ||
-    (spatial_type_v %in% c("icar", "bym2") &&
-     !identical(spatial_param_v, "collapsed") &&
-     is.null(spatial_info$rsr_basis))
-  temporal_type_v <- temporal_info$type %||% "none"
-  temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
-  st_supported <- !isTRUE(st_params$has_spatiotemporal) ||
-    (st_params$type %in% c("I", "II", "III", "IV", "separable", "nonsep_gp") &&
-     st_params$parameterization != "collapsed")
-  specs_eligible <- use_specs_path &&
-    !is.null(MODEL_TYPES[[model_type]]$n_processes) &&
-    zi_supported &&
-    spatial_supported &&
-    temporal_supported &&
-    (!isTRUE(tvc_params$has_tvc) || tvc_params$structure != "gp") &&
-    st_supported
-
   if (specs_eligible) {
     links <- family_links(family, model_type)
     num_link <- links$num
     denom_link <- links$denom %||% "log"
-    cfg <- list(family = model_type, zi = zi_type_str,
+    cfg <- list(family = model_type, zi = zi_type_str, initialize = TRUE,
                 num_link = num_link, denom_link = denom_link,
                 zi_link = links$zi, oi_link = links$oi)
     if (identical(MODEL_TYPES[[model_type]]$responses[["denom"]],"exposure"))
@@ -260,27 +263,20 @@ fit_hmc <- function(formula,
     extra_indices <- p_total_design + p_re_n + seq_len(n_extra_per_family)
     spec_order <- c(setdiff(seq_along(q_init), extra_indices), extra_indices)
     q_init_spec <- as.numeric(q_init[spec_order])
-    p_spatial_n <- if (spatial_type_v %in% c("icar", "bym2")) spatial_info$n_units else 0L
+    p_spatial_n <- if (spatial_type_v %in% c("icar", "bym2", "car_proper", "gp", "hsgp", "multiscale_gp")) 1L else 0L
 
     re_params_spec <- re_params
 
-    spatial_params_spec <- if (p_spatial_n > 0L) {
-      list(
-        type             = spatial_type_v,
-        group            = as.integer(spatial_info$group),
-        n_units          = as.integer(spatial_info$n_units),
-        adj_row_ptr      = as.integer(spatial_info$adj_row_ptr),
-        adj_col_idx      = as.integer(spatial_info$adj_col_idx),
-        n_neighbors      = as.integer(spatial_info$n_neighbors),
-        bym2_scale       = spatial_info$bym2_scale %||% 1.0,
-        node_prec        = spatial_info$node_prec,
-        Q_inv            = spatial_info$Q_inv,
-        L_Q              = spatial_info$L_Q,
-        sigma_prior_U = sp$spatial_sigma_prior_U,
-        sigma_prior_alpha = sp$spatial_sigma_prior_alpha,
-        parameterization = spatial_param_v
-      )
-    } else list()
+    spatial_params_spec <- spatial_params
+    if (p_spatial_n > 0L) {
+      spatial_params_spec$sigma_prior_U <- sp$spatial_sigma_prior_U
+      spatial_params_spec$sigma_prior_alpha <- sp$spatial_sigma_prior_alpha
+      spatial_params_spec$shared <- spatial_info$shared %||% TRUE
+      spatial_params_spec$gp <- gp_params
+      spatial_params_spec$hsgp_m <- spatial_info$hsgp_m
+      spatial_params_spec$basis <- spatial_info$hsgp_Phi
+      spatial_params_spec$eigenvalues <- spatial_info$hsgp_eigenvalues
+    }
 
     temporal_params_spec <- if (!temporal_type_v %in% c("none", "tvc")) {
       temporal_params$parameterization <- temporal_info$parameterization %||% "centered"

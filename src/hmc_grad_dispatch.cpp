@@ -150,7 +150,7 @@ struct GradientEntry {
 const GradientEntry gradient_registry[] = {
   {"field_coordinates", compute_gradient_field_coordinates, ~0u,
    [](GradientMode, const ModelData&, const ParamLayout&, unsigned) {
-     return field_coordinates && !field_coordinates->entries.empty();
+     return field_coordinates && !field_coordinates->empty();
    }},
   {"numerical", compute_gradient_numerical, ~0u,
    [](GradientMode m, const ModelData& d, const ParamLayout& l, unsigned f) {

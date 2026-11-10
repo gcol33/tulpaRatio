@@ -2,6 +2,7 @@
 #include <algorithm>
 #include "lik_specs/family_registry.h"
 #include "lik_specs/family_kernel.h"
+#include "lik_specs/family_weights.h"
 #include "lik_specs/lik_grad_h_kernel.h"
 
 namespace tulpaRatio {
@@ -24,7 +25,9 @@ FamilyEntry make_family_entry(const char* name, const char* spec_name,
         single ? fixed : lik::continuous_response<Den> ? ResponseShape::Positive : ResponseShape::Count,
         &lik::family_likelihood<Num,Den,double>,
         &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient,legacy_likelihood,
-        margin_link_domain<Num>(),margin_link_domain<Den>()};
+        margin_link_domain<Num>(),margin_link_domain<Den>(),
+
+        &lik::family_weights<Num,Den,double>, &lik::family_weights<Num,Den,tulpa::arena::Var>};
 }
 
 const std::vector<FamilyEntry>& family_entries() {
@@ -85,6 +88,10 @@ tulpa::LikelihoodSpec build_ratio_likelihood_spec(const RatioConfig& cfg) {
     spec.ll_arena=entry.likelihood_arena;
     if (cfg.zi == "none" && cfg.num_link == entry.num_link &&
         cfg.denom_link == entry.denom_link) spec.gradient_fn=entry.gradient;
+    if (cfg.zi == "none") {
+        spec.eta_weights_fn=entry.weights;
+        spec.eta_weights_arena_fn=entry.weights_arena;
+    }
     return spec;
 }
 
@@ -142,4 +149,41 @@ Rcpp::NumericVector cpp_test_family_likelihood(std::string family, double shape,
     out[0]=ll; out[1]=al.val(); out[2]=en.adj(); out[3]=ed.adj();
     for (int k=0;k<entry.n_extra;++k) out[4+k]=ap[k].adj();
     return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List cpp_test_family_weights(std::string family, Rcpp::NumericVector point) {
+    using namespace tulpaRatio;
+    const auto& entry = family_entry(family);
+    RatioConfig cfg;
+    cfg.family = family; cfg.num_link = entry.num_link;
+    const auto spec = build_ratio_likelihood_spec(cfg);
+    const int np = entry.processes;
+    if (point.size() != np + entry.n_extra) Rcpp::stop("point must contain process predictors and log extra parameters");
+    lik::ResponseData response{{3}, {8}, {3.0}, {4.0}};
+    tulpa::ModelData data;
+    data.N = 1; data.n_processes = np;
+    tulpa::ParamLayout layout;
+    layout.extra_offset = 0;
+    std::vector<double> q(point.begin() + np, point.end()), score(np), weights(np * np);
+    spec.eta_weights_fn(0, point.begin(), 0., 0., q, data, layout, &response, score.data(), weights.data());
+    const double ll = spec.ll_double(0, point.begin(), 0., 0., q, data, layout, &response);
+    tulpa::arena::ArenaScope scope;
+    const auto input = tulpa::arena::make_vars(scope.arena(), std::vector<double>(point.begin(), point.end()));
+    std::vector<tulpa::arena::Var> parameters(input.begin() + np, input.end()), a_score(np), a_weights(np * np);
+    spec.eta_weights_arena_fn(0, input.data(), tulpa::arena::Var(0), tulpa::arena::Var(0), parameters,
+        data, layout, &response, a_score.data(), a_weights.data());
+    std::vector<tulpa::arena::Var> outputs = a_score;
+    outputs.insert(outputs.end(), a_weights.begin(), a_weights.end());
+    Rcpp::NumericMatrix derivatives(outputs.size(), input.size());
+    Rcpp::NumericVector values(outputs.size());
+    for (size_t i = 0; i < outputs.size(); ++i) {
+        values[i] = outputs[i].val();
+        outputs[i].backward();
+        const auto gradient = tulpa::arena::get_adjoints(input);
+        for (size_t j = 0; j < input.size(); ++j) derivatives(i, j) = gradient[j];
+    }
+    return Rcpp::List::create(Rcpp::Named("ll") = ll, Rcpp::Named("score") = score,
+        Rcpp::Named("weights") = weights, Rcpp::Named("values") = values,
+        Rcpp::Named("derivatives") = derivatives);
 }

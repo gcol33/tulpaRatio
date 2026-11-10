@@ -125,6 +125,8 @@ FieldCoordinates make_field_coordinates(const std::vector<double>& initial,
                                          const ParamLayout& layout) {
   FieldCoordinates out;
   out.gradient = resolve_gradient_fn(g_gradient_mode, data, layout);
+  if (layout.is_gp && data.has_gp)
+    out.ranges.push_back({layout.log_phi_gp_idx, data.gp_phi_prior_lower, data.gp_phi_prior_upper});
   struct Block { int begin, end, scale; double sign; int width; bool constant, linear, standardized; };
   std::vector<Block> blocks;
   auto add = [&](int begin, int end, int scale, double sign, int width = 0,
@@ -353,6 +355,8 @@ private:
 
     q = q_init;
     coordinates = make_field_coordinates(q_init, data, layout);
+    for (const auto& range : coordinates.ranges)
+      q[range.index] = range.interior(q[range.index]);
     coordinates.inverse(q);
   }
   void initialize_warmup() {
@@ -1670,8 +1674,8 @@ private:
   }
   void store_sample() {
     std::vector<double> canonical;
-    const double stored_jacobian = coordinates.entries.empty() ? 0.0 : coordinates.forward(q, canonical);
-    const auto& stored = coordinates.entries.empty() ? q : canonical;
+    const double stored_jacobian = coordinates.empty() ? 0.0 : coordinates.forward(q, canonical);
+    const auto& stored = coordinates.empty() ? q : canonical;
     std::memcpy(result.sample_row(sample_idx), stored.data(),
                 n_params * sizeof(double));
     // A non-centred block is sampled in a coordinate that is not the effect
@@ -1688,8 +1692,8 @@ private:
                 row + layout.spatial_start);
         }
         if (data.gp_parameterization == 1 && data.has_gp && layout.is_gp) {
-            double sigma2_store = std::exp(q[layout.log_sigma2_gp_idx]);
-            double phi_store = std::exp(q[layout.log_phi_gp_idx]);
+            double sigma2_store = std::exp(stored[layout.log_sigma2_gp_idx]);
+            double phi_store = std::exp(stored[layout.log_phi_gp_idx]);
             RATIOD_TLS_WORKSPACE(ratiod_gp::NNGPNCWorkspace, nc_ws_store);
             ratiod_gp::nngp_nc_forward(&stored[layout.gp_w_start], sigma2_store, phi_store,
                                        data.gp_data, nc_ws_store);

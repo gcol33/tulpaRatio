@@ -26,6 +26,8 @@ struct FamilyEntry {
     tulpa::FullGradFn gradient;
     bool legacy_likelihood;
     LinkDomain num_domain, denom_domain;
+    tulpa::EtaWeightsFn weights;
+    tulpa::EtaWeightsArenaFn weights_arena;
 };
 
 const std::vector<FamilyEntry>& family_entries();
