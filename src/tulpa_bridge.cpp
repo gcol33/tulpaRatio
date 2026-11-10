@@ -624,7 +624,9 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     const bool gp = st.type == tulpa::STType::SEPARABLE || st.type == tulpa::STType::NONSEP_GP;
     data.st_margin_centering = !gp && !data.st_is_hsgp;
     const std::string temporal = Rcpp::as<std::string>(st_params["temporal_type"]);
-    if (temporal == "rw1") st.temporal_type = tulpa::TemporalType::RW1;
+    if (!data.st_is_hsgp && !tulpa_st::st_reads_time_margin(st.type))
+      st.temporal_type = tulpa::TemporalType::NONE;
+    else if (temporal == "rw1") st.temporal_type = tulpa::TemporalType::RW1;
     else if (temporal == "rw2") st.temporal_type = tulpa::TemporalType::RW2;
     else if (temporal == "ar1") st.temporal_type = tulpa::TemporalType::AR1;
     else Rcpp::stop("Unsupported spatiotemporal time margin");

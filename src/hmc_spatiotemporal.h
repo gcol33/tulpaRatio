@@ -11,6 +11,7 @@
 #include "hmc_cov.h"
 #include <tulpa/st_gp_kernel.h>
 #include <tulpa/st_margins.h>
+#include <tulpa/st_data.h>
 #include "hmc_temporal.h"
 #include "hmc_svc.h"
 #include "autodiff_utils.h"
@@ -57,17 +58,6 @@ inline int st_time_rank(TemporalType type, int T, bool cyclic) {
     case TemporalType::AR1: return (T >= 2) ? T : 0;
     default:                return 0;
   }
-}
-
-// Whether the interaction's time margin carries a correlation to estimate.
-// Type II applies the temporal precision within each spatial unit and Type IV
-// carries it as a Kronecker margin, so both read rho. Type I is iid over the
-// whole grid and Type III's time margin is unstructured, so neither has one;
-// the GP types carry a range instead. HSGP-ST reads the margin per basis
-// function, which the caller adds since it is a property of the data, not the
-// interaction type.
-inline bool st_time_margin_is_structured(STType type) {
-  return type == STType::TYPE_II || type == STType::TYPE_IV;
 }
 
 // Non-separability types for the GP interaction. Two of the four names this

@@ -428,7 +428,7 @@ ParamLayout compute_param_layout(const ModelData& data) {
     // there leaves a coordinate the sampler moves against nothing but its own
     // prior.
     const bool st_reads_time_margin =
-        ratiod_spatiotemporal::st_time_margin_is_structured(
+        tulpa_st::st_reads_time_margin(
             data.spatiotemporal_data.type) || data.st_is_hsgp;
     if (data.spatiotemporal_data.temporal_type == TemporalType::AR1 &&
         st_reads_time_margin) {

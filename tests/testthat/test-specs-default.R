@@ -22,6 +22,14 @@ test_that("supported structures use the engine by default and honor the switch",
     list(data = gp_data, spatial = main,
       spatiotemporal = spatiotemporal(spatial_hsgp(~ lon + lat, m = 3L),
         temporal_rw1("time"), type = "IV", parameterization = "centered")))
+  time_margins <- list(temporal_iid("time"), temporal_gp("time"),
+    temporal_multiscale("time", trend = "rw1", seasonal = 3L, short_term = "iid"))
+  for (type in c("I", "III", "separable")) for (time in time_margins) {
+    st <- if (type == "separable") spatiotemporal(main, time, type = type,
+      parameterization = "noncentered", coords = ~ lon + lat, nn = 4L) else
+      spatiotemporal(main, time, type = type)
+    cases[[length(cases) + 1L]] <- list(data = gp_data, spatial = main, spatiotemporal = st)
+  }
   fit <- function(case) suppressWarnings(do.call(tratio, c(list(formula = y | n ~ 1,
     family = ratiod_binomial(), mode = "hmc",
     control = list(iter = 40L, warmup = 20L, chains = 1L, cores = 1L, seed = 19L,

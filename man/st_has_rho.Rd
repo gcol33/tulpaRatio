@@ -17,8 +17,8 @@ Type II applies the temporal precision within each spatial unit, Type IV
 carries it as a Kronecker margin and HSGP-ST reads it per basis function, so
 all three estimate an AR1 \code{rho}. Type I is iid over the whole grid and Type
 III's time margin is unstructured, so neither has one; the GP types carry a
-range instead. This mirrors \code{st_time_margin_is_structured()} in
-\code{src/hmc_spatiotemporal.h}, which the parameter layout reads -- a parameter
+range instead. This mirrors \code{st_reads_time_margin()} in
+\code{tulpa/st_data.h}, which the parameter layout reads -- a parameter
 allocated on one side and not the other shifts every index after it.
 }
 \keyword{internal}

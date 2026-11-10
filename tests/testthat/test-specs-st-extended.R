@@ -25,7 +25,10 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
     st_iv_disconnected_ar1 = c("IV", "ar1", "noncentered", "disconnected"),
     st_iv_disconnected_rw2 = c("IV", "rw2", "noncentered", "disconnected"),
     st_shared = c("IV", "rw1", "noncentered", "shared"),
-    st_unshared = c("IV", "rw1", "noncentered", "unshared"))
+    st_unshared = c("IV", "rw1", "noncentered", "unshared"),
+    st_i_iid = c("I", "iid", "centered"),
+    st_iii_gp = c("III", "gp", "centered"),
+    st_gp_ms = c("separable", "multiscale", "noncentered"))
   bridge19_inventory("spatiotemporal", names(cases))
   cases <- bridge19_select_cases(cases)
   for (seed in c(18L, 181L, 182L)) for (name in names(cases)) {
@@ -57,7 +60,9 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
       truth <- plogis(beta[1L] + beta[2L] * d$x + field)
       d$y <- rbinom(nrow(d), d$n, truth)
     }
-    constructor <- switch(case[2L], rw1 = temporal_rw1, rw2 = temporal_rw2, ar1 = temporal_ar1)
+    constructor <- switch(case[2L], rw1 = temporal_rw1, rw2 = temporal_rw2, ar1 = temporal_ar1,
+      iid = temporal_iid, gp = temporal_gp,
+      multiscale = function(time) temporal_multiscale(time, trend = "rw1", seasonal = 3L, short_term = "iid"))
     time_margin <- if ("cyclic" %in% case) constructor("time", cyclic = TRUE) else constructor("time")
     main <- spatial_car(adjacency, group_var = "unit")
     st <- if (case[1L] == "HSGP") {

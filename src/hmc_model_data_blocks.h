@@ -103,7 +103,7 @@ inline void apply_st_params(ModelData& data, const Rcpp::List& st_params) {
         st_params.containsElementNamed("st_is_hsgp") &&
         Rcpp::as<bool>(st_params["st_is_hsgp"]);
     const bool st_reads_time_margin =
-        ratiod_spatiotemporal::st_time_margin_is_structured(
+        tulpa_st::st_reads_time_margin(
             data.spatiotemporal_data.type) || st_is_hsgp_flag;
     if (st_temporal_type_str == "rw1") {
       data.spatiotemporal_data.temporal_type = TemporalType::RW1;
