@@ -18,7 +18,10 @@ test_that("supported structures use the engine by default and honor the switch",
         parameterization = "noncentered", coords = ~ lon + lat, nn = 4L)),
     list(data = gp_data, spatial = main,
       spatiotemporal = spatiotemporal(spatial_hsgp(~ lon + lat, m = 3L),
-        temporal_rw1("time"), type = "IV")))
+        temporal_rw1("time"), type = "IV")),
+    list(data = gp_data, spatial = main,
+      spatiotemporal = spatiotemporal(spatial_hsgp(~ lon + lat, m = 3L),
+        temporal_rw1("time"), type = "IV", parameterization = "centered")))
   fit <- function(case) suppressWarnings(do.call(tratio, c(list(formula = y | n ~ 1,
     family = ratiod_binomial(), mode = "hmc",
     control = list(iter = 40L, warmup = 20L, chains = 1L, cores = 1L, seed = 19L,

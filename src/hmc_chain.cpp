@@ -781,7 +781,7 @@ private:
     // sqrt(tau) instead, which this Q = tau*(Qs⊗Qt) + diag(H_lik) construction does not
     // describe -- z's natural scale is tau-free and near-unit, which the ordinary
     // Welford-adapted mass below already handles.
-    bool use_sparse_gmrf_mass = (data.st_parameterization == 0);
+    bool use_sparse_gmrf_mass = (data.st_parameterization == 0) && !data.st_is_hsgp;
     if (use_sparse_gmrf_mass && data.has_spatiotemporal && data.spatiotemporal_data.type == STType::TYPE_IV) {
       int st_S = data.spatiotemporal_data.n_spatial;
       int st_T = data.spatiotemporal_data.n_times;
