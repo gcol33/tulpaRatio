@@ -653,6 +653,8 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       st.nn_dist_time = Rcpp::as<std::vector<double>>(st_params["nn_dist_time"]);
       st.nn_order = Rcpp::as<std::vector<int>>(st_params["nn_order"]);
       st.nn_order_inv = Rcpp::as<std::vector<int>>(st_params["nn_order_inv"]);
+      for (int& index : st.nn_order) --index;
+      for (int& index : st.nn_order_inv) --index;
       st.cov_space = static_cast<tulpa::CovType>(Rcpp::as<int>(st_params["cov_space"]));
       st.cov_time = static_cast<tulpa::CovType>(Rcpp::as<int>(st_params["cov_time"]));
       const std::string nonsep = Rcpp::as<std::string>(st_params["nonsep_type"]);
@@ -733,12 +735,21 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     auto& result=results[c];
     const int n=result.n_sample;
     auto draws = row_major_matrix(result.samples,n,result.n_params);
+    const auto restore_range = [&](int index, double lower, double upper, double scale) {
+      for (int i = 0; i < n; ++i)
+        draws(i,index) = std::log(tulpa::field_range_from_coordinate(draws(i,index), lower, upper, true) / scale);
+    };
     if (data.has_svc && data.svc_range_prior == 1)
-      for (int i = 0; i < n; ++i) for (int j = 0; j < data.svc_data.n_svc; ++j) {
+      for (int j = 0; j < data.svc_data.n_svc; ++j) {
         const int index = layout.log_phi_svc_start + j;
         const double scale = data.svc_data.cov_type == tulpa::CovType::GAUSSIAN ? std::sqrt(2.0) : 1.0;
-        draws(i,index) = std::log(tulpa::svc_range_from_coordinate(draws(i,index),data) / scale);
+        restore_range(index, data.svc_range_lower, data.svc_range_upper, scale);
       }
+    if (layout.is_st_gp && data.st_uniform_ranges) {
+      const auto& st = data.spatiotemporal_data;
+      restore_range(layout.log_phi_st_space_idx, st.phi_space_prior_lower, st.phi_space_prior_upper, 1.0);
+      restore_range(layout.log_phi_st_time_idx, st.phi_time_prior_lower, st.phi_time_prior_upper, 1.0);
+    }
     samples[c]=draws;
     log_prob[c]=buffer_vector(result.log_prob,n);
     accept_prob[c]=buffer_vector(result.accept_prob,n);

@@ -18,6 +18,7 @@
 #include "icar_quadratic.h"
 #include "hmc_re.h"  // Templated random-effect prior and effects
 #include "hmc_spatiotemporal.h"  // Templated spatiotemporal interaction priors
+#include "st_range.h"
 #include "hmc_hsgp.h"  // Templated HSGP spectral density
 #include "hmc_gp_autodiff.h"  // Templated GP/NNGP functions
 #include "hmc_svc_autodiff.h"  // Templated SVC functions
@@ -1018,8 +1019,8 @@ T compute_log_post_impl(
         if (layout.is_st_gp) {
             T log_phi_space = params[layout.log_phi_st_space_idx];
             T log_phi_time = params[layout.log_phi_st_time_idx];
-            phi_st_space = safe_exp(log_phi_space);
-            phi_st_time = safe_exp(log_phi_time);
+            phi_st_space = st_gp_range_value(log_phi_space, data, true);
+            phi_st_time = st_gp_range_value(log_phi_time, data, false);
 
             // Uniform prior within bounds
             if (get_value(phi_st_space) < data.st_phi_space_prior_lower ||
@@ -1030,7 +1031,9 @@ T compute_log_post_impl(
                 get_value(phi_st_time) > data.st_phi_time_prior_upper) {
                 return T(-std::numeric_limits<double>::infinity());
             }
-            log_post = log_post + log_phi_space + log_phi_time;  // Jacobians
+            log_post = log_post + tulpa::uniform_range_coordinate_log_density(
+                log_phi_space, data.st_parameterization != 2)
+                + tulpa::uniform_range_coordinate_log_density(log_phi_time, data.st_parameterization != 2);
         }
 
         if (layout.st_collapsed) {
@@ -1052,10 +1055,8 @@ T compute_log_post_impl(
                 data.st_parameterization, data.st_is_hsgp, st_data);
 
             if (st_use_nc_gp) {
-                // The GP interaction from z ~ N(0, I) through the NNGP
-                // autoregression: the field's density is N(0, I) on z, and the
-                // soft sum-to-zero with the normalizer of the subspace it leaves
-                // stays on delta, as in the centred coordinate.
+                // Standard normal coordinates factor the GP precision with
+                // its Gaussian spatial and temporal margin constraints.
                 st_delta_nc.resize(ST);
                 if (!ratiod_spatiotemporal::st_gp_nc_forward(
                         z_or_delta, T(1.0) / tau_st, phi_st_space, phi_st_time,
@@ -1068,15 +1069,6 @@ T compute_log_post_impl(
                 for (int k = 0; k < ST; k++) z_sq = z_sq + z_or_delta[k] * z_or_delta[k];
                 log_post = log_post - T(0.5) * z_sq - T(0.5 * ST * std::log(2.0 * M_PI));
 
-                log_post = log_post + ratiod_spatiotemporal::st_sum_to_zero_penalty(
-                    st_delta, S, T_st, true, true, st_data.spatial_partition
-                );
-                T st_norm;
-                if (!ratiod_spatiotemporal::st_margin_normalizer(
-                        tau_st, rho_st, phi_st_space, phi_st_time, st_data, &st_norm)) {
-                    return T(-std::numeric_limits<double>::infinity());
-                }
-                log_post = log_post + st_norm;
             } else if (st_use_nc) {
                 // Forward transform: delta = z / sqrt(tau_st)
                 T inv_scale = T(1.0) / safe_sqrt(tau_st);

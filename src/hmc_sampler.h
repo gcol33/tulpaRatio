@@ -517,8 +517,8 @@ struct ParamLayout {
   // Spatiotemporal interaction parameters
   int log_tau_st_idx;                                // Log precision for ST interaction
   int logit_rho_st_idx;                              // AR1 autocorrelation if ST temporal is AR1
-  int log_phi_st_space_idx;                          // Log spatial range (GP-based)
-  int log_phi_st_time_idx;                           // Log temporal range (GP-based)
+  int log_phi_st_space_idx;                          // Spatial range coordinate (GP-based)
+  int log_phi_st_time_idx;                           // Temporal range coordinate (GP-based)
   int st_delta_start, st_delta_end;                  // ST interaction effects (S * T or m^2 * T)
   // HSGP-ST: separate hyperparameters for spectral basis interaction
   int log_sigma2_st_hsgp_idx;                        // Log variance for ST HSGP kernel

@@ -71,10 +71,8 @@ struct StGpGrad {
 // no second factorization, and exactly the (I - A)' D^-1 (I - A) w application
 // the Vecchia factorization already holds.
 //
-// SIGMA2 factors out of the neighbour block (C = sigma2 R), so alpha and m_i do
-// not move with it and d_i is proportional to it. That collapses to
-// d(log p)/d(log sigma2) = sum_i (-0.5 + 0.5 e_i^2/d_i) with no extra solve,
-// and log_tau = -log sigma2 flips the sign.
+// The fixed neighbour ridge enters the precision derivative of both regression
+// weights and conditional variance through st_gp_log_precision_direction.
 //
 // The two RANGES need dC/dphi. With beta = C^-1 w_nb, one more pair of
 // triangular solves against the factor the scan already built,
@@ -97,6 +95,7 @@ inline StGpGrad st_gp_nngp_grad(const SpatiotemporalData& st, const double* w,
   RATIOD_TLS_WORKSPACE(std::vector<double>, gp_wnb);
   RATIOD_TLS_WORKSPACE(std::vector<double>, gp_tmp);
   RATIOD_TLS_WORKSPACE(std::vector<double>, gp_beta);
+  RATIOD_TLS_WORKSPACE(std::vector<double>, gp_tau_alpha);
   RATIOD_TLS_WORKSPACE(std::vector<double>, gp_dc_s);
   RATIOD_TLS_WORKSPACE(std::vector<double>, gp_dc_t);
   RATIOD_TLS_WORKSPACE(std::vector<double>, gp_dC_s);
@@ -107,13 +106,17 @@ inline StGpGrad st_gp_nngp_grad(const SpatiotemporalData& st, const double* w,
   out.ok = st_gp_nngp_scan<double>(
       w, sigma2, phi_space, phi_time, st,
       [&](int i, int obs_idx, const int* nb, int n_nb, const double* L,
-          const double* /*c_vec*/, const double* alpha, const double& cond_mean,
+          const double* c_vec, const double* alpha, const double& cond_mean,
           const double& cond_var, bool floored) {
         const double e = w[obs_idx] - cond_mean;
         const double r = e / cond_var;
         out.log_prior += -0.5 * std::log(2.0 * M_PI * cond_var) - 0.5 * e * r;
         grad_w[obs_idx] -= r;
-        if (!floored) out.log_tau += 0.5 - 0.5 * e * r;
+        double variance_tau = 0.0, mean_tau = 0.0;
+        tulpa_st_gp::st_gp_log_precision_direction(L, c_vec, alpha, n_nb, sigma2,
+            floored, gp_tmp, gp_tau_alpha, variance_tau);
+        for (int j = 0; j < n_nb; ++j) mean_tau += gp_tau_alpha[j] * w[nb[j]];
+        out.log_tau += (-0.5 / cond_var + 0.5 * r * r) * variance_tau + r * mean_tau;
 
         if (n_nb == 0) return;
         for (int j = 0; j < n_nb; j++) grad_w[nb[j]] += alpha[j] * r;

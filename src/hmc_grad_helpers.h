@@ -6,6 +6,7 @@
 #include "log_post_impl.h"
 #include "hmc_gradient_vectorized.h"
 #include "ar1_shared.h"
+#include "st_range.h"
 #include "hmc_car_proper.h"
 
 namespace ratiod_hmc {

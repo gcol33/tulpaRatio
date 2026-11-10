@@ -1641,8 +1641,8 @@ double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
     const bool ok = ratiod_spatiotemporal::st_gp_nc_forward(
         &params_nc[layout.st_delta_start],
         std::exp(-params_nc[layout.log_tau_st_idx]),
-        std::exp(params_nc[layout.log_phi_st_space_idx]),
-        std::exp(params_nc[layout.log_phi_st_time_idx]),
+        st_gp_range_value(params_nc[layout.log_phi_st_space_idx], data_nc, true),
+        st_gp_range_value(params_nc[layout.log_phi_st_time_idx], data_nc, false),
         data_nc.spatiotemporal_data, &params_c[layout.st_delta_start]);
     if (!ok) Rcpp::stop("cpp_st_gp_nc_coordinate_spread: the NNGP scan failed");
     const double diff = lp_nc - compute_log_post(params_c, data_c, layout);

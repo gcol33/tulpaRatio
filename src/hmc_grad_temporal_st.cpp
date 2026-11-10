@@ -347,8 +347,8 @@ void compute_gradient_spatiotemporal_handcoded(
     // both arrives with the interaction's prior below.
     double phi_st_space = 1.0, phi_st_time = 1.0;
     if (layout.is_st_gp) {
-        phi_st_space = std::exp(params[layout.log_phi_st_space_idx]);
-        phi_st_time = std::exp(params[layout.log_phi_st_time_idx]);
+        phi_st_space = st_gp_range_value(params[layout.log_phi_st_space_idx], data, true);
+        phi_st_time = st_gp_range_value(params[layout.log_phi_st_time_idx], data, false);
     }
 
     // NC reparameterization: params store z, reconstruct delta
@@ -400,8 +400,10 @@ void compute_gradient_spatiotemporal_handcoded(
     // its log Jacobian. Outside them the density is -inf and the state is
     // rejected on the value, not steered on the gradient.
     if (layout.is_st_gp) {
-        grad[layout.log_phi_st_space_idx] = 1.0;
-        grad[layout.log_phi_st_time_idx] = 1.0;
+        grad[layout.log_phi_st_space_idx] = tulpa::uniform_range_coordinate_score(
+            params[layout.log_phi_st_space_idx], data.st_parameterization != 2);
+        grad[layout.log_phi_st_time_idx] = tulpa::uniform_range_coordinate_score(
+            params[layout.log_phi_st_time_idx], data.st_parameterization != 2);
     }
 
     // ST interaction prior on rho_st (Beta on u = (rho + 1) / 2)
@@ -571,8 +573,10 @@ void compute_gradient_spatiotemporal_handcoded(
         grad[layout.log_lengthscale_st_hsgp_idx] += st_pg.log_lengthscale_hsgp;
     }
     if (layout.is_st_gp) {
-        grad[layout.log_phi_st_space_idx] += st_pg.log_phi_space;
-        grad[layout.log_phi_st_time_idx] += st_pg.log_phi_time;
+        grad[layout.log_phi_st_space_idx] += st_pg.log_phi_space * st_gp_range_slope(
+            params[layout.log_phi_st_space_idx], data, true);
+        grad[layout.log_phi_st_time_idx] += st_pg.log_phi_time * st_gp_range_slope(
+            params[layout.log_phi_st_time_idx], data, false);
     }
 
     // Non-centered RE chain rule transformation

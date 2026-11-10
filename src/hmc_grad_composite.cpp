@@ -316,8 +316,8 @@ void compute_gradient_composite(
         // leaves only the log Jacobian on each; the field's own contribution to
         // both arrives with the interaction's prior below.
         if (layout.is_st_gp) {
-            phi_st_space = std::exp(params[layout.log_phi_st_space_idx]);
-            phi_st_time = std::exp(params[layout.log_phi_st_time_idx]);
+            phi_st_space = st_gp_range_value(params[layout.log_phi_st_space_idx], data, true);
+            phi_st_time = st_gp_range_value(params[layout.log_phi_st_time_idx], data, false);
         }
         st_use_nc = ratiod_spatiotemporal::st_noncentered_gmrf(
             data.st_parameterization, data.st_is_hsgp, st);
@@ -336,8 +336,8 @@ void compute_gradient_composite(
     const bool st_lap = layout.st_collapsed;
     if (st_lap) {
         tau_st = std::exp(params[layout.log_tau_st_idx]);
-        phi_st_space = std::exp(params[layout.log_phi_st_space_idx]);
-        phi_st_time = std::exp(params[layout.log_phi_st_time_idx]);
+        phi_st_space = st_gp_range_value(params[layout.log_phi_st_space_idx], data, true);
+        phi_st_time = st_gp_range_value(params[layout.log_phi_st_time_idx], data, false);
         if (phi_st_space < data.st_phi_space_prior_lower ||
             phi_st_space > data.st_phi_space_prior_upper ||
             phi_st_time < data.st_phi_time_prior_lower ||
@@ -545,8 +545,10 @@ void compute_gradient_composite(
         if (layout.is_st_gp) {
             // Uniform inside the bounds: each range carries only its log
             // Jacobian, the same term the density adds.
-            grad[layout.log_phi_st_space_idx] = 1.0;
-            grad[layout.log_phi_st_time_idx] = 1.0;
+            grad[layout.log_phi_st_space_idx] = tulpa::uniform_range_coordinate_score(
+                params[layout.log_phi_st_space_idx], data.st_parameterization != 2);
+            grad[layout.log_phi_st_time_idx] = tulpa::uniform_range_coordinate_score(
+                params[layout.log_phi_st_time_idx], data.st_parameterization != 2);
         }
         if (layout.logit_rho_st_idx >= 0) {
             grad[layout.logit_rho_st_idx] = ratiod_ar1::log_prior_rho_grad(
@@ -1057,8 +1059,10 @@ void compute_gradient_composite(
             grad[layout.log_lengthscale_st_hsgp_idx] += st_pg.log_lengthscale_hsgp;
         }
         if (layout.is_st_gp) {
-            grad[layout.log_phi_st_space_idx] += st_pg.log_phi_space;
-            grad[layout.log_phi_st_time_idx] += st_pg.log_phi_time;
+            grad[layout.log_phi_st_space_idx] += st_pg.log_phi_space * st_gp_range_slope(
+                params[layout.log_phi_st_space_idx], data, true);
+            grad[layout.log_phi_st_time_idx] += st_pg.log_phi_time * st_gp_range_slope(
+                params[layout.log_phi_st_time_idx], data, false);
         }
     }
 

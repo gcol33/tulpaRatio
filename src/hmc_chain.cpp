@@ -1716,12 +1716,16 @@ private:
                                                      data.st_is_hsgp,
                                                      data.spatiotemporal_data)) {
             const double sigma2_st_store = std::exp(-q[layout.log_tau_st_idx]);
-            const double phi_space_store = std::exp(q[layout.log_phi_st_space_idx]);
-            const double phi_time_store = std::exp(q[layout.log_phi_st_time_idx]);
+            const double phi_space_store = st_gp_range_value(q[layout.log_phi_st_space_idx], data, true);
+            const double phi_time_store = st_gp_range_value(q[layout.log_phi_st_time_idx], data, false);
             (void)ratiod_spatiotemporal::st_gp_nc_forward(
                 &q[layout.st_delta_start], sigma2_st_store, phi_space_store,
                 phi_time_store, data.spatiotemporal_data,
                 &row[layout.st_delta_start]);
+        }
+        if (layout.is_st_gp && !layout.st_collapsed) {
+            row[layout.log_phi_st_space_idx] = std::log(st_gp_range_value(q[layout.log_phi_st_space_idx], data, true));
+            row[layout.log_phi_st_time_idx] = std::log(st_gp_range_value(q[layout.log_phi_st_time_idx], data, false));
         }
         if (temporal_effects_transformed(data, layout)) {
             std::vector<double> phi_store_buf;
