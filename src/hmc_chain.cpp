@@ -1679,6 +1679,14 @@ private:
     // sampled coordinate.
     {
         double* row = result.sample_row(sample_idx);
+        if (spatial_block_is_centred(data, layout)) {
+            std::vector<double> physical(row + layout.spatial_start,
+                row + layout.spatial_start + data.n_spatial_units);
+            ratiod_constraints::center_areal_blocks(physical, 0,
+                data.n_spatial_units, data.areal_components);
+            std::copy_n(physical.data(), data.n_spatial_units,
+                row + layout.spatial_start);
+        }
         if (data.gp_parameterization == 1 && data.has_gp && layout.is_gp) {
             double sigma2_store = std::exp(q[layout.log_sigma2_gp_idx]);
             double phi_store = std::exp(q[layout.log_phi_gp_idx]);
