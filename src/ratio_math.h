@@ -9,9 +9,9 @@ using namespace tulpa::math;
 // Inverse links of the linear predictors
 // ============================================================================
 
-// The logit of the probability the link maps eta to. Under the logit link
-// that is eta itself, and the expression stays the one the canonical model
-// has always differentiated.
+// The probability's logit equals eta under the logit link.
+// Noncanonical links supply its value and first derivative.
+// lift_unary propagates that derivative through the scalar type.
 template<typename T>
 inline T prob_logit(const T& eta, ratiod_link::LinkType link) {
     if (link == ratiod_link::LinkType::LOGIT) return eta;
