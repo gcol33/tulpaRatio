@@ -503,12 +503,15 @@ Rcpp::List cpp_hmc_fit(
   // This prevents R GC from invalidating memory during sampling
   std::atomic_thread_fence(std::memory_order_seq_cst);
 
-  require_gradient_supported(data, compute_param_layout(data));
+  const ParamLayout layout = compute_param_layout(data);
+  if (q0.size() != static_cast<size_t>(layout.total_params))
+    Rcpp::stop("Initial parameter vector length %d does not match layout size %d",
+               static_cast<int>(q0.size()), layout.total_params);
+  require_gradient_supported(data, layout);
 
   // Run sampler
   std::vector<HMCResult> results;
   if (n_chains == 1) {
-    ParamLayout layout = compute_param_layout(data);
     results.push_back(run_hmc_chain(
       q0, data, layout, n_iter, n_warmup, L, 0, seed, verbose, max_treedepth,
       metric_type, adapt_delta, walnuts_ptr

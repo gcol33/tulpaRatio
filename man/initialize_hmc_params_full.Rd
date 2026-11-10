@@ -11,8 +11,8 @@ initialize_hmc_params_full(
   temporal_info,
   zi_info,
   latent_info = NULL,
-  svc_info = NULL,
   spatiotemporal_info = NULL,
+  ms_temporal_info = NULL,
   links = family_links(NULL, model_type)
 )
 }

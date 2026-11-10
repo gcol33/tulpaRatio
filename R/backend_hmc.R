@@ -167,8 +167,8 @@ fit_hmc <- function(formula,
 
   # Initialize parameters
   q_init <- initialize_hmc_params_full(
-    hmc_data, model_type, spatial_info, temporal_info, zi_info, latent_info, svc_info,
-    spatiotemporal_info, links = family_links(family, model_type)
+    hmc_data, model_type, spatial_info, temporal_info, zi_info, latent_info,
+    spatiotemporal_info, ms_temporal_info, links = family_links(family, model_type)
   )
 
   if (verbose) {
@@ -1621,17 +1621,14 @@ prepare_zi_for_hmc <- function(zi, data, N, family = NULL) {
 #' @keywords internal
 initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
                                         temporal_info, zi_info, latent_info = NULL,
-                                        svc_info = NULL,
                                         spatiotemporal_info = NULL,
+                                        ms_temporal_info = NULL,
                                         links = family_links(NULL, model_type)) {
-  # Start building parameter vector with data-driven initialization
-  q_init <- numeric(0)
-  idx <- 1
+  layout <- hmc_param_layout(hmc_data, spatial_info, temporal_info, zi_info,
+    model_type, latent_info, spatiotemporal_info, ms_temporal_info)
+  q_init <- numeric(layout$total)
 
-  # Fixed effects: each intercept starts at the link of its response's mean,
-  # so the sampler does not begin at a mean of one when the data's is far
-  # from it. Over trial counts that mean is the success proportion, over a
-  # known exposure the rate.
+  # Intercepts start at the linked response mean, success proportion or exposure rate.
   responses <- MODEL_TYPES[[model_type]]$responses
   start_mean <- function(y, scale = NULL) {
     keep <- is.finite(y) & y > 0
@@ -1652,229 +1649,31 @@ initialize_hmc_params_full <- function(hmc_data, model_type, spatial_info,
     positive = start_mean(hmc_data$y_denom_cont),
     NA_real_
   )
-
-  p_num <- hmc_data$p_num
-  if (p_num > 0) {
-    beta_num_init <- rep(0.0, p_num)
-    start <- pp_linkfun(links$num)(num_mean)
-    if (is.finite(start)) beta_num_init[1] <- start
-    q_init <- c(q_init, beta_num_init)
+  for (margin in c("num", "denom")) {
+    indices <- layout[[paste0("beta_", margin)]]
+    if (!length(indices)) next
+    start <- pp_linkfun(links[[margin]] %||% "log")(
+      if (margin == "num") num_mean else denom_mean)
+    if (is.finite(start)) q_init[indices[1L]] <- start
   }
 
-  p_denom <- hmc_data$p_denom
-  if (p_denom > 0) {
-    beta_denom_init <- rep(0.0, p_denom)
-    start <- pp_linkfun(links$denom %||% "log")(denom_mean)
-    if (is.finite(start)) beta_denom_init[1] <- start
-    q_init <- c(q_init, beta_denom_init)
-  }
-
-  # Random effects (supports multi-term RE with slopes and correlations)
-  n_re_terms <- hmc_data$n_re_terms %||% 0L
-  has_slopes <- hmc_data$has_slopes %||% FALSE
-  has_correlated_slopes <- hmc_data$has_correlated_slopes %||% FALSE
-
-  if (n_re_terms > 0) {
-    if (has_slopes) {
-      q_init <- c(q_init, rep(0.0, hmc_data$total_sigma_params + hmc_data$total_re_params))
-      if (has_correlated_slopes) {
-        q_init <- c(q_init, rep(0.0, hmc_data$total_chol_params))
-      }
-    } else if (n_re_terms > 1) {
-      q_init <- c(q_init, rep(0.0, n_re_terms + hmc_data$total_re_groups))
-    } else if (hmc_data$n_re_groups > 0) {
-      q_init <- c(q_init, rep(0.0, 1 + hmc_data$n_re_groups))
-    }
-  } else if (hmc_data$n_re_groups > 0) {
-    # Single-term legacy path (used by GP interface where n_re_terms = 0)
-    q_init <- c(q_init, rep(0.0, 1 + hmc_data$n_re_groups))
-  }
-
-  # Overdispersion / shape / sigma parameters, numerator then denominator, on
-  # the log scale: a moderate overdispersion or shape of 2, a log-scale SD of
-  # 0.5, a beta-binomial precision of 10
-  dispersion <- MODEL_TYPES[[model_type]]$dispersion
-  dispersion <- dispersion[intersect(c("num", "denom"), names(dispersion))]
+  # Dispersion coordinates use moderate shape, precision and log-scale SD starts.
   dispersion_start <- c(phi_num = log(2), phi_denom = log(2), shape = log(2),
-                        shape_num = log(2), shape_denom = log(2),
-                        sigma_num = log(0.5), sigma_denom = log(0.5),
-                        phi = log(10))
-  q_init <- c(q_init, unname(dispersion_start[dispersion]))
+    shape_num = log(2), shape_denom = log(2), sigma_num = log(0.5),
+    sigma_denom = log(0.5), phi = log(10))
+  for (margin in names(layout$dispersion_names))
+    q_init[layout[[paste0("phi_", margin)]]] <-
+      unname(dispersion_start[layout$dispersion_names[[margin]]])
 
-  # Spatial
-  if (spatial_info$type == "icar") {
-    icar_param <- spatial_info$parameterization %||% "standard"
-    if (icar_param == "collapsed") {
-      q_init <- c(q_init, rep(0.0, 1))  # log_tau only
-    } else {
-      q_init <- c(q_init, rep(0.0, 1 + spatial_info$n_units))
-    }
-  } else if (spatial_info$type == "car_proper") {
-    q_init <- c(q_init, rep(0.0, 2 + spatial_info$n_units))  # log_tau + logit_rho + phi
-  } else if (spatial_info$type == "bym2") {
-    bym2_param <- spatial_info$parameterization %||% "standard"
-    if (bym2_param == "collapsed") {
-      q_init <- c(q_init, rep(0.0, 2))  # log_sigma_total, logit_rho only
-    } else {
-      q_init <- c(q_init, rep(0.0, 2 + 2 * spatial_info$n_units))
-    }
-  } else if (spatial_info$type == "gp") {
-    # Layout: log_sigma2, log_phi, w[n_units] (or just log_sigma2, log_phi for collapsed)
-    gp_param <- spatial_info$parameterization %||% "centered"
-    if (gp_param == "collapsed") {
-      # Collapsed: only hyperparams, GP effects marginalized
-      q_init <- c(q_init, rep(0.0, 2))
-    } else {
-      q_init <- c(q_init, rep(0.0, 2 + spatial_info$n_units))
-    }
-  } else if (spatial_info$type == "multiscale_gp") {
-    # Initialize phi/lengthscale to geometric mean of range bounds (on log scale)
-    range_local_lower <- spatial_info$range_local_lower %||% 0.01
-    range_local_upper <- spatial_info$range_local_upper %||% 1.0
-    range_regional_lower <- spatial_info$range_regional_lower %||% 1.0
-    range_regional_upper <- spatial_info$range_regional_upper %||% 10.0
-    log_phi_local_init <- log(sqrt(range_local_lower * range_local_upper))
-    log_phi_regional_init <- log(sqrt(range_regional_lower * range_regional_upper))
-
-    # m^2 basis coefficients per scale
-    hsgp_m <- spatial_info$hsgp_m %||% 6L
-    n_per_scale <- hsgp_m * hsgp_m
-
-    # Layout: log_sigma2_local, log_ls_local, beta_local[n], log_sigma2_regional, log_ls_regional, beta_regional[n]
-    q_init <- c(q_init,
-                0.0, log_phi_local_init, rep(0.0, n_per_scale),
-                0.0, log_phi_regional_init, rep(0.0, n_per_scale))
-  } else if (spatial_info$type == "hsgp") {
-    hsgp_m <- spatial_info$hsgp_m %||% 8L
-    q_init <- c(q_init, rep(0.0, 2 + hsgp_m * hsgp_m))
-  }
-
-  # Temporal (regular temporal effects, not TVC or multiscale)
-  if (temporal_info$type != "none" && temporal_info$type != "tvc" &&
-      temporal_info$type != "multiscale") {
-    if (temporal_info$type == "gp") {
-      # Temporal GP: log_sigma2 + log_phi + N effects
-      n_temporal_params <- 2 + temporal_info$n_temporal_params
-    } else {
-      # RW1/RW2/AR1: log_tau + effects (+ rho for AR1)
-      n_temporal_params <- 1 + temporal_info$n_temporal_params
-      if (temporal_info$type == "ar1") {
-        n_temporal_params <- n_temporal_params + 1
-      }
-    }
-    q_init <- c(q_init, rep(0.0, n_temporal_params))
-  }
-
-  # Multiscale temporal
-  # Layout: [log_sigma2_trend, trend[n_times], log_sigma2_seasonal, seasonal[period],
-  #          log_sigma2_short, (logit_rho if AR1), short[n_times]]
-  if (temporal_info$type == "multiscale") {
-    n_times <- temporal_info$n_times %||% 0L
-    trend_type <- temporal_info$trend %||% "none"
-    seasonal_period <- temporal_info$seasonal %||% 0L
-    short_type <- temporal_info$short_term %||% "none"
-
-    n_ms_params <- 0L
-    # Trend component
-    if (trend_type != "none") {
-      n_ms_params <- n_ms_params + 1 + n_times  # log_sigma2_trend + effects
-    }
-    # Seasonal component
-    if (!is.null(seasonal_period) && seasonal_period >= 2) {
-      n_ms_params <- n_ms_params + 1 + seasonal_period  # log_sigma2_seasonal + effects
-    }
-    # Short-term component
-    if (short_type != "none") {
-      n_ms_params <- n_ms_params + 1 + n_times  # log_sigma2_short + effects
-      if (short_type == "ar1") {
-        n_ms_params <- n_ms_params + 1  # logit_rho
-      }
-    }
-    q_init <- c(q_init, rep(0.0, n_ms_params))
-  }
-
-  # TVC (Temporally-Varying Coefficients)
-  if (!is.null(temporal_info$type) && temporal_info$type == "tvc") {
-    n_tvc <- temporal_info$n_tvc %||% 0L
-    n_times <- temporal_info$n_times %||% 0L
-    n_groups <- temporal_info$n_groups %||% 1L
-    structure <- temporal_info$structure %||% "rw1"
-
-    if (n_tvc > 0) {
-      n_tvc_params <- n_tvc
-      if (structure == "ar1") {
-        n_tvc_params <- n_tvc_params + 1
-      }
-      n_tvc_params <- n_tvc_params + n_times * n_tvc * n_groups
-      q_init <- c(q_init, rep(0.0, n_tvc_params))
+  # Multiscale GP ranges start at the geometric mean of each prior interval.
+  if (identical(layout$msgp$type, "multiscale_gp")) {
+    bounds <- list(local = c(0.01, 1), regional = c(1, 10))
+    for (scale in names(bounds)) {
+      lower <- spatial_info[[paste0("range_", scale, "_lower")]] %||% bounds[[scale]][1L]
+      upper <- spatial_info[[paste0("range_", scale, "_upper")]] %||% bounds[[scale]][2L]
+      q_init[layout$msgp[[scale]]$log_phi] <- log(sqrt(lower * upper))
     }
   }
-
-  # Zero-inflation
-  if (zi_info$type != "none") {
-    q_init <- c(q_init, rep(0.0, zi_info$p_zi))
-    if (!is.null(zi_info$p_oi) && zi_info$p_oi > 0) {
-      q_init <- c(q_init, rep(0.0, zi_info$p_oi))
-    }
-  }
-
-  # Latent factors
-  if (!is.null(latent_info) && latent_info$type != "none") {
-    K <- latent_info$n_factors
-    N <- latent_info$n_obs
-    n_proc <- if (isTRUE(latent_info$shared)) 2L else 1L
-    q_init <- c(q_init, rep(0.0, latent_n_loadings(n_proc, K) + N * K))
-  }
-
-  # Spatiotemporal interaction (Knorr-Held Type I-IV)
-  if (!is.null(spatiotemporal_info) &&
-      isTRUE(spatiotemporal_info$has_spatiotemporal)) {
-    st_type <- spatiotemporal_info$type %||% "none"
-    if (st_type != "none") {
-      n_st_spatial <- spatiotemporal_info$n_spatial %||% 0L
-      n_st_times <- spatiotemporal_info$n_times %||% 0L
-      n_st_delta <- spatiotemporal_info$n_params %||% (n_st_spatial * n_st_times)
-
-      # log_tau_st (precision for interaction)
-      q_init <- c(q_init, 0.0)
-
-      # tau_st2 removed — single tau for all ST types
-
-      # logit_rho_st, where the interaction's time margin reads one
-      if (st_has_rho(spatiotemporal_info)) {
-        q_init <- c(q_init, 0.0)
-      }
-
-      # GP range parameters for separable/non-separable GP
-      if (st_type %in% c("separable", "nonsep_gp")) {
-        q_init <- c(q_init, 0.0, 0.0)  # log_phi_space, log_phi_time
-      }
-
-      # ST interaction effects delta[S*T], unless integrated out
-      if (!identical(spatiotemporal_info$parameterization, "collapsed")) {
-        q_init <- c(q_init, rep(0.0, n_st_delta))
-      }
-    }
-  }
-
-  # SVC (Spatially-Varying Coefficients)
-  if (!is.null(svc_info) && isTRUE(svc_info$has_svc)) {
-    n_svc <- svc_info$n_svc %||% 0L
-    n_obs <- svc_info$n_obs %||% hmc_data$N
-    if (n_svc > 0) {
-      svc_approx <- svc_info$svc_approx %||% "nngp"
-      if (svc_approx == "hsgp") {
-        m_total <- as.integer(svc_info$hsgp_m)^2
-        # log_sigma2_svc (n_svc) + log_lengthscale_svc (n_svc) + beta (n_svc * m^2)
-        q_init <- c(q_init, rep(0.0, 2 * n_svc + n_svc * m_total))
-      } else {
-        # log_sigma2_svc (n_svc) + range_svc (n_svc: the logit of phi on its
-        # prior interval, so 0 is the interval's midpoint) + svc_w (n_svc * n_obs)
-        q_init <- c(q_init, rep(0.0, 2 * n_svc + n_svc * n_obs))
-      }
-    }
-  }
-
   q_init
 }
 

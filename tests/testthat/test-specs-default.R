@@ -15,7 +15,10 @@ test_that("supported structures use the engine by default and honor the switch",
   cases <- list(list(data = d, temporal = temporal_iid("time")),
     list(data = gp_data, spatial = main,
       spatiotemporal = spatiotemporal(main, temporal_rw1("time"), type = "separable",
-        parameterization = "noncentered", coords = ~ lon + lat, nn = 4L)))
+        parameterization = "noncentered", coords = ~ lon + lat, nn = 4L)),
+    list(data = gp_data, spatial = main,
+      spatiotemporal = spatiotemporal(spatial_hsgp(~ lon + lat, m = 3L),
+        temporal_rw1("time"), type = "IV")))
   fit <- function(case) suppressWarnings(do.call(tratio, c(list(formula = y | n ~ 1,
     family = ratiod_binomial(), mode = "hmc",
     control = list(iter = 40L, warmup = 20L, chains = 1L, cores = 1L, seed = 19L,
@@ -29,4 +32,16 @@ test_that("supported structures use the engine by default and honor the switch",
     expect_equal(calls, i)
     expect_identical(dim(engine$draws), dim(legacy$draws))
   }
+})
+
+test_that("the model sampler rejects incomplete parameter states", {
+  old <- options(tulpaRatio.use_specs = FALSE)
+  on.exit(options(old))
+  trace("cpp_hmc_fit", where = asNamespace("tulpaRatio"),
+    tracer = quote(q_init <- q_init[-length(q_init)]), print = FALSE)
+  on.exit(untrace("cpp_hmc_fit", where = asNamespace("tulpaRatio")), add = TRUE)
+  d <- data.frame(n = 12L, y = c(3L, 4L, 6L, 7L))
+  expect_error(tratio(y | n ~ 1, data = d, family = ratiod_binomial(), mode = "hmc",
+    control = list(iter = 20L, warmup = 10L, chains = 1L, cores = 1L, verbose = FALSE)),
+    "Initial parameter vector length .* does not match layout size")
 })
