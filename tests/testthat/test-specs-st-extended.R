@@ -26,6 +26,7 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
     st_iv_disconnected_rw2 = c("IV", "rw2", "noncentered", "disconnected"),
     st_shared = c("IV", "rw1", "noncentered", "shared"),
     st_unshared = c("IV", "rw1", "noncentered", "unshared"))
+  bridge19_inventory("spatiotemporal", names(cases))
   selected <- Sys.getenv("TULPA_BRIDGE_ROUTE")
   if (nzchar(selected)) {
     wanted <- strsplit(selected, ",", fixed = TRUE)[[1L]]
@@ -84,6 +85,10 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
     expect_true(all(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta) < .2), info = paste(name, seed))
     prediction <- fitted(fit, summary = FALSE)
     recovered <- colMeans(prediction$numerator)
+    bridge19_record_recovery(fit, max(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta)),
+      if (paired) sqrt(mean(((recovered - truth) / truth)^2)) else max(abs(recovered - truth)),
+      if (paired) sqrt(mean(((colMeans(prediction$denominator) - denominator) / denominator)^2)) else NA_real_,
+      scale = if (paired) "relative_rmse" else "probability")
     expect_lt(if (paired) sqrt(mean(((recovered - truth) / truth)^2)) else max(abs(recovered - truth)),
       if (paired) .3 else .1, label = paste(name, seed, "recovery"))
     if (paired) expect_lt(sqrt(mean(((colMeans(prediction$denominator) - denominator) / denominator)^2)),

@@ -6,6 +6,7 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
     tvc_shared = "tvc_shared", tvc_unshared = "tvc_unshared",
     latent_single = "single", latent_first_zero = "first_zero",
     latent_shared = "factor_shared", latent_two = "factor_two")
+  bridge19_inventory("varying", names(cases))
   selected <- Sys.getenv("TULPA_BRIDGE_ROUTE")
   if (nzchar(selected)) {
     wanted <- strsplit(selected, ",", fixed = TRUE)[[1L]]
@@ -68,6 +69,10 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
     expect_true(all(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta) < .3), info = paste(name, seed))
     prediction <- fitted(fit, summary = FALSE)
     recovered <- colMeans(prediction$numerator)
+    bridge19_record_recovery(fit, max(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta)),
+      sqrt(mean(((recovered - truth) / if (paired) truth else 1)^2)),
+      if (paired) sqrt(mean(((colMeans(prediction$denominator) - exp(denom_eta)) / exp(denom_eta))^2)) else NA_real_,
+      scale = if (paired) "relative_rmse" else "probability_rmse")
     expect_lt(sqrt(mean(((recovered - truth) / if (paired) truth else 1)^2)),
       if (paired) .3 else .12, label = paste(name, seed, "recovery"))
     if (paired) expect_lt(sqrt(mean(((colMeans(prediction$denominator) - exp(denom_eta)) / exp(denom_eta))^2)),

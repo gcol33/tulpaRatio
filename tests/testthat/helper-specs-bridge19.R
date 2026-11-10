@@ -1,3 +1,26 @@
+bridge19_write_evidence <- function(row, filename) {
+  work <- Sys.getenv("TULPA_BRIDGE_WORK", file.path(tempdir(), "bridge19"))
+  dir.create(work, recursive = TRUE, showWarnings = FALSE)
+  path <- file.path(work, filename)
+  write.table(row, path, sep = "\t", row.names = FALSE, append = TRUE,
+    col.names = !file.exists(path))
+}
+
+bridge19_inventory <- function(group, routes) {
+  bridge19_write_evidence(data.frame(group = group, route = routes,
+    seeds = "18,181,182"), "route-inventory.tsv")
+}
+
+bridge19_record_recovery <- function(fit, beta_error, numerator_error,
+                                     denominator_error = NA_real_, scale) {
+  row <- attr(fit, "bridge19")
+  row$beta_max_abs <- beta_error
+  row$numerator_error <- numerator_error
+  row$denominator_error <- denominator_error
+  row$error_scale <- scale
+  bridge19_write_evidence(row, "route-recovery-final.tsv")
+}
+
 bridge19_fixture <- function(seed, case) {
   set.seed(seed)
   groups <- if (isTRUE(case$grouped)) 2L else 1L
@@ -144,11 +167,11 @@ bridge19_pair <- function(args, name, seed) {
     bridge_ess_sec = ess(b) / results$bridge$seconds,
     legacy_divergences = results$legacy$fit$diagnostics$n_divergent,
     bridge_divergences = results$bridge$fit$diagnostics$n_divergent)
-  output <- file.path(work, "route-comparisons-final.tsv")
-  write.table(row, output, sep = "\t", row.names = FALSE,
-    col.names = !file.exists(output), append = TRUE)
+  bridge19_write_evidence(row, "route-comparisons-final.tsv")
   message(sprintf("BRIDGE19 route=%s seed=%d mean_sd=%.6f quantile_sd=%.6f", name, seed, mean_gap, quantile_gap))
   expect_lt(mean_gap, .35, label = paste(name, seed, "means"))
   expect_lt(quantile_gap, .65, label = paste(name, seed, "quantiles"))
-  results$bridge$fit
+  fit <- results$bridge$fit
+  attr(fit, "bridge19") <- row[c("binary_tag", "argument_tag", "route", "seed")]
+  fit
 }
