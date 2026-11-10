@@ -31,7 +31,7 @@ test_that("joint engine fields and collapsed spatial posteriors agree across see
       list(fit = fit, seconds = timing[['elapsed']])
     }
     a <- fit_one(TRUE); b <- fit_one(FALSE)
-    collapsed <- as.matrix(a$fit$draws); sampled <- as.matrix(b$fit$draws)
+    collapsed <- spatial_comparison_draws(a$fit$draws); sampled <- spatial_comparison_draws(b$fit$draws)
     columns <- intersect(colnames(collapsed), colnames(sampled))
     x <- collapsed[, columns, drop = FALSE]; y <- sampled[, columns, drop = FALSE]
     mean_gap <- max(abs(colMeans(x) - colMeans(y)) / apply(x, 2, sd))

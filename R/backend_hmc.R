@@ -109,7 +109,8 @@ fit_hmc <- function(formula,
   adapt_delta_value <- if (is.null(adapt_delta)) -1.0 else as.double(adapt_delta)
 
   inp <- sampler_inputs(formula, data, family, spatial, temporal,
-                        spatiotemporal, zi, latent, priors, re_param)
+                        spatiotemporal, zi, latent, priors, re_param,
+                        validate_collapsed = FALSE)
   model_type <- inp$model_type
   hmc_data <- inp$hmc_data
   gp_info <- inp$gp_info
@@ -175,8 +176,7 @@ fit_hmc <- function(formula,
   spatial_param_v <- spatial_info$parameterization %||% "standard"
   spatial_supported <- spatial_type_v %in% c("none", "svc", "icar", "bym2",
     "car_proper", "gp", "hsgp", "multiscale_gp") &&
-    (!identical(spatial_param_v, "collapsed") ||
-     (spatial_type_v %in% c("icar", "bym2", "gp") && identical(zi_type_str, "none")))
+    (!identical(spatial_param_v, "collapsed") || spatial_type_v %in% c("icar", "bym2", "gp"))
   temporal_type_v <- temporal_info$type %||% "none"
   temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
   st_supported <- !isTRUE(st_params$has_spatiotemporal) ||
@@ -187,11 +187,13 @@ fit_hmc <- function(formula,
     zi_supported && spatial_supported && temporal_supported &&
     (!isTRUE(tvc_params$has_tvc) || tvc_params$structure != "gp") && st_supported
 
-  if (specs_eligible && identical(spatial_type_v, "gp") && identical(spatial_param_v, "collapsed")) {
-    spatial_info$parameterization <- spatial_params$parameterization <-
+  if (specs_eligible && identical(spatial_param_v, "collapsed")) {
+    spatial_info$parameterization <- spatial_params$parameterization <- "auto"
+    if (identical(spatial_type_v, "gp"))
       gp_info$parameterization <- gp_params$parameterization <- "auto"
     spatial_param_v <- "auto"
   }
+  validate_legacy_collapsed(spatial_info, temporal_info, spatial)
 
   # Initialize parameters
   q_init <- initialize_hmc_params_full(
@@ -413,11 +415,12 @@ fit_hmc <- function(formula,
 #'   `spatiotemporal_info`, `ms_temporal_info`, `svc_info`),
 #'   the sampler priors `sp`, the filled `priors`, and `bundles`, the ten
 #'   parameter lists in the order `build_model_data()` takes them
+#' @param validate_collapsed Validate constraints of the legacy spatial marginal.
 #' @keywords internal
 sampler_inputs <- function(formula, data, family, spatial = NULL,
                            temporal = NULL, spatiotemporal = NULL, zi = NULL,
                            latent = NULL, priors = NULL,
-                           re_param = "noncentered") {
+                           re_param = "noncentered", validate_collapsed = TRUE) {
   # Get model type
   model_type <- get_hmc_model_type(family)
 
@@ -464,24 +467,12 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
     gp_info <- NULL
     spatial_info <- prepare_spatial_for_hmc(spatial, data, hmc_data$N)
   }
-  if (!is.null(spatial_info$rsr_basis) &&
-      identical(spatial_info$parameterization, "collapsed")) {
-    stop("A restricted spatial field (`spatial_rsr()`) cannot be collapsed: ",
-         "the collapsed marginal integrates the unrestricted field. ",
-         "Use the default parameterization.", call. = FALSE)
-  }
 
   # Prepare temporal structure
   temporal_info <- prepare_temporal_for_hmc(temporal, data, hmc_data$N)
   temporal_info$time_levels <- temporal$time_levels
   temporal_info$rtr_basis <- rtr_basis(temporal, data)
-  if (!is.null(temporal_info$rtr_basis) &&
-      identical(spatial_info$parameterization, "collapsed")) {
-    stop("A restricted temporal effect (`temporal_rtr()`) cannot sit beside a ",
-         "collapsed spatial field: the collapsed marginal reads the temporal ",
-         "effect unprojected. Use the default spatial parameterization.",
-         call. = FALSE)
-  }
+  if (validate_collapsed) validate_legacy_collapsed(spatial_info, temporal_info, spatial)
 
   # Prepare the inflation design implied by the family specification.
   zi_info <- prepare_zi_for_hmc(zi, data, hmc_data$N, family)

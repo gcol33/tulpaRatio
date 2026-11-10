@@ -14,3 +14,11 @@ spatial_bridge_fixture <- function(seed) {
   list(S = S, adjacency = adjacency, coords = coords, truth = truth, raw = raw,
     data = d, eta = .2 + .5 * d$x + truth[d$unit])
 }
+
+spatial_comparison_draws <- function(draws) {
+  out <- as.matrix(draws)
+  precision <- startsWith(colnames(out), 'tau_')
+  out[, precision] <- log(out[, precision, drop = FALSE])
+  colnames(out)[precision] <- paste0('log_', colnames(out)[precision])
+  out
+}

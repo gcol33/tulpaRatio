@@ -49,7 +49,8 @@ lengthscale priors use these scaled distance units.}
 amplitude centering based on fixed likelihood information.
 \code{"centered"} samples the effects directly,
 \code{"noncentered"} samples standardized Gaussian innovations, and
-\code{"collapsed"} marginalizes the field.}
+\code{"collapsed"} selects automatic joint coordinates on the engine callback
+route. The legacy sampler marginalizes that field.}
 
 \item{x}{A ratiod_gp object}
 

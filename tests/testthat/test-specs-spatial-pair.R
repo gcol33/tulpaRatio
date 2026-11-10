@@ -28,7 +28,7 @@ test_that("spatial bridge preserves numerator-only fields and dispersion coordin
             verbose = FALSE, gradient_mode = if (!bridge && identical(fields[[name]]$type, 'car_proper')) 'H' else 'A_r')))
       }
       legacy <- fit_one(FALSE); engine <- fit_one(TRUE)
-      a <- as.matrix(legacy$draws); b <- as.matrix(engine$draws)
+      a <- spatial_comparison_draws(legacy$draws); b <- spatial_comparison_draws(engine$draws)
       expect_identical(colnames(a), colnames(b), info = name)
       mean_gap <- max(abs(colMeans(a) - colMeans(b)) / apply(a, 2, sd))
       quantile_gap <- max(abs(sweep(apply(a, 2, quantile, c(.1, .5, .9)) -

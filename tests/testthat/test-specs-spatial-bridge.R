@@ -54,7 +54,7 @@ test_that("spatial bridge posteriors agree with the model sampler and simulated 
       before <- calls
       fit <- suppressWarnings(do.call(tratio, args))
       expect_equal(calls, before + 1L, info = name)
-      a <- as.matrix(legacy$draws); b <- as.matrix(fit$draws)
+      a <- spatial_comparison_draws(legacy$draws); b <- spatial_comparison_draws(fit$draws)
       expect_identical(colnames(a), colnames(b), info = name)
       mean_gaps <- abs(colMeans(a) - colMeans(b)) / apply(a, 2, sd)
       quantile_gaps <- abs(sweep(apply(a, 2, quantile, c(.1, .5, .9)) -

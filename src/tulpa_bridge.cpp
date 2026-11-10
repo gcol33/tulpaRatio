@@ -15,7 +15,6 @@
 #include <tulpa/model_data.h>
 #include <tulpa/param_layout.h>
 #include <tulpa/field_coordinates.h>
-#include <tulpa/spatial_reconstruction.h>
 
 #include "lik_specs/family_registry.h"
 #include "lik_specs/lik_helpers.h"
@@ -717,14 +716,14 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     const std::string sampler(result.sampler);
     samplers[c]=sampler == "nuts" ? "NUTS" : sampler;
     epsilon[c]=result.epsilon;
-    if (layout.is_icar_collapsed || layout.is_bym2_collapsed) {
-      std::vector<double> phi(static_cast<size_t>(n) * data.n_spatial_units);
-      std::vector<double> theta(layout.is_bym2_collapsed ? phi.size() : 0);
-      tulpa::get_spatial_reconstruction_fn()(&data, &layout, result.samples, n,
-        static_cast<unsigned int>(seed) ^ (0x9e3779b9U + static_cast<unsigned int>(c)), true,
-        phi.data(), theta.empty() ? nullptr : theta.data());
-      spatial_fields[c] = row_major_matrix(phi.data(), n, data.n_spatial_units);
-      if (!theta.empty()) unstructured_fields[c] = row_major_matrix(theta.data(), n, data.n_spatial_units);
+    if (layout.is_icar_collapsed || layout.is_bym2_collapsed || layout.is_gp_collapsed) {
+      const int units = layout.is_gp ? data.gp_data.n_obs : data.n_spatial_units;
+      if (result.n_spatial_fields != units || (n > 0 && (!result.spatial_draws ||
+          (layout.is_bym2_collapsed && !result.unstructured_draws))))
+        Rcpp::stop("The engine must return conditional spatial fields for every retained draw");
+      spatial_fields[c] = row_major_matrix(result.spatial_draws, n, units);
+      if (layout.is_bym2_collapsed)
+        unstructured_fields[c] = row_major_matrix(result.unstructured_draws, n, units);
     }
     result.free_buffers();
   }
@@ -738,5 +737,6 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     Rcpp::Named("energy")=pack(energy),
     Rcpp::Named("sampler")=Rcpp::as<std::string>(samplers[0]),
     Rcpp::Named("icar_phi_star")=(layout.is_icar_collapsed || layout.is_bym2_collapsed) ? pack(spatial_fields) : R_NilValue,
-    Rcpp::Named("bym2_theta_star")=layout.is_bym2_collapsed ? pack(unstructured_fields) : R_NilValue);
+    Rcpp::Named("bym2_theta_star")=layout.is_bym2_collapsed ? pack(unstructured_fields) : R_NilValue,
+    Rcpp::Named("gp_w_star")=layout.is_gp_collapsed ? pack(spatial_fields) : R_NilValue);
 }

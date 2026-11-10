@@ -89,6 +89,7 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
     if (type == "gp") {
         data.spatial_type = tulpa::SpatialType::GP;
         data.has_gp = true;
+        data.gp_collapsed = param == "collapsed";
         data.gp_parameterization = (param == "noncentered" || param == "auto") ? 1 : 0;
         data.auto_gp_coordinates = param == "auto";
         auto& g = data.gp_data;
@@ -131,7 +132,7 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
         data.gp_range_prior.type = tulpa::RangePriorType::UNIFORM;
         data.gp_range_prior.lower = Rcpp::as<double>(gp["phi_prior_lower"]);
         data.gp_range_prior.upper = Rcpp::as<double>(gp["phi_prior_upper"]);
-        return 2 + n;
+        return data.gp_collapsed ? 2 : 2 + n;
     }
     if (type == "hsgp") {
         data.spatial_type = tulpa::SpatialType::HSGP;

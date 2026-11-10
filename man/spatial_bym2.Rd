@@ -35,8 +35,9 @@ numerator and denominator linear predictors identically.}
 
 \item{parameterization}{Parameterization of the spatial random effect.
 \code{"auto"} (default) scales each sampled field by its prior precision plus
-fixed likelihood curvature. \code{"standard"} samples the field directly.
-\code{"collapsed"} marginalizes the spatial field. BYM2 uses unit-scale
+fixed likelihood curvature. \code{"standard"} represents the field directly.
+The engine callback route uses automatic joint coordinates for
+\code{"collapsed"}. The legacy sampler marginalizes that field. BYM2 uses unit-scale
 structured and independent fields with a separate total scale.}
 }
 \value{

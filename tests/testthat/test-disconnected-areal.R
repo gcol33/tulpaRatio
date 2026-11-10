@@ -41,8 +41,35 @@ test_that("components and islands are found", {
   # multiplier brings it to unit variance
   expect_equal(bym$node_prec[1:18], rep(1, 18))
   expect_equal(bym$node_prec[19], bym$scale_factor^2)
-  expect_error(spatial_car(A, spatial_level = "group", group_var = "region",
-                           parameterization = "collapsed"), "connected")
+  expect_identical(spatial_car(A, spatial_level = "group", group_var = "region",
+                              parameterization = "collapsed")$parameterization, "collapsed")
+})
+
+test_that("collapsed requests on disconnected graphs use joint engine fields", {
+  skip_on_cran()
+  d <- disconnected_data()
+  op <- options(tulpaRatio.use_specs = FALSE)
+  on.exit(options(op))
+  fields <- list(
+    spatial_car(d$adj, group_var = 'region', parameterization = 'collapsed'),
+    spatial_bym2(d$adj, group_var = 'region', parameterization = 'collapsed'))
+  for (spatial in fields) {
+    expect_error(tratio(y | trials ~ x, data = d$df, family = ratiod_binomial(),
+      spatial = spatial, mode = 'hmc', control = list(iter = 20L, chains = 1L,
+        cores = 1L, seed = 18L, verbose = FALSE)), 'connected')
+  }
+  options(tulpaRatio.use_specs = TRUE)
+  for (seed in c(18L, 181L, 182L)) for (spatial in fields) {
+    fit <- suppressWarnings(tratio(y | trials ~ x, data = d$df,
+      family = ratiod_binomial(), spatial = spatial, mode = 'hmc',
+      control = list(iter = 2500L, warmup = 750L, chains = 1L, cores = 1L,
+        seed = seed, adapt_delta = .99, verbose = FALSE)))
+    expect_identical(fit$spatial$parameterization, 'auto')
+    expect_lt(abs(coef(fit)[['num:x']] - .5), .2)
+    eta <- -.4 + .5 * d$df$x + d$field[as.integer(d$df$region)]
+    fitted_eta <- qlogis(fitted(fit, summary = FALSE)$numerator)
+    expect_lt(sqrt(mean((colMeans(fitted_eta) - eta)^2)), .2)
+  }
 })
 
 test_that("an ICAR and a BYM2 field on a disconnected map fit and recover", {

@@ -14,7 +14,8 @@ sampler_inputs(
   zi = NULL,
   latent = NULL,
   priors = NULL,
-  re_param = "noncentered"
+  re_param = "noncentered",
+  validate_collapsed = TRUE
 )
 }
 \arguments{
@@ -33,6 +34,8 @@ sampler_inputs(
 \item{priors}{Prior specification}
 
 \item{re_param}{Random effects parameterization: "centered" or "noncentered"}
+
+\item{validate_collapsed}{Validate constraints of the legacy spatial marginal.}
 }
 \value{
 A list: \code{model_type}, \code{hmc_data}, the prepared structures
