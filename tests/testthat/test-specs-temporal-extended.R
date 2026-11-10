@@ -2,12 +2,7 @@ test_that("temporal and linked routes agree across seeds and recover planted pre
   skip_on_cran()
   cases <- bridge19_cases()
   bridge19_inventory("temporal", names(cases))
-  selected <- Sys.getenv("TULPA_BRIDGE_ROUTE")
-  if (nzchar(selected)) {
-    wanted <- strsplit(selected, ",", fixed = TRUE)[[1L]]
-    stopifnot(all(wanted %in% names(cases)))
-    cases <- cases[wanted]
-  }
+  cases <- bridge19_select_cases(cases)
   for (seed in c(18L, 181L, 182L)) for (name in names(cases)) {
     case <- cases[[name]]
     d <- bridge19_fixture(seed, case)

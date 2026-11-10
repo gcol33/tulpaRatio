@@ -11,6 +11,15 @@ bridge19_inventory <- function(group, routes) {
     seeds = "18,181,182"), "route-inventory.tsv")
 }
 
+bridge19_select_cases <- function(cases, prefix = "") {
+  selected <- Sys.getenv("TULPA_BRIDGE_ROUTE")
+  if (!nzchar(selected)) return(cases)
+  wanted <- strsplit(selected, ",", fixed = TRUE)[[1L]]
+  indices <- match(wanted, paste0(prefix, names(cases)))
+  stopifnot(!anyNA(indices))
+  cases[indices]
+}
+
 bridge19_record_recovery <- function(fit, beta_error, numerator_error,
                                      denominator_error = NA_real_, scale) {
   row <- attr(fit, "bridge19")
@@ -131,6 +140,7 @@ bridge19_pair <- function(args, name, seed) {
       saveRDS(results[[label]], path)
     }
   }
+  expect_identical(results$legacy$reached_engine, FALSE, info = paste(name, seed, "cached legacy dispatch"))
   expect_true(isTRUE(results$bridge$reached_engine), info = paste(name, seed, "cached dispatch"))
   comparison_draws <- function(fit) {
     out <- as.matrix(fit$draws)

@@ -2,6 +2,7 @@ test_that("noncanonical numerator and denominator links agree across seeds", {
   skip_on_cran()
   cases <- list(identity_inverse = c("identity", "inverse"), inverse_identity = c("inverse", "identity"))
   bridge19_inventory("links", paste0("links_", names(cases)))
+  cases <- bridge19_select_cases(cases, "links_")
   for (seed in c(18L, 181L, 182L)) for (name in names(cases)) {
     set.seed(seed)
     d <- data.frame(x = runif(160L, -.8, .8))

@@ -27,12 +27,7 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
     st_shared = c("IV", "rw1", "noncentered", "shared"),
     st_unshared = c("IV", "rw1", "noncentered", "unshared"))
   bridge19_inventory("spatiotemporal", names(cases))
-  selected <- Sys.getenv("TULPA_BRIDGE_ROUTE")
-  if (nzchar(selected)) {
-    wanted <- strsplit(selected, ",", fixed = TRUE)[[1L]]
-    stopifnot(all(wanted %in% names(cases)))
-    cases <- cases[wanted]
-  }
+  cases <- bridge19_select_cases(cases)
   for (seed in c(18L, 181L, 182L)) for (name in names(cases)) {
     case <- cases[[name]]
     disconnected <- length(case) > 3L && case[4L] == "disconnected"

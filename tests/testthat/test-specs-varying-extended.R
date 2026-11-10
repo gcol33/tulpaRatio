@@ -7,12 +7,7 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
     latent_single = "single", latent_first_zero = "first_zero",
     latent_shared = "factor_shared", latent_two = "factor_two")
   bridge19_inventory("varying", names(cases))
-  selected <- Sys.getenv("TULPA_BRIDGE_ROUTE")
-  if (nzchar(selected)) {
-    wanted <- strsplit(selected, ",", fixed = TRUE)[[1L]]
-    stopifnot(all(wanted %in% names(cases)))
-    cases <- cases[wanted]
-  }
+  cases <- bridge19_select_cases(cases)
   for (seed in c(18L, 181L, 182L)) for (name in names(cases)) {
     kind <- cases[[name]]
     factor <- startsWith(name, "latent")
