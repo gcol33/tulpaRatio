@@ -168,6 +168,10 @@ fit_hmc <- function(formula,
 
   use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", TRUE)) ||
     identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
+  st_collapsed_gp <- isTRUE(st_params$has_spatiotemporal) &&
+    st_params$type %in% c("separable", "nonsep_gp") &&
+    identical(st_params$parameterization, "collapsed")
+  if (st_collapsed_gp && use_specs_path) st_params$parameterization <- "noncentered"
   zi_type_str <- zi_info$type %||% "none"
   zi_supported <- zi_type_str %in% MODEL_TYPES[[model_type]]$spec_inflation
   n_re_groups_v <- hmc_data$n_re_groups %||% 0L
@@ -192,6 +196,10 @@ fit_hmc <- function(formula,
     if (identical(spatial_type_v, "gp"))
       gp_info$parameterization <- gp_params$parameterization <- "auto"
     spatial_param_v <- "auto"
+  }
+  if (st_collapsed_gp) {
+    if (specs_eligible) spatiotemporal_info$parameterization <- "noncentered" else
+      st_params$parameterization <- "collapsed"
   }
   validate_legacy_collapsed(spatial_info, temporal_info, spatial)
 
