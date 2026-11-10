@@ -118,7 +118,16 @@ ridged_precision_factors <- function(Q, ridge = 0.01) {
   R <- chol(Q + ridge * diag(nrow(Q)))
   list(Q_inv = as.numeric(chol2inv(R)), L = as.numeric(t(R)))
 }
-# Logistic CDF with log probabilities and upper-tail probabilities.
+#' Inverse logit
+#'
+#' @param x Numeric vector of logistic quantiles.
+#' @param lower.tail Logical; if TRUE, return the lower-tail probability
+#'   `P(X <= x)`, otherwise return the upper-tail probability `P(X > x)`.
+#' @param log.p Logical; if TRUE, return the natural logarithm of the
+#'   probability.
+#' @return Numeric vector of standard logistic probabilities, or their
+#'   natural logarithms when `log.p = TRUE`.
+#' @keywords internal
 inv_logit <- function(x, lower.tail = TRUE, log.p = FALSE) {
   stats::plogis(x, lower.tail = lower.tail, log.p = log.p)
 }

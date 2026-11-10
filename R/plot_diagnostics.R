@@ -546,7 +546,7 @@ plot_pairs_base <- function(draws_df, pars, has_divergent, alpha) {
 #' coordinates and scatter plots highlight where in parameter space
 #' divergences occur.
 #'
-#' @param fit A `ratiod_fit` object (HMC backend).
+#' @param object A `ratiod_fit` object (HMC backend).
 #' @param pars Character vector of parameter names. If NULL, uses variance
 #'   parameters.
 #' @param type Plot type: "parcoord" (parallel coordinates) or "scatter".
