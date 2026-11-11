@@ -178,8 +178,8 @@ fit_hmc <- function(formula,
   n_re_terms_v <- hmc_data$n_re_terms %||% 0L
   spatial_type_v <- spatial_info$type %||% "none"
   spatial_param_v <- spatial_info$parameterization %||% "standard"
-  spatial_supported <- spatial_type_v %in% c("none", "svc", "icar", "bym2",
-    "car_proper", "gp", "hsgp", "multiscale_gp") &&
+  main_spatial_types <- c("icar", "bym2", "car_proper", "gp", "hsgp", "multiscale_gp")
+  spatial_supported <- spatial_type_v %in% c("none", "svc", main_spatial_types) &&
     (!identical(spatial_param_v, "collapsed") || spatial_type_v %in% c("icar", "bym2", "gp"))
   temporal_type_v <- temporal_info$type %||% "none"
   temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
@@ -275,12 +275,13 @@ fit_hmc <- function(formula,
     extra_indices <- p_total_design + p_re_n + seq_len(n_extra_per_family)
     spec_order <- c(setdiff(seq_along(q_init), extra_indices), extra_indices)
     q_init_spec <- as.numeric(q_init[spec_order])
-    p_spatial_n <- if (spatial_type_v %in% c("icar", "bym2", "car_proper", "gp", "hsgp", "multiscale_gp")) 1L else 0L
+    has_main_spatial <- spatial_type_v %in% main_spatial_types
 
     re_params_spec <- re_params
 
-    spatial_params_spec <- spatial_params
-    if (p_spatial_n > 0L) {
+    spatial_params_spec <- list(type = "none")
+    if (has_main_spatial) {
+      spatial_params_spec <- spatial_params
       spatial_params_spec$sigma_prior_U <- sp$spatial_sigma_prior_U
       spatial_params_spec$sigma_prior_alpha <- sp$spatial_sigma_prior_alpha
       spatial_params_spec$shared <- spatial_info$shared %||% TRUE
