@@ -181,7 +181,12 @@ bridge19_pair <- function(args, name, seed, control = bridge19_control(name, see
     x
   }
   key_path <- file.path(work, paste0("cache-key-", Sys.getpid(), ".rds"))
+  cache_locale <- Sys.getlocale("LC_CTYPE")
+  on.exit(Sys.setlocale("LC_CTYPE", cache_locale), add = TRUE)
+  Sys.setlocale("LC_CTYPE", if (.Platform$OS.type == "windows") ".UTF-8" else "C.UTF-8")
+  if (!isTRUE(l10n_info()[["UTF-8"]])) stop("Bridge cache serialization requires UTF-8")
   saveRDS(canonical(args), key_path, version = 3L)
+  Sys.setlocale("LC_CTYPE", cache_locale)
   argument_tag <- unname(tools::md5sum(key_path))
   directory <- file.path(work, "comparisons", binary_tag, argument_tag)
   dir.create(directory, recursive = TRUE, showWarnings = FALSE)
@@ -213,6 +218,18 @@ bridge19_pair <- function(args, name, seed, control = bridge19_control(name, see
   }
   expect_identical(results$legacy$reached_engine, FALSE, info = paste(name, seed, "cached legacy dispatch"))
   expect_true(isTRUE(results$bridge$reached_engine), info = paste(name, seed, "cached dispatch"))
+  for (label in names(results)) {
+    result <- results[[label]]
+    path <- file.path(directory, paste(name, seed, label, "rds", sep = "."))
+    provenance <- result$provenance
+    bridge19_write_evidence(data.frame(binary_tag, argument_tag, route = name, seed,
+      path = label, sampling_binary_tag = provenance$source_binary_tag %||% binary_tag,
+      rematerialized = !is.null(provenance),
+      source_cache_md5 = provenance$source_cache_md5 %||% unname(tools::md5sum(path)),
+      output_cache_md5 = unname(tools::md5sum(path)), source_fit_seconds = result$seconds,
+      postprocess_seconds = provenance$postprocess_seconds %||% 0),
+      "route-sampling-provenance.tsv")
+  }
   a <- bridge19_comparison_draws(results$legacy$fit)
   b <- bridge19_comparison_draws(results$bridge$fit)
   for (result in results)
