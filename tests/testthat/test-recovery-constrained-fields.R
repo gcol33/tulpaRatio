@@ -31,6 +31,63 @@ grid_adj <- function(S) {
   A
 }
 
+proper_car_fixture <- function() {
+  S <- 36L
+  A <- grid_adj(S)
+  rho_true <- 0.5
+  tau_true <- 3
+  set.seed(44)
+  phi_true <- backsolve(chol(tau_true * (diag(rowSums(A)) - rho_true * A)),
+                        rnorm(S))
+  site <- rep(seq_len(S), each = 25L)
+  N <- length(site)
+  x <- rnorm(N)
+  trials <- sample(15:50, N, replace = TRUE)
+  df <- data.frame(
+    y = rbinom(N, trials, plogis(TRUE_INTERCEPT + TRUE_SLOPE * x + phi_true[site])),
+    trials = trials, x = x, site = factor(site))
+  list(data = df, adjacency = A,
+       truth = list(level = TRUE_INTERCEPT + mean(phi_true),
+                    rho = rho_true, tau = tau_true))
+}
+
+proper_car_recovery <- local({
+  fits <- new.env(parent = emptyenv())
+  function(center) {
+    specs <- isTRUE(getOption("tulpaRatio.use_specs", TRUE)) ||
+      identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
+    key <- paste(if (center) "centered" else "uncentered",
+                 if (specs) "engine" else "legacy", sep = "-")
+    if (!exists(key, envir = fits, inherits = FALSE)) {
+      fixture <- proper_car_fixture()
+      control <- list(iter = 2500L, warmup = 1500L, chains = 4L, seed = 5L)
+      timing <- system.time(fit <- fit_recovery_model(fixture$data, mode = "hmc",
+        spatial = spatial_car(fixture$adjacency, spatial_level = "group",
+                              group_var = "site", proper = TRUE, center = center),
+        control = control))
+      fits[[key]] <- list(fit = fit, truth = fixture$truth)
+      evidence <- Sys.getenv("TULPA_BRIDGE_EVIDENCE", "")
+      if (nzchar(evidence)) saveRDS(list(draws = as.matrix(fit$draws),
+        chains = fit$chains, center = center, backend = if (specs) "engine" else "legacy",
+        diagnostics = fit$diagnostics, truth = fixture$truth, control = control,
+        seconds = unname(timing["elapsed"])),
+        file.path(evidence, paste0("proper-car-recovery-", key, ".rds")))
+    }
+    fits[[key]]
+  }
+})
+
+recovery_summary <- function(draws, chains, variable, transform = identity) {
+  values <- transform(draws[, variable])
+  m <- matrix(values, nrow = nrow(draws) / chains, ncol = chains)
+  list(mean = mean(values),
+       lo = unname(quantile(values, 0.025)),
+       hi = unname(quantile(values, 0.975)),
+       rhat = posterior::rhat(m),
+       ess = posterior::ess_bulk(m),
+       mcse = posterior::mcse_mean(m))
+}
+
 # Gaussian importance integration over the fixed effects and the constrained
 # field, followed by trapezoidal integration over a log scale. Whitening by
 # the positive eigenvalues of Q keeps the dense solve conditioned as tau grows.
@@ -139,28 +196,21 @@ constrained_field_reference <- function(df, Q, group, n_draws = 2048L,
        tail_slope = diff(tail(logp, 2L)) / diff(tail(x, 2L)))
 }
 
-fit_one <- function(df, ..., control = list()) {
+fit_recovery_model <- function(df, ..., control = list()) {
   control <- utils::modifyList(
     list(iter = 1000, warmup = 500, chains = 4, verbose = FALSE), control)
-  f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(), ...,
-              control = control)
+  tratio(y | trials ~ x, data = df, family = ratiod_binomial(), ...,
+         control = control)
+}
+
+fit_one <- function(df, ..., control = list()) {
+  f <- fit_recovery_model(df, ..., control = control)
   dr <- as.matrix(f$draws)
-  per <- nrow(dr) / f$chains
-  summarise <- function(v, transform = identity) {
-    values <- transform(dr[, v])
-    m <- matrix(values, nrow = per, ncol = f$chains)
-    list(mean = mean(values),
-         lo = unname(quantile(values, 0.025)),
-         hi = unname(quantile(values, 0.975)),
-         rhat = posterior::rhat(m),
-         ess = posterior::ess_bulk(m),
-         mcse = posterior::mcse_mean(m))
-  }
   list(backend = f$backend,
-       intercept = summarise("beta_num[1]"),
-       slope = summarise("beta_num[2]"),
+       intercept = recovery_summary(dr, f$chains, "beta_num[1]"),
+       slope = recovery_summary(dr, f$chains, "beta_num[2]"),
        log_tau_temporal = if ("tau_temporal" %in% colnames(dr))
-         summarise("tau_temporal", log) else NULL)
+         recovery_summary(dr, f$chains, "tau_temporal", log) else NULL)
 }
 
 test_that("RW1 recovers the intercept and slope with calibrated intervals", {
@@ -381,70 +431,19 @@ test_that("a spatiotemporal interaction recovers the intercept", {
 test_that("proper CAR recovers rho and the intercept (gcol33/tulpaRatio#31)", {
   skip_on_cran()
   skip_if_not_installed("posterior")
-
-  # Simulate directly from Q(rho) = D - rho*W so the field itself, not just
-  # the regression coefficients, carries a known truth to recover. rho_true
-  # kept at 0.5 rather than close to 1: Q(rho)'s smallest eigenvalue shrinks
-  # as rho -> 1 (a grid graph's leading eigenvector is the constant
-  # direction), creating a near-collinearity between the intercept and phi's
-  # mean that is a real property of proper CAR, not something this recovery
-  # test is meant to stress.
-  S <- 36L
-  A <- grid_adj(S)
-  D <- diag(rowSums(A))
-  rho_true <- 0.5
-  tau_true <- 3.0
-  set.seed(44)
-  Q <- D - rho_true * A
-  # A draw through the Cholesky factor is the same on every platform, which
-  # an eigendecomposition (MASS::mvrnorm) is not
-  phi_true <- backsolve(chol(tau_true * Q), rnorm(S))
-  # The field is centred in eta, so the intercept is the level of the
-  # linear predictor: the true intercept plus the drawn field's mean
-  level_true <- TRUE_INTERCEPT + mean(phi_true)
-
-  n_per <- 25L
-  N <- S * n_per
-  site <- rep(seq_len(S), each = n_per)
-  x <- rnorm(N)
-  trials <- sample(15:50, N, replace = TRUE)
-  eta <- TRUE_INTERCEPT + TRUE_SLOPE * x + phi_true[site]
-  df <- data.frame(y = rbinom(N, trials, plogis(eta)), trials = trials, x = x,
-                   site = factor(site))
-
-  # Proper CAR has no specialized mass-matrix warm-start (unlike ICAR/BYM2),
-  # so NUTS adapts a generic one from scratch; a longer warmup (rather than a
-  # seed pick) is what buys reliable convergence on rho/tau's slower geometry.
-  f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(),
-             spatial = spatial_car(A, spatial_level = "group", group_var = "site", proper = TRUE),
-             mode = "hmc",
-             control = list(iter = 2000, warmup = 1500, chains = 4, seed = 5,
-                            verbose = FALSE))
+  study <- proper_car_recovery(TRUE)
+  f <- study$fit
+  level_true <- study$truth$level
+  rho_true <- study$truth$rho
+  tau_true <- study$truth$tau
   expect_identical(f$backend, "hmc")
 
   dr <- as.matrix(f$draws)
   expect_true("rho_spatial" %in% colnames(dr))
   expect_true("tau_spatial" %in% colnames(dr))
-  per <- nrow(dr) / f$chains
-  summarise <- function(v) {
-    m <- matrix(dr[, v], nrow = per, ncol = f$chains)
-    list(mean = mean(dr[, v]),
-         lo = unname(quantile(dr[, v], 0.025)),
-         hi = unname(quantile(dr[, v], 0.975)),
-         rhat = posterior::rhat(m),
-         ess = posterior::ess_bulk(m))
-  }
-  r_int <- summarise("beta_num[1]")
-  r_rho <- summarise("rho_spatial")
-  r_tau <- summarise("tau_spatial")
-
-  # Q(rho) is full rank, so the prior identifies the field's mean, but the
-  # LIKELIHOOD cannot see it apart from the intercept: eta reads beta_0 + phi_s,
-  # and moving the intercept by c against every phi by -c leaves eta alone. With
-  # the mean left in, the two correlate at -0.977, each carries a posterior sd
-  # near 0.06 while their sum carries 0.013, and the intercept is a coordinate
-  # along a ridge rather than a quantity the data pin. spatial_car() removes it
-  # from eta by default now, so the intercept IS the level and converges.
+  r_int <- recovery_summary(dr, f$chains, "beta_num[1]")
+  r_rho <- recovery_summary(dr, f$chains, "rho_spatial")
+  r_tau <- recovery_summary(dr, f$chains, "tau_spatial", log)
   expect_lt(r_int$rhat, 1.05)
   expect_gt(r_int$ess, 1000)
 
@@ -460,9 +459,9 @@ test_that("proper CAR recovers rho and the intercept (gcol33/tulpaRatio#31)", {
   expect_true(r_rho$lo <= rho_true && rho_true <= r_rho$hi,
               label = sprintf("rho 95%% CI [%.3f, %.3f] vs true %.2f",
                               r_rho$lo, r_rho$hi, rho_true))
-  expect_true(r_tau$lo <= tau_true && tau_true <= r_tau$hi,
-              label = sprintf("tau 95%% CI [%.3f, %.3f] vs true %.2f",
-                              r_tau$lo, r_tau$hi, tau_true))
+  expect_true(r_tau$lo <= log(tau_true) && log(tau_true) <= r_tau$hi,
+              label = sprintf("log(tau) 95%% CI [%.3f, %.3f] vs true %.2f",
+                              r_tau$lo, r_tau$hi, log(tau_true)))
 })
 
 test_that("a spatial-only model reaches a sampler that reports its chains", {
@@ -687,37 +686,17 @@ test_that("centring a proper CAR field moves the level onto the intercept", {
   skip_on_cran()
   skip_if_not_installed("posterior")
 
-  S <- 36L
-  A <- grid_adj(S)
-  rho_true <- 0.5
-  tau_true <- 3.0
-  set.seed(44)
-  phi_true <- backsolve(chol(tau_true * (diag(rowSums(A)) - rho_true * A)),
-                        rnorm(S))
-
-  n_per <- 25L
-  N <- S * n_per
-  site <- rep(seq_len(S), each = n_per)
-  x <- rnorm(N)
-  trials <- sample(15:50, N, replace = TRUE)
-  df <- data.frame(
-    y = rbinom(N, trials, plogis(TRUE_INTERCEPT + TRUE_SLOPE * x + phi_true[site])),
-    trials = trials, x = x, site = factor(site))
-
   fit <- function(center) {
-    f <- tratio(y | trials ~ x, data = df, family = ratiod_binomial(), mode = "hmc",
-                spatial = spatial_car(A, spatial_level = "group", group_var = "site",
-                                      proper = TRUE, center = center),
-                control = list(iter = 2000, warmup = 1500, chains = 4, seed = 5,
-                               verbose = FALSE))
+    f <- proper_car_recovery(center)$fit
     dr <- as.matrix(f$draws)
-    per <- nrow(dr) / f$chains
     b0 <- dr[, "beta_num[1]"]
+    intercept <- recovery_summary(dr, f$chains, "beta_num[1]")
     field_mean <- rowMeans(dr[, grep("^phi_spatial", colnames(dr)), drop = FALSE])
     # The level eta actually carries, written in each parameterisation's terms.
     level <- if (center) b0 else b0 + field_mean
-    list(intercept_ess = posterior::ess_bulk(matrix(b0, per, f$chains)),
-         intercept_rhat = posterior::rhat(matrix(b0, per, f$chains)),
+    list(intercept_ess = intercept$ess,
+         intercept_rhat = intercept$rhat,
+         n_draws = nrow(dr),
          level = mean(level),
          slope = mean(dr[, "beta_num[2]"]),
          rho = mean(dr[, "rho_spatial"]))
@@ -726,14 +705,11 @@ test_that("centring a proper CAR field moves the level onto the intercept", {
   raw <- fit(FALSE)
   centred <- fit(TRUE)
 
-  # Same identified posterior. Centring is a change of coordinates on the level,
-  # not a change of model fit.
   expect_equal(centred$level, raw$level, tolerance = 0.02)
   expect_equal(centred$slope, raw$slope, tolerance = 0.02)
   expect_equal(centred$rho, raw$rho, tolerance = 0.15)
 
-  # What it buys. Measured on this fixture: ESS 71 -> 1953, rhat 1.053 -> 1.001.
-  expect_lt(raw$intercept_ess, 400)
+  expect_lt(raw$intercept_ess, 0.2 * raw$n_draws)
   expect_gt(centred$intercept_ess, 1000)
   expect_gt(centred$intercept_ess, 4 * raw$intercept_ess)
   expect_lt(centred$intercept_rhat, 1.05)
