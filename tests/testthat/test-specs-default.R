@@ -15,18 +15,25 @@ test_that("supported structures use the engine by default and honor the switch",
   cases <- list(list(data = d, temporal = temporal_iid("time")),
     list(data = gp_data, spatial = main,
       spatiotemporal = spatiotemporal(main, temporal_rw1("time"), type = "separable",
-        parameterization = "noncentered", coords = ~ lon + lat, nn = 4L)),
+        coords = ~ lon + lat, nn = 4L)),
     list(data = gp_data, spatial = main,
       spatiotemporal = spatiotemporal(spatial_hsgp(~ lon + lat, m = 3L),
         temporal_rw1("time"), type = "IV")),
     list(data = gp_data, spatial = main,
       spatiotemporal = spatiotemporal(spatial_hsgp(~ lon + lat, m = 3L),
         temporal_rw1("time"), type = "IV", parameterization = "centered")))
+  expect_identical(cases[[2L]]$spatiotemporal$parameterization, "noncentered")
+  expect_identical(cases[[3L]]$spatiotemporal$parameterization, "noncentered")
+  for (par in c("centered", "collapsed")) {
+    st <- spatiotemporal(main, temporal_rw1("time"), type = "separable",
+      parameterization = par, coords = ~ lon + lat, nn = 4L)
+    expect_identical(st$parameterization, par)
+  }
   time_margins <- list(temporal_iid("time"), temporal_gp("time"),
     temporal_multiscale("time", trend = "rw1", seasonal = 3L, short_term = "iid"))
   for (type in c("I", "III", "separable")) for (time in time_margins) {
     st <- if (type == "separable") spatiotemporal(main, time, type = type,
-      parameterization = "noncentered", coords = ~ lon + lat, nn = 4L) else
+      coords = ~ lon + lat, nn = 4L) else
       spatiotemporal(main, time, type = type)
     cases[[length(cases) + 1L]] <- list(data = gp_data, spatial = main, spatiotemporal = st)
   }

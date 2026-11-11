@@ -42,17 +42,12 @@ or \code{\link[=spatial_gp]{spatial_gp()}}.}
 numerator and denominator. Set to FALSE for process-specific effects
 (triggers warning about potential confounding).}
 
-\item{parameterization}{With the HMC backend: \code{"centered"} (default)
-samples the interaction directly; \code{"noncentered"} samples a standard
-normal \code{z} and reconstructs the interaction from it, as \code{z / sqrt(tau)}
-for the Knorr-Held types (\code{"I"} to \code{"IV"}) and through the
-nearest-neighbour GP autoregression, \verb{delta_i = m_i + sqrt(d_i) z_i}, for
-the GP types. When the data carry little or no space-time interaction,
-the posterior for \code{tau} drifts toward large values and the centered
-field's conditional scale shrinks with it (a funnel), which NUTS cannot
-span with a single step size; \code{"noncentered"} decouples the two and should
-be tried first when \code{rhat} for the interaction (or an intercept sharing
-its geometry) will not drop with more warmup. \code{"collapsed"}, for the GP
+\item{parameterization}{With the HMC backend: \code{"centered"} samples the
+interaction directly; \code{"noncentered"} uses Gaussian innovations and
+reconstructs the interaction with its spatial and temporal sum constraints.
+The default is \code{"noncentered"} for the GP types and an HSGP spatial margin,
+and \code{"centered"} for the other Knorr-Held types (\code{"I"} to \code{"IV"}).
+\code{"collapsed"}, for the GP
 types, integrates the interaction out with a Laplace approximation
 inside HMC (Margossian et al. 2020): the sampler moves the
 hyperparameters and every other block, and the interaction is drawn from
@@ -61,9 +56,8 @@ interaction's field-against-hyperparameter funnel; the marginal it
 targets is an approximation, exact for a Gaussian likelihood. It needs a
 log-concave family with canonical links (binomial, Poisson-gamma,
 negative binomial, gamma-gamma, lognormal) without zero inflation. An
-HSGP spatial margin uses innovation coordinates by default in the engine.
-Its temporal precision and sum constraint determine the transform. The
-model sampler uses centered HSGP coefficients. Ignored outside the HMC backend.}
+HSGP spatial margin's temporal precision and sum constraint determine its
+innovation transform. Ignored outside the HMC backend.}
 
 \item{nonsep_type}{For \code{type = "nonsep_gp"}: \code{"product"} (the separable
 covariance) or \code{"gneiting"} (Gneiting 2002). An additive covariance is not

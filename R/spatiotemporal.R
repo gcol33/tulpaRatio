@@ -59,17 +59,12 @@ NULL
 #' @param shared Logical; if TRUE (default), spatiotemporal effect enters both
 #'   numerator and denominator. Set to FALSE for process-specific effects
 #'   (triggers warning about potential confounding).
-#' @param parameterization With the HMC backend: `"centered"` (default)
-#'   samples the interaction directly; `"noncentered"` samples a standard
-#'   normal `z` and reconstructs the interaction from it, as `z / sqrt(tau)`
-#'   for the Knorr-Held types (`"I"` to `"IV"`) and through the
-#'   nearest-neighbour GP autoregression, `delta_i = m_i + sqrt(d_i) z_i`, for
-#'   the GP types. When the data carry little or no space-time interaction,
-#'   the posterior for `tau` drifts toward large values and the centered
-#'   field's conditional scale shrinks with it (a funnel), which NUTS cannot
-#'   span with a single step size; `"noncentered"` decouples the two and should
-#'   be tried first when `rhat` for the interaction (or an intercept sharing
-#'   its geometry) will not drop with more warmup. `"collapsed"`, for the GP
+#' @param parameterization With the HMC backend: `"centered"` samples the
+#'   interaction directly; `"noncentered"` uses Gaussian innovations and
+#'   reconstructs the interaction with its spatial and temporal sum constraints.
+#'   The default is `"noncentered"` for the GP types and an HSGP spatial margin,
+#'   and `"centered"` for the other Knorr-Held types (`"I"` to `"IV"`).
+#'   `"collapsed"`, for the GP
 #'   types, integrates the interaction out with a Laplace approximation
 #'   inside HMC (Margossian et al. 2020): the sampler moves the
 #'   hyperparameters and every other block, and the interaction is drawn from
@@ -78,9 +73,8 @@ NULL
 #'   targets is an approximation, exact for a Gaussian likelihood. It needs a
 #'   log-concave family with canonical links (binomial, Poisson-gamma,
 #'   negative binomial, gamma-gamma, lognormal) without zero inflation. An
-#'   HSGP spatial margin uses innovation coordinates by default in the engine.
-#'   Its temporal precision and sum constraint determine the transform. The
-#'   model sampler uses centered HSGP coefficients. Ignored outside the HMC backend.
+#'   HSGP spatial margin's temporal precision and sum constraint determine its
+#'   innovation transform. Ignored outside the HMC backend.
 #' @param nonsep_type For `type = "nonsep_gp"`: `"product"` (the separable
 #'   covariance) or `"gneiting"` (Gneiting 2002). An additive covariance is not
 #'   among them: on a complete `S x T` grid its rank is `S + T - 1`, and the
@@ -234,11 +228,11 @@ spatiotemporal <- function(spatial,
   # Normalize type
   type <- match.arg(type)
   if (type == "iid") type <- "I"
-  if (missing(parameterization) && inherits(spatial, "ratiod_hsgp"))
+  is_gp_type <- type %in% c("separable", "nonsep_gp")
+  if (missing(parameterization) && (is_gp_type || inherits(spatial, "ratiod_hsgp")))
     parameterization <- "noncentered"
   parameterization <- match.arg(parameterization)
   nonsep_type <- match.arg(nonsep_type)
-  is_gp_type <- type %in% c("separable", "nonsep_gp")
   if (parameterization == "collapsed" && !is_gp_type) {
     stop("parameterization = \"collapsed\" integrates out a GP interaction; ",
          "use type = \"separable\" or \"nonsep_gp\".", call. = FALSE)
