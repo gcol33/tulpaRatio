@@ -1673,7 +1673,8 @@ Rcpp::List cpp_st_ar1_zero_density(std::string field, Rcpp::NumericVector correl
 }
 
 // For a likelihood Gaussian in the interaction (lognormal), the collapsed
-// interaction's Laplace step is exact: p(y, delta | rest) =
+// interaction's Laplace step is exact at fixed physical ranges:
+// p(y, delta | rest) =
 // p(y | rest) N(delta; dh, H^-1) for every delta. So the centred density at
 // any delta, less log N(delta; dh, H^-1), is the collapsed density whatever
 // delta is; a missing normalizer, penalty or correction term shows as a gap.
@@ -1688,10 +1689,22 @@ double cpp_st_collapsed_exactness(std::string field = "stgp_collapsed",
   ModelData data_l = make_model(field, n_obs, n_units, n_times, seed, "lognormal");
   ModelData data_c = make_model(centred_field, n_obs, n_units, n_times, seed,
                                 "lognormal");
+  data_l.st_phi_space_prior_lower = data_c.st_phi_space_prior_lower = 0.02;
+  data_l.st_phi_space_prior_upper = data_c.st_phi_space_prior_upper = 0.8;
+  data_l.st_phi_time_prior_lower = data_c.st_phi_time_prior_lower = 0.01;
+  data_l.st_phi_time_prior_upper = data_c.st_phi_time_prior_upper = 0.6;
   ParamLayout lay_l = compute_param_layout(data_l);
   ParamLayout lay_c = compute_param_layout(data_c);
   std::vector<double> p_l = draw_params(data_l, lay_l, get_n_params(data_l), seed);
-  const double lp_l = compute_log_post(p_l, data_l, lay_l);
+  const auto range_log_density = [](const std::vector<double>& p,
+                                     const ModelData& data, const ParamLayout& lay) {
+    return tulpa::uniform_range_coordinate_log_density(
+        p[lay.log_phi_st_space_idx], data.st_parameterization != 2) +
+        tulpa::uniform_range_coordinate_log_density(
+        p[lay.log_phi_st_time_idx], data.st_parameterization != 2);
+  };
+  const double lp_l = compute_log_post(p_l, data_l, lay_l) -
+                      range_log_density(p_l, data_l, lay_l);
   if (!std::isfinite(lp_l)) Rcpp::stop("cpp_st_collapsed_exactness: no mode");
 
   const auto& ws = ratiod_st_laplace::workspace();
@@ -1709,11 +1722,20 @@ double cpp_st_collapsed_exactness(std::string field = "stgp_collapsed",
       p_c.push_back(ws.delta[k] + e[k]);
     }
     p_c.insert(p_c.end(), p_l.begin() + lay_c.st_delta_start, p_l.end());
+    for (bool space : {true, false}) {
+      const int source = space ? lay_l.log_phi_st_space_idx : lay_l.log_phi_st_time_idx;
+      const int target = space ? lay_c.log_phi_st_space_idx : lay_c.log_phi_st_time_idx;
+      const double phi = st_gp_range_value(p_l[source], data_l, space);
+      const double lower = space ? data_c.st_phi_space_prior_lower : data_c.st_phi_time_prior_lower;
+      const double upper = space ? data_c.st_phi_space_prior_upper : data_c.st_phi_time_prior_upper;
+      p_c[target] = std::log(phi - lower) - std::log(upper - phi);
+    }
     double eHe = ratiod_st_laplace::prior_quad(data_l, ws.fac, e.data(), buf.data());
     for (int k = 0; k < n; k++) eHe += ws.W[k] * e[k] * e[k];
     const double log_normal = -0.5 * n * std::log(2.0 * M_PI) + 0.5 * log_det_H -
                               0.5 * eHe;
-    const double gap = compute_log_post(p_c, data_c, lay_c) - log_normal - lp_l;
+    const double gap = compute_log_post(p_c, data_c, lay_c) -
+                       range_log_density(p_c, data_c, lay_c) - log_normal - lp_l;
     worst = std::max(worst, std::abs(gap));
   }
   return worst;
