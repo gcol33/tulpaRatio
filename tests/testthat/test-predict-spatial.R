@@ -129,22 +129,6 @@ test_that("predict errors when coords.0 missing for GP", {
   )
 })
 
-# The four kernels, written out here rather than read off the package, so the
-# kriging below is scored against a covariance family it does not share code
-# with. phi is a lengthscale in all four.
-krige_kernels <- list(
-  exponential = function(d, s2, phi) s2 * exp(-d / phi),
-  matern      = function(d, s2, phi) {
-    u <- sqrt(3) * d / phi
-    s2 * (1 + u) * exp(-u)
-  },
-  gaussian    = function(d, s2, phi) s2 * exp(-0.5 * (d / phi)^2),
-  spherical   = function(d, s2, phi) {
-    r <- d / phi
-    ifelse(d >= phi, 0, s2 * (1 - 1.5 * r + 0.5 * r^3))
-  }
-)
-
 # Nearest-neighbour kriging at one new location for one draw, from its
 # definition: the k nearest training locations, the neighbour block plus the
 # 1e-6 jitter the sampler paths use, and C_s0S C_SS^-1 w.
@@ -168,15 +152,14 @@ test_that("kriging reproduces its definition under every covariance", {
   s2 <- c(0.7, 1.3, 0.4)
   phi <- c(0.25, 0.6, 0.9)
 
-  codes <- c(exponential = 0L, matern = 1L, gaussian = 2L, spherical = 3L)
-  for (cv in names(codes)) {
+  for (cv in names(SPATIAL_COVARIANCE_CODES)) {
     got <- tulpaRatio:::cpp_kriging_predict(
       coords_train = coords_train, coords_new = coords_new,
       w_train = w_train, sigma2 = s2, phi = phi,
-      cov_type = codes[[cv]], nn = 5L
+      cov_type = SPATIAL_COVARIANCE_CODES[[cv]], nn = 5L
     )
     want <- t(vapply(seq_along(s2), function(s) {
-      krige_reference(krige_kernels[[cv]], coords_train, coords_new,
+      krige_reference(spatial_covariance_kernels[[cv]], coords_train, coords_new,
                       w_train[s, ], s2[s], phi[s], 5L)
     }, numeric(nrow(coords_new))))
 
@@ -191,7 +174,7 @@ test_that("kriging reproduces its definition under every covariance", {
     coords_train = coords_train, coords_new = coords_new, w_train = w_train,
     sigma2 = s2, phi = phi, cov_type = code, nn = 5L)
   expect_false(isTRUE(all.equal(krige(0L), krige(3L), tolerance = 0)))
-  expect_error(krige(4L), "Unknown covariance code")
+  expect_error(krige(length(SPATIAL_COVARIANCE_CODES)), "Unknown covariance code")
 })
 
 test_that("kriging refuses a field that is not indexed by location", {

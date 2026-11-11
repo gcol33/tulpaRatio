@@ -1,20 +1,3 @@
-pg_kernels <- list(
-  exponential = function(d, s2, phi) s2 * exp(-d / phi),
-  matern      = function(d, s2, phi) {
-    u <- sqrt(3) * d / phi
-    s2 * (1 + u) * exp(-u)
-  },
-  gaussian    = function(d, s2, phi) s2 * exp(-0.5 * (d / phi)^2),
-  spherical   = function(d, s2, phi) {
-    r <- d / phi
-    ifelse(d >= phi, 0, s2 * (1 - 1.5 * r + 0.5 * r^3))
-  },
-  matern25    = function(d, s2, phi) {
-    u <- sqrt(5) * d / phi
-    s2 * (1 + u + u * u / 3) * exp(-u)
-  }
-)
-
 pg_cov_fixture <- function(seed = 21L, n = 12L, nn = 4L) {
   set.seed(seed)
   co <- cbind(runif(n), runif(n))
@@ -87,15 +70,12 @@ pg_density_cpp <- function(cov_type, fx, sigma2 = fx$sigma2, phi = fx$phi) {
   )
 }
 
-PG_COV_CODES <- c(exponential = 0L, matern = 1L, gaussian = 2L, spherical = 3L,
-                  matern25 = 4L)
-
 test_that("PG NNGP conditionals match the supported covariance kernels", {
   fx <- pg_cov_fixture()
-  for (cv in names(PG_COV_CODES)) {
+  for (cv in names(SPATIAL_COVARIANCE_CODES)) {
     expect_equal(
-      pg_cond_cpp(PG_COV_CODES[[cv]], fx),
-      unname(pg_cond_reference(pg_kernels[[cv]], fx)),
+      pg_cond_cpp(SPATIAL_COVARIANCE_CODES[[cv]], fx),
+      unname(pg_cond_reference(spatial_covariance_kernels[[cv]], fx)),
       tolerance = 1e-12,
       label = sprintf("cov = %s", cv)
     )
@@ -104,9 +84,9 @@ test_that("PG NNGP conditionals match the supported covariance kernels", {
 
 test_that("gaussian and spherical are not the Matern 2.5 the else branch gave", {
   fx <- pg_cov_fixture()
-  old <- unname(pg_cond_reference(pg_kernels$matern25, fx))
+  old <- unname(pg_cond_reference(spatial_covariance_kernels$matern52, fx))
   for (cv in c("gaussian", "spherical")) {
-    got <- pg_cond_cpp(PG_COV_CODES[[cv]], fx)
+    got <- pg_cond_cpp(SPATIAL_COVARIANCE_CODES[[cv]], fx)
     # Both used to equal `old` exactly. The conditional mean moves by 0.11 on
     # gaussian and 0.34 on spherical at this fixture, and the variance by 0.11
     # and 0.38, so this is not a tolerance question.
@@ -118,7 +98,7 @@ test_that("gaussian and spherical are not the Matern 2.5 the else branch gave", 
 
 test_that("the PG NNGP conditional rejects unknown covariance codes", {
   fx <- pg_cov_fixture()
-  expect_error(pg_cond_cpp(5L, fx), "Unknown covariance code")
+  expect_error(pg_cond_cpp(length(SPATIAL_COVARIANCE_CODES), fx), "Unknown covariance code")
   expect_error(pg_cond_cpp(-1L, fx), "Unknown covariance code")
 })
 
@@ -195,10 +175,10 @@ test_that("the PG GP sampler does not read past its per-location arrays", {
 
 test_that("the field log density is the sequential NNGP factorization", {
   fx <- pg_cov_fixture()
-  for (cv in names(PG_COV_CODES)) {
+  for (cv in names(SPATIAL_COVARIANCE_CODES)) {
     expect_equal(
-      pg_density_cpp(PG_COV_CODES[[cv]], fx),
-      pg_density_reference(pg_kernels[[cv]], fx),
+      pg_density_cpp(SPATIAL_COVARIANCE_CODES[[cv]], fx),
+      pg_density_reference(spatial_covariance_kernels[[cv]], fx),
       tolerance = 1e-12,
       label = sprintf("cov = %s", cv)
     )
