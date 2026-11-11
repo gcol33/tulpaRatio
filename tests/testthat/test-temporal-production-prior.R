@@ -24,7 +24,7 @@ test_that("production temporal priors match dense quadratic forms", {
       }
       actual <- tulpaRatio:::cpp_test_temporal_log_prior(w,type,tau,rho,cyclic,G,augment)
       expect_equal(actual,reference,tolerance=1e-12,info=paste(type,cyclic,augment))
-      if (!augment) expect_equal(
+      if (augment == (type %in% c('rw1','rw2'))) expect_equal(
         tulpaRatio:::cpp_test_temporal_log_prior(w,type,tau,rho,cyclic,G,FALSE,TRUE),
         reference,tolerance=1e-12,info=paste('TVC',type,cyclic))
     }
