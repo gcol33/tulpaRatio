@@ -740,7 +740,7 @@ test_that("proper CAR is declared, not silently mis-differentiated", {
   }
 })
 
-test_that("proper CAR refuses an autodiff gradient mode at the front door", {
+test_that("the model sampler refuses autodiff gradients for proper CAR", with_legacy_sampler({
   skip_on_cran()
   set.seed(1)
   N <- 200L
@@ -775,9 +775,9 @@ test_that("proper CAR refuses an autodiff gradient mode at the front door", {
   expect_no_warning(
     fit_h <- suppressWarnings(fit_with("H"), classes = "tulpaRatio_divergence"))
   expect_identical(fit_h$backend, "hmc")
-})
+}))
 
-test_that("a collapsed field refuses an autodiff gradient mode at the front door", {
+test_that("the model sampler refuses autodiff gradients for collapsed ICAR", with_legacy_sampler({
   skip_on_cran()
   # The refusal has to reach the user, not just the predicate: the field is
   # marginalized out, so the templated density has no slot for it and every other
@@ -822,7 +822,7 @@ test_that("a collapsed field refuses an autodiff gradient mode at the front door
   expect_no_warning(
     fit_h <- suppressWarnings(fit_with("H"), classes = "tulpaRatio_divergence"))
   expect_identical(fit_h$backend, "hmc")
-})
+}))
 
 test_that("centring makes the spatial field's mean invisible to the likelihood", {
   # A hard sum-to-zero constraint means the intercept, not the field, carries
@@ -837,7 +837,7 @@ test_that("centring makes the spatial field's mean invisible to the likelihood",
   }
 })
 
-test_that("a non-centred GP fit keeps its handcoded gradient (gcol33/tulpaRatio#57)", {
+test_that("the model sampler uses its handcoded gradient for non-centred GP fields", with_legacy_sampler({
   skip_on_cran()
   # resolve_gradient_fn sends any GP model at the default gradient mode to
   # compute_gradient_gp_handcoded, so the non-centred parameterization is the
@@ -875,7 +875,7 @@ test_that("a non-centred GP fit keeps its handcoded gradient (gcol33/tulpaRatio#
       message = "finite difference"
     )
   }
-})
+}))
 
 
 # A finite difference cannot see a transform that builds the wrong field: the

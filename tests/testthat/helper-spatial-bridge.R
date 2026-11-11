@@ -22,3 +22,15 @@ spatial_comparison_draws <- function(draws) {
   colnames(out)[precision] <- paste0('log_', colnames(out)[precision])
   out
 }
+
+with_legacy_sampler <- function(code) {
+  old_options <- options(tulpaRatio.use_specs = FALSE)
+  old_environment <- Sys.getenv('TULPARATIO_USE_SPECS', unset = NA_character_)
+  on.exit({
+    options(old_options)
+    if (is.na(old_environment)) Sys.unsetenv('TULPARATIO_USE_SPECS') else
+      Sys.setenv(TULPARATIO_USE_SPECS = old_environment)
+  }, add = TRUE)
+  Sys.unsetenv('TULPARATIO_USE_SPECS')
+  eval.parent(substitute(code))
+}
