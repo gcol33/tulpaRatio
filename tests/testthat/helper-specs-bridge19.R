@@ -38,6 +38,10 @@ bridge19_fixture <- function(seed, case) {
   d$x <- rnorm(nrow(d))
   if (isTRUE(case$linear_restriction)) d$x <- (d$time - 3.5) / 2
   field <- c(-.6, -.3, -.1, .1, .3, .6)[d$time]
+  if (!is.null(case$period)) {
+    field <- .5 * sin(2 * pi * (d$time - 1) / case$period)
+    field <- field - mean(field)
+  }
   if (isTRUE(case$restricted)) {
     Q <- qr.Q(qr(model.matrix(~ x, d)))
     field <- field - drop(Q %*% crossprod(Q, field))
@@ -72,7 +76,7 @@ bridge19_cases <- function() {
     temporal_gp_ou = list(temporal = temporal_gp("time")),
     temporal_gp_matern = list(temporal = temporal_gp("time", cov = "matern", nu = 1.5)),
     temporal_gp_gaussian = list(temporal = temporal_gp("time", cov = "gaussian")),
-    temporal_gp_periodic = list(temporal = temporal_gp("time", cov = "periodic", period = 4)),
+    temporal_gp_periodic = list(period = 4L, temporal = temporal_gp("time", cov = "periodic", period = 4)),
     temporal_gp_centered = list(temporal = temporal_gp("time", parameterization = "centered")),
     temporal_gp_grouped = list(grouped = TRUE, temporal = temporal_gp("time", group_var = "group")),
     restricted_gp = list(restricted = TRUE, temporal = temporal_rtr(temporal_gp("time"), ~ x)),
