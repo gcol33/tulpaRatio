@@ -125,7 +125,7 @@ NUTS / HMC (\code{mode = "hmc"}):
 adaptation. Higher values give smaller steps, reducing divergences but
 slowing sampling. \code{NULL} (default) selects on model complexity: 0.80
 simple, 0.85 ICAR, 0.90 BYM2 and correlated random slopes. Range
-0.80--0.99.
+at least 0.5 and below 1.
 \item \code{max_treedepth}: maximum NUTS tree depth. \code{NULL} (default) uses 10.
 Raise if you see many max-treedepth warnings; costs computation per
 iteration.

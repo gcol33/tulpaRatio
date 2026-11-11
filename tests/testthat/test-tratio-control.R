@@ -49,7 +49,10 @@ test_that("enumerated knobs are checked against their choices", {
 
 test_that("scalar knobs are range- and type-checked", {
   expect_equal(.tratio_control(list(adapt_delta = 0.95))$adapt_delta, 0.95)
-  expect_error(.tratio_control(list(adapt_delta = 1.5)), "between 0.5 and 0.99")
+  for (target in c(.5, .999, 1 - .Machine$double.eps / 2))
+    expect_identical(.tratio_control(list(adapt_delta = target))$adapt_delta, target)
+  for (target in c(.49, 1, 1.5, Inf, NaN))
+    expect_error(.tratio_control(list(adapt_delta = target)), "at least 0.5 and below 1")
   expect_false(.tratio_control(list())$walnuts)
   expect_true(.tratio_control(list(walnuts = TRUE))$walnuts)
   expect_error(.tratio_control(list(walnuts = "yes")), "TRUE or FALSE")

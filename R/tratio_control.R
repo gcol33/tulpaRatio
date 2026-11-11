@@ -39,8 +39,8 @@
 }
 
 .tratio_adapt_delta <- function(x, nm) {
-  .tratio_scalar(x, nm, function(v) is.numeric(v) && v >= 0.5 && v <= 0.99,
-                 "a single number between 0.5 and 0.99")
+  .tratio_scalar(x, nm, function(v) is.numeric(v) && v >= 0.5 && v < 1,
+                 "a single number at least 0.5 and below 1")
   as.numeric(x)
 }
 
