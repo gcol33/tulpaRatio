@@ -2,8 +2,43 @@ bridge19_write_evidence <- function(row, filename) {
   work <- Sys.getenv("TULPA_BRIDGE_WORK", file.path(tempdir(), "bridge19"))
   dir.create(work, recursive = TRUE, showWarnings = FALSE)
   path <- file.path(work, filename)
-  write.table(row, path, sep = "\t", row.names = FALSE, append = TRUE,
-    col.names = !file.exists(path))
+  append <- file.exists(path)
+  write.table(row, path, sep = "\t", row.names = FALSE, append = append,
+    col.names = !append)
+}
+
+bridge19_control <- function(name, seed) {
+  control <- list(iter = 6000L, warmup = 2000L, chains = 1L, cores = 1L,
+    seed = seed, verbose = FALSE, adapt_delta = .99, gradient_mode = "A_r",
+    metric = "auto")
+  recipes <- list(st_i_iid = list(chains = 4L, adapt_delta = .999))
+  recipe <- recipes[[name]]
+  control[names(recipe)] <- recipe
+  control
+}
+
+bridge19_comparison_draws <- function(fit) {
+  out <- as.matrix(fit$draws)
+  fields <- hmc_structure_contributions(hmc_fit_unpack(fit), hmc_fit_design(fit))
+  for (field in fields) for (margin in c("eta", "eta_denom")) {
+    values <- field[[margin]]
+    if (is.null(values)) next
+    colnames(values) <- paste0(field$name, ":", margin, "[", seq_len(ncol(values)), "]")
+    out <- cbind(out, values)
+  }
+  out
+}
+
+bridge19_chain_stat <- function(draws, fit, statistic) {
+  ids <- fit$diagnostics$energy_chain
+  stopifnot(length(ids) == nrow(draws))
+  indices <- lapply(sort(unique(ids)), function(id) which(ids == id))
+  stopifnot(length(unique(lengths(indices))) == 1L)
+  out <- vapply(seq_len(ncol(draws)), function(column)
+    statistic(do.call(cbind, lapply(indices, function(rows) draws[rows, column]))),
+    numeric(1L))
+  names(out) <- colnames(draws)
+  out
 }
 
 bridge19_inventory <- function(group, routes) {
@@ -123,7 +158,8 @@ bridge19_cases <- function() {
   cases
 }
 
-bridge19_pair <- function(args, name, seed) {
+bridge19_pair <- function(args, name, seed, control = bridge19_control(name, seed)) {
+  args$control <- control
   work <- Sys.getenv("TULPA_BRIDGE_WORK", file.path(tempdir(), "bridge19"))
   dir.create(work, recursive = TRUE, showWarnings = FALSE)
   binaries <- c(getLoadedDLLs()[["tulpa"]][["path"]],
@@ -173,19 +209,10 @@ bridge19_pair <- function(args, name, seed) {
   }
   expect_identical(results$legacy$reached_engine, FALSE, info = paste(name, seed, "cached legacy dispatch"))
   expect_true(isTRUE(results$bridge$reached_engine), info = paste(name, seed, "cached dispatch"))
-  comparison_draws <- function(fit) {
-    out <- as.matrix(fit$draws)
-    fields <- hmc_structure_contributions(hmc_fit_unpack(fit), hmc_fit_design(fit))
-    for (field in fields) for (margin in c("eta", "eta_denom")) {
-      values <- field[[margin]]
-      if (is.null(values)) next
-      colnames(values) <- paste0(field$name, ":", margin, "[", seq_len(ncol(values)), "]")
-      out <- cbind(out, values)
-    }
-    out
-  }
-  a <- comparison_draws(results$legacy$fit)
-  b <- comparison_draws(results$bridge$fit)
+  a <- bridge19_comparison_draws(results$legacy$fit)
+  b <- bridge19_comparison_draws(results$bridge$fit)
+  for (result in results)
+    expect_length(unique(result$fit$diagnostics$energy_chain), control$chains)
   expect_identical(colnames(a), colnames(b), info = paste(name, seed))
   precision <- grepl("^tau_", colnames(a))
   a[, precision] <- log(a[, precision, drop = FALSE])
@@ -199,16 +226,22 @@ bridge19_pair <- function(args, name, seed) {
   mean_gap <- max(abs(colMeans(a) - colMeans(b)) / sd)
   quantile_gap <- max(abs(sweep(apply(a, 2L, quantile, c(.1, .5, .9)) -
     apply(b, 2L, quantile, c(.1, .5, .9)), 2L, sd, "/")))
-  ess <- function(x) min(apply(x, 2L, posterior::ess_bulk))
+  ess_a <- min(bridge19_chain_stat(a, results$legacy$fit, posterior::ess_bulk))
+  ess_b <- min(bridge19_chain_stat(b, results$bridge$fit, posterior::ess_bulk))
   row <- data.frame(binary_tag = binary_tag, argument_tag = argument_tag,
     precision_coordinate = "log", route = name, seed = seed, mean_sd = mean_gap,
     quantile_sd = quantile_gap, legacy_seconds = results$legacy$seconds,
     bridge_seconds = results$bridge$seconds,
-    legacy_ess_sec = ess(a) / results$legacy$seconds,
-    bridge_ess_sec = ess(b) / results$bridge$seconds,
+    legacy_ess_sec = ess_a / results$legacy$seconds,
+    bridge_ess_sec = ess_b / results$bridge$seconds,
     legacy_divergences = results$legacy$fit$diagnostics$n_divergent,
     bridge_divergences = results$bridge$fit$diagnostics$n_divergent)
   bridge19_write_evidence(row, "route-comparisons-final.tsv")
+  rhat <- function(x, fit) if (control$chains > 1L)
+    max(bridge19_chain_stat(x, fit, posterior::rhat)) else NA_real_
+  bridge19_write_evidence(cbind(row[c("binary_tag", "argument_tag", "route", "seed")],
+    as.data.frame(control[setdiff(names(control), "seed")]), rhat_legacy = rhat(a, results$legacy$fit),
+    rhat_engine = rhat(b, results$bridge$fit)), "route-controls-final.tsv")
   message(sprintf("BRIDGE19 route=%s seed=%d mean_sd=%.6f quantile_sd=%.6f", name, seed, mean_gap, quantile_gap))
   expect_lt(mean_gap, .35, label = paste(name, seed, "means"))
   expect_lt(quantile_gap, .65, label = paste(name, seed, "quantiles"))

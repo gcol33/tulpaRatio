@@ -12,9 +12,7 @@ test_that("noncanonical numerator and denominator links agree across seeds", {
     d$y <- rgamma(nrow(d), 30, rate = 30 / numerator)
     d$denom <- rgamma(nrow(d), 30, rate = 30 / denominator)
     args <- list(formula = y | denom ~ x, data = d,
-      family = ratiod_gamma_gamma(link_num = links[1L], link_denom = links[2L]), mode = "hmc",
-      control = list(iter = 6000L, warmup = 2000L, chains = 1L, cores = 1L,
-        seed = seed, verbose = FALSE, adapt_delta = .99, gradient_mode = "A_r"))
+      family = ratiod_gamma_gamma(link_num = links[1L], link_denom = links[2L]), mode = "hmc")
     fit <- bridge19_pair(args, paste0("links_", name), seed)
     recovery <- colMeans(as.matrix(fit$draws))[1:4]
     truth <- c(if (links[1L] == "identity") c(3, .3) else c(.8, .1),

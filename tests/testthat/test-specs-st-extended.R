@@ -76,9 +76,7 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
       shared = !paired || case[4L] == "shared")
     args <- list(formula = if (paired) y | denom ~ x else y | n ~ x, data = d,
       family = if (paired) ratiod_poisson(denom_family = "gamma") else ratiod_binomial(),
-      spatial = main, spatiotemporal = st, mode = "hmc", control = list(iter = 6000L, warmup = 2000L,
-        chains = 1L, cores = 1L, seed = seed, verbose = FALSE,
-        adapt_delta = .99, gradient_mode = "A_r"))
+      spatial = main, spatiotemporal = st, mode = "hmc")
     fit <- bridge19_pair(args, name, seed)
     b <- as.matrix(fit$draws)
     expected_beta <- if (paired) c(beta, 1, .2) else beta

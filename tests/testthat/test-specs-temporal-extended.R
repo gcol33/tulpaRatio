@@ -8,9 +8,7 @@ test_that("temporal and linked routes agree across seeds and recover planted pre
     d <- bridge19_fixture(seed, case)
     args <- list(formula = y | n ~ x, data = d,
       family = ratiod_binomial(case$link %||% "logit"), temporal = case$temporal,
-      mode = "hmc", control = list(iter = 6000L, warmup = 2000L,
-        chains = 1L, cores = 1L, seed = seed, verbose = FALSE,
-        adapt_delta = .99, gradient_mode = "A_r"))
+      mode = "hmc")
     fit <- bridge19_pair(args, name, seed)
     b <- as.matrix(fit$draws)
     recovery <- bridge19_temporal_recovery(fit, d, case$link %||% "logit")

@@ -48,9 +48,7 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
       family <- ratiod_binomial()
       beta <- c(.2, .5)
     }
-    args <- list(formula = formula, data = d, family = family, mode = "hmc",
-      control = list(iter = 6000L, warmup = 2000L, chains = 1L, cores = 1L,
-        seed = seed, verbose = FALSE, adapt_delta = .99, gradient_mode = "A_r"))
+    args <- list(formula = formula, data = d, family = family, mode = "hmc")
     if (factor) args$latent <- latent_factor(if (kind == "factor_two") 2L else 1L,
       constraint = if (kind == "first_zero") "first_zero" else "sum_to_zero") else if (tvc)
       args$temporal <- temporal_tvc("time", ~ x, structure = "iid", shared = kind == "tvc_shared") else
