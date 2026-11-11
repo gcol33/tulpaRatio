@@ -1,15 +1,3 @@
-# spatial_gp(cov = ) offers four kernels and the PG binomial GP sampler used to
-# distinguish two of them: its selector tested cov_type 0 and 1 and sent
-# everything else to an unconditional else branch computing Matern 2.5, so
-# "gaussian" and "spherical" both ran a kernel the user did not ask for
-# (gcol33/tulpaRatio#35).
-#
-# The sampler cannot arbitrate this. Its sigma2_gp rails -- on the fixture below
-# it reaches 1e4 against a true 0.7 -- and its draws do not reproduce at a fixed
-# seed, so two runs differ whichever kernel ran. The conditional is driven
-# directly instead, against the four kernels written out here and an NNGP
-# conditional derived from its definition rather than read off the C++.
-
 pg_kernels <- list(
   exponential = function(d, s2, phi) s2 * exp(-d / phi),
   matern      = function(d, s2, phi) {
@@ -21,8 +9,6 @@ pg_kernels <- list(
     r <- d / phi
     ifelse(d >= phi, 0, s2 * (1 - 1.5 * r + 0.5 * r^3))
   },
-  # Not a spatial_gp() choice: what the old else branch returned for the two
-  # kernels it did not recognise.
   matern25    = function(d, s2, phi) {
     u <- sqrt(5) * d / phi
     s2 * (1 + u + u * u / 3) * exp(-u)
@@ -101,9 +87,10 @@ pg_density_cpp <- function(cov_type, fx, sigma2 = fx$sigma2, phi = fx$phi) {
   )
 }
 
-PG_COV_CODES <- c(exponential = 0L, matern = 1L, gaussian = 2L, spherical = 3L)
+PG_COV_CODES <- c(exponential = 0L, matern = 1L, gaussian = 2L, spherical = 3L,
+                  matern25 = 4L)
 
-test_that("every spatial_gp(cov = ) choice runs its own kernel under PG", {
+test_that("PG NNGP conditionals match the supported covariance kernels", {
   fx <- pg_cov_fixture()
   for (cv in names(PG_COV_CODES)) {
     expect_equal(
@@ -129,11 +116,9 @@ test_that("gaussian and spherical are not the Matern 2.5 the else branch gave", 
                                 tolerance = 0)))
 })
 
-test_that("an unrecognised covariance code is refused, not resolved", {
+test_that("the PG NNGP conditional rejects unknown covariance codes", {
   fx <- pg_cov_fixture()
-  # The old selector sent 2, 3 and anything else to Matern 2.5. Every value R
-  # can send is now mapped explicitly and the rest error.
-  expect_error(pg_cond_cpp(4L, fx), "Unknown covariance code")
+  expect_error(pg_cond_cpp(5L, fx), "Unknown covariance code")
   expect_error(pg_cond_cpp(-1L, fx), "Unknown covariance code")
 })
 
