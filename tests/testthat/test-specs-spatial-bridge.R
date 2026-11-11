@@ -42,11 +42,17 @@ test_that("spatial bridge posteriors agree with the model sampler and simulated 
         parameterization = 'noncentered'), ~ x),
       rsr_hsgp = spatial_rsr(spatial_hsgp(~ lon + lat, scale_coords = FALSE, m = 3L), ~ x),
       rsr_multiscale = spatial_rsr(spatial_multiscale(~ lon + lat, scale_coords = FALSE, m = 3L), ~ x))
+    selected <- Sys.getenv('TULPA_BRIDGE_SPATIAL_ROUTES', '')
+    if (nzchar(selected)) {
+      requested <- strsplit(selected, ',', fixed = TRUE)[[1]]
+      stopifnot(all(requested %in% names(fields)))
+      fields <- fields[requested]
+    }
     for (name in names(fields)) {
       restricted <- startsWith(name, 'rsr_')
       args <- list(formula = y | n ~ x, data = if (restricted) d_r else d, family = ratiod_binomial(),
-        spatial = fields[[name]], mode = 'hmc', control = list(iter = 8000L,
-          warmup = 2500L, chains = 1L, cores = 1L, seed = seed,
+        spatial = fields[[name]], mode = 'hmc', control = list(iter = if (name == 'gp_matern32') 32000L else 8000L,
+          warmup = if (name == 'gp_matern32') 5000L else 2500L, chains = 1L, cores = 1L, seed = seed,
           verbose = FALSE, adapt_delta = .99,
           gradient_mode = if (identical(fields[[name]]$type, 'car_proper')) 'H' else 'A_r'))
       options(tulpaRatio.use_specs = FALSE)
