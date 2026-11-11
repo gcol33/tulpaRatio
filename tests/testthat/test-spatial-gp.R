@@ -42,9 +42,9 @@ test_that("spatial_gp rejects invalid coordinate specification", {
 
 test_that("spatial_gp rejects invalid nu for Matern", {
   expect_error(spatial_gp(~ lon + lat, cov = "matern", nu = -1),
-               "positive number")
+               "supported smoothness")
   expect_error(spatial_gp(~ lon + lat, cov = "matern", nu = 0),
-               "positive number")
+               "supported smoothness")
 })
 
 test_that("spatial_gp rejects invalid nn", {
