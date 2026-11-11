@@ -16,8 +16,8 @@ depend on what else is in the model}
 \code{TRUE}, or a phrase naming the restriction
 }
 \description{
-These samplers run on the HMC parameter vector of the areal fields: ICAR,
-BYM2 and proper CAR. Gaussian-process fields and spatially varying
+These samplers run on the HMC parameter vector of the ICAR and BYM2
+areal fields. Gaussian-process fields and spatially varying
 coefficients have their own blocks, which these samplers do not carry. A
 restricted field reaches the predictor projected onto the complement of the
 restricted covariates; a sampler that reads the field directly would fit the
