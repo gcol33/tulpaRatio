@@ -13,7 +13,11 @@ test_that("temporal and linked routes agree across seeds and recover planted pre
         adapt_delta = .99, gradient_mode = "A_r"))
     fit <- bridge19_pair(args, name, seed)
     b <- as.matrix(fit$draws)
-    expect_true(all(abs(colMeans(b)[1:2] - c(.2, .5)) < .25), info = paste(name, seed))
+    recovery <- bridge19_temporal_recovery(fit, d, case$link %||% "logit")
+    bridge19_write_evidence(cbind(attr(fit, "bridge19"), recovery),
+      "temporal-coefficient-recovery.tsv")
+    expect_lt(recovery$predictor_coefficient_error, .25,
+      label = paste(name, seed, "predictor coefficients"))
     recovered <- colMeans(fitted(fit, summary = FALSE)$numerator)
     bridge19_record_recovery(fit, max(abs(colMeans(b)[1:2] - c(.2, .5))),
       max(abs(recovered - d$truth)), scale = "probability")

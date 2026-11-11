@@ -30,6 +30,35 @@ bridge19_record_recovery <- function(fit, beta_error, numerator_error,
   bridge19_write_evidence(row, "route-recovery-final.tsv")
 }
 
+bridge19_link <- function(name) {
+  links <- list(
+    logit = list(link = stats::qlogis, inverse = stats::plogis),
+    probit = list(link = stats::qnorm, inverse = stats::pnorm),
+    cloglog = list(link = function(p) log(-log1p(-p)),
+      inverse = function(x) -expm1(-exp(x))))
+  links[[name]]
+}
+
+bridge19_temporal_recovery <- function(fit, data, link) {
+  b <- as.matrix(fit$draws)
+  design <- hmc_fit_design(fit)
+  stopifnot(identical(unname(design$X_num[, 2L]), data$x))
+  level <- b[, "beta_num[1]"]
+  fields <- hmc_structure_contributions(hmc_fit_unpack(fit), design)
+  for (field in fields) {
+    stopifnot(!is.null(field$eta), ncol(field$eta) == nrow(data))
+    level <- level + rowMeans(field$eta)
+  }
+  truth <- mean(bridge19_link(link)$link(data$truth) - .5 * data$x)
+  data.frame(raw_intercept_mean = mean(b[, "beta_num[1]"]),
+    raw_intercept_sd = sd(b[, "beta_num[1]"]),
+    raw_coefficient_error = max(abs(colMeans(b)[1:2] - c(.2, .5))),
+    predictor_level_mean = mean(level), predictor_level_sd = sd(level),
+    predictor_level_truth = truth,
+    predictor_coefficient_error = max(abs(c(mean(level) - truth,
+      mean(b[, "beta_num[2]"]) - .5))))
+}
+
 bridge19_fixture <- function(seed, case) {
   set.seed(seed)
   groups <- if (isTRUE(case$grouped)) 2L else 1L
@@ -47,9 +76,7 @@ bridge19_fixture <- function(seed, case) {
     field <- field - drop(Q %*% crossprod(Q, field))
   }
   eta <- .2 + .5 * d$x + if (isTRUE(case$tvc)) field * d$x else field
-  inverse <- switch(case$link %||% "logit", logit = plogis, probit = pnorm,
-    cloglog = function(x) -expm1(-exp(x)))
-  d$truth <- inverse(eta)
+  d$truth <- bridge19_link(case$link %||% "logit")$inverse(eta)
   d$y <- rbinom(nrow(d), d$n, d$truth)
   d
 }
