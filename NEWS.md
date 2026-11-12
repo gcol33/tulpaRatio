@@ -1,17 +1,20 @@
 # tulpaRatio 1.7.3
 
-* The engine NUTS route forwards fixed-step HMC, the metric, WALNUTS and the
-  automatic acceptance target, and reports the engine's leapfrog counts and
-  starting Hamiltonians. It also carries automatic ICAR, disconnected BYM2 with
-  per-component centring, and single-group RW1, RW2, AR1 and cyclic RW1/RW2
-  fields. A temporal field shared with one process only reaches that process.
-  Over three seeds each, these routes agree with the legacy sampler within
-  0.14 posterior SD in the means and 0.25 SD in the 10/50/90% quantiles, with
-  zero engine divergences (#176).
+* All HMC, NUTS, WALNUTS, elliptical slice, stochastic-gradient and variational
+  fits evaluate the tulpa engine target. The model-side sampler stack and its
+  selection option and environment override are removed (#176). Collapsed
+  areal and GP requests use joint engine coordinates. Unsupported combinations
+  stop during model construction.
 
-* The HMC sampler is split by concern with one gradient registry for dispatch
-  and naming and one fixed-effect predictor helper. Seeded draws on 21 chain
-  fixtures and 1,400 captured gradient evaluations are byte-identical (#192).
+* Binomial models with AR1 time-varying coefficients use the engine sampler,
+  resolving the model-side sampler crash (#233).
+
+* The engine NUTS route forwards fixed-step HMC, the metric, WALNUTS and the
+  automatic acceptance target, and reports leapfrog counts and starting
+  Hamiltonians. Linked consumers use engine ABI 59 and require rebuilding.
+
+* Shared response-margin values and gradients retain the frozen round-17
+  numerical fixtures (#176).
 
 * Unused sampler routines, Rcpp exports and the CUDA stubs are removed;
   `gpu_available()` and `gpu_info()` are documented as driver-library
@@ -21,7 +24,7 @@
   ICAR, proper CAR, GP/NNGP, temporal GP, multiscale, TVC and SVC fields in a
   partial coordinate fixed before sampling from the prior and likelihood
   information at a zero field, with its exact Jacobian; draws are returned on
-  the effect scale and explicit `parameterization =` requests are unchanged.
+  the effect scale.
   On weak-signal RW1 and ICAR fixtures the default centred coordinate had
   missed the dense posterior by up to 0.39 posterior SD; the partial coordinate
   is within 0.055 SD on signal and zero-signal fixtures, with ESS per second up

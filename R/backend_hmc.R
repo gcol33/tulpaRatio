@@ -17,7 +17,6 @@
 #' It supports ratio and exposure families, multiple chains, random effects,
 #' sampled ICAR/BYM2 fields, temporal walks and Gaussian processes, multiscale
 #' temporal effects, varying coefficients, latent factors and Knorr-Held interactions.
-#' `options(tulpaRatio.use_specs = FALSE)` selects the model sampler.
 #' Sampler controls select NUTS, fixed-step HMC, WALNUTS and the metric.
 #'
 #' **Supported model families:**
@@ -109,8 +108,7 @@ fit_hmc <- function(formula,
   adapt_delta_value <- if (is.null(adapt_delta)) -1.0 else as.double(adapt_delta)
 
   inp <- sampler_inputs(formula, data, family, spatial, temporal,
-                        spatiotemporal, zi, latent, priors, re_param,
-                        validate_collapsed = FALSE)
+                        spatiotemporal, zi, latent, priors, re_param)
   model_type <- inp$model_type
   hmc_data <- inp$hmc_data
   gp_info <- inp$gp_info
@@ -123,28 +121,8 @@ fit_hmc <- function(formula,
   svc_info <- inp$svc_info
   sp <- inp$sp
   priors <- inp$priors
-  re_params <- inp$bundles$re_params
-  spatial_params <- inp$bundles$spatial_params
-  gp_params <- inp$bundles$gp_params
-  temporal_params <- inp$bundles$temporal_params
-  prior_params <- inp$bundles$prior_params
-  zi_params <- inp$bundles$zi_params
-  latent_params <- inp$bundles$latent_params
-  st_params <- inp$bundles$st_params
-  tvc_params <- inp$bundles$tvc_params
-  svc_params <- inp$bundles$svc_params
-  sigma_beta <- sp$sigma_beta
-  sigma_re_scale <- sp$sigma_re_scale
-  phi_shape <- sp$phi_shape
-  phi_rate <- sp$phi_rate
-  temporal_sigma_prior_U <- sp$temporal_sigma_prior_U
-  temporal_sigma_prior_alpha <- sp$temporal_sigma_prior_alpha
-  rho_temporal_ab <- c(a = temporal_params$rho_prior_a,
-                       b = temporal_params$rho_prior_b)
-  has_re_slopes <- re_params$has_slopes
-  has_re_correlated_slopes <- re_params$has_correlated_slopes
 
-  # Random slopes are now supported - log info if present
+  # Random-slope term counts
   if (isTRUE(hmc_data$has_slopes) && verbose) {
     n_slope_terms <- sum(sapply(hmc_data$re_terms, function(t) length(t$slope_vars) > 0))
     n_corr <- sum(sapply(hmc_data$re_terms, function(t) isTRUE(t$correlated) && length(t$slope_vars) > 0))
@@ -166,50 +144,13 @@ fit_hmc <- function(formula,
     }
   }
 
-  use_specs_path <- isTRUE(getOption("tulpaRatio.use_specs", TRUE)) ||
-    identical(Sys.getenv("TULPARATIO_USE_SPECS"), "1")
-  st_collapsed_gp <- isTRUE(st_params$has_spatiotemporal) &&
-    st_params$type %in% c("separable", "nonsep_gp") &&
-    identical(st_params$parameterization, "collapsed")
-  if (st_collapsed_gp && use_specs_path) st_params$parameterization <- "noncentered"
-  zi_type_str <- zi_info$type %||% "none"
-  zi_supported <- zi_type_str %in% MODEL_TYPES[[model_type]]$spec_inflation
-  n_re_groups_v <- hmc_data$n_re_groups %||% 0L
-  n_re_terms_v <- hmc_data$n_re_terms %||% 0L
-  spatial_type_v <- spatial_info$type %||% "none"
-  spatial_param_v <- spatial_info$parameterization %||% "standard"
-  main_spatial_types <- c("icar", "bym2", "car_proper", "gp", "hsgp", "multiscale_gp")
-  spatial_supported <- spatial_type_v %in% c("none", "svc", main_spatial_types) &&
-    (!identical(spatial_param_v, "collapsed") || spatial_type_v %in% c("icar", "bym2", "gp"))
-  temporal_type_v <- temporal_info$type %||% "none"
-  temporal_supported <- temporal_type_v %in% c("none", "rw1", "rw2", "ar1", "iid", "gp", "multiscale", "tvc")
-  st_supported <- !isTRUE(st_params$has_spatiotemporal) ||
-    (st_params$type %in% c("I", "II", "III", "IV", "separable", "nonsep_gp") &&
-     st_params$parameterization != "collapsed")
-  specs_eligible <- use_specs_path &&
-    !is.null(MODEL_TYPES[[model_type]]$n_processes) &&
-    zi_supported && spatial_supported && temporal_supported &&
-    (!isTRUE(tvc_params$has_tvc) || tvc_params$structure != "gp") && st_supported
-
-  if (specs_eligible && identical(spatial_param_v, "collapsed")) {
-    spatial_info$parameterization <- spatial_params$parameterization <- "auto"
-    if (identical(spatial_type_v, "gp")) {
-      gp_info$parameterization <- gp_params$parameterization <- "auto"
-      gp_params$conditional_coordinates <- TRUE
-    }
-    spatial_param_v <- "auto"
-  }
-  if (st_collapsed_gp) {
-    if (specs_eligible) spatiotemporal_info$parameterization <- "noncentered" else
-      st_params$parameterization <- "collapsed"
-  }
-  validate_legacy_collapsed(spatial_info, temporal_info, spatial, family)
-
-  # Initialize parameters
-  q_init <- initialize_hmc_params_full(
-    hmc_data, model_type, spatial_info, temporal_info, zi_info, latent_info,
-    spatiotemporal_info, ms_temporal_info, links = family_links(family, model_type)
-  )
+  setup <- engine_sampler_inputs(inp, family)
+  inp <- setup$inputs
+  spatial_info <- inp$spatial_info
+  gp_info <- inp$gp_info
+  temporal_info <- inp$temporal_info
+  spatiotemporal_info <- inp$spatiotemporal_info
+  q_init <- setup$args$init
 
   if (verbose) {
     sampler_name <- if (L == 0) "NUTS" else paste0("HMC (L=", L, ")")
@@ -234,145 +175,14 @@ fit_hmc <- function(formula,
     }
   }
 
-  # `cores` is a budget split two ways rather than a chain-concurrency count
-  # alone: concurrent_chains chains run at once, and each gets the rest of the
-  # budget for its own within-chain gradient/likelihood parallelism. A single
-  # chain (concurrent_chains == 1) gets the whole budget within-chain, which a
-  # chain-count-only cap could never express (#17).
-  concurrent_chains <- min(cores, chains)
-  n_threads_within <- as.integer(cores %/% concurrent_chains)
-
-  if (specs_eligible) {
-    links <- family_links(family, model_type)
-    num_link <- links$num
-    denom_link <- links$denom %||% "log"
-    cfg <- list(family = model_type, zi = zi_type_str, initialize = TRUE,
-                num_link = num_link, denom_link = denom_link,
-                zi_link = links$zi, oi_link = links$oi)
-    if (identical(MODEL_TYPES[[model_type]]$responses[["denom"]],"exposure"))
-      cfg$exposure <- as.numeric(hmc_data$y_denom_cont)
-    has_zi_block <- !(zi_type_str %in% c("none", "oi_binomial"))
-    has_oi_block <- zi_type_str %in% c("oi_binomial", "zoib")
-    if (has_zi_block) cfg$X_zi <- zi_info$X_zi
-    if (has_oi_block) cfg$X_oi <- zi_info$X_oi
-    if (has_zi_block || has_oi_block) {
-      cfg$zi_prior_sd <- sp$zi_prior_sd
-      cfg$oi_prior_sd <- sp$zi_prior_sd
-    }
-    X_list <- if (MODEL_TYPES[[model_type]]$n_processes == 1L) {
-      list(hmc_data$X_num)
-    } else {
-      list(hmc_data$X_num, hmc_data$X_denom)
-    }
-
-    n_extra_per_family <- length(MODEL_TYPES[[model_type]]$dispersion)
-    p_total_design <- (hmc_data$p_num %||% 0L) +
-      (if (MODEL_TYPES[[model_type]]$n_processes == 1L) 0L else (hmc_data$p_denom %||% 0L))
-    p_re_n <- if (n_re_terms_v > 0L) {
-      sum(re_params$n_groups_vec * re_params$n_coefs_vec) +
-        sum(re_params$n_coefs_vec) + sum(re_params$n_chol_vec)
-    } else if (n_re_groups_v > 0L) 1L + n_re_groups_v else 0L
-    extra_indices <- p_total_design + p_re_n + seq_len(n_extra_per_family)
-    spec_order <- c(setdiff(seq_along(q_init), extra_indices), extra_indices)
-    q_init_spec <- as.numeric(q_init[spec_order])
-    has_main_spatial <- spatial_type_v %in% main_spatial_types
-
-    re_params_spec <- re_params
-
-    spatial_params_spec <- list(type = "none")
-    if (has_main_spatial) {
-      spatial_params_spec <- spatial_params
-      spatial_params_spec$sigma_prior_U <- sp$spatial_sigma_prior_U
-      spatial_params_spec$sigma_prior_alpha <- sp$spatial_sigma_prior_alpha
-      spatial_params_spec$shared <- spatial_info$shared %||% TRUE
-      spatial_params_spec$gp <- gp_params
-      spatial_params_spec$hsgp_m <- spatial_info$hsgp_m
-      spatial_params_spec$basis <- spatial_info$hsgp_Phi
-      spatial_params_spec$eigenvalues <- spatial_info$hsgp_eigenvalues
-    }
-
-    temporal_params_spec <- if (!temporal_type_v %in% c("none", "tvc")) {
-      temporal_params$parameterization <- temporal_info$parameterization %||% "centered"
-      temporal_params
-    } else list()
-
-    fit_raw <- cpp_tulpaRatio_run_nuts_specs(
-      y_num             = as.integer(hmc_data$y_num),
-      y_denom           = as.integer(hmc_data$y_denom),
-      y_num_cont        = as.numeric(hmc_data$y_num_cont),
-      y_denom_cont      = as.numeric(hmc_data$y_denom_cont),
-      X_list            = X_list,
-      cfg_list          = cfg,
-      init              = q_init_spec,
-      n_iter            = as.integer(iter),
-      n_warmup          = as.integer(warmup),
-      max_treedepth     = as.integer(max_treedepth %||% 10L),
-      adapt_delta       = adapt_delta_value,
-      seed              = as.integer(seed),
-      verbose           = isTRUE(verbose),
-      gradient_mode     = if (identical(gradient_mode, "auto")) "A_r" else gradient_mode,
-      sigma_beta        = sigma_beta,
-      phi_prior_shape   = phi_shape,
-      phi_prior_rate    = phi_rate,
-      sigma_prior_scale = sigma_re_scale,
-      re_params         = re_params_spec,
-      spatial_params    = spatial_params_spec,
-      temporal_params   = temporal_params_spec,
-      svc_spec          = svc_params,
-      tvc_spec          = tvc_params,
-      latent_spec       = latent_params,
-      st_spec           = st_params,
-      n_chains          = as.integer(chains),
-      n_threads         = as.integer(cores),
-      L                 = as.integer(L),
-      metric            = metric,
-      walnuts           = isTRUE(walnuts)
-    )
-
-    restore_order <- order(spec_order)
-    fit_raw$samples <- if (chains > 1L) {
-      lapply(fit_raw$samples, function(x) x[, restore_order, drop = FALSE])
-    } else fit_raw$samples[, restore_order, drop = FALSE]
-
-    if (temporal_type_v == "gp") temporal_info$stored_parameterization <- "centered"
-    if (isTRUE(st_params$has_spatiotemporal))
-      spatiotemporal_info$stored_parameterization <- "centered"
-
-  } else {
-    fit_raw <- cpp_hmc_fit(
-      q_init = q_init,
-      y_num = as.integer(hmc_data$y_num),
-      y_denom = as.integer(hmc_data$y_denom),
-      y_num_cont = hmc_data$y_num_cont,
-      y_denom_cont = hmc_data$y_denom_cont,
-      X_num = hmc_data$X_num,
-      X_denom = hmc_data$X_denom,
-      family = family_params(family, model_type),
-      re_params = re_params,
-      spatial_params = spatial_params,
-      gp_params = gp_params,
-      temporal_params = temporal_params,
-      prior_params = prior_params,
-      zi_params = zi_params,
-      latent_params = latent_params,
-      st_params = st_params,
-      tvc_params = tvc_params,
-      svc_params = svc_params,
-      n_iter = as.integer(iter),
-      n_warmup = as.integer(warmup),
-      L = as.integer(L),
-      n_chains = as.integer(chains),
-      seed = as.integer(seed),
-      n_threads = n_threads_within,
-      verbose = verbose,
-      gradient_mode_str = gradient_mode,
-      max_treedepth = as.integer(max_treedepth),
-      metric_str = metric,
-      adapt_delta = adapt_delta_value,
-      walnuts = isTRUE(walnuts),
-      n_cores = as.integer(concurrent_chains)
-    )
-  }
+  fit_raw <- do.call(cpp_tulpaRatio_sample, c(setup$args, list(
+    n_iter = as.integer(iter), n_warmup = as.integer(warmup),
+    max_treedepth = as.integer(max_treedepth), adapt_delta = adapt_delta_value,
+    seed = as.integer(seed), verbose = isTRUE(verbose),
+    gradient_mode = if (identical(gradient_mode, "auto")) "A_r" else gradient_mode,
+    n_chains = as.integer(chains), n_threads = as.integer(cores),
+    L = as.integer(L), metric = metric, walnuts = isTRUE(walnuts))))
+  fit_raw <- engine_sampler_result(fit_raw, setup, chains)
 
   # Divergences bias the draws whether or not progress is printed
   if (L == 0) {
@@ -426,12 +236,11 @@ fit_hmc <- function(formula,
 #'   `spatiotemporal_info`, `ms_temporal_info`, `svc_info`),
 #'   the sampler priors `sp`, the filled `priors`, and `bundles`, the ten
 #'   parameter lists in the order `build_model_data()` takes them
-#' @param validate_collapsed Validate constraints of the legacy spatial marginal.
 #' @keywords internal
 sampler_inputs <- function(formula, data, family, spatial = NULL,
                            temporal = NULL, spatiotemporal = NULL, zi = NULL,
                            latent = NULL, priors = NULL,
-                           re_param = "noncentered", validate_collapsed = TRUE) {
+                           re_param = "noncentered") {
   # Get model type
   model_type <- get_hmc_model_type(family)
 
@@ -483,7 +292,6 @@ sampler_inputs <- function(formula, data, family, spatial = NULL,
   temporal_info <- prepare_temporal_for_hmc(temporal, data, hmc_data$N)
   temporal_info$time_levels <- temporal$time_levels
   temporal_info$rtr_basis <- rtr_basis(temporal, data)
-  if (validate_collapsed) validate_legacy_collapsed(spatial_info, temporal_info, spatial, family)
 
   # Prepare the inflation design implied by the family specification.
   zi_info <- prepare_zi_for_hmc(zi, data, hmc_data$N, family)
@@ -859,30 +667,6 @@ gp_bundle <- function(gp_info, priors) {
 }
 
 
-#' The arguments `build_model_data()` reads, for a sampler entry point
-#'
-#' @param inputs The list `sampler_inputs()` returns
-#' @param family Model family
-#' @return A named list: responses, design matrices, family and the ten
-#'   parameter bundles
-#' @keywords internal
-model_data_args <- function(inputs, family) {
-  hmc_data <- inputs$hmc_data
-  c(
-    list(
-      y_num = as.integer(hmc_data$y_num),
-      y_denom = as.integer(hmc_data$y_denom),
-      y_num_cont = as.numeric(hmc_data$y_num_cont),
-      y_denom_cont = as.numeric(hmc_data$y_denom_cont),
-      X_num = hmc_data$X_num,
-      X_denom = hmc_data$X_denom,
-      family = family_params(family, inputs$model_type)
-    ),
-    inputs$bundles
-  )
-}
-
-
 #' The temporal GP fields of the temporal bundle
 #'
 #' What C++ reads to build the GP margin: the time grid, the kernel and the
@@ -999,22 +783,11 @@ prepare_hmc_data <- function(formula, data, family, model_type) {
         # Use the pre-computed slope_matrix from formula parsing
         # This handles interactions (x*z), polynomials (poly(x,2)), etc.
         raw_re <- formula$numerator$random_effects[[t]]
-        if (!is.null(raw_re$slope_matrix)) {
-          slope_matrices[[t]] <- raw_re$slope_matrix
-        } else {
-          # Fallback: build design matrix manually (for backwards compatibility)
-          slope_mat <- matrix(0, nrow = length(y_num), ncol = length(term$slope_vars))
-          for (s in seq_along(term$slope_vars)) {
-            var_spec <- term$slope_vars[s]
-            if (!var_spec %in% names(data)) {
-              stop(sprintf("Slope variable '%s' not found in data", var_spec),
-                   call. = FALSE)
-            }
-            slope_mat[, s] <- as.numeric(data[[var_spec]])
-          }
-          colnames(slope_mat) <- term$slope_vars
-          slope_matrices[[t]] <- slope_mat
+        if (is.null(raw_re$slope_matrix)) {
+          stop("Random-slope design matrix is missing from the parsed formula.",
+               call. = FALSE)
         }
+        slope_matrices[[t]] <- raw_re$slope_matrix
       } else {
         slope_matrices[[t]] <- NULL
       }
@@ -1028,11 +801,11 @@ prepare_hmc_data <- function(formula, data, family, model_type) {
     y_denom_cont = y_denom_cont,
     X_num = X_num,
     X_denom = X_denom,
-    # Legacy single-term RE fields (for backwards compatibility)
+    # First random-effect term
     re_group = re_info$group_idx,
     n_re_groups = re_info$n_groups,
     re_var = re_info$group_var,
-    # New multi-term RE fields
+    # Random-effect term blocks
     n_re_terms = re_info$n_re_terms,
     re_terms = re_info$re_terms,
     re_group_matrix = re_info$group_idx_matrix,
@@ -1072,11 +845,11 @@ extract_re_for_hmc <- function(formula) {
 
   if (is.null(re_terms) || length(re_terms) == 0) {
     return(list(
-      # Legacy single-term fields (for backwards compatibility)
+      # First random-effect term
       group_idx = rep(0L, n_obs),
       n_groups = 0L,
       group_var = NULL,
-      # New multi-term fields
+      # Random-effect term blocks
       n_re_terms = 0L,
       re_terms = list(),
       has_slopes = FALSE,
@@ -1161,11 +934,11 @@ extract_re_for_hmc <- function(formula) {
   }
 
   list(
-    # Legacy single-term fields (use first term for backwards compatibility)
+    # First random-effect term
     group_idx = as.integer(re_terms[[1]]$group),
     n_groups = as.integer(re_terms[[1]]$n_groups),
     group_var = re_terms[[1]]$group_var,
-    # New multi-term fields
+    # Random-effect term blocks
     n_re_terms = n_re_terms,
     re_terms = re_terms_processed,
     group_idx_matrix = group_idx_matrix,
@@ -1714,20 +1487,10 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
 
   n_samples <- nrow(all_samples)
 
-  # One layout, read by every consumer of the sample matrix
-  layout <- hmc_param_layout(
-    hmc_data = hmc_data, spatial_info = spatial_info,
-    temporal_info = temporal_info, zi_info = zi_info,
-    model_type = model_type, latent_info = latent_info,
-    st_info = spatiotemporal_info, ms_temporal_info = ms_temporal_info
-  )
-  if (layout$total != ncol(all_samples)) {
-    stop("Parameter layout describes ", layout$total, " parameters but the ",
-         "sampler returned ", ncol(all_samples), ". The layout in ",
-         "hmc_param_layout() and compute_param_layout() in ",
-         "src/hmc_sampler.cpp have diverged.", call. = FALSE)
-  }
-
+  inp <- list(hmc_data = hmc_data, spatial_info = spatial_info,
+    temporal_info = temporal_info, zi_info = zi_info, model_type = model_type,
+    latent_info = latent_info, spatiotemporal_info = spatiotemporal_info,
+    ms_temporal_info = ms_temporal_info)
   # Fields the inner Laplace optimization of a collapsed parameterization
   # leaves behind (NULL otherwise): one matrix per chain, stacked as the
   # samples are
@@ -1739,23 +1502,16 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
   gp_w_star <- star("gp_w_star")
   icar_phi_star <- star("icar_phi_star")
   bym2_theta_star <- star("bym2_theta_star")
-  st_delta_draws <- star("st_delta_draws")
 
-  unpack <- function(samples, chain = NULL) {
-    hmc_unpack_draws(
-      samples = samples, layout = layout, hmc_data = hmc_data,
-      spatial_info = spatial_info, temporal_info = temporal_info,
-      model_type = model_type, re_param = re_param,
-      latent_info = latent_info, st_info = spatiotemporal_info,
-      ms_temporal_info = ms_temporal_info,
-      gp_w_star = star("gp_w_star", chain),
-      icar_phi_star = star("icar_phi_star", chain),
-      bym2_theta_star = star("bym2_theta_star", chain),
-      st_delta_draws = star("st_delta_draws", chain)
-    )
-  }
-
-  unpacked <- unpack(all_samples)
+  state <- sampler_draw_state(all_samples, inp, re_param,
+    conditional = list(gp_w_star = gp_w_star, icar_phi_star = icar_phi_star,
+                       bym2_theta_star = bym2_theta_star))
+  layout <- state$layout
+  unpack <- function(samples, chain = NULL) state$unpack(samples,
+    list(gp_w_star = star("gp_w_star", chain),
+         icar_phi_star = star("icar_phi_star", chain),
+         bym2_theta_star = star("bym2_theta_star", chain)))
+  unpacked <- state$unpacked
   draws_list <- hmc_draws_list(unpacked)
   draws <- do.call(cbind, draws_list)
   colnames(draws) <- names(draws_list)
@@ -1792,7 +1548,7 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
     samples_list <- list(draws)
   }
 
-  structure_draws <- hmc_structure_draws(unpacked)
+  state$internal["eta_dropped"] <- list(eta$dropped)
 
   fit <- list(
     draws = draws,
@@ -1828,22 +1584,7 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
       energy_chain = if (!is.null(all_energy)) energy_chain
     ),
     log_prob = all_log_prob,
-    .internal = c(
-      list(
-        samples = all_samples,
-        hmc_data = hmc_data,
-        model_type = model_type,
-        latent_info = latent_info,
-        ms_temporal_info = ms_temporal_info,
-        layout = layout,
-        eta_dropped = eta$dropped,
-        gp_w_star = gp_w_star,
-        icar_phi_star = icar_phi_star,
-        bym2_theta_star = bym2_theta_star,
-        st_delta_draws = st_delta_draws
-      ),
-      structure_draws
-    )
+    .internal = state$internal
   )
 
   class(fit) <- "ratiod_fit"

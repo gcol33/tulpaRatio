@@ -15,7 +15,7 @@
 #include <vector>
 
 #include "cov_type_code.h"
-#include "hmc_cov.h"
+#include "covariance.h"
 
 // [[Rcpp::depends(RcppEigen)]]
 

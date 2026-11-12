@@ -23,7 +23,7 @@ LDLIBS = $(R_LDFLAGS)
 # Coverage flags
 COV_FLAGS = --coverage -fprofile-arcs -ftest-coverage -O0 -g
 
-TEST_SOURCES = test_main.cpp test_linalg.cpp test_zi.cpp test_temporal.cpp test_svc.cpp
+TEST_SOURCES = test_main.cpp test_linalg.cpp test_zi.cpp
 
 # Output executable
 TEST_EXE = run_tests
@@ -43,7 +43,7 @@ coverage: $(TEST_EXE_COV)
 	./$(TEST_EXE_COV)
 	@echo ""
 	@echo "=== Coverage Summary ==="
-	gcov -r test_linalg.cpp test_zi.cpp test_temporal.cpp 2>/dev/null | grep -A1 "File.*\.h"
+	gcov -r test_linalg.cpp test_zi.cpp 2>/dev/null | grep -A1 "File.*\.h"
 	@echo ""
 	@echo "Run 'make lcov' to generate HTML report"
 
@@ -64,8 +64,6 @@ test-linalg: $(TEST_EXE)
 test-zi: $(TEST_EXE)
 	./$(TEST_EXE) "[zi]"
 
-test-temporal: $(TEST_EXE)
-	./$(TEST_EXE) "[temporal]"
 
 # Verbose output
 verbose: $(TEST_EXE)

@@ -1,6 +1,7 @@
 #ifndef TULPARATIO_RATIO_MATH_H
 #define TULPARATIO_RATIO_MATH_H
 #include <tulpa/ad_scalar_math.h>
+#include <tulpa/scalar_priors.h>
 #include <limits>
 #include "link_function.h"
 namespace ratiod { namespace math {
@@ -99,19 +100,16 @@ inline T log1m_exp(const T& x) {
     return log1p_fn(-safe_exp(x));
 }
 
-template<typename T>
-inline T log_prior_normal(const T& x, double tau) {
-    return T(-0.5) * tau * x * x;
-}
+using tulpa::math::log_prior_normal;
 
 template<typename T>
 inline T log_prior_gamma(const T& log_phi, double shape, double rate) {
     T phi = safe_exp(log_phi);
-    return (shape - 1.0) * log_phi - rate * phi + log_phi;
+    return tulpa::math::log_prior_gamma_value(log_phi,phi,shape,rate);
 }
 
 inline double log_prior_gamma_score(double phi, double shape, double rate) {
-    return shape - rate * phi;
+    return tulpa::math::log_prior_gamma_gradient(phi,shape,rate);
 }
 
 inline double log_prior_gamma_grad(double log_phi, double shape, double rate) {

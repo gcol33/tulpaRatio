@@ -12,7 +12,7 @@ test_that("collapsed and sampled Gaussian field posteriors match dense integrati
   ref_sd <- sqrt(sum((beta-ref_mean)^2*posterior))
   ref_q <- approx(cumsum(posterior),beta,c(.1,.5,.9),ties='ordered')$y
   expect_lt(abs(sum(beta*marginal)-ref_mean)/ref_sd,.005)
-  fit <- tulpaRatio:::cpp_tulpaRatio_run_nuts_specs(
+  fit <- tulpaRatio:::cpp_tulpaRatio_sample(
     y_num=y,y_denom=n,y_num_cont=numeric(),y_denom_cont=numeric(),
     X_list=list(matrix(c(1,1),1)),cfg_list=list(family='binomial'),
     init=c(0,0),n_iter=8000L,n_warmup=2000L,seed=224L,sigma_beta=sigma,

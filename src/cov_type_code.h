@@ -3,7 +3,7 @@
 
 #include <Rcpp.h>
 
-#include "hmc_cov.h"
+#include "covariance.h"
 
 namespace ratiod_cov {
 

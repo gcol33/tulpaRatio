@@ -13,9 +13,9 @@ test_that("engine sampler controls recover the binomial posterior across seeds",
     uniroot(function(x) integrate(density, -15, x)$value / norm - p,
       c(-8, 8), tol = 1e-9)$root, numeric(1))
   calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+  trace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')))
+  on.exit(untrace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio')))
   for (seed in c(18L, 181L, 182L)) for (metric in c('auto', 'diag', 'dense', 'block_diag')) {
     for (algorithm in c('NUTS', 'HMC', 'WALNUTS')) {
       control <- list(iter = 3000L, warmup = 1000L, chains = 1L, cores = 1L,

@@ -36,7 +36,7 @@ test_that("all negative binomial density and autodiff paths preserve large sizes
         ref <- nb_inflated_reference(y, mu, phi, z, type)
         p <- tulpaRatio:::cpp_test_negbin_paths(y, mu, phi, z, type)
         s <- tulpaRatio:::cpp_test_negbin_spec(y, mu, phi, z, type)
-        vals <- c(p$legacy_double, p$autodiff[, "value"], p$H[1], s[, "value"])
+        vals <- c(p$scalar_double, p$autodiff[, "value"], p$H[1], s[, "value"])
         expect_lt(max(abs(vals - ref)), 1e-10)
         expect_lt(abs(p$H_table[1] - nb_count_reference(y, mu, phi)), 1e-10)
         expect_lt(abs(tulpaRatio:::cpp_test_zi_negbin_lpmf(y, mu, phi) - nb_count_reference(y, mu, phi)), 1e-10)
@@ -46,7 +46,7 @@ test_that("all negative binomial density and autodiff paths preserve large sizes
   }
 })
 
-test_that("negative binomial H tables serve fused and vectorized kernels", {
+test_that("cached and uncached negative binomial margins preserve their scores", {
   for (y in c(0L, 3L, 33L, 200L)) for (phi in c(0.1, 2, 1000, 1e8, 1e17)) {
     h <- tulpaRatio:::cpp_test_negbin_h_kernels(y, 2, phi)
     expect_lt(max(abs(h[, 1] - nb_count_reference(y, 2, phi))), 1e-10)

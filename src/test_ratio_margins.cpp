@@ -25,28 +25,6 @@ Rcpp::NumericVector cpp_test_linked_margin(std::string family, double y, int n,
         Rcpp::Named("curvature")=r.neg_hess,Rcpp::Named("zi")=r.zi,Rcpp::Named("oi")=r.oi);
 }
 
-namespace ratiod_hmc { Rcpp::NumericMatrix residual_accumulation_probe(); }
-namespace ratiod_hmc {
-Rcpp::NumericMatrix collapsed_margin_probe(int,int,double,double,double,double,double,bool);
-Rcpp::NumericVector collapsed_gp_reference_probe(Rcpp::NumericVector,int,int,double);
-}
-
-// [[Rcpp::export]]
-Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta,int y,int n,double sigma) {
-    return ratiod_hmc::collapsed_gp_reference_probe(beta,y,n,sigma);
-}
-
-// [[Rcpp::export]]
-Rcpp::NumericMatrix cpp_test_collapsed_margin(int family, int y, double yd, double en,
-    double ed, double pn, double pd, bool shared) {
-    return ratiod_hmc::collapsed_margin_probe(family,y,yd,en,ed,pn,pd,shared);
-}
-
-// [[Rcpp::export]]
-Rcpp::NumericMatrix cpp_test_residual_accumulation() {
-    return ratiod_hmc::residual_accumulation_probe();
-}
-
 // [[Rcpp::export]]
 Rcpp::NumericVector cpp_test_ratio_margin(std::string family, double y, int n,
                                           double eta, double phi, bool cached) {

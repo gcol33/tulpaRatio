@@ -29,9 +29,9 @@ No general correctness guarantee beyond empirical usefulness.
 Point estimates usually good, but uncertainty often underestimated.
 Tails and correlations unreliable. Failure is usually silent.
 Variational inference optimizes an approximating family; the
-stochastic-gradient samplers (SGHMC, SGLD) run at a fixed step size on
-minibatch gradients with no Metropolis correction, so they sample a
-distribution perturbed by the discretization and the gradient noise.
+stochastic-gradient samplers (SGHMC, SGLD) use full-data gradients and
+discretized stochastic dynamics. Finite steps and gradient clipping can
+perturb the posterior.
 }
 
 \section{Auto Mode}{

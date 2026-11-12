@@ -24,7 +24,6 @@ struct FamilyEntry {
     tulpa::LikelihoodFn<double> likelihood;
     tulpa::LikelihoodFn<tulpa::arena::Var> likelihood_arena;
     tulpa::FullGradFn gradient;
-    bool legacy_likelihood;
     LinkDomain num_domain, denom_domain;
     tulpa::EtaWeightsFn weights;
     tulpa::EtaWeightsArenaFn weights_arena;

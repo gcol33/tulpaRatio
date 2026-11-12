@@ -1,5 +1,7 @@
 #include <RcppEigen.h>
 #include "spatial_model_data.h"
+#include "engine_sampler.h"
+#include "engine_options.h"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -159,7 +161,7 @@ Rcpp::List cpp_tulpa_pg_binomial_gibbs(
 }
 
 // [[Rcpp::export]]
-Rcpp::List cpp_tulpaRatio_run_nuts_specs(
+Rcpp::List cpp_tulpaRatio_sample(
     Rcpp::IntegerVector y_num,
     Rcpp::IntegerVector y_denom,
     Rcpp::NumericVector y_num_cont,
@@ -178,9 +180,9 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     double phi_prior_shape = 1.0,
     double phi_prior_rate  = 0.01,
     double sigma_prior_scale = 1.0,
-    Rcpp::List re_params = Rcpp::List::create(),
-    Rcpp::List spatial_params = Rcpp::List::create(),
-    Rcpp::List temporal_params = Rcpp::List::create(),
+    Rcpp::Nullable<Rcpp::List> re_params = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> spatial_params = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> temporal_params = R_NilValue,
     int n_chains = 1,
     int n_threads = 1,
     int L = 0,
@@ -189,15 +191,20 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     Rcpp::Nullable<Rcpp::List> svc_spec = R_NilValue,
     Rcpp::Nullable<Rcpp::List> tvc_spec = R_NilValue,
     Rcpp::Nullable<Rcpp::List> latent_spec = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> st_spec = R_NilValue
+    Rcpp::Nullable<Rcpp::List> st_spec = R_NilValue,
+    std::string method = "nuts",
+    Rcpp::Nullable<Rcpp::List> sampler_options = R_NilValue
 ) {
+  const Rcpp::List re = tulpaRatio::optional_list(re_params);
+  const Rcpp::List spatial = tulpaRatio::optional_list(spatial_params);
+  const Rcpp::List temporal = tulpaRatio::optional_list(temporal_params);
   const Rcpp::List svc_params = svc_spec.isNotNull() ? Rcpp::List(svc_spec) : Rcpp::List::create();
   const Rcpp::List tvc_params = tvc_spec.isNotNull() ? Rcpp::List(tvc_spec) : Rcpp::List::create();
   const Rcpp::List latent_params = latent_spec.isNotNull() ? Rcpp::List(latent_spec) : Rcpp::List::create();
   const Rcpp::List st_params = st_spec.isNotNull() ? Rcpp::List(st_spec) : Rcpp::List::create();
   const int n_proc_input = X_list.size();
   if (n_proc_input < 1) {
-    Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: X_list must contain at least one "
+    Rcpp::stop("cpp_tulpaRatio_sample: X_list must contain at least one "
                "design matrix.");
   }
   Rcpp::NumericMatrix X0 = X_list[0];
@@ -205,6 +212,9 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
 
   tulpaRatio::RatioConfig cfg;
   cfg.family    = Rcpp::as<std::string>(cfg_list["family"]);
+  const auto& family = tulpaRatio::family_entry(cfg.family);
+  cfg.num_link = family.num_link;
+  cfg.denom_link = family.denom_link;
   if (cfg_list.containsElementNamed("zi"))         cfg.zi         = Rcpp::as<std::string>(cfg_list["zi"]);
   if (cfg_list.containsElementNamed("num_link"))   cfg.num_link   = Rcpp::as<std::string>(cfg_list["num_link"]);
   if (cfg_list.containsElementNamed("denom_link")) cfg.denom_link = Rcpp::as<std::string>(cfg_list["denom_link"]);
@@ -233,7 +243,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   const bool has_y_int  = (y_num.size()  == N) && (y_denom.size()  == N);
   const bool has_y_cont = (y_num_cont.size() == N) || (y_denom_cont.size() == N);
   if (!has_y_int && !has_y_cont) {
-    Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: response vectors all empty.");
+    Rcpp::stop("cpp_tulpaRatio_sample: response vectors all empty.");
   }
 
   tulpa::LikelihoodSpec spec = tulpaRatio::build_ratio_likelihood_spec(cfg);
@@ -251,7 +261,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   ratiod_link::parse_link(cfg.oi_link, response->oi_link);
 
   if (n_proc_input != spec.n_processes) {
-    Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: X_list has %d matrices but "
+    Rcpp::stop("cpp_tulpaRatio_sample: X_list has %d matrices but "
                "family='%s' expects %d processes.",
                n_proc_input, cfg.family.c_str(), spec.n_processes);
   }
@@ -271,7 +281,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   for (int k = 0; k < spec.n_processes; ++k) {
     Rcpp::NumericMatrix Xk = X_list[k];
     if (Xk.nrow() != N) {
-      Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: X_list[[%d]] has %d rows, "
+      Rcpp::stop("cpp_tulpaRatio_sample: X_list[[%d]] has %d rows, "
                  "expected %d (rows of X_list[[1]]).",
                  k + 1, Xk.nrow(), N);
     }
@@ -297,12 +307,12 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
 
   if (has_zi_block) {
     if (!cfg_list.containsElementNamed("X_zi")) {
-      Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: zi='%s' requires cfg_list$X_zi.",
+      Rcpp::stop("cpp_tulpaRatio_sample: zi='%s' requires cfg_list$X_zi.",
                  cfg.zi.c_str());
     }
     Rcpp::NumericMatrix X_zi = cfg_list["X_zi"];
     if (X_zi.nrow() != N) {
-      Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: X_zi has %d rows, expected %d.",
+      Rcpp::stop("cpp_tulpaRatio_sample: X_zi has %d rows, expected %d.",
                  X_zi.nrow(), N);
     }
     data.X_zi_flat = rmajor_from_rmatrix(X_zi);
@@ -310,30 +320,31 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   }
   if (has_oi_block) {
     if (!cfg_list.containsElementNamed("X_oi")) {
-      Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: zi='%s' requires cfg_list$X_oi.",
+      Rcpp::stop("cpp_tulpaRatio_sample: zi='%s' requires cfg_list$X_oi.",
                  cfg.zi.c_str());
     }
     Rcpp::NumericMatrix X_oi = cfg_list["X_oi"];
     if (X_oi.nrow() != N) {
-      Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: X_oi has %d rows, expected %d.",
+      Rcpp::stop("cpp_tulpaRatio_sample: X_oi has %d rows, expected %d.",
                  X_oi.nrow(), N);
     }
     data.X_oi_flat = rmajor_from_rmatrix(X_oi);
     data.p_oi      = X_oi.ncol();
   }
 
-  if (re_params.size() > 0) {
-    ratiod_hmc::apply_re_params(data,re_params);
+  if (re.size() > 0) {
+    ratiod_hmc::apply_re_params(data,re);
     if (data.n_re_groups > 0 || data.n_re_terms > 0) spec.gradient_fn=nullptr;
   }
 
-  const int p_spatial_block = tulpaRatio::apply_spatial_model_data(data, spatial_params);
+  const int p_spatial_block = tulpaRatio::apply_spatial_model_data(data, spatial);
   if (p_spatial_block > 0) spec.gradient_fn = nullptr;
 
-  if (temporal_params.containsElementNamed("type")) {
+  if (temporal.containsElementNamed("type")) {
     const std::string temporal_type =
-        Rcpp::as<std::string>(temporal_params["type"]);
-    if (temporal_type != "none" && !temporal_type.empty()) {
+        Rcpp::as<std::string>(temporal["type"]);
+    const auto temporal_kind=ratiod_enum::parse_enum(tulpaRatio::TEMPORAL_NAMES,temporal_type,"temporal structure");
+    if (temporal_kind != tulpa::TemporalType::NONE) {
       if (temporal_type == "rw1") {
         data.temporal_type = tulpa::TemporalType::RW1;
       } else if (temporal_type == "rw2") {
@@ -349,29 +360,29 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       } else if (temporal_type == "ar1") {
         data.temporal_type = tulpa::TemporalType::AR1;
       } else {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: temporal type '%s' is not "
+        Rcpp::stop("cpp_tulpaRatio_sample: temporal type '%s' is not "
                    "yet supported on the spec path. Supported: 'rw1', 'rw2', "
                    "'ar1'.", temporal_type.c_str());
       }
 
       data.temporal_time_idx =
-          Rcpp::as<std::vector<int>>(temporal_params["time_idx"]);
+          Rcpp::as<std::vector<int>>(temporal["time_idx"]);
       data.temporal_group_idx =
-          Rcpp::as<std::vector<int>>(temporal_params["group_idx"]);
-      data.n_times             = Rcpp::as<int>(temporal_params["n_times"]);
-      data.n_temporal_groups   = Rcpp::as<int>(temporal_params["n_groups"]);
-      data.n_temporal_params   = Rcpp::as<int>(temporal_params["n_params"]);
-      data.temporal_cyclic     = Rcpp::as<bool>(temporal_params["cyclic"]);
-      const bool shared = Rcpp::as<bool>(temporal_params["shared"]);
+          Rcpp::as<std::vector<int>>(temporal["group_idx"]);
+      data.n_times             = Rcpp::as<int>(temporal["n_times"]);
+      data.n_temporal_groups   = Rcpp::as<int>(temporal["n_groups"]);
+      data.n_temporal_params   = Rcpp::as<int>(temporal["n_params"]);
+      data.temporal_cyclic     = Rcpp::as<bool>(temporal["cyclic"]);
+      const bool shared = Rcpp::as<bool>(temporal["shared"]);
       for (int k = 1; k < data.n_processes; ++k) data.sharing.temporal[k] = shared;
-      if (temporal_params.containsElementNamed("parameterization")) {
-        const auto parameterization = Rcpp::as<std::string>(temporal_params["parameterization"]);
+      if (temporal.containsElementNamed("parameterization")) {
+        const auto parameterization = Rcpp::as<std::string>(temporal["parameterization"]);
         data.auto_temporal_coordinates = parameterization == "auto";
         data.temporal_parameterization = parameterization == "noncentered" ? 1 : 0;
       }
       data.temporal_group_centering = true;
-      if (temporal_params.containsElementNamed("rtr")) {
-        const Rcpp::List restriction = temporal_params["rtr"];
+      if (temporal.containsElementNamed("rtr")) {
+        const Rcpp::List restriction = temporal["rtr"];
         if (restriction.containsElementNamed("active") && Rcpp::as<bool>(restriction["active"])) {
           data.set_temporal_restriction(
               Rcpp::as<std::vector<double>>(restriction["basis"]),
@@ -382,29 +393,29 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
         auto& gp = data.temporal_gp_data;
         gp.n_obs = data.n_times;
         gp.n_groups = data.n_temporal_groups;
-        gp.time_values = Rcpp::as<std::vector<double>>(temporal_params["time_values"]);
+        gp.time_values = Rcpp::as<std::vector<double>>(temporal["time_values"]);
         gp.group_index = data.temporal_group_idx;
-        const std::string covariance = Rcpp::as<std::string>(temporal_params["cov_type"]);
+        const std::string covariance = Rcpp::as<std::string>(temporal["cov_type"]);
         if (covariance == "exponential") gp.cov_type = tulpa::TemporalCovType::EXPONENTIAL;
         else if (covariance == "matern") gp.cov_type = tulpa::TemporalCovType::MATERN;
         else if (covariance == "gaussian") gp.cov_type = tulpa::TemporalCovType::GAUSSIAN;
         else if (covariance == "periodic") gp.cov_type = tulpa::TemporalCovType::PERIODIC;
         else Rcpp::stop("Unknown temporal GP covariance");
-        gp.nu = Rcpp::as<double>(temporal_params["nu"]);
-        gp.period = Rcpp::as<double>(temporal_params["period"]);
+        gp.nu = Rcpp::as<double>(temporal["nu"]);
+        gp.period = Rcpp::as<double>(temporal["period"]);
         gp.shared = shared;
         data.temporal_gp_relative_nugget = 1e-6;
         data.temporal_gp_parameterization =
-            Rcpp::as<std::string>(temporal_params["gp_parameterization"]) == "centered" ? 0 : 1;
+            Rcpp::as<std::string>(temporal["gp_parameterization"]) == "centered" ? 0 : 1;
         data.auto_temporal_gp_coordinates = data.auto_temporal_coordinates;
         data.auto_temporal_coordinates = false;
-        data.temporal_gp_sigma2_prior_U = Rcpp::as<double>(temporal_params["gp_sigma2_prior_U"]);
-        data.temporal_gp_sigma2_prior_alpha = Rcpp::as<double>(temporal_params["gp_sigma2_prior_alpha"]);
-        data.temporal_gp_phi_prior_lower = Rcpp::as<double>(temporal_params["gp_phi_prior_lower"]);
-        data.temporal_gp_phi_prior_upper = Rcpp::as<double>(temporal_params["gp_phi_prior_upper"]);
+        data.temporal_gp_sigma2_prior_U = Rcpp::as<double>(temporal["gp_sigma2_prior_U"]);
+        data.temporal_gp_sigma2_prior_alpha = Rcpp::as<double>(temporal["gp_sigma2_prior_alpha"]);
+        data.temporal_gp_phi_prior_lower = Rcpp::as<double>(temporal["gp_phi_prior_lower"]);
+        data.temporal_gp_phi_prior_upper = Rcpp::as<double>(temporal["gp_phi_prior_upper"]);
         if (gp.cov_type == tulpa::TemporalCovType::GAUSSIAN) {
-          data.temporal_gp_phi_prior_lower *= std::sqrt(2.0);
-          data.temporal_gp_phi_prior_upper *= std::sqrt(2.0);
+          data.temporal_gp_phi_prior_lower *= ratiod_cov::range_scale(gp.cov_type);
+          data.temporal_gp_phi_prior_upper *= ratiod_cov::range_scale(gp.cov_type);
         }
         if (gp.time_values.size() != static_cast<size_t>(data.n_times))
           Rcpp::stop("temporal GP needs one time value per distinct time");
@@ -426,16 +437,16 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
           Rcpp::stop("Unknown multiscale temporal component");
           return tulpa::TemporalType::NONE;
         };
-        ms.trend_type = parse(Rcpp::as<std::string>(temporal_params["trend_type"]));
-        ms.short_term_type = parse(Rcpp::as<std::string>(temporal_params["short_term_type"]));
-        ms.seasonal_period = Rcpp::as<int>(temporal_params["seasonal_period"]);
-        data.ms_sigma2_trend_prior_U = Rcpp::as<double>(temporal_params["sigma2_trend_prior_U"]);
-        data.ms_sigma2_trend_prior_alpha = Rcpp::as<double>(temporal_params["sigma2_trend_prior_alpha"]);
-        data.ms_sigma2_seasonal_prior_U = Rcpp::as<double>(temporal_params["sigma2_seasonal_prior_U"]);
-        data.ms_sigma2_seasonal_prior_alpha = Rcpp::as<double>(temporal_params["sigma2_seasonal_prior_alpha"]);
-        data.ms_sigma2_short_prior_U = Rcpp::as<double>(temporal_params["sigma2_short_prior_U"]);
-        data.ms_sigma2_short_prior_alpha = Rcpp::as<double>(temporal_params["sigma2_short_prior_alpha"]);
-        const std::string coordinate = Rcpp::as<std::string>(temporal_params["ms_parameterization"]);
+        ms.trend_type = parse(Rcpp::as<std::string>(temporal["trend_type"]));
+        ms.short_term_type = parse(Rcpp::as<std::string>(temporal["short_term_type"]));
+        ms.seasonal_period = Rcpp::as<int>(temporal["seasonal_period"]);
+        data.ms_sigma2_trend_prior_U = Rcpp::as<double>(temporal["sigma2_trend_prior_U"]);
+        data.ms_sigma2_trend_prior_alpha = Rcpp::as<double>(temporal["sigma2_trend_prior_alpha"]);
+        data.ms_sigma2_seasonal_prior_U = Rcpp::as<double>(temporal["sigma2_seasonal_prior_U"]);
+        data.ms_sigma2_seasonal_prior_alpha = Rcpp::as<double>(temporal["sigma2_seasonal_prior_alpha"]);
+        data.ms_sigma2_short_prior_U = Rcpp::as<double>(temporal["sigma2_short_prior_U"]);
+        data.ms_sigma2_short_prior_alpha = Rcpp::as<double>(temporal["sigma2_short_prior_alpha"]);
+        const std::string coordinate = Rcpp::as<std::string>(temporal["ms_parameterization"]);
         const bool nc = coordinate != "centered";
         data.auto_multiscale_coordinates = coordinate == "auto";
         data.ms_trend_parameterization = nc && ms.trend_type != tulpa::TemporalType::NONE;
@@ -443,19 +454,19 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
         data.ms_short_parameterization = nc && ms.short_term_type != tulpa::TemporalType::NONE;
         tulpa::prepare_field(data, tulpa::FieldSetup::MULTISCALE_TEMPORAL);
       }
-      data.ar1_rho_prior_a = Rcpp::as<double>(temporal_params["rho_prior_a"]);
-      data.ar1_rho_prior_b = Rcpp::as<double>(temporal_params["rho_prior_b"]);
-      if (temporal_params.containsElementNamed("sigma_prior_U")) {
+      data.ar1_rho_prior_a = Rcpp::as<double>(temporal["rho_prior_a"]);
+      data.ar1_rho_prior_b = Rcpp::as<double>(temporal["rho_prior_b"]);
+      if (temporal.containsElementNamed("sigma_prior_U")) {
         data.temporal_sigma_prior_U =
-            Rcpp::as<double>(temporal_params["sigma_prior_U"]);
+            Rcpp::as<double>(temporal["sigma_prior_U"]);
       }
-      if (temporal_params.containsElementNamed("sigma_prior_alpha")) {
+      if (temporal.containsElementNamed("sigma_prior_alpha")) {
         data.temporal_sigma_prior_alpha =
-            Rcpp::as<double>(temporal_params["sigma_prior_alpha"]);
+            Rcpp::as<double>(temporal["sigma_prior_alpha"]);
       }
 
       if ((int)data.temporal_time_idx.size() != N) {
-        Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: temporal_params$time_idx "
+        Rcpp::stop("cpp_tulpaRatio_sample: temporal_params$time_idx "
                    "length (%d) must equal N (%d).",
                    (int)data.temporal_time_idx.size(), N);
       }
@@ -502,8 +513,8 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
       else if (covariance == "spherical") svc.cov_type = tulpa::CovType::SPHERICAL;
       else Rcpp::stop("Unknown SVC covariance");
       if (svc.cov_type == tulpa::CovType::GAUSSIAN) {
-        data.svc_range_lower *= std::sqrt(2.0);
-        data.svc_range_upper *= std::sqrt(2.0);
+        data.svc_range_lower *= ratiod_cov::range_scale(data.svc_data.cov_type);
+        data.svc_range_upper *= ratiod_cov::range_scale(data.svc_data.cov_type);
       }
       svc.nn_idx = Rcpp::as<std::vector<int>>(svc_params["nn_idx"]);
       svc.nn_dist = Rcpp::as<std::vector<double>>(svc_params["nn_dist"]);
@@ -529,11 +540,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     tvc.shared = Rcpp::as<bool>(tvc_params["shared"]);
     tvc.cyclic = Rcpp::as<bool>(tvc_params["cyclic"]);
     const std::string structure = Rcpp::as<std::string>(tvc_params["structure"]);
-    if (structure == "rw1") tvc.structure = tulpa::TemporalType::RW1;
-    else if (structure == "rw2") tvc.structure = tulpa::TemporalType::RW2;
-    else if (structure == "ar1") tvc.structure = tulpa::TemporalType::AR1;
-    else if (structure == "iid") tvc.structure = tulpa::TemporalType::IID;
-    else Rcpp::stop("Unsupported TVC structure");
+    tvc.structure=ratiod_enum::parse_enum(tulpaRatio::TVC_NAMES,structure,"TVC structure");
     data.tvc_sigma_prior_U = Rcpp::as<double>(tvc_params["sigma_prior_U"]);
     data.tvc_sigma_prior_alpha = Rcpp::as<double>(tvc_params["sigma_prior_alpha"]);
     data.tvc_rho_prior_a = 2.0;
@@ -631,7 +638,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
   tulpa::ParamLayout layout = tulpa::compute_layout(data);
 
   if (init.size() != layout.total_params) {
-    Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: init length (%d) != engine layout (%d) for family='%s'.",
+    Rcpp::stop("cpp_tulpaRatio_sample: init length (%d) != engine layout (%d) for family='%s'.",
                static_cast<int>(init.size()), layout.total_params, cfg.family.c_str());
   }
 
@@ -647,31 +654,31 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
 
   int grad_rc = tulpa::set_gradient_mode_str(gradient_mode.c_str());
   if (grad_rc != 0) {
-    Rcpp::stop("cpp_tulpaRatio_run_nuts_specs: unrecognised gradient_mode '%s'.",
+    Rcpp::stop("cpp_tulpaRatio_sample: unrecognised gradient_mode '%s'.",
                gradient_mode.c_str());
+  }
+
+  if (cfg_list.containsElementNamed("initialize") && Rcpp::as<bool>(cfg_list["initialize"]) &&
+      data.has_gp && data.gp_range_prior.type == tulpa::RangePriorType::UNIFORM) {
+    const tulpa::LogRangeCoordinate range{layout.log_phi_gp_idx,
+        data.gp_range_prior.lower, data.gp_range_prior.upper};
+    initial[range.index] = range.interior(initial[range.index]);
+  }
+  if (method != "nuts") {
+    tulpa::OmpCapScope thread_cap(n_threads);
+    const Rcpp::List options = sampler_options.isNotNull() ? Rcpp::List(sampler_options) : Rcpp::List::create();
+    return tulpaRatio::sample_engine(method, options, data, layout, initial,
+                                    n_iter, n_warmup, seed, verbose);
   }
 
   if (n_chains < 1) Rcpp::stop("n_chains must be positive");
   tulpa::SamplerControl control;
   control.L = L;
   control.walnuts = walnuts;
-  if (metric == "auto") control.metric = tulpa::MassMatrixType::AUTO;
-  else if (metric == "diag") control.metric = tulpa::MassMatrixType::DIAG;
-  else if (metric == "dense") control.metric = tulpa::MassMatrixType::DENSE;
-  else if (metric == "block_diag") control.metric = tulpa::MassMatrixType::BLOCK_DIAG;
-  else Rcpp::stop("Unknown metric '%s'", metric.c_str());
+  control.metric=ratiod_enum::parse_enum(tulpaRatio::METRIC_NAMES,metric,"metric");
   tulpa::OmpCapScope thread_cap(n_threads);
   std::vector<double> init_vec;
   for (int c=0;c<n_chains;++c) init_vec.insert(init_vec.end(),initial.begin(),initial.end());
-  if (cfg_list.containsElementNamed("initialize") && Rcpp::as<bool>(cfg_list["initialize"]) &&
-      data.has_gp && data.gp_range_prior.type == tulpa::RangePriorType::UNIFORM) {
-    const tulpa::LogRangeCoordinate range{layout.log_phi_gp_idx,
-        data.gp_range_prior.lower, data.gp_range_prior.upper};
-    for (int c = 0; c < n_chains; ++c) {
-      double& value = init_vec[c * layout.total_params + range.index];
-      value = range.interior(value);
-    }
-  }
   std::vector<tulpa::NUTSResult> results(n_chains);
   if (n_chains == 1) {
     tulpa::get_nuts_fn()(&data,&layout,init_vec.data(),layout.total_params,
@@ -691,21 +698,7 @@ Rcpp::List cpp_tulpaRatio_run_nuts_specs(
     auto& result=results[c];
     const int n=result.n_sample;
     auto draws = row_major_matrix(result.samples,n,result.n_params);
-    const auto restore_range = [&](int index, double lower, double upper, double scale) {
-      for (int i = 0; i < n; ++i)
-        draws(i,index) = std::log(tulpa::field_range_from_coordinate(draws(i,index), lower, upper, true) / scale);
-    };
-    if (data.has_svc && data.svc_range_prior == 1)
-      for (int j = 0; j < data.svc_data.n_svc; ++j) {
-        const int index = layout.log_phi_svc_start + j;
-        const double scale = data.svc_data.cov_type == tulpa::CovType::GAUSSIAN ? std::sqrt(2.0) : 1.0;
-        restore_range(index, data.svc_range_lower, data.svc_range_upper, scale);
-      }
-    if (layout.is_st_gp && data.st_uniform_ranges) {
-      const auto& st = data.spatiotemporal_data;
-      restore_range(layout.log_phi_st_space_idx, st.phi_space_prior_lower, st.phi_space_prior_upper, 1.0);
-      restore_range(layout.log_phi_st_time_idx, st.phi_time_prior_lower, st.phi_time_prior_upper, 1.0);
-    }
+    tulpaRatio::restore_engine_ranges(draws,data,layout);
     samples[c]=draws;
     log_prob[c]=buffer_vector(result.log_prob,n);
     accept_prob[c]=buffer_vector(result.accept_prob,n);

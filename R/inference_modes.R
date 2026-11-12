@@ -25,9 +25,9 @@
 #' Point estimates usually good, but uncertainty often underestimated.
 #' Tails and correlations unreliable. Failure is usually silent.
 #' Variational inference optimizes an approximating family; the
-#' stochastic-gradient samplers (SGHMC, SGLD) run at a fixed step size on
-#' minibatch gradients with no Metropolis correction, so they sample a
-#' distribution perturbed by the discretization and the gradient noise.
+#' stochastic-gradient samplers (SGHMC, SGLD) use full-data gradients and
+#' discretized stochastic dynamics. Finite steps and gradient clipping can
+#' perturb the posterior.
 #'
 #' @section Auto Mode:
 #'
@@ -466,9 +466,7 @@ assert_backend_fits_structures <- function(backend, structures) {
 #' These samplers evaluate the package's one log posterior, which carries
 #' every model type and maps each linear predictor through its link. The
 #' Gibbs, Polya-Gamma and Laplace samplers carry likelihoods of their own,
-#' written for the original model types under the canonical links, as do the
-#' collapsed spatial fields, whose marginal is a Laplace approximation under
-#' those likelihoods.
+#' written for the supported model types under the canonical links.
 #'
 #' @keywords internal
 LIKELIHOOD_BACKENDS <- c("hmc", "ess", "sghmc", "sgld", "vi")
@@ -489,28 +487,14 @@ assert_backend_fits_likelihood <- function(backend, family, structures = list())
       "and this family needs %s. Use `mode = \"hmc\"`."),
       backend, what), call. = FALSE)
   }
-  if (!identical(backend, "hmc") && identical(structures$spatial$parameterization, "collapsed"))
-    assert_legacy_collapsed_likelihood(family)
   invisible(TRUE)
 }
 
 canonical_likelihood_requirement <- function(family) {
   model_type <- get_hmc_model_type(family)
-  if (family_handcoded(family, model_type)) return(NULL)
   links <- family_links(family, model_type)
   odd_links <- unique(setdiff(unlist(links[c("num", "denom", "zi", "oi")]), LINKS_CANONICAL))
-  if (!isTRUE(MODEL_TYPES[[model_type]]$handcoded))
-    sprintf("the %s likelihood", model_type) else
-    sprintf("the %s link", paste(odd_links, collapse = ", "))
-}
-
-assert_legacy_collapsed_likelihood <- function(family) {
-  what <- canonical_likelihood_requirement(family)
-  if (is.null(what)) return(invisible(TRUE))
-  stop(sprintf(paste0(
-    "A collapsed spatial field is marginalized under the canonical links ",
-    "of the original likelihoods only, and this family needs %s. Sample ",
-    "the field with another `parameterization`."), what), call. = FALSE)
+  if (length(odd_links)) sprintf("the %s link", paste(odd_links, collapse = ", ")) else NULL
 }
 
 
@@ -620,7 +604,7 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
 
   # The samplers with likelihoods of their own fit those likelihoods under
   # the canonical links only
-  handcoded <- family_handcoded(family, get_hmc_model_type(family))
+  canonical <- is.null(canonical_likelihood_requirement(family))
 
   # Decision logic
   reason_parts <- character(0)
@@ -639,7 +623,7 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
     reason_parts <- c(reason_parts, "spatial model with large n")
   }
 
-  if (use_structured && handcoded && "laplace" %in% MODEL_TYPES[[get_hmc_model_type(family)]]$samplers &&
+  if (use_structured && canonical && "laplace" %in% MODEL_TYPES[[get_hmc_model_type(family)]]$samplers &&
       backend_fits_structures("laplace", structures)) {
     return(list(
       mode = "structured",
@@ -655,7 +639,7 @@ auto_select_mode <- function(family, n_obs, structures = list()) {
   # test models with the same posterior
   is_gibbs_spatial <- has_spatial && !is.null(spatial_type) &&
                       spatial_type %in% c("icar", "car", "bym2")
-  if (is_gibbs_spatial && handcoded && backend_fits_structures("gibbs", structures) &&
+  if (is_gibbs_spatial && canonical && backend_fits_structures("gibbs", structures) &&
       !is.na(gibbs_model_type(family))) {
     return(list(
       mode = "exact",

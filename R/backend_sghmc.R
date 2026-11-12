@@ -1,8 +1,8 @@
 #' Stochastic Gradient MCMC Backends for ratio Models
 #'
 #' @description
-#' Stochastic gradient MCMC methods sample large datasets from minibatch
-#' gradients. They are Tier 3 (Optimized): see Details.
+#' SGHMC and SGLD use full-data gradients with injected Gaussian noise.
+#' They are Tier 3 (Optimized): see Details.
 #'
 #' @details
 #' Two methods are provided:
@@ -15,10 +15,9 @@
 #' Simpler method without momentum, uses decaying step size schedule.
 #' Reference: Welling & Teh (2011) "Bayesian Learning via Stochastic Gradient Langevin Dynamics"
 #'
-#' Their continuous-time limit samples the posterior, but both run a fixed
-#' step size on minibatch gradients with no Metropolis correction, so a run
-#' samples a distribution perturbed by the discretization and the gradient
-#' noise. They share Tier 3 with VI for that reason.
+#' Both use discretized stochastic dynamics with gradient clipping.
+#' Finite steps can perturb the posterior. SGLD supports a decaying
+#' step size schedule. These approximations share Tier 3 with VI.
 #'
 #' @section When to Use:
 #' - N > 10,000 observations
@@ -41,7 +40,8 @@ NULL
 #' @param priors Prior specification
 #' @param iter Total iterations
 #' @param warmup Warmup iterations
-#' @param batch_size Minibatch size (default: min(256, N/10))
+#' @param batch_size Number of observations in each gradient. Must equal the
+#'   number of rows in data; NULL uses all rows.
 #' @param epsilon Step size / learning rate (default: 0.01)
 #' @param alpha Friction coefficient (default: 0.1)
 #' @param L Leapfrog steps per iteration (default: 10)
@@ -81,16 +81,18 @@ fit_sghmc <- function(formula,
   model_type <- inp$model_type
 
   assert_single_random_intercept(hmc_data, "sghmc")
+  setup <- engine_sampler_inputs(inp, family)
+  inp <- setup$inputs
+
 
   # Set default batch size
   N <- hmc_data$N
   if (is.null(batch_size)) {
-    batch_size <- min(256L, max(32L, as.integer(N / 10)))
+    batch_size <- N
   }
-  batch_size <- as.integer(min(batch_size, N))
+  batch_size <- as.integer(batch_size)
+  if (batch_size != N) stop("Minibatch stochastic-gradient sampling is unsupported; batch_size must equal n_obs.", call. = FALSE)
 
-  # The sampler starts at zero on the layout it computes
-  q_init <- numeric(0)
 
   if (verbose) {
     message("Stochastic Gradient HMC")
@@ -100,14 +102,9 @@ fit_sghmc <- function(formula,
   }
 
   # Fit SGHMC model
-  fit_raw <- do.call(cpp_sghmc_fit, c(
-    list(q_init = q_init),
-    model_data_args(inp, family),
-    list(n_iter = as.integer(iter), n_warmup = as.integer(warmup),
-         batch_size = as.integer(batch_size), epsilon = epsilon,
-         alpha = alpha, L = as.integer(L), seed = as.integer(seed),
-         verbose = verbose)
-  ))
+  fit_raw <- engine_sampler_run(setup, "sghmc", iter, warmup, seed, verbose,
+    list(batch_size = batch_size, epsilon = epsilon, alpha = alpha, L = as.integer(L)))
+  fit_raw$param_names <- engine_raw_parameter_names(setup$layout)
 
   # Build result object
   result <- structure(list(
@@ -147,7 +144,7 @@ fit_sghmc <- function(formula,
     message("SGHMC complete. Final epsilon: ", round(fit_raw$final_epsilon, 6))
   }
 
-  result
+  engine_fit_metadata(result, setup)
 }
 
 
@@ -162,7 +159,7 @@ fit_sghmc <- function(formula,
 #' @param priors Prior specification
 #' @param iter Total iterations
 #' @param warmup Warmup iterations
-#' @param batch_size Minibatch size
+#' @inheritParams fit_sghmc
 #' @param epsilon Initial step size
 #' @param schedule_a Step size schedule parameter a
 #' @param schedule_b Step size schedule parameter b
@@ -206,16 +203,18 @@ fit_sgld <- function(formula,
   model_type <- inp$model_type
 
   assert_single_random_intercept(hmc_data, "sgld")
+  setup <- engine_sampler_inputs(inp, family)
+  inp <- setup$inputs
+
 
   # Set default batch size
   N <- hmc_data$N
   if (is.null(batch_size)) {
-    batch_size <- min(256L, max(32L, as.integer(N / 10)))
+    batch_size <- N
   }
-  batch_size <- as.integer(min(batch_size, N))
+  batch_size <- as.integer(batch_size)
+  if (batch_size != N) stop("Minibatch stochastic-gradient sampling is unsupported; batch_size must equal n_obs.", call. = FALSE)
 
-  # The sampler starts at zero on the layout it computes
-  q_init <- numeric(0)
 
   if (verbose) {
     message("Stochastic Gradient Langevin Dynamics")
@@ -228,15 +227,10 @@ fit_sgld <- function(formula,
   }
 
   # Fit SGLD model
-  fit_raw <- do.call(cpp_sgld_fit, c(
-    list(q_init = q_init),
-    model_data_args(inp, family),
-    list(n_iter = as.integer(iter), n_warmup = as.integer(warmup),
-         batch_size = as.integer(batch_size), epsilon = epsilon,
-         schedule_a = schedule_a, schedule_b = schedule_b,
-         schedule_gamma = schedule_gamma, use_schedule = use_schedule,
-         seed = as.integer(seed), verbose = verbose)
-  ))
+  fit_raw <- engine_sampler_run(setup, "sgld", iter, warmup, seed, verbose,
+    list(batch_size = batch_size, epsilon = epsilon, schedule_a = schedule_a,
+      schedule_b = schedule_b, schedule_gamma = schedule_gamma, use_schedule = use_schedule))
+  fit_raw$param_names <- engine_raw_parameter_names(setup$layout)
 
   # Build result
   result <- structure(list(
@@ -269,7 +263,7 @@ fit_sgld <- function(formula,
     message("SGLD complete.")
   }
 
-  result
+  engine_fit_metadata(result, setup)
 }
 
 

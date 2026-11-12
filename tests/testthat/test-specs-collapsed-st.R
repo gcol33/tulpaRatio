@@ -1,9 +1,9 @@
 test_that("collapsed ST GP requests use joint engine coordinates and recover planted fields", {
   skip_on_cran()
   calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+  trace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')), add = TRUE)
+  on.exit(untrace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio')), add = TRUE)
   adjacency <- matrix(c(0, 1, 0, 1, 0, 1, 0, 1, 0), 3)
   for (seed in c(18L, 181L, 182L)) for (type in c('separable', 'nonsep_gp')) {
     set.seed(seed)

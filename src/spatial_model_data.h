@@ -3,6 +3,8 @@
 
 #include <RcppEigen.h>
 #include <tulpa/model_data.h>
+#include "covariance.h"
+#include "engine_options.h"
 
 namespace tulpaRatio {
 
@@ -113,21 +115,11 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
         if (g.obs_to_loc.size() != static_cast<size_t>(data.N)) Rcpp::stop("GP location map must have N entries");
         for (int i : g.obs_to_loc) if (i < 0 || i >= n) Rcpp::stop("GP location index outside field");
         const std::string cov = Rcpp::as<std::string>(gp["cov_type"]);
-        if (cov == "exponential") g.cov_type = tulpa::CovType::EXPONENTIAL;
-        else if (cov == "matern") {
-            const double nu = Rcpp::as<double>(gp["nu"]);
-            if (nu == 0.5) g.cov_type = tulpa::CovType::EXPONENTIAL;
-            else if (nu == 1.5) g.cov_type = tulpa::CovType::MATERN32;
-            else if (nu == 2.5) g.cov_type = tulpa::CovType::MATERN52;
-            else Rcpp::stop("Matern smoothness must be 0.5, 1.5 or 2.5");
-        }
-        else if (cov == "gaussian") g.cov_type = tulpa::CovType::GAUSSIAN;
-        else if (cov == "spherical") g.cov_type = tulpa::CovType::SPHERICAL;
-        else Rcpp::stop("Unknown GP covariance: %s", cov);
+        g.cov_type=ratiod_cov::parse_cov_type(cov,Rcpp::as<double>(gp["nu"]));
         g.nu = Rcpp::as<double>(gp["nu"]);
         g.shared = shared;
         if (cov == "gaussian") {
-            const double factor = 1.0 / std::sqrt(2.0);
+            const double factor = 1.0 / ratiod_cov::range_scale(g.cov_type);
             for (double& x : g.coords) x *= factor;
             for (double& x : g.nn_dist) x *= factor;
             for (double& x : g.nn_neighbor_dist) x *= factor;
@@ -153,8 +145,7 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
     data.msgp_hsgp_data = spectral_basis(sp, data.N);
     data.multiscale_gp_data.shared = shared;
     const std::string sampler = Rcpp::as<std::string>(gp["sampler"]);
-    if (sampler == "lbfgs") data.multiscale_gp_data.sampler = tulpa::MSGPSampler::LBFGS;
-    else if (sampler != "auto") Rcpp::stop("Unknown multiscale sampler: %s", sampler);
+    data.multiscale_gp_data.sampler=ratiod_enum::parse_enum(MSGP_NAMES,sampler,"multiscale sampler");
     data.ms_sigma2_local_prior_U = Rcpp::as<double>(gp["sigma2_local_prior_U"]);
     data.ms_sigma2_local_prior_alpha = Rcpp::as<double>(gp["sigma2_local_prior_alpha"]);
     data.ms_sigma2_regional_prior_U = Rcpp::as<double>(gp["sigma2_regional_prior_U"]);

@@ -1,9 +1,9 @@
 test_that("collapsed spatial requests recover planted fields through the engine", {
   skip_on_cran()
   calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+  trace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')), add = TRUE)
+  on.exit(untrace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio')), add = TRUE)
   fixture <- spatial_bridge_fixture(1919L)
   adjacency <- fixture$adjacency
   truth <- fixture$truth

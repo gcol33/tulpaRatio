@@ -3,26 +3,13 @@ if (length(setdiff(args, "--check"))) stop("usage: Rscript tools/unity.R [--chec
 check_only <- "--check" %in% args
 src <- "src"
 
-groups <- list(
-  core = c("array_utils.cpp", "crt_rng.cpp", "enum_names.cpp", "gpu_backend.cpp",
-           "precision_density.cpp"),
-  exports = "RcppExports.cpp",
-  hmc = c("hmc_chain.cpp", "hmc_exports.cpp", "hmc_grad_analytical.cpp",
-          "hmc_grad_areal_collapsed.cpp", "hmc_grad_composite.cpp",
-          "hmc_grad_dispatch.cpp", "hmc_grad_gp.cpp", "hmc_grad_latent_hsgp.cpp",
-          "hmc_grad_modes.cpp", "hmc_grad_svc_tvc.cpp", "hmc_grad_temporal_st.cpp",
-          "hmc_integrator.cpp", "hmc_layout.cpp", "hmc_mass.cpp"),
-  likelihood = c("lik_dispatch.cpp", "lik_grad_h_kernel.cpp", "tulpa_bridge.cpp"),
-  pg = c("pg_binomial.cpp", "pg_negbin.cpp", "pg_rng.cpp", "pg_spatial.cpp"),
-  samplers = c("ess_sampler.cpp", "gibbs_spatial.cpp", "sghmc_sampler.cpp",
-               "vi_sampler.cpp"),
-  spatial = c("hsgp_spectral.cpp", "kriging.cpp", "temporal_gp_field.cpp"),
-  tests = c("test_chain_concurrency.cpp", "test_gradient_check.cpp", "test_helpers.cpp",
-            "test_hmc_grad_probes.cpp", "test_hmc_metric.cpp", "test_multiscale_prior.cpp",
-            "test_negbin_spec.cpp", "test_precision_jet.cpp", "test_precision_legacy.cpp",
-            "test_precision_spec.cpp", "test_ratio_margins.cpp", "test_ratio_math.cpp",
-            "test_scalar_math.cpp", "test_tls_workspace.cpp", "test_vi.cpp")
-)
+groups <- list(core = c("array_utils.cpp", "crt_rng.cpp", "enum_names.cpp", "gpu_backend.cpp", "precision_density.cpp"
+), exports = c("RcppExports.cpp", "thread_count.cpp"), likelihood = c("lik_dispatch.cpp", "tulpa_bridge.cpp"
+), pg = c("pg_binomial.cpp", "pg_negbin.cpp", "pg_rng.cpp", "pg_spatial.cpp"), samplers = "gibbs_spatial.cpp",
+    spatial = c("hsgp_spectral.cpp", "kriging.cpp"), tests = c("test_chain_concurrency.cpp", "test_gradient_check.cpp",
+    "test_helpers.cpp", "test_negbin_spec.cpp", "test_precision_jet.cpp", "test_precision_spec.cpp",
+    "test_ratio_margins.cpp", "test_ratio_math.cpp", "test_scalar_math.cpp", "test_tls_workspace.cpp",
+    "test_engine_margins.cpp", "test_precision_scalar.cpp", "test_spec17.cpp"))
 
 unity <- paste0("unity_", names(groups), ".cpp")
 sources <- list.files(src, "\\.cpp$")

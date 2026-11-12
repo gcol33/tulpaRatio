@@ -27,7 +27,7 @@ test_that("structure and covariance choices are names the sampler parses", {
 test_that("an unknown name stops rather than reading as a default", {
   expect_error(tulpaRatio:::cpp_gradient_check("rw1", mode = "banana"), "gradient mode")
   expect_error(tulpaRatio:::cpp_gradient_check("rw1", zi = "zi_banana"), "inflation")
-  expect_error(tulpaRatio:::cpp_test_temporal_log_prior(rnorm(5), "rw3", 1, 0, FALSE),
+  expect_error(tulpa:::cpp_test_temporal_log_prior(rnorm(5), "rw3", 1, 0, FALSE),
                "temporal structure")
   expect_error(tulpaRatio:::cpp_enum_names("banana"), "enum kind")
 })

@@ -11,7 +11,6 @@ test_that("model metadata resolves every distribution pair and dispersion", {
     expect_identical(tulpaRatio:::get_hmc_model_type(family), type)
     expect_identical(family$numerator$distribution, spec$distributions[["num"]])
     expect_identical(family$denominator$distribution, spec$distributions[["denom"]])
-    expect_identical(tulpaRatio:::family_handcoded(family, type), spec$handcoded)
     expect_identical(tulpaRatio:::gibbs_model_type(family),
                      if ("gibbs" %in% spec$samplers) type else NA_character_)
     prior <- tulpaRatio:::default_prior("phi", type)

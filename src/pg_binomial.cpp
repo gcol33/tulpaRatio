@@ -6,7 +6,7 @@
 #include "pg_temporal.h"
 #include "pg_rng.h"
 #include "pg_spatial.h"
-#include "hmc_cov.h"
+#include "covariance.h"
 #include "cov_type_code.h"
 #include "linalg_fast.h"
 #include "omp_thread_scope.h"

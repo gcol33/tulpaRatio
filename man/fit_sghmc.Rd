@@ -41,7 +41,8 @@ fit_sghmc(
 
 \item{warmup}{Warmup iterations}
 
-\item{batch_size}{Minibatch size (default: min(256, N/10))}
+\item{batch_size}{Number of observations in each gradient. Must equal the
+number of rows in data; NULL uses all rows.}
 
 \item{epsilon}{Step size / learning rate (default: 0.01)}
 

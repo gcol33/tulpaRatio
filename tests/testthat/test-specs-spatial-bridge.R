@@ -1,9 +1,9 @@
 test_that("spatial engine posteriors recover simulated predictors", {
   skip_on_cran()
   calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+  trace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')))
+  on.exit(untrace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio')))
   for (seed in c(18L, 181L, 182L)) {
     fixture <- spatial_bridge_fixture(seed)
     adjacency <- fixture$adjacency; coords <- fixture$coords

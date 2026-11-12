@@ -43,7 +43,8 @@ fit_sgld(
 
 \item{warmup}{Warmup iterations}
 
-\item{batch_size}{Minibatch size}
+\item{batch_size}{Number of observations in each gradient. Must equal the
+number of rows in data; NULL uses all rows.}
 
 \item{epsilon}{Initial step size}
 

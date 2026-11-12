@@ -8,7 +8,6 @@ test_that("R reads compiled family shapes, links, inflation and extra counts", {
     expect_equal(entry$n_processes,if (model$responses[['denom']] %in% c('trials','exposure')) 1L else 2L)
   }
   for (name in c('poisson_fixed','negbin_fixed','lognormal_fixed','poisson_negbin')) {
-    expect_false(entries[[name]]$handcoded)
     expect_true(entries[[name]]$n_processes > 0L)
   }
 })

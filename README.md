@@ -17,7 +17,8 @@ proportions, such as catch per unit effort, the share of one species in
 a sample, or successes out of a known number of trials.
 
 The package is built on the [tulpa](https://gillescolling.com/tulpa/)
-engine, which supplies the sampler and the shared C++ machinery;
+engine, which supplies Hamiltonian Monte Carlo, elliptical slice sampling,
+stochastic-gradient sampling, variational inference and the shared C++ machinery;
 tulpaRatio adds the two-process ratio models, their families and the
 spatial and temporal terms. It models the numerator and the denominator
 as two processes with linked linear predictors, and derives the ratio
@@ -178,7 +179,7 @@ cpue <- ratio(fit, summary = TRUE)
 head(cpue)
 #> tulpaRatio ratio summary (response scale)
 #> ===========================================
-#> 
+#>
 #>  obs     mean        sd      q2.5      q50    q97.5
 #>    1 1.265194 0.1058698 1.0691947 1.259819 1.483303
 #>    2 1.839405 0.1263989 1.5985339 1.835237 2.096420
@@ -190,11 +191,11 @@ head(cpue)
 ratio_contrast(fit, ~ season)
 #> tulpaRatio ratio contrasts
 #> =====================
-#> 
-#> Type: difference 
-#> Variable: season 
-#> Reference: summer 
-#> 
+#>
+#> Type: difference
+#> Variable: season
+#> Reference: summer
+#>
 #>          contrast      mean         sd        q2.5       q50     q97.5
 #>  winter vs summer 0.1112132 0.09829348 -0.08689166 0.1124141 0.3020628
 #>  prob_positive

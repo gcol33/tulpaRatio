@@ -1,9 +1,9 @@
 test_that("numerator-only temporal fields preserve process inclusion", {
   skip_on_cran()
   calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+  trace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')),
+  on.exit(untrace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio')),
     add = TRUE)
   for (seed in c(18L, 181L, 182L)) {
     set.seed(seed)

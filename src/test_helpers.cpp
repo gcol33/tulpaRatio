@@ -8,30 +8,15 @@
 #include "pg_common.h"
 #include "pg_temporal.h"
 #include "omp_sum.h"
-#include "hmc_sampler.h"
-#include "ratio_obs_lik.h"
 #include "taylor_jet.h"
 
 #include "linalg_fast.h"
-#include "hmc_temporal.h"
-#include "hmc_temporal_multiscale.h"
 #include "ratio_margins.h"
-#include "hmc_spatiotemporal.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
 using namespace Rcpp;
-
-namespace ratiod_hmc {
-Rcpp::NumericVector negbin_table_probe(int y, double mu, double phi);
-Rcpp::NumericMatrix negbin_h_kernels(int y, double mu, double phi);
-}
-
-// [[Rcpp::export]]
-NumericMatrix cpp_test_negbin_h_kernels(int y, double mu, double phi) {
-  return ratiod_hmc::negbin_h_kernels(y, mu, phi);
-}
 
 // [[Rcpp::export]]
 NumericVector cpp_test_negbin_jet(int y, double mu, double phi) {
@@ -56,7 +41,7 @@ List cpp_test_negbin_paths(int y, double mu, double phi, double z,
                            std::string type = "zi_negbin") {
   const double eta = std::log(mu), lp = std::log(phi);
   NumericMatrix out(2, 4);
-  rownames(out) = CharacterVector::create("legacy_forward", "legacy_arena");
+  rownames(out) = CharacterVector::create("scalar_forward", "scalar_arena");
   colnames(out) = CharacterVector::create("value", "eta", "log_phi", "zi");
   for (int j = 0; j < 3; ++j) {
     const auto val = negbin_probe_density(y, fwd::Dual(eta, j == 0),
@@ -72,18 +57,18 @@ List cpp_test_negbin_paths(int y, double mu, double phi, double z,
     out(1, 0) = val.val(); out(1, 1) = a.adj(); out(1, 2) = b.adj(); out(1, 3) = c.adj();
   }
 
-  ratiod::ModelData data;
-  data.model_type = ratiod::ModelType::NEGBIN_NEGBIN;
-  data.y_num = {y}; data.y_denom = {0};
-  data.zi_type = ratiod_zi::parse_zi_type(type == "plain" ? "none" : type);
-  ratiod::ParamLayout layout;
-  layout.has_zi = type != "plain";
-  const auto h = ratiod::ratio_obs_derivs(data, layout, 0, eta, 0.0, phi, 1.0, z, 0.0,
-      ratiod::OBS_D_PHI_NUM | ratiod::OBS_D_ZI);
-  return List::create(_["autodiff"] = out,
-      _["legacy_double"] = negbin_probe_density(y, eta, lp, z, type),
-      _["H"] = NumericVector::create(h.ll + std::log(2.0), h.eta_num, phi * h.phi_num, h.logit_zi),
-      _["H_table"] = ratiod_hmc::negbin_table_probe(y, mu, phi));
+  using namespace tulpaRatio::margins;
+  const auto inflation=static_cast<tulpa::ZIType>(ratiod_zi::parse_zi_type(type=="plain" ? "none":type));
+  const auto result=linked_result<NegBin>(y,0,eta,phi,inflation,z,0,ratiod_link::LinkType::LOG);
+  Observation observation{double(y),eta};
+  observation.log_factorial=std::lgamma(y+1.);
+  observation.lgamma_difference=tulpa::math::lgamma_ratio_count(y,phi);
+  observation.digamma_difference=tulpa::math::polygamma_rising_difference(0,y,phi);
+  const auto cached=NegBin(phi).evaluate<true>(observation);
+  return List::create(_["autodiff"]=out,
+      _["scalar_double"]=negbin_probe_density(y,eta,lp,z,type),
+      _["H"]=NumericVector::create(result.ll,result.residual,phi*result.extra,result.zi),
+      _["H_table"]=NumericVector::create(cached.ll,cached.residual,phi*cached.extra));
 }
 
 static std::vector<double> flatten_row_major(const NumericMatrix& x) {
@@ -103,26 +88,6 @@ NumericVector cpp_test_inverse_logit(NumericVector x) {
   NumericVector out(x.size());
   for (int i = 0; i < x.size(); ++i) out[i] = ratiod::math::inv_logit(x[i]);
   return out;
-}
-
-// A binomial model without observations has independent N(0,1) coefficients.
-// [[Rcpp::export]]
-List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon) {
-  ratiod::ModelData data;
-  data.N = 0;
-  data.p_num = q.size();
-  data.p_denom = 0;
-  data.model_type = ratiod::ModelType::BINOMIAL;
-  data.sigma_beta = 1.0;
-  const auto layout = ratiod_hmc::compute_param_layout(data);
-  std::vector<double> position(q.begin(), q.end()), momentum(p.begin(), p.end());
-  const auto step = ratiod_hmc::leapfrog_step(position, momentum, epsilon, data, layout);
-  ratiod_hmc::DenseMassMatrix mass;
-  mass.init(p.size(), ratiod_hmc::MassMatrixType::DIAG);
-  const double h = ratiod_hmc::nuts_compute_hamiltonian_fast(
-      -0.5 * ratiod_linalg::norm_squared(position.data(), position.size()),
-      momentum.data(), mass, p.size());
-  return List::create(_["q"] = step.q, _["p"] = step.p, _["hamiltonian"] = h);
 }
 
 // [[Rcpp::export]]
@@ -329,61 +294,6 @@ List cpp_test_compute_linear_predictors(
 }
 
 // ---------------------------------------------------------------------------
-// hmc_temporal.h test wrappers
-// ---------------------------------------------------------------------------
-
-
-// [[Rcpp::export]]
-double cpp_test_rw1_quadratic_form(NumericVector phi, bool cyclic) {
-  return ratiod_temporal::rw1_quadratic_form(phi.begin(), phi.size(), cyclic);
-}
-
-// [[Rcpp::export]]
-double cpp_test_rw2_quadratic_form(NumericVector phi, bool cyclic) {
-  return ratiod_temporal::rw2_quadratic_form(phi.begin(), phi.size(), cyclic);
-}
-
-// [[Rcpp::export]]
-double cpp_test_ar1_log_density(NumericVector phi, double rho, double tau) {
-  return ratiod_ar1::ar1_log_density(phi.begin(), phi.size(), rho, tau);
-}
-
-// [[Rcpp::export]]
-double cpp_test_temporal_log_prior(
-    NumericVector phi,
-    std::string type_str,
-    double tau,
-    double rho,
-    bool cyclic,
-    int n_groups = 1,
-    bool augment = false,
-    bool tvc = false
-) {
-  if (tvc) {
-    ratiod_tvc::TVCData data;
-    data.n_times = phi.size() / n_groups;
-    data.n_tvc = 1; data.n_groups = n_groups;
-    data.structure = ratiod_temporal::parse_temporal_type(type_str);
-    data.cyclic = cyclic;
-    return ratiod_tvc::tvc_log_prior(std::vector<double>(phi.begin(),phi.end()),
-                                     data,std::vector<double>{tau},std::vector<double>{rho});
-  }
-  return ratiod_temporal::temporal_log_prior(
-    phi.begin(), phi.size() / n_groups, ratiod_temporal::parse_temporal_type(type_str),
-    std::log(tau), tau, rho, cyclic, n_groups, augment
-  );
-}
-
-// [[Rcpp::export]]
-double cpp_test_ms_rw_log_lik(NumericVector phi, double sigma2, int order,
-                              bool cyclic, bool augment) {
-  std::vector<double> v(phi.begin(), phi.end());
-  return order == 2
-      ? ratiod_temporal::rw2_log_lik(v, sigma2, cyclic, augment)
-      : ratiod_temporal::rw1_log_lik(v, sigma2, cyclic, augment);
-}
-
-// ---------------------------------------------------------------------------
 // hmc_zi.h test wrappers
 // ---------------------------------------------------------------------------
 
@@ -515,131 +425,6 @@ List cpp_test_parallel_likelihood(
     Named("log_lik") = log_lik,
     Named("n_threads_requested") = n_threads
   );
-}
-
-// ---------------------------------------------------------------------------
-// hmc_spatiotemporal.h: the GP interaction's field density
-//
-// The NNGP over a field's index set is EXACT when every location conditions on
-// all of its predecessors, so at nn = n - 1 this has to reproduce the dense
-// multivariate normal built from the same kernel. That identity is what pins
-// the covariance assembly, the ordering and the neighbour Cholesky against the
-// definition rather than against themselves; test-st-gp-density.R drives it.
-// ---------------------------------------------------------------------------
-
-
-static ratiod_spatiotemporal::SpatiotemporalData test_st_gp_structure(
-    int n, NumericMatrix coords, NumericVector time_values, int nn,
-    IntegerVector nn_idx, NumericVector nn_dist_space, NumericVector nn_dist_time,
-    IntegerVector nn_order, const std::string& nonsep_type,
-    const std::string& cov_space, const std::string& cov_time) {
-  ratiod_spatiotemporal::SpatiotemporalData st;
-  st.type = ratiod_spatiotemporal::STType::NONSEP_GP;
-  st.n_params = n;
-  st.nn = nn;
-  st.coords.resize(2 * (size_t)n);
-  for (int i = 0; i < n; i++) {
-    st.coords[(size_t)i * 2 + 0] = coords(i, 0);
-    st.coords[(size_t)i * 2 + 1] = coords(i, 1);
-  }
-  st.time_values = Rcpp::as<std::vector<double>>(time_values);
-  st.nn_idx = Rcpp::as<std::vector<int>>(nn_idx);
-  st.nn_dist_space = Rcpp::as<std::vector<double>>(nn_dist_space);
-  st.nn_dist_time = Rcpp::as<std::vector<double>>(nn_dist_time);
-  std::vector<int> ord = Rcpp::as<std::vector<int>>(nn_order);
-  st.nn_order.resize(ord.size());
-  for (size_t i = 0; i < ord.size(); i++) st.nn_order[i] = ord[i] - 1;
-  st.nn_order_inv.assign(ord.size(), 0);
-  for (size_t i = 0; i < st.nn_order.size(); i++)
-    st.nn_order_inv[st.nn_order[i]] = (int)i;
-
-  if (nonsep_type == "product") {
-    st.nonsep_type = ratiod_spatiotemporal::NonsepType::PRODUCT;
-  } else if (nonsep_type == "gneiting") {
-    st.nonsep_type = ratiod_spatiotemporal::NonsepType::GNEITING;
-  } else {
-    Rcpp::stop("unknown nonsep_type '%s'", nonsep_type.c_str());
-  }
-  st.cov_space = ratiod_cov::parse_cov_type(cov_space);
-  st.cov_time = ratiod_cov::parse_cov_type(cov_time);
-  return st;
-}
-
-// [[Rcpp::export]]
-double cpp_test_st_gp_log_lik(
-    NumericVector w,
-    double sigma2,
-    double phi_space,
-    double phi_time,
-    NumericMatrix coords,        // n x 2, by field index
-    NumericVector time_values,   // n, by field index
-    int nn,
-    IntegerVector nn_idx,        // n x nn, row-major, 1-based within ordering
-    NumericVector nn_dist_space,
-    NumericVector nn_dist_time,
-    IntegerVector nn_order,      // 1-based from R, stored 0-based
-    std::string nonsep_type = "product",
-    std::string cov_space = "exponential",
-    std::string cov_time = "exponential"
-) {
-  const ratiod_spatiotemporal::SpatiotemporalData st = test_st_gp_structure(
-      w.size(), coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time,
-      nn_order, nonsep_type, cov_space, cov_time);
-  return ratiod_spatiotemporal::st_gp_nngp_log_lik(
-      w.begin(), sigma2, phi_space, phi_time, st);
-}
-
-// The margin penalty's normalizer on an S x T grid (field index s * T + t),
-// with its derivatives in log tau and the two log ranges.
-// [[Rcpp::export]]
-Rcpp::List cpp_test_st_gp_margin_normalizer(
-    double tau,
-    double phi_space,
-    double phi_time,
-    int n_spatial,
-    int n_times,
-    NumericMatrix coords,
-    NumericVector time_values,
-    int nn,
-    IntegerVector nn_idx,
-    NumericVector nn_dist_space,
-    NumericVector nn_dist_time,
-    IntegerVector nn_order,
-    std::string nonsep_type = "gneiting"
-) {
-  ratiod_spatiotemporal::SpatiotemporalData st = test_st_gp_structure(
-      n_spatial * n_times, coords, time_values, nn, nn_idx, nn_dist_space,
-      nn_dist_time, nn_order, nonsep_type, "exponential", "exponential");
-  st.n_spatial = n_spatial;
-  st.n_times = n_times;
-  const ratiod_spatiotemporal::StGpMarginNormalizer nz =
-      ratiod_spatiotemporal::st_gp_margin_normalizer_grad(tau, phi_space, phi_time, st);
-  if (!nz.ok) Rcpp::stop("the normalizer could not be formed");
-  return Rcpp::List::create(
-      Rcpp::Named("value") = nz.value,
-      Rcpp::Named("grad") = Rcpp::NumericVector::create(
-          nz.log_tau, nz.log_phi_space, nz.log_phi_time));
-}
-
-// The rho term of a Knorr-Held interaction's margin-penalty normalizer on an
-// S x T grid with an AR1 time margin, with its rho derivative.
-// [[Rcpp::export]]
-Rcpp::NumericVector cpp_test_st_ar1_margin_normalizer(
-    double rho, int n_spatial, int n_times, std::string type = "II") {
-  ratiod_spatiotemporal::SpatiotemporalData st;
-  if (type == "II") {
-    st.type = ratiod_spatiotemporal::STType::TYPE_II;
-  } else if (type == "IV") {
-    st.type = ratiod_spatiotemporal::STType::TYPE_IV;
-  } else {
-    Rcpp::stop("unknown type '%s'", type.c_str());
-  }
-  st.temporal_type = ratiod_temporal::TemporalType::AR1;
-  st.n_spatial = n_spatial;
-  st.n_times = n_times;
-  return Rcpp::NumericVector::create(
-      ratiod_spatiotemporal::st_ar1_margin_log_normalizer(rho, st),
-      ratiod_spatiotemporal::st_ar1_margin_log_normalizer_drho(rho, st));
 }
 
 // [[Rcpp::export]]

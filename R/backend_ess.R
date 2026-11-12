@@ -82,9 +82,10 @@ fit_ess <- function(formula,
   hmc_data <- inp$hmc_data
 
   assert_single_random_intercept(hmc_data, "ess")
+  setup <- engine_sampler_inputs(inp, family)
+  inp <- setup$inputs
 
-  # The sampler starts every chain at zero on the layout it computes
-  q_init <- numeric(0)
+
 
   if (verbose) {
     message("Elliptical Slice Sampling")
@@ -92,18 +93,9 @@ fit_ess <- function(formula,
   }
 
   runs <- lapply(seq_len(chains), function(c) {
-    do.call(cpp_ess_fit, c(
-      list(q_init = q_init),
-      model_data_args(inp, family),
-      list(n_iter = as.integer(iter), n_warmup = as.integer(warmup),
-           seed = as.integer(seed + c - 1L), verbose = verbose)
-    ))
+    engine_sampler_run(setup, "ess", iter, warmup, seed + c - 1L, verbose)
   })
 
-  # ESS samples the parameter vector of the HMC sampler (one layout,
-  # compute_param_layout()), with random effects in the centred coordinate,
-  # so its draws go through the same unpacking. It has no trajectories: no
-  # divergences, tree depth or energy.
   per_chain <- function(field) {
     out <- lapply(runs, function(r) r[[field]])
     if (chains == 1L) out[[1L]] else out

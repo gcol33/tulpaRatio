@@ -40,7 +40,6 @@ test_that("residual kernels accumulate every margin's extra score", {
       p <- c(2.4,1.7)[k]
       r <- tulpaRatio:::cpp_test_ratio_margin(family,c(3,8)[k],8L,c(-.35,.2)[k],p,TRUE)
       score <- r['extra']
-      if (family == 'lognormal') score <- score/p
       expected[k] <- expected[k] + score
       expected[3] <- expected[3] + r['ll']
     }

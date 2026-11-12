@@ -2,8 +2,26 @@
 #include "lik_specs/lik_helpers.h"
 
 namespace tulpaRatio {
-Rcpp::NumericMatrix precision_spec_h_probe(double y, double mu, double phi);
-Rcpp::NumericVector precision_spec_beta_h_probe(int y, int n, double phi);
+using namespace margins;
+Rcpp::NumericMatrix precision_spec_h_probe(double y, double mu, double phi) {
+    const Gamma gamma(phi);
+    const Observation x{y,std::log(mu)};
+    const auto g = gamma.evaluate<false>(x);
+    Rcpp::NumericMatrix out(3,2);
+    out(0,0) = (-1.0 + g.ll) + 1.0;
+    out(0,1) = g.extra;
+    out(1,0) = (NegBin(2).evaluate<false>({0,0}).ll + g.ll) + 2*std::log1p(.5);
+    out(1,1) = g.extra;
+    out(2,0) = g.ll + g.ll;
+    out(2,1) = g.extra;
+    return out;
+}
+
+Rcpp::NumericVector precision_spec_beta_h_probe(int y, int n, double phi) {
+    const auto b = BetaBinomial(phi).evaluate<false>({double(y),0.0,n});
+    return Rcpp::NumericVector::create(b.ll,b.extra);
+}
+
 }
 
 // [[Rcpp::export]]

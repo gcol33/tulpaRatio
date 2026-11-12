@@ -90,6 +90,9 @@ fit_vi <- function(formula,
   model_type <- inp$model_type
 
   assert_single_random_intercept(hmc_data, "vi")
+  setup <- engine_sampler_inputs(inp, family)
+  inp <- setup$inputs
+
 
   # VI options
   vi_options <- list(
@@ -110,8 +113,6 @@ fit_vi <- function(formula,
     seed = as.integer(seed)
   )
 
-  # The variational mean starts at zero on the layout the fit computes
-  q_init <- numeric(0)
 
   if (verbose) {
     message("Variational Inference")
@@ -120,11 +121,8 @@ fit_vi <- function(formula,
   }
 
   # Fit VI model
-  fit_raw <- do.call(cpp_vi_fit, c(
-    list(q_init = q_init),
-    model_data_args(inp, family),
-    list(vi_options = vi_options, verbose = verbose)
-  ))
+  fit_raw <- engine_sampler_run(setup, "vi", 1L, 0L, seed, verbose, vi_options)
+  fit_raw$param_names <- engine_raw_parameter_names(setup$layout)
 
   # Build result object
   result <- structure(list(
@@ -141,7 +139,7 @@ fit_vi <- function(formula,
     vi_converged = fit_raw$converged,
     psis_k = fit_raw$psis_k,
 
-    # Samples for compatibility
+    # Posterior samples
     samples = fit_raw$samples,
     n_samples = nrow(fit_raw$samples),
     draws = NULL,  # Will be set below after param_names
@@ -186,7 +184,7 @@ fit_vi <- function(formula,
             " (marginal): approximation quality is acceptable but not ideal.")
   }
 
-  result
+  engine_fit_metadata(result, setup)
 }
 
 

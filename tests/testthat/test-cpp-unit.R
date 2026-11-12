@@ -7,14 +7,14 @@ test_that("production leapfrog and Hamiltonian match a Gaussian reference", {
   q <- c(1, 0.5, -0.3)
   p <- c(0.2, -0.4, 0.6)
   epsilon <- 0.1
-  result <- tulpaRatio:::cpp_test_integrator(q, p, epsilon)
+  result <- tulpa:::cpp_test_integrator(q, p, epsilon)
   half <- p - epsilon * q / 2
   expected_q <- q + epsilon * half
   expected_p <- half - epsilon * expected_q / 2
   expect_equal(result$q, expected_q, tolerance = 1e-10)
   expect_equal(result$p, expected_p, tolerance = 1e-10)
   expect_equal(result$hamiltonian, sum(q^2 + p^2) / 2, tolerance = 1e-10)
-  reverse <- tulpaRatio:::cpp_test_integrator(result$q, -result$p, epsilon)
+  reverse <- tulpa:::cpp_test_integrator(result$q, -result$p, epsilon)
   expect_equal(reverse$q, q, tolerance = 1e-10)
   expect_equal(reverse$p, -p, tolerance = 1e-10)
 })
@@ -409,7 +409,7 @@ test_that("rw1_quadratic_form computes sum of squared differences", {
   phi <- c(1, 2, 5, 7, 8)
 
   # Non-cyclic: sum((phi[t+1] - phi[t])^2) for t=1..T-1
-  result <- tulpaRatio:::cpp_test_rw1_quadratic_form(phi, FALSE)
+  result <- tulpa:::cpp_test_rw1_quadratic_form(phi, FALSE)
   expected <- (2-1)^2 + (5-2)^2 + (7-5)^2 + (8-7)^2
   expect_equal(result, expected, tolerance = 1e-10)
 })
@@ -418,7 +418,7 @@ test_that("rw1_quadratic_form handles cyclic case", {
   phi <- c(1, 2, 5, 7, 8)
 
   # Cyclic: adds (phi[1] - phi[T])^2
-  result <- tulpaRatio:::cpp_test_rw1_quadratic_form(phi, TRUE)
+  result <- tulpa:::cpp_test_rw1_quadratic_form(phi, TRUE)
   expected <- (2-1)^2 + (5-2)^2 + (7-5)^2 + (8-7)^2 + (1-8)^2
   expect_equal(result, expected, tolerance = 1e-10)
 })
@@ -427,7 +427,7 @@ test_that("rw2_quadratic_form computes sum of squared second differences", {
   phi <- c(1, 3, 4, 6, 10)
 
   # Non-cyclic: sum((phi[t] - 2*phi[t+1] + phi[t+2])^2)
-  result <- tulpaRatio:::cpp_test_rw2_quadratic_form(phi, FALSE)
+  result <- tulpa:::cpp_test_rw2_quadratic_form(phi, FALSE)
   d1 <- 1 - 2*3 + 4   # = -1
   d2 <- 3 - 2*4 + 6   # = 1
   d3 <- 4 - 2*6 + 10  # = 2
@@ -436,8 +436,8 @@ test_that("rw2_quadratic_form computes sum of squared second differences", {
 })
 
 test_that("rw2_quadratic_form returns 0 for T < 3", {
-  expect_equal(tulpaRatio:::cpp_test_rw2_quadratic_form(c(1, 2), FALSE), 0)
-  expect_equal(tulpaRatio:::cpp_test_rw2_quadratic_form(c(1), FALSE), 0)
+  expect_equal(tulpa:::cpp_test_rw2_quadratic_form(c(1, 2), FALSE), 0)
+  expect_equal(tulpa:::cpp_test_rw2_quadratic_form(c(1), FALSE), 0)
 })
 
 test_that("ar1_log_density is finite for valid inputs", {
@@ -445,7 +445,7 @@ test_that("ar1_log_density is finite for valid inputs", {
   rho <- 0.7
   tau <- 2.0
 
-  result <- tulpaRatio:::cpp_test_ar1_log_density(phi, rho, tau)
+  result <- tulpa:::cpp_test_ar1_log_density(phi, rho, tau)
   expect_true(is.finite(result))
   expect_true(result < 0)  # Log-density should be negative
 })
@@ -457,7 +457,7 @@ test_that("ar1_log_density matches manual computation", {
   tau <- 2.0
   sigma2 <- 1.0 / tau
 
-  result <- tulpaRatio:::cpp_test_ar1_log_density(phi, rho, tau)
+  result <- tulpa:::cpp_test_ar1_log_density(phi, rho, tau)
 
   # Manual computation
   T <- length(phi)
@@ -478,12 +478,12 @@ test_that("temporal_log_prior RW1 matches manual computation", {
   phi <- c(1, 2, 4)
   tau <- 2.0
 
-  result <- tulpaRatio:::cpp_test_temporal_log_prior(phi, "rw1", tau, 0, FALSE)
+  result <- tulpa:::cpp_test_temporal_log_prior(phi, "rw1", tau, 0, FALSE)
 
   # Manual: 0.5 * rank * log(tau) - 0.5 * tau * quad
   quad <- (2-1)^2 + (4-2)^2  # = 1 + 4 = 5
   rank <- 2  # T - 1 for non-cyclic
-  expected <- 0.5 * rank * log(tau) - 0.5 * tau * quad
+  expected <- 0.5 * rank * log(tau / (2 * pi)) - 0.5 * tau * quad
   expect_equal(result, expected, tolerance = 1e-10)
 })
 
@@ -498,12 +498,12 @@ test_that("the intrinsic arms' augmentation carries both the quadratic and the r
   quad_aug <- quad + 6^2 / 3                         # 14
   rank <- 2                                          # rw1_rank(3, FALSE)
 
-  plain <- tulpaRatio:::cpp_test_ms_rw_log_lik(phi, sigma2, 1L, FALSE, FALSE)
+  plain <- tulpa:::cpp_test_ms_rw_log_lik(phi, sigma2, 1L, FALSE, FALSE)
   expect_equal(plain,
                -0.5 * quad / sigma2 - 0.5 * rank * log(2 * pi * sigma2),
                tolerance = 1e-10)
 
-  augmented <- tulpaRatio:::cpp_test_ms_rw_log_lik(phi, sigma2, 1L, FALSE, TRUE)
+  augmented <- tulpa:::cpp_test_ms_rw_log_lik(phi, sigma2, 1L, FALSE, TRUE)
   expect_equal(augmented,
                -0.5 * quad_aug / sigma2 - 0.5 * (rank + 1) * log(2 * pi * sigma2),
                tolerance = 1e-10)
@@ -512,8 +512,8 @@ test_that("the intrinsic arms' augmentation carries both the quadratic and the r
   # difference is the one extra rank the full-rank normalizer carries.
   centred <- c(-1, 0, 1)
   expect_equal(
-    tulpaRatio:::cpp_test_ms_rw_log_lik(centred, sigma2, 1L, FALSE, TRUE) -
-      tulpaRatio:::cpp_test_ms_rw_log_lik(centred, sigma2, 1L, FALSE, FALSE),
+    tulpa:::cpp_test_ms_rw_log_lik(centred, sigma2, 1L, FALSE, TRUE) -
+      tulpa:::cpp_test_ms_rw_log_lik(centred, sigma2, 1L, FALSE, FALSE),
     -0.5 * log(2 * pi * sigma2),
     tolerance = 1e-10)
 })
@@ -530,7 +530,7 @@ test_that("a non-cyclic RW2 stays deficient by one after the augmentation", {
   quad_aug <- sum(d2^2) + sum(phi)^2 / n
 
   expect_equal(
-    tulpaRatio:::cpp_test_ms_rw_log_lik(phi, sigma2, 2L, FALSE, TRUE),
+    tulpa:::cpp_test_ms_rw_log_lik(phi, sigma2, 2L, FALSE, TRUE),
     -0.5 * quad_aug / sigma2 - 0.5 * (n - 1) * log(2 * pi * sigma2),
     tolerance = 1e-10)
 })

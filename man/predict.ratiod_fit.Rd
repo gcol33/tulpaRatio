@@ -57,9 +57,8 @@ effects in predictions. Set to FALSE for fixed-effects-only predictions.}
 \item{return_spatial}{Logical; if TRUE, return spatial effect samples at
 new locations as \code{w.0.samples} in the output (similar to spOccupancy).}
 
-\item{n_samples}{Number of posterior samples to draw for backends that
-don't store samples directly (e.g., Laplace, VI). Default uses all
-available samples for HMC/PG.}
+\item{n_samples}{Number of posterior draws generated for Laplace prediction.
+Engine sampler predictions use the stored parameter draws.}
 
 \item{...}{Ignored}
 

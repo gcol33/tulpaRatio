@@ -36,8 +36,8 @@ NULL
 #' @param parameterization Parameterization of the spatial random effect.
 #'   `"auto"` (default) scales each sampled field by its prior precision plus
 #'   fixed likelihood curvature. `"standard"` represents the field directly.
-#'   The engine callback route uses automatic joint coordinates for
-#'   `"collapsed"`. The legacy sampler marginalizes that field. BYM2 uses unit-scale
+#'   The sampler uses automatic joint coordinates for
+#'   `"collapsed"`. BYM2 uses unit-scale
 #'   structured and independent fields with a separate total scale.
 #' @param center Logical; if TRUE (default), the field's mean is removed on its
 #'   way into the linear predictor, so the intercept carries the level and the
@@ -590,8 +590,7 @@ is_connected <- function(adjacency) {
 #'   amplitude centering based on fixed likelihood information.
 #'   `"centered"` samples the effects directly,
 #'   `"noncentered"` samples standardized Gaussian innovations, and
-#'   `"collapsed"` selects automatic joint coordinates on the engine callback
-#'   route. The legacy sampler marginalizes that field.
+#'   `"collapsed"` selects automatic joint coordinates.
 #'
 #' @return A `ratiod_gp` object
 #'

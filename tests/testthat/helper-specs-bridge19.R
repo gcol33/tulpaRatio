@@ -161,9 +161,9 @@ bridge19_cases <- function() {
 engine_recovery_fit <- function(args, name, seed, control = bridge19_control(name, seed)) {
   args$control <- control
   reached_engine <- FALSE
-  trace("cpp_tulpaRatio_run_nuts_specs", where = asNamespace("tulpaRatio"),
+  trace("cpp_tulpaRatio_sample", where = asNamespace("tulpaRatio"),
     tracer = function() reached_engine <<- TRUE, print = FALSE)
-  on.exit(untrace("cpp_tulpaRatio_run_nuts_specs", where = asNamespace("tulpaRatio")), add = TRUE)
+  on.exit(untrace("cpp_tulpaRatio_sample", where = asNamespace("tulpaRatio")), add = TRUE)
   timing <- system.time(fit <- do.call(tratio, args))
   expect_true(reached_engine, info = paste(name, seed, "dispatch"))
   expect_length(unique(fit$diagnostics$energy_chain), control$chains)
@@ -175,7 +175,7 @@ engine_recovery_fit <- function(args, name, seed, control = bridge19_control(nam
   row <- data.frame(route = name, seed = seed, seconds = timing[["elapsed"]],
     ess_sec = min(bridge19_chain_stat(draws, fit, posterior::ess_bulk)) / timing[["elapsed"]],
     divergences = fit$diagnostics$n_divergent,
-    rhat = if (control$chains > 1L) max(bridge19_chain_stat(draws, fit, posterior::rhat)) else NA_real_)
+    rhat = max(bridge19_chain_stat(draws, fit, posterior::rhat)))
   bridge19_write_evidence(row, "engine-route-diagnostics.tsv")
   work <- Sys.getenv("TULPA_BRIDGE_WORK", file.path(tempdir(), "bridge19"))
   saveRDS(list(fit = fit, args = args, diagnostics = row),

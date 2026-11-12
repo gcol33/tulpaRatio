@@ -4,8 +4,8 @@
 \alias{sghmc_backend}
 \title{Stochastic Gradient MCMC Backends for ratio Models}
 \description{
-Stochastic gradient MCMC methods sample large datasets from minibatch
-gradients. They are Tier 3 (Optimized): see Details.
+SGHMC and SGLD use full-data gradients with injected Gaussian noise.
+They are Tier 3 (Optimized): see Details.
 }
 \details{
 Two methods are provided:
@@ -18,10 +18,9 @@ Reference: Chen, Fox, Guestrin (2014) "Stochastic Gradient Hamiltonian Monte Car
 Simpler method without momentum, uses decaying step size schedule.
 Reference: Welling & Teh (2011) "Bayesian Learning via Stochastic Gradient Langevin Dynamics"
 
-Their continuous-time limit samples the posterior, but both run a fixed
-step size on minibatch gradients with no Metropolis correction, so a run
-samples a distribution perturbed by the discretization and the gradient
-noise. They share Tier 3 with VI for that reason.
+Both use discretized stochastic dynamics with gradient clipping.
+Finite steps can perturb the posterior. SGLD supports a decaying
+step size schedule. These approximations share Tier 3 with VI.
 }
 \section{When to Use}{
 

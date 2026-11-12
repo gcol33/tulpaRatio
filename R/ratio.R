@@ -624,10 +624,8 @@ compute_fitted_laplace <- function(object) {
 #'   effects in predictions. Set to FALSE for fixed-effects-only predictions.
 #' @param return_spatial Logical; if TRUE, return spatial effect samples at
 #'   new locations as `w.0.samples` in the output (similar to spOccupancy).
-#' @param n_samples Number of posterior samples to draw for backends that
-
-#'   don't store samples directly (e.g., Laplace, VI). Default uses all
-#'   available samples for HMC/PG.
+#' @param n_samples Number of posterior draws generated for Laplace prediction.
+#'   Engine sampler predictions use the stored parameter draws.
 #' @param ... Ignored
 #'
 #' @return If `summary = TRUE`, a data frame with posterior summaries.
@@ -717,10 +715,6 @@ predict.ratiod_fit <- function(object, newdata, type = c("response", "link"),
     pred_result <- predict_laplace(object, newdata, type, re_formula, allow_new_levels,
                                    coords.0, include_spatial, return_spatial,
                                    n_samples = n_samples %||% 1000L)
-  } else if (backend == "vi") {
-    pred_result <- predict_vi(object, newdata, type, re_formula, allow_new_levels,
-                              coords.0, include_spatial, return_spatial,
-                              n_samples = n_samples %||% 1000L)
   } else {
     stop("predict() not yet supported for backend '", backend, "'.\n",
          "Use fitted() for in-sample fitted values.", call. = FALSE)
@@ -1519,51 +1513,6 @@ predict_laplace <- function(object, newdata, type, re_formula, allow_new_levels,
   pred_draws <- hmc_response_draws(list(eta_num = eta_num, eta_denom = eta_denom),
                                    fit_links(object), type)
   list(draws = pred_draws, w_samples = NULL)
-}
-
-
-#' Predict for VI backend
-#' @keywords internal
-predict_vi <- function(object, newdata, type, re_formula, allow_new_levels,
-                       coords.0, include_spatial, return_spatial, n_samples) {
-  # VI stores variational parameters
-  # Sample from variational posterior q(theta)
-
-  vi_params <- object$.internal$vi_params
-  if (is.null(vi_params)) {
-    stop("VI fit missing variational parameters.", call. = FALSE)
-  }
-
-  # Sample from variational posterior
-  samples <- sample_vi_posterior(vi_params, n_samples)
-
-  # Build prediction data
-  pred_data <- build_prediction_data(object, newdata, re_formula, allow_new_levels)
-
-  # Create temporary object
-  temp_object <- object
-  temp_object$.internal$samples <- samples
-
-  pred_draws <- compute_predictions_hmc(temp_object, pred_data, type)
-
-  list(draws = pred_draws, w_samples = NULL)
-}
-
-
-#' Sample from VI variational posterior
-#' @keywords internal
-sample_vi_posterior <- function(vi_params, n_samples) {
-  # Mean-field: q(theta) = prod N(mu_i, sigma_i^2)
-  mu <- vi_params$mu
-  sigma <- vi_params$sigma
-
-  if (is.null(mu) || is.null(sigma)) {
-    stop("VI parameters missing mu or sigma.", call. = FALSE)
-  }
-
-  p <- length(mu)
-  Z <- matrix(rnorm(n_samples * p), n_samples, p)
-  sweep(Z * matrix(sigma, n_samples, p, byrow = TRUE), 2, mu, "+")
 }
 
 

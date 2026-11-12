@@ -290,14 +290,12 @@ FAMILY_DISTRIBUTIONS <- list(
 )
 
 model_type_spec <- function(num, denom, responses, dispersion = NULL,
-                            samplers = character(), phi_rate = 0.1, name = NULL,
-                            handcoded = FALSE) {
+                            samplers = character(), phi_rate = 0.1, name = NULL) {
   list(distributions = c(num = num, denom = denom), responses = responses,
        dispersion = dispersion,
        samplers = c("hmc", "ess", "sghmc", "sgld", "vi", samplers),
        phi_prior = c(shape = 2, rate = phi_rate), name = name,
        labels = vapply(FAMILY_DISTRIBUTIONS[c(num, denom)], `[[`, "", "label"),
-       handcoded = handcoded,
        spec_inflation = character())
 }
 
@@ -434,18 +432,6 @@ family_links <- function(family, model_type) {
 family_canonical_links <- function(family, model_type) {
   links <- family_links(family, model_type)
   all(unlist(links[c("num", "denom", "zi", "oi")]) %in% LINKS_CANONICAL)
-}
-
-
-#' Whether a family's likelihood is one the hand-written samplers carry
-#'
-#' Its model type has a hand-coded likelihood and every link is canonical.
-#'
-#' @inheritParams family_links
-#' @return `TRUE` or `FALSE`
-#' @keywords internal
-family_handcoded <- function(family, model_type) {
-  isTRUE(MODEL_TYPES[[model_type]]$handcoded) && family_canonical_links(family, model_type)
 }
 
 

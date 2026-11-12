@@ -3,7 +3,7 @@
 #include "lik_specs/family_registry.h"
 #include "lik_specs/family_kernel.h"
 #include "lik_specs/family_weights.h"
-#include "lik_specs/lik_grad_h_kernel.h"
+#include "lik_specs/ratio_h_gradient.h"
 
 namespace tulpaRatio {
 
@@ -17,14 +17,14 @@ constexpr LinkDomain margin_link_domain() {
 
 template<class Num, class Den = margins::NoMargin>
 FamilyEntry make_family_entry(const char* name, const char* spec_name,
-    const char* link, std::vector<std::string> zi, tulpa::FullGradFn gradient,
-    ResponseShape fixed = ResponseShape::Trials, bool legacy_likelihood = true) {
+    const char* link, std::vector<std::string> zi, bool analytic = true,
+    ResponseShape fixed = ResponseShape::Trials) {
     constexpr bool single = std::is_same<Den,margins::NoMargin>::value;
     return {name,spec_name,single ? 1 : 2,Num::n_extra+Den::n_extra,link,"log",std::move(zi),
         lik::continuous_response<Num> ? ResponseShape::Positive : ResponseShape::Count,
         single ? fixed : lik::continuous_response<Den> ? ResponseShape::Positive : ResponseShape::Count,
         &lik::family_likelihood<Num,Den,double>,
-        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,gradient,legacy_likelihood,
+        &lik::family_likelihood<Num,Den,tulpa::arena::Var>,analytic ? &h_kernel::gradient<Num,Den> : nullptr,
         margin_link_domain<Num>(),margin_link_domain<Den>(),
 
         &lik::family_weights<Num,Den,double>, &lik::family_weights<Num,Den,tulpa::arena::Var>};
@@ -34,27 +34,27 @@ const std::vector<FamilyEntry>& family_entries() {
     using namespace margins;
     static const std::vector<FamilyEntry> entries = {
         make_family_entry<Binomial>("binomial","tulpaRatio_binomial","logit",
-            {"none","zi_binomial","hurdle_binomial","oi_binomial","zoib"},&grad_h_binomial),
+            {"none","zi_binomial","hurdle_binomial","oi_binomial","zoib"}),
         make_family_entry<Poisson,Gamma>("poisson_gamma","tulpaRatio_poisson_gamma","log",
-            {"none","zi_poisson","hurdle_poisson"},&grad_h_poisson_gamma),
+            {"none","zi_poisson","hurdle_poisson"}),
         make_family_entry<NegBin,Gamma>("negbin_gamma","tulpaRatio_negbin_gamma","log",
-            {"none","zi_negbin","hurdle_negbin"},&grad_h_negbin_gamma),
+            {"none","zi_negbin","hurdle_negbin"}),
         make_family_entry<NegBin,NegBin>("negbin_negbin","tulpaRatio_negbin_negbin","log",
-            {"none","zi_negbin","hurdle_negbin"},&grad_h_negbin_negbin),
+            {"none","zi_negbin","hurdle_negbin"}),
         make_family_entry<Gamma,Gamma>("gamma_gamma","tulpaRatio_gamma_gamma","log",
-            {"none"},&grad_h_gamma_gamma),
+            {"none"}),
         make_family_entry<Lognormal,Lognormal>("lognormal","tulpaRatio_lognormal","log",
-            {"none"},&grad_h_lognormal),
+            {"none"}),
         make_family_entry<BetaBinomial>("beta_binomial","tulpaRatio_beta_binomial","logit",
-            {"none"},&grad_h_beta_binomial),
+            {"none"}),
         make_family_entry<Poisson>("poisson_fixed","tulpaRatio_poisson_fixed","log",
-            {"none","zi_poisson","hurdle_poisson"},nullptr,ResponseShape::Exposure,false),
+            {"none","zi_poisson","hurdle_poisson"},false,ResponseShape::Exposure),
         make_family_entry<NegBin>("negbin_fixed","tulpaRatio_negbin_fixed","log",
-            {"none","zi_negbin","hurdle_negbin"},nullptr,ResponseShape::Exposure,false),
+            {"none","zi_negbin","hurdle_negbin"},false,ResponseShape::Exposure),
         make_family_entry<Lognormal>("lognormal_fixed","tulpaRatio_lognormal_fixed","log",
-            {"none"},nullptr,ResponseShape::Exposure,false),
+            {"none"},false,ResponseShape::Exposure),
         make_family_entry<Poisson,NegBin>("poisson_negbin","tulpaRatio_poisson_negbin","log",
-            {"none","zi_poisson","hurdle_poisson"},nullptr,ResponseShape::Trials,false)
+            {"none","zi_poisson","hurdle_poisson"},false,ResponseShape::Trials)
     };
     return entries;
 }
@@ -120,7 +120,6 @@ Rcpp::List cpp_ratio_family_entries() {
         out[k]=Rcpp::List::create(Rcpp::Named("n_processes")=e.processes,
             Rcpp::Named("n_extra")=e.n_extra,Rcpp::Named("num_link")=e.num_link,
             Rcpp::Named("denom_link")=e.denom_link,Rcpp::Named("spec_inflation")=e.zi,
-            Rcpp::Named("handcoded")=e.legacy_likelihood,
             Rcpp::Named("responses")=Rcpp::CharacterVector::create(
                 Rcpp::Named("num")=domain(e.num_response),Rcpp::Named("denom")=domain(e.denom_response)));
     }

@@ -10,8 +10,6 @@ LIKELIHOOD_BACKENDS
 These samplers evaluate the package's one log posterior, which carries
 every model type and maps each linear predictor through its link. The
 Gibbs, Polya-Gamma and Laplace samplers carry likelihoods of their own,
-written for the original model types under the canonical links, as do the
-collapsed spatial fields, whose marginal is a Laplace approximation under
-those likelihoods.
+written for the supported model types under the canonical links.
 }
 \keyword{internal}

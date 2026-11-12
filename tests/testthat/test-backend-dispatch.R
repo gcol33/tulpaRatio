@@ -43,6 +43,6 @@ test_that("stochastic gradient builders share the data-sized batch default", {
     control = tulpaRatio:::.tratio_control(list(iter = 100, chains = 1, verbose = FALSE)))
   for (backend in c("sghmc", "sgld")) {
     args <- tulpaRatio:::TRATIO_BACKENDS[[backend]]$args(context)
-    expect_identical(args$batch_size, 9)
+    expect_identical(args$batch_size, nrow(context$inputs$data))
   }
 })

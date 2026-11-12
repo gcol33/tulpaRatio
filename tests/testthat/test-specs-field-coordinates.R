@@ -1,9 +1,9 @@
 test_that("automatic and cyclic fields reach the engine and recover simulated effects", {
   skip_on_cran()
   calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
+  trace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')))
+  on.exit(untrace('cpp_tulpaRatio_sample', where = asNamespace('tulpaRatio')))
   S <- 6L
   adjacency <- matrix(0, S, S)
   for (s in seq_len(S - 1L)) adjacency[s, s + 1L] <- adjacency[s + 1L, s] <- 1

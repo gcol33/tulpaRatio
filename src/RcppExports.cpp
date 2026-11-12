@@ -48,38 +48,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_ess_fit
-Rcpp::List cpp_ess_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List gp_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, int n_iter, int n_warmup, unsigned int seed, bool verbose);
-RcppExport SEXP _tulpaRatio_cpp_ess_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP gp_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP seedSEXP, SEXP verboseSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type q_init(q_initSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_num(y_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_denom(y_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_num_cont(y_num_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_denom_cont(y_denom_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_num(X_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_denom(X_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type family(familySEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type gp_params(gp_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type prior_params(prior_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type zi_params(zi_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type latent_params(latent_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type st_params(st_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type tvc_params(tvc_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type svc_params(svc_paramsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
-    Rcpp::traits::input_parameter< int >::type n_warmup(n_warmupSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_ess_fit(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_gibbs_margin
 Rcpp::NumericVector cpp_test_gibbs_margin(int family, int y, double yd, double en, double ed, double pn, double pd);
 RcppExport SEXP _tulpaRatio_cpp_test_gibbs_margin(SEXP familySEXP, SEXP ySEXP, SEXP ydSEXP, SEXP enSEXP, SEXP edSEXP, SEXP pnSEXP, SEXP pdSEXP) {
@@ -125,72 +93,6 @@ BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     rcpp_result_gen = Rcpp::wrap(cpp_gpu_info());
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_hmc_fit
-Rcpp::List cpp_hmc_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List gp_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, int n_iter, int n_warmup, int L, int n_chains, unsigned int seed, int n_threads, bool verbose, std::string gradient_mode_str, int max_treedepth, std::string metric_str, double adapt_delta, bool walnuts, int n_cores);
-RcppExport SEXP _tulpaRatio_cpp_hmc_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP gp_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP LSEXP, SEXP n_chainsSEXP, SEXP seedSEXP, SEXP n_threadsSEXP, SEXP verboseSEXP, SEXP gradient_mode_strSEXP, SEXP max_treedepthSEXP, SEXP metric_strSEXP, SEXP adapt_deltaSEXP, SEXP walnutsSEXP, SEXP n_coresSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type q_init(q_initSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_num(y_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_denom(y_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_num_cont(y_num_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_denom_cont(y_denom_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_num(X_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_denom(X_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type family(familySEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type gp_params(gp_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type prior_params(prior_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type zi_params(zi_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type latent_params(latent_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type st_params(st_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type tvc_params(tvc_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type svc_params(svc_paramsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
-    Rcpp::traits::input_parameter< int >::type n_warmup(n_warmupSEXP);
-    Rcpp::traits::input_parameter< int >::type L(LSEXP);
-    Rcpp::traits::input_parameter< int >::type n_chains(n_chainsSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< std::string >::type gradient_mode_str(gradient_mode_strSEXP);
-    Rcpp::traits::input_parameter< int >::type max_treedepth(max_treedepthSEXP);
-    Rcpp::traits::input_parameter< std::string >::type metric_str(metric_strSEXP);
-    Rcpp::traits::input_parameter< double >::type adapt_delta(adapt_deltaSEXP);
-    Rcpp::traits::input_parameter< bool >::type walnuts(walnutsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_cores(n_coresSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_hmc_fit(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str, max_treedepth, metric_str, adapt_delta, walnuts, n_cores));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_get_max_threads
-int cpp_get_max_threads();
-RcppExport SEXP _tulpaRatio_cpp_get_max_threads() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_get_max_threads());
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_spatial_covariance
-Rcpp::NumericMatrix cpp_test_spatial_covariance(Rcpp::NumericVector distance, double variance, double range, std::string covariance, double nu);
-RcppExport SEXP _tulpaRatio_cpp_test_spatial_covariance(SEXP distanceSEXP, SEXP varianceSEXP, SEXP rangeSEXP, SEXP covarianceSEXP, SEXP nuSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type distance(distanceSEXP);
-    Rcpp::traits::input_parameter< double >::type variance(varianceSEXP);
-    Rcpp::traits::input_parameter< double >::type range(rangeSEXP);
-    Rcpp::traits::input_parameter< std::string >::type covariance(covarianceSEXP);
-    Rcpp::traits::input_parameter< double >::type nu(nuSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_spatial_covariance(distance, variance, range, covariance, nu));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -623,108 +525,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_sghmc_fit
-Rcpp::List cpp_sghmc_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List gp_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, int n_iter, int n_warmup, int batch_size, double epsilon, double alpha, int L, unsigned int seed, bool verbose);
-RcppExport SEXP _tulpaRatio_cpp_sghmc_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP gp_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP batch_sizeSEXP, SEXP epsilonSEXP, SEXP alphaSEXP, SEXP LSEXP, SEXP seedSEXP, SEXP verboseSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type q_init(q_initSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_num(y_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_denom(y_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_num_cont(y_num_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_denom_cont(y_denom_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_num(X_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_denom(X_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type family(familySEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type gp_params(gp_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type prior_params(prior_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type zi_params(zi_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type latent_params(latent_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type st_params(st_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type tvc_params(tvc_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type svc_params(svc_paramsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
-    Rcpp::traits::input_parameter< int >::type n_warmup(n_warmupSEXP);
-    Rcpp::traits::input_parameter< int >::type batch_size(batch_sizeSEXP);
-    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
-    Rcpp::traits::input_parameter< int >::type L(LSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sghmc_fit(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_sgld_fit
-Rcpp::List cpp_sgld_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List gp_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, int n_iter, int n_warmup, int batch_size, double epsilon, double schedule_a, double schedule_b, double schedule_gamma, bool use_schedule, unsigned int seed, bool verbose);
-RcppExport SEXP _tulpaRatio_cpp_sgld_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP gp_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP batch_sizeSEXP, SEXP epsilonSEXP, SEXP schedule_aSEXP, SEXP schedule_bSEXP, SEXP schedule_gammaSEXP, SEXP use_scheduleSEXP, SEXP seedSEXP, SEXP verboseSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type q_init(q_initSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_num(y_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_denom(y_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_num_cont(y_num_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_denom_cont(y_denom_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_num(X_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_denom(X_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type family(familySEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type gp_params(gp_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type prior_params(prior_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type zi_params(zi_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type latent_params(latent_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type st_params(st_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type tvc_params(tvc_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type svc_params(svc_paramsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_iter(n_iterSEXP);
-    Rcpp::traits::input_parameter< int >::type n_warmup(n_warmupSEXP);
-    Rcpp::traits::input_parameter< int >::type batch_size(batch_sizeSEXP);
-    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    Rcpp::traits::input_parameter< double >::type schedule_a(schedule_aSEXP);
-    Rcpp::traits::input_parameter< double >::type schedule_b(schedule_bSEXP);
-    Rcpp::traits::input_parameter< double >::type schedule_gamma(schedule_gammaSEXP);
-    Rcpp::traits::input_parameter< bool >::type use_schedule(use_scheduleSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sgld_fit(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_temporal_gp_field
-Rcpp::NumericMatrix cpp_temporal_gp_field(const Rcpp::NumericMatrix& x, const Rcpp::NumericVector& log_sigma2, const Rcpp::NumericVector& logit_phi, const Rcpp::List& temporal_params);
-RcppExport SEXP _tulpaRatio_cpp_temporal_gp_field(SEXP xSEXP, SEXP log_sigma2SEXP, SEXP logit_phiSEXP, SEXP temporal_paramsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type x(xSEXP);
-    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type log_sigma2(log_sigma2SEXP);
-    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type logit_phi(logit_phiSEXP);
-    Rcpp::traits::input_parameter< const Rcpp::List& >::type temporal_params(temporal_paramsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_temporal_gp_field(x, log_sigma2, logit_phi, temporal_params));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_temporal_gp_log_prior
-Rcpp::List cpp_temporal_gp_log_prior(const Rcpp::NumericVector& x, double log_sigma2, double logit_phi, const Rcpp::List& temporal_params);
-RcppExport SEXP _tulpaRatio_cpp_temporal_gp_log_prior(SEXP xSEXP, SEXP log_sigma2SEXP, SEXP logit_phiSEXP, SEXP temporal_paramsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type x(xSEXP);
-    Rcpp::traits::input_parameter< double >::type log_sigma2(log_sigma2SEXP);
-    Rcpp::traits::input_parameter< double >::type logit_phi(logit_phiSEXP);
-    Rcpp::traits::input_parameter< const Rcpp::List& >::type temporal_params(temporal_paramsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_temporal_gp_log_prior(x, log_sigma2, logit_phi, temporal_params));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_chain_concurrency
 int cpp_chain_concurrency(int n_chains, int max_concurrent);
 RcppExport SEXP _tulpaRatio_cpp_chain_concurrency(SEXP n_chainsSEXP, SEXP max_concurrentSEXP) {
@@ -782,6 +582,76 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_residual_accumulation
+Rcpp::NumericMatrix cpp_test_residual_accumulation();
+RcppExport SEXP _tulpaRatio_cpp_test_residual_accumulation() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_test_residual_accumulation());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_collapsed_margin
+Rcpp::NumericMatrix cpp_test_collapsed_margin(int family, int y, double yd, double en, double ed, double pn, double pd, bool shared);
+RcppExport SEXP _tulpaRatio_cpp_test_collapsed_margin(SEXP familySEXP, SEXP ySEXP, SEXP ydSEXP, SEXP enSEXP, SEXP edSEXP, SEXP pnSEXP, SEXP pdSEXP, SEXP sharedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type family(familySEXP);
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type yd(ydSEXP);
+    Rcpp::traits::input_parameter< double >::type en(enSEXP);
+    Rcpp::traits::input_parameter< double >::type ed(edSEXP);
+    Rcpp::traits::input_parameter< double >::type pn(pnSEXP);
+    Rcpp::traits::input_parameter< double >::type pd(pdSEXP);
+    Rcpp::traits::input_parameter< bool >::type shared(sharedSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_margin(family, y, yd, en, ed, pn, pd, shared));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_collapsed_gp_reference
+Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta, int y, int n, double sigma);
+RcppExport SEXP _tulpaRatio_cpp_test_collapsed_gp_reference(SEXP betaSEXP, SEXP ySEXP, SEXP nSEXP, SEXP sigmaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_gp_reference(beta, y, n, sigma));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_negbin_h_kernels
+Rcpp::NumericMatrix cpp_test_negbin_h_kernels(int y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_negbin_h_kernels(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_h_kernels(y, mu, phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_test_spatial_covariance
+Rcpp::NumericMatrix cpp_test_spatial_covariance(Rcpp::NumericVector distance, double variance, double range, std::string covariance, double nu);
+RcppExport SEXP _tulpaRatio_cpp_test_spatial_covariance(SEXP distanceSEXP, SEXP varianceSEXP, SEXP rangeSEXP, SEXP covarianceSEXP, SEXP nuSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type distance(distanceSEXP);
+    Rcpp::traits::input_parameter< double >::type variance(varianceSEXP);
+    Rcpp::traits::input_parameter< double >::type range(rangeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type covariance(covarianceSEXP);
+    Rcpp::traits::input_parameter< double >::type nu(nuSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_spatial_covariance(distance, variance, range, covariance, nu));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_gradient_fields
 Rcpp::CharacterVector cpp_gradient_fields();
 RcppExport SEXP _tulpaRatio_cpp_gradient_fields() {
@@ -832,22 +702,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type U(USEXP);
     Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_scale_conditional_draws(n, quad, rank, U, alpha));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_gradient_dispatch
-std::string cpp_gradient_dispatch(std::string field, int n_obs, int n_units, int n_times, unsigned int seed, std::string family);
-RcppExport SEXP _tulpaRatio_cpp_gradient_dispatch(SEXP fieldSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP, SEXP seedSEXP, SEXP familySEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
-    Rcpp::traits::input_parameter< int >::type n_obs(n_obsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_units(n_unitsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
-    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_gradient_dispatch(field, n_obs, n_units, n_times, seed, family));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -940,9 +794,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_st_collapsed_exactness
-double cpp_st_collapsed_exactness(std::string field, int n_draws, unsigned int seed, int n_obs, int n_units, int n_times);
-RcppExport SEXP _tulpaRatio_cpp_st_collapsed_exactness(SEXP fieldSEXP, SEXP n_drawsSEXP, SEXP seedSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP) {
+// cpp_st_gaussian_conditional_exactness
+double cpp_st_gaussian_conditional_exactness(std::string field, int n_draws, unsigned int seed, int n_obs, int n_units, int n_times);
+RcppExport SEXP _tulpaRatio_cpp_st_gaussian_conditional_exactness(SEXP fieldSEXP, SEXP n_drawsSEXP, SEXP seedSEXP, SEXP n_obsSEXP, SEXP n_unitsSEXP, SEXP n_timesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -952,7 +806,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_obs(n_obsSEXP);
     Rcpp::traits::input_parameter< int >::type n_units(n_unitsSEXP);
     Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_st_collapsed_exactness(field, n_draws, seed, n_obs, n_units, n_times));
+    rcpp_result_gen = Rcpp::wrap(cpp_st_gaussian_conditional_exactness(field, n_draws, seed, n_obs, n_units, n_times));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -981,19 +835,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_polygamma(n, x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_negbin_h_kernels
-NumericMatrix cpp_test_negbin_h_kernels(int y, double mu, double phi);
-RcppExport SEXP _tulpaRatio_cpp_test_negbin_h_kernels(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_negbin_h_kernels(y, mu, phi));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1044,19 +885,6 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_inverse_logit(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_integrator
-List cpp_test_integrator(NumericVector q, NumericVector p, double epsilon);
-RcppExport SEXP _tulpaRatio_cpp_test_integrator(SEXP qSEXP, SEXP pSEXP, SEXP epsilonSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type q(qSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type p(pSEXP);
-    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_integrator(q, p, epsilon));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1302,76 +1130,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_rw1_quadratic_form
-double cpp_test_rw1_quadratic_form(NumericVector phi, bool cyclic);
-RcppExport SEXP _tulpaRatio_cpp_test_rw1_quadratic_form(SEXP phiSEXP, SEXP cyclicSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< bool >::type cyclic(cyclicSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_rw1_quadratic_form(phi, cyclic));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_rw2_quadratic_form
-double cpp_test_rw2_quadratic_form(NumericVector phi, bool cyclic);
-RcppExport SEXP _tulpaRatio_cpp_test_rw2_quadratic_form(SEXP phiSEXP, SEXP cyclicSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< bool >::type cyclic(cyclicSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_rw2_quadratic_form(phi, cyclic));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_ar1_log_density
-double cpp_test_ar1_log_density(NumericVector phi, double rho, double tau);
-RcppExport SEXP _tulpaRatio_cpp_test_ar1_log_density(SEXP phiSEXP, SEXP rhoSEXP, SEXP tauSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
-    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_ar1_log_density(phi, rho, tau));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_temporal_log_prior
-double cpp_test_temporal_log_prior(NumericVector phi, std::string type_str, double tau, double rho, bool cyclic, int n_groups, bool augment, bool tvc);
-RcppExport SEXP _tulpaRatio_cpp_test_temporal_log_prior(SEXP phiSEXP, SEXP type_strSEXP, SEXP tauSEXP, SEXP rhoSEXP, SEXP cyclicSEXP, SEXP n_groupsSEXP, SEXP augmentSEXP, SEXP tvcSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< std::string >::type type_str(type_strSEXP);
-    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
-    Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
-    Rcpp::traits::input_parameter< bool >::type cyclic(cyclicSEXP);
-    Rcpp::traits::input_parameter< int >::type n_groups(n_groupsSEXP);
-    Rcpp::traits::input_parameter< bool >::type augment(augmentSEXP);
-    Rcpp::traits::input_parameter< bool >::type tvc(tvcSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_temporal_log_prior(phi, type_str, tau, rho, cyclic, n_groups, augment, tvc));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_ms_rw_log_lik
-double cpp_test_ms_rw_log_lik(NumericVector phi, double sigma2, int order, bool cyclic, bool augment);
-RcppExport SEXP _tulpaRatio_cpp_test_ms_rw_log_lik(SEXP phiSEXP, SEXP sigma2SEXP, SEXP orderSEXP, SEXP cyclicSEXP, SEXP augmentSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma2(sigma2SEXP);
-    Rcpp::traits::input_parameter< int >::type order(orderSEXP);
-    Rcpp::traits::input_parameter< bool >::type cyclic(cyclicSEXP);
-    Rcpp::traits::input_parameter< bool >::type augment(augmentSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_ms_rw_log_lik(phi, sigma2, order, cyclic, augment));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_log1pexp
 double cpp_test_log1pexp(double x);
 RcppExport SEXP _tulpaRatio_cpp_test_log1pexp(SEXP xSEXP) {
@@ -1594,67 +1352,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_st_gp_log_lik
-double cpp_test_st_gp_log_lik(NumericVector w, double sigma2, double phi_space, double phi_time, NumericMatrix coords, NumericVector time_values, int nn, IntegerVector nn_idx, NumericVector nn_dist_space, NumericVector nn_dist_time, IntegerVector nn_order, std::string nonsep_type, std::string cov_space, std::string cov_time);
-RcppExport SEXP _tulpaRatio_cpp_test_st_gp_log_lik(SEXP wSEXP, SEXP sigma2SEXP, SEXP phi_spaceSEXP, SEXP phi_timeSEXP, SEXP coordsSEXP, SEXP time_valuesSEXP, SEXP nnSEXP, SEXP nn_idxSEXP, SEXP nn_dist_spaceSEXP, SEXP nn_dist_timeSEXP, SEXP nn_orderSEXP, SEXP nonsep_typeSEXP, SEXP cov_spaceSEXP, SEXP cov_timeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type w(wSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma2(sigma2SEXP);
-    Rcpp::traits::input_parameter< double >::type phi_space(phi_spaceSEXP);
-    Rcpp::traits::input_parameter< double >::type phi_time(phi_timeSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type coords(coordsSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type time_values(time_valuesSEXP);
-    Rcpp::traits::input_parameter< int >::type nn(nnSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type nn_idx(nn_idxSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nn_dist_space(nn_dist_spaceSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nn_dist_time(nn_dist_timeSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type nn_order(nn_orderSEXP);
-    Rcpp::traits::input_parameter< std::string >::type nonsep_type(nonsep_typeSEXP);
-    Rcpp::traits::input_parameter< std::string >::type cov_space(cov_spaceSEXP);
-    Rcpp::traits::input_parameter< std::string >::type cov_time(cov_timeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_st_gp_log_lik(w, sigma2, phi_space, phi_time, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type, cov_space, cov_time));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_st_gp_margin_normalizer
-Rcpp::List cpp_test_st_gp_margin_normalizer(double tau, double phi_space, double phi_time, int n_spatial, int n_times, NumericMatrix coords, NumericVector time_values, int nn, IntegerVector nn_idx, NumericVector nn_dist_space, NumericVector nn_dist_time, IntegerVector nn_order, std::string nonsep_type);
-RcppExport SEXP _tulpaRatio_cpp_test_st_gp_margin_normalizer(SEXP tauSEXP, SEXP phi_spaceSEXP, SEXP phi_timeSEXP, SEXP n_spatialSEXP, SEXP n_timesSEXP, SEXP coordsSEXP, SEXP time_valuesSEXP, SEXP nnSEXP, SEXP nn_idxSEXP, SEXP nn_dist_spaceSEXP, SEXP nn_dist_timeSEXP, SEXP nn_orderSEXP, SEXP nonsep_typeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
-    Rcpp::traits::input_parameter< double >::type phi_space(phi_spaceSEXP);
-    Rcpp::traits::input_parameter< double >::type phi_time(phi_timeSEXP);
-    Rcpp::traits::input_parameter< int >::type n_spatial(n_spatialSEXP);
-    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type coords(coordsSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type time_values(time_valuesSEXP);
-    Rcpp::traits::input_parameter< int >::type nn(nnSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type nn_idx(nn_idxSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nn_dist_space(nn_dist_spaceSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type nn_dist_time(nn_dist_timeSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type nn_order(nn_orderSEXP);
-    Rcpp::traits::input_parameter< std::string >::type nonsep_type(nonsep_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_st_gp_margin_normalizer(tau, phi_space, phi_time, n_spatial, n_times, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_st_ar1_margin_normalizer
-Rcpp::NumericVector cpp_test_st_ar1_margin_normalizer(double rho, int n_spatial, int n_times, std::string type);
-RcppExport SEXP _tulpaRatio_cpp_test_st_ar1_margin_normalizer(SEXP rhoSEXP, SEXP n_spatialSEXP, SEXP n_timesSEXP, SEXP typeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type rho(rhoSEXP);
-    Rcpp::traits::input_parameter< int >::type n_spatial(n_spatialSEXP);
-    Rcpp::traits::input_parameter< int >::type n_times(n_timesSEXP);
-    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_st_ar1_margin_normalizer(rho, n_spatial, n_times, type));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_pg_rw2_conditional
 NumericVector cpp_test_pg_rw2_conditional(NumericVector omega, NumericVector residual, double tau);
 RcppExport SEXP _tulpaRatio_cpp_test_pg_rw2_conditional(SEXP omegaSEXP, SEXP residualSEXP, SEXP tauSEXP) {
@@ -1665,78 +1362,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type residual(residualSEXP);
     Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_pg_rw2_conditional(omega, residual, tau));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_gradient_trajectory
-Rcpp::List cpp_test_gradient_trajectory(std::string type, std::string block, std::string mode, std::string path, int n, int steps, double epsilon);
-RcppExport SEXP _tulpaRatio_cpp_test_gradient_trajectory(SEXP typeSEXP, SEXP blockSEXP, SEXP modeSEXP, SEXP pathSEXP, SEXP nSEXP, SEXP stepsSEXP, SEXP epsilonSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
-    Rcpp::traits::input_parameter< std::string >::type block(blockSEXP);
-    Rcpp::traits::input_parameter< std::string >::type mode(modeSEXP);
-    Rcpp::traits::input_parameter< std::string >::type path(pathSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type steps(stepsSEXP);
-    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_gradient_trajectory(type, block, mode, path, n, steps, epsilon));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_metric_step
-Rcpp::List cpp_test_metric_step(std::string type, std::string block, int n, double epsilon, bool extreme);
-RcppExport SEXP _tulpaRatio_cpp_test_metric_step(SEXP typeSEXP, SEXP blockSEXP, SEXP nSEXP, SEXP epsilonSEXP, SEXP extremeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
-    Rcpp::traits::input_parameter< std::string >::type block(blockSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    Rcpp::traits::input_parameter< bool >::type extreme(extremeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_metric_step(type, block, n, epsilon, extreme));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_metric_epsilon
-Rcpp::List cpp_test_metric_epsilon(std::string type, int n);
-RcppExport SEXP _tulpaRatio_cpp_test_metric_epsilon(SEXP typeSEXP, SEXP nSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_metric_epsilon(type, n));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_metric_geometry
-Rcpp::List cpp_test_metric_geometry(std::string type, std::string block, int n, int n_draws);
-RcppExport SEXP _tulpaRatio_cpp_test_metric_geometry(SEXP typeSEXP, SEXP blockSEXP, SEXP nSEXP, SEXP n_drawsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
-    Rcpp::traits::input_parameter< std::string >::type block(blockSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type n_draws(n_drawsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_metric_geometry(type, block, n, n_draws));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_multiscale_prior
-Rcpp::List cpp_test_multiscale_prior(std::string structure, Rcpp::NumericVector phi, double log_sigma2, double logit_rho);
-RcppExport SEXP _tulpaRatio_cpp_test_multiscale_prior(SEXP structureSEXP, SEXP phiSEXP, SEXP log_sigma2SEXP, SEXP logit_rhoSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type structure(structureSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< double >::type log_sigma2(log_sigma2SEXP);
-    Rcpp::traits::input_parameter< double >::type logit_rho(logit_rhoSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_multiscale_prior(structure, phi, log_sigma2, logit_rho));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1780,30 +1405,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_precision_h
-Rcpp::NumericMatrix cpp_test_precision_h(double y, double mu, double phi, int family);
-RcppExport SEXP _tulpaRatio_cpp_test_precision_h(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP, SEXP familySEXP) {
+// cpp_test_precision_scalar
+Rcpp::NumericMatrix cpp_test_precision_scalar(double y, double mu, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_scalar(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< double >::type y(ySEXP);
     Rcpp::traits::input_parameter< double >::type mu(muSEXP);
     Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    Rcpp::traits::input_parameter< int >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_h(y, mu, phi, family));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_precision_legacy
-Rcpp::NumericMatrix cpp_test_precision_legacy(double y, double mu, double phi);
-RcppExport SEXP _tulpaRatio_cpp_test_precision_legacy(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_legacy(y, mu, phi));
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_scalar(y, mu, phi));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1820,16 +1431,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_precision_beta_legacy
-Rcpp::NumericMatrix cpp_test_precision_beta_legacy(int y, int n, double phi);
-RcppExport SEXP _tulpaRatio_cpp_test_precision_beta_legacy(SEXP ySEXP, SEXP nSEXP, SEXP phiSEXP) {
+// cpp_test_precision_beta_scalar
+Rcpp::NumericMatrix cpp_test_precision_beta_scalar(int y, int n, double phi);
+RcppExport SEXP _tulpaRatio_cpp_test_precision_beta_scalar(SEXP ySEXP, SEXP nSEXP, SEXP phiSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< int >::type y(ySEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
     Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_beta_legacy(y, n, phi));
+    rcpp_result_gen = Rcpp::wrap(cpp_test_precision_beta_scalar(y, n, phi));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1903,48 +1514,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type zi_link(zi_linkSEXP);
     Rcpp::traits::input_parameter< std::string >::type oi_link(oi_linkSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_test_linked_margin(family, y, n, eta, phi, link, inflation, zi, oi, zi_link, oi_link));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_collapsed_gp_reference
-Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta, int y, int n, double sigma);
-RcppExport SEXP _tulpaRatio_cpp_test_collapsed_gp_reference(SEXP betaSEXP, SEXP ySEXP, SEXP nSEXP, SEXP sigmaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type beta(betaSEXP);
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_gp_reference(beta, y, n, sigma));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_collapsed_margin
-Rcpp::NumericMatrix cpp_test_collapsed_margin(int family, int y, double yd, double en, double ed, double pn, double pd, bool shared);
-RcppExport SEXP _tulpaRatio_cpp_test_collapsed_margin(SEXP familySEXP, SEXP ySEXP, SEXP ydSEXP, SEXP enSEXP, SEXP edSEXP, SEXP pnSEXP, SEXP pdSEXP, SEXP sharedSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type family(familySEXP);
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< double >::type yd(ydSEXP);
-    Rcpp::traits::input_parameter< double >::type en(enSEXP);
-    Rcpp::traits::input_parameter< double >::type ed(edSEXP);
-    Rcpp::traits::input_parameter< double >::type pn(pnSEXP);
-    Rcpp::traits::input_parameter< double >::type pd(pdSEXP);
-    Rcpp::traits::input_parameter< bool >::type shared(sharedSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_margin(family, y, yd, en, ed, pn, pd, shared));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_test_residual_accumulation
-Rcpp::NumericMatrix cpp_test_residual_accumulation();
-RcppExport SEXP _tulpaRatio_cpp_test_residual_accumulation() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_test_residual_accumulation());
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2042,6 +1611,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_test_spec17
+Rcpp::List cpp_test_spec17(std::string family, std::string field);
+RcppExport SEXP _tulpaRatio_cpp_test_spec17(SEXP familySEXP, SEXP fieldSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< std::string >::type field(fieldSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_test_spec17(family, field));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_tls_workspace_shrink
 double cpp_tls_workspace_shrink(int cycles, int work, int n);
 RcppExport SEXP _tulpaRatio_cpp_tls_workspace_shrink(SEXP cyclesSEXP, SEXP workSEXP, SEXP nSEXP) {
@@ -2055,13 +1636,13 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_vi_math
-Rcpp::NumericVector cpp_test_vi_math();
-RcppExport SEXP _tulpaRatio_cpp_test_vi_math() {
+// cpp_get_max_threads
+int cpp_get_max_threads();
+RcppExport SEXP _tulpaRatio_cpp_get_max_threads() {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_test_vi_math());
+    rcpp_result_gen = Rcpp::wrap(cpp_get_max_threads());
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2118,9 +1699,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_tulpaRatio_run_nuts_specs
-Rcpp::List cpp_tulpaRatio_run_nuts_specs(Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::List X_list, Rcpp::List cfg_list, Rcpp::NumericVector init, int n_iter, int n_warmup, int max_treedepth, double adapt_delta, int seed, bool verbose, std::string gradient_mode, double sigma_beta, double phi_prior_shape, double phi_prior_rate, double sigma_prior_scale, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List temporal_params, int n_chains, int n_threads, int L, std::string metric, bool walnuts, Rcpp::Nullable<Rcpp::List> svc_spec, Rcpp::Nullable<Rcpp::List> tvc_spec, Rcpp::Nullable<Rcpp::List> latent_spec, Rcpp::Nullable<Rcpp::List> st_spec);
-RcppExport SEXP _tulpaRatio_cpp_tulpaRatio_run_nuts_specs(SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_listSEXP, SEXP cfg_listSEXP, SEXP initSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP max_treedepthSEXP, SEXP adapt_deltaSEXP, SEXP seedSEXP, SEXP verboseSEXP, SEXP gradient_modeSEXP, SEXP sigma_betaSEXP, SEXP phi_prior_shapeSEXP, SEXP phi_prior_rateSEXP, SEXP sigma_prior_scaleSEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP, SEXP n_chainsSEXP, SEXP n_threadsSEXP, SEXP LSEXP, SEXP metricSEXP, SEXP walnutsSEXP, SEXP svc_specSEXP, SEXP tvc_specSEXP, SEXP latent_specSEXP, SEXP st_specSEXP) {
+// cpp_tulpaRatio_sample
+Rcpp::List cpp_tulpaRatio_sample(Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::List X_list, Rcpp::List cfg_list, Rcpp::NumericVector init, int n_iter, int n_warmup, int max_treedepth, double adapt_delta, int seed, bool verbose, std::string gradient_mode, double sigma_beta, double phi_prior_shape, double phi_prior_rate, double sigma_prior_scale, Rcpp::Nullable<Rcpp::List> re_params, Rcpp::Nullable<Rcpp::List> spatial_params, Rcpp::Nullable<Rcpp::List> temporal_params, int n_chains, int n_threads, int L, std::string metric, bool walnuts, Rcpp::Nullable<Rcpp::List> svc_spec, Rcpp::Nullable<Rcpp::List> tvc_spec, Rcpp::Nullable<Rcpp::List> latent_spec, Rcpp::Nullable<Rcpp::List> st_spec, std::string method, Rcpp::Nullable<Rcpp::List> sampler_options);
+RcppExport SEXP _tulpaRatio_cpp_tulpaRatio_sample(SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_listSEXP, SEXP cfg_listSEXP, SEXP initSEXP, SEXP n_iterSEXP, SEXP n_warmupSEXP, SEXP max_treedepthSEXP, SEXP adapt_deltaSEXP, SEXP seedSEXP, SEXP verboseSEXP, SEXP gradient_modeSEXP, SEXP sigma_betaSEXP, SEXP phi_prior_shapeSEXP, SEXP phi_prior_rateSEXP, SEXP sigma_prior_scaleSEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP temporal_paramsSEXP, SEXP n_chainsSEXP, SEXP n_threadsSEXP, SEXP LSEXP, SEXP metricSEXP, SEXP walnutsSEXP, SEXP svc_specSEXP, SEXP tvc_specSEXP, SEXP latent_specSEXP, SEXP st_specSEXP, SEXP methodSEXP, SEXP sampler_optionsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2142,9 +1723,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type phi_prior_shape(phi_prior_shapeSEXP);
     Rcpp::traits::input_parameter< double >::type phi_prior_rate(phi_prior_rateSEXP);
     Rcpp::traits::input_parameter< double >::type sigma_prior_scale(sigma_prior_scaleSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type re_params(re_paramsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type spatial_params(spatial_paramsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type temporal_params(temporal_paramsSEXP);
     Rcpp::traits::input_parameter< int >::type n_chains(n_chainsSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
     Rcpp::traits::input_parameter< int >::type L(LSEXP);
@@ -2154,37 +1735,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type tvc_spec(tvc_specSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type latent_spec(latent_specSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type st_spec(st_specSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_tulpaRatio_run_nuts_specs(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts, svc_spec, tvc_spec, latent_spec, st_spec));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_vi_fit
-Rcpp::List cpp_vi_fit(Rcpp::NumericVector q_init, Rcpp::IntegerVector y_num, Rcpp::IntegerVector y_denom, Rcpp::NumericVector y_num_cont, Rcpp::NumericVector y_denom_cont, Rcpp::NumericMatrix X_num, Rcpp::NumericMatrix X_denom, Rcpp::List family, Rcpp::List re_params, Rcpp::List spatial_params, Rcpp::List gp_params, Rcpp::List temporal_params, Rcpp::List prior_params, Rcpp::List zi_params, Rcpp::List latent_params, Rcpp::List st_params, Rcpp::List tvc_params, Rcpp::List svc_params, Rcpp::List vi_options, bool verbose);
-RcppExport SEXP _tulpaRatio_cpp_vi_fit(SEXP q_initSEXP, SEXP y_numSEXP, SEXP y_denomSEXP, SEXP y_num_contSEXP, SEXP y_denom_contSEXP, SEXP X_numSEXP, SEXP X_denomSEXP, SEXP familySEXP, SEXP re_paramsSEXP, SEXP spatial_paramsSEXP, SEXP gp_paramsSEXP, SEXP temporal_paramsSEXP, SEXP prior_paramsSEXP, SEXP zi_paramsSEXP, SEXP latent_paramsSEXP, SEXP st_paramsSEXP, SEXP tvc_paramsSEXP, SEXP svc_paramsSEXP, SEXP vi_optionsSEXP, SEXP verboseSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type q_init(q_initSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_num(y_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type y_denom(y_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_num_cont(y_num_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_denom_cont(y_denom_contSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_num(X_numSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X_denom(X_denomSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type family(familySEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type re_params(re_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type spatial_params(spatial_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type gp_params(gp_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type temporal_params(temporal_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type prior_params(prior_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type zi_params(zi_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type latent_params(latent_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type st_params(st_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type tvc_params(tvc_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type svc_params(svc_paramsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type vi_options(vi_optionsSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_vi_fit(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose));
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type sampler_options(sampler_optionsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_tulpaRatio_sample(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts, svc_spec, tvc_spec, latent_spec, st_spec, method, sampler_options));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2193,14 +1746,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_flatten_3d_rowmajor", (DL_FUNC) &_tulpaRatio_cpp_flatten_3d_rowmajor, 4},
     {"_tulpaRatio_cpp_crt_mean", (DL_FUNC) &_tulpaRatio_cpp_crt_mean, 2},
     {"_tulpaRatio_cpp_enum_names", (DL_FUNC) &_tulpaRatio_cpp_enum_names, 1},
-    {"_tulpaRatio_cpp_ess_fit", (DL_FUNC) &_tulpaRatio_cpp_ess_fit, 22},
     {"_tulpaRatio_cpp_test_gibbs_margin", (DL_FUNC) &_tulpaRatio_cpp_test_gibbs_margin, 7},
     {"_tulpaRatio_cpp_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_gibbs_spatial, 1},
     {"_tulpaRatio_cpp_gpu_available", (DL_FUNC) &_tulpaRatio_cpp_gpu_available, 0},
     {"_tulpaRatio_cpp_gpu_info", (DL_FUNC) &_tulpaRatio_cpp_gpu_info, 0},
-    {"_tulpaRatio_cpp_hmc_fit", (DL_FUNC) &_tulpaRatio_cpp_hmc_fit, 31},
-    {"_tulpaRatio_cpp_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_get_max_threads, 0},
-    {"_tulpaRatio_cpp_test_spatial_covariance", (DL_FUNC) &_tulpaRatio_cpp_test_spatial_covariance, 5},
     {"_tulpaRatio_cpp_hsgp_spectrum", (DL_FUNC) &_tulpaRatio_cpp_hsgp_spectrum, 5},
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
     {"_tulpaRatio_cpp_ratio_family_entries", (DL_FUNC) &_tulpaRatio_cpp_ratio_family_entries, 0},
@@ -2222,34 +1771,32 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_rpg", (DL_FUNC) &_tulpaRatio_cpp_rpg, 2},
     {"_tulpaRatio_cpp_rpg_real", (DL_FUNC) &_tulpaRatio_cpp_rpg_real, 2},
     {"_tulpaRatio_cpp_ratio_precision_density", (DL_FUNC) &_tulpaRatio_cpp_ratio_precision_density, 4},
-    {"_tulpaRatio_cpp_sghmc_fit", (DL_FUNC) &_tulpaRatio_cpp_sghmc_fit, 26},
-    {"_tulpaRatio_cpp_sgld_fit", (DL_FUNC) &_tulpaRatio_cpp_sgld_fit, 28},
-    {"_tulpaRatio_cpp_temporal_gp_field", (DL_FUNC) &_tulpaRatio_cpp_temporal_gp_field, 4},
-    {"_tulpaRatio_cpp_temporal_gp_log_prior", (DL_FUNC) &_tulpaRatio_cpp_temporal_gp_log_prior, 4},
     {"_tulpaRatio_cpp_chain_concurrency", (DL_FUNC) &_tulpaRatio_cpp_chain_concurrency, 2},
     {"_tulpaRatio_cpp_chain_visits", (DL_FUNC) &_tulpaRatio_cpp_chain_visits, 2},
     {"_tulpaRatio_cpp_set_max_threads", (DL_FUNC) &_tulpaRatio_cpp_set_max_threads, 1},
     {"_tulpaRatio_cpp_within_chain_team", (DL_FUNC) &_tulpaRatio_cpp_within_chain_team, 3},
     {"_tulpaRatio_cpp_num_procs", (DL_FUNC) &_tulpaRatio_cpp_num_procs, 0},
+    {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
+    {"_tulpaRatio_cpp_test_collapsed_margin", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_margin, 8},
+    {"_tulpaRatio_cpp_test_collapsed_gp_reference", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_gp_reference, 4},
+    {"_tulpaRatio_cpp_test_negbin_h_kernels", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_h_kernels, 3},
+    {"_tulpaRatio_cpp_test_spatial_covariance", (DL_FUNC) &_tulpaRatio_cpp_test_spatial_covariance, 5},
     {"_tulpaRatio_cpp_gradient_fields", (DL_FUNC) &_tulpaRatio_cpp_gradient_fields, 0},
     {"_tulpaRatio_cpp_gradient_chain_fixture", (DL_FUNC) &_tulpaRatio_cpp_gradient_chain_fixture, 4},
     {"_tulpaRatio_cpp_scale_prior_check", (DL_FUNC) &_tulpaRatio_cpp_scale_prior_check, 4},
     {"_tulpaRatio_cpp_scale_conditional_draws", (DL_FUNC) &_tulpaRatio_cpp_scale_conditional_draws, 5},
-    {"_tulpaRatio_cpp_gradient_dispatch", (DL_FUNC) &_tulpaRatio_cpp_gradient_dispatch, 6},
     {"_tulpaRatio_cpp_gradient_check", (DL_FUNC) &_tulpaRatio_cpp_gradient_check, 16},
     {"_tulpaRatio_cpp_gradient_race", (DL_FUNC) &_tulpaRatio_cpp_gradient_race, 10},
     {"_tulpaRatio_cpp_logpost_at", (DL_FUNC) &_tulpaRatio_cpp_logpost_at, 8},
     {"_tulpaRatio_cpp_st_gp_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_st_gp_nc_coordinate_spread, 3},
     {"_tulpaRatio_cpp_st_ar1_zero_density", (DL_FUNC) &_tulpaRatio_cpp_st_ar1_zero_density, 2},
-    {"_tulpaRatio_cpp_st_collapsed_exactness", (DL_FUNC) &_tulpaRatio_cpp_st_collapsed_exactness, 6},
+    {"_tulpaRatio_cpp_st_gaussian_conditional_exactness", (DL_FUNC) &_tulpaRatio_cpp_st_gaussian_conditional_exactness, 6},
     {"_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread", (DL_FUNC) &_tulpaRatio_cpp_ms_temporal_nc_coordinate_spread, 6},
     {"_tulpaRatio_cpp_polygamma", (DL_FUNC) &_tulpaRatio_cpp_polygamma, 2},
-    {"_tulpaRatio_cpp_test_negbin_h_kernels", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_h_kernels, 3},
     {"_tulpaRatio_cpp_test_negbin_jet", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_jet, 3},
     {"_tulpaRatio_cpp_test_negbin_paths", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_paths, 5},
     {"_tulpaRatio_cpp_test_cholesky", (DL_FUNC) &_tulpaRatio_cpp_test_cholesky, 1},
     {"_tulpaRatio_cpp_test_inverse_logit", (DL_FUNC) &_tulpaRatio_cpp_test_inverse_logit, 1},
-    {"_tulpaRatio_cpp_test_integrator", (DL_FUNC) &_tulpaRatio_cpp_test_integrator, 3},
     {"_tulpaRatio_cpp_test_autodiff_unary", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_unary, 3},
     {"_tulpaRatio_cpp_test_autodiff_binary", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_binary, 3},
     {"_tulpaRatio_cpp_test_autodiff_vector", (DL_FUNC) &_tulpaRatio_cpp_test_autodiff_vector, 4},
@@ -2269,11 +1816,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_linalg_log_sum_exp_vec", (DL_FUNC) &_tulpaRatio_cpp_test_linalg_log_sum_exp_vec, 1},
     {"_tulpaRatio_cpp_test_softmax_inplace", (DL_FUNC) &_tulpaRatio_cpp_test_softmax_inplace, 1},
     {"_tulpaRatio_cpp_test_compute_linear_predictors", (DL_FUNC) &_tulpaRatio_cpp_test_compute_linear_predictors, 5},
-    {"_tulpaRatio_cpp_test_rw1_quadratic_form", (DL_FUNC) &_tulpaRatio_cpp_test_rw1_quadratic_form, 2},
-    {"_tulpaRatio_cpp_test_rw2_quadratic_form", (DL_FUNC) &_tulpaRatio_cpp_test_rw2_quadratic_form, 2},
-    {"_tulpaRatio_cpp_test_ar1_log_density", (DL_FUNC) &_tulpaRatio_cpp_test_ar1_log_density, 3},
-    {"_tulpaRatio_cpp_test_temporal_log_prior", (DL_FUNC) &_tulpaRatio_cpp_test_temporal_log_prior, 8},
-    {"_tulpaRatio_cpp_test_ms_rw_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_ms_rw_log_lik, 5},
     {"_tulpaRatio_cpp_test_log1pexp", (DL_FUNC) &_tulpaRatio_cpp_test_log1pexp, 1},
     {"_tulpaRatio_cpp_test_log_logistic", (DL_FUNC) &_tulpaRatio_cpp_test_log_logistic, 1},
     {"_tulpaRatio_cpp_test_log1m_logistic", (DL_FUNC) &_tulpaRatio_cpp_test_log1m_logistic, 1},
@@ -2291,30 +1833,18 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_zi_log_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_zi_log_likelihood, 5},
     {"_tulpaRatio_cpp_test_parallel_dot_products", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_dot_products, 3},
     {"_tulpaRatio_cpp_test_parallel_likelihood", (DL_FUNC) &_tulpaRatio_cpp_test_parallel_likelihood, 3},
-    {"_tulpaRatio_cpp_test_st_gp_log_lik", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_log_lik, 14},
-    {"_tulpaRatio_cpp_test_st_gp_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_gp_margin_normalizer, 13},
-    {"_tulpaRatio_cpp_test_st_ar1_margin_normalizer", (DL_FUNC) &_tulpaRatio_cpp_test_st_ar1_margin_normalizer, 4},
     {"_tulpaRatio_cpp_test_pg_rw2_conditional", (DL_FUNC) &_tulpaRatio_cpp_test_pg_rw2_conditional, 3},
-    {"_tulpaRatio_cpp_test_gradient_trajectory", (DL_FUNC) &_tulpaRatio_cpp_test_gradient_trajectory, 7},
-    {"_tulpaRatio_cpp_test_metric_step", (DL_FUNC) &_tulpaRatio_cpp_test_metric_step, 5},
-    {"_tulpaRatio_cpp_test_metric_epsilon", (DL_FUNC) &_tulpaRatio_cpp_test_metric_epsilon, 2},
-    {"_tulpaRatio_cpp_test_metric_geometry", (DL_FUNC) &_tulpaRatio_cpp_test_metric_geometry, 4},
-    {"_tulpaRatio_cpp_test_multiscale_prior", (DL_FUNC) &_tulpaRatio_cpp_test_multiscale_prior, 4},
     {"_tulpaRatio_cpp_test_negbin_math", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_math, 2},
     {"_tulpaRatio_cpp_test_negbin_spec", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_spec, 5},
     {"_tulpaRatio_cpp_test_precision_jet", (DL_FUNC) &_tulpaRatio_cpp_test_precision_jet, 3},
-    {"_tulpaRatio_cpp_test_precision_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_h, 4},
-    {"_tulpaRatio_cpp_test_precision_legacy", (DL_FUNC) &_tulpaRatio_cpp_test_precision_legacy, 3},
+    {"_tulpaRatio_cpp_test_precision_scalar", (DL_FUNC) &_tulpaRatio_cpp_test_precision_scalar, 3},
     {"_tulpaRatio_cpp_test_precision_gibbs", (DL_FUNC) &_tulpaRatio_cpp_test_precision_gibbs, 3},
-    {"_tulpaRatio_cpp_test_precision_beta_legacy", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_legacy, 3},
+    {"_tulpaRatio_cpp_test_precision_beta_scalar", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_scalar, 3},
     {"_tulpaRatio_cpp_test_precision_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec_h, 3},
     {"_tulpaRatio_cpp_test_precision_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec, 3},
     {"_tulpaRatio_cpp_test_precision_beta_spec_h", (DL_FUNC) &_tulpaRatio_cpp_test_precision_beta_spec_h, 3},
     {"_tulpaRatio_cpp_test_linked_margin", (DL_FUNC) &_tulpaRatio_cpp_test_linked_margin, 11},
-    {"_tulpaRatio_cpp_test_collapsed_gp_reference", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_gp_reference, 4},
-    {"_tulpaRatio_cpp_test_collapsed_margin", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_margin, 8},
-    {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_ratio_margin", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin, 6},
     {"_tulpaRatio_cpp_test_ratio_margin_scalars", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_margin_scalars, 5},
     {"_tulpaRatio_cpp_test_margin_fields", (DL_FUNC) &_tulpaRatio_cpp_test_margin_fields, 5},
@@ -2322,14 +1852,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_test_ratio_prior", (DL_FUNC) &_tulpaRatio_cpp_test_ratio_prior, 2},
     {"_tulpaRatio_cpp_test_scalar_math", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_math, 2},
     {"_tulpaRatio_cpp_test_scalar_boundaries", (DL_FUNC) &_tulpaRatio_cpp_test_scalar_boundaries, 1},
+    {"_tulpaRatio_cpp_test_spec17", (DL_FUNC) &_tulpaRatio_cpp_test_spec17, 2},
     {"_tulpaRatio_cpp_tls_workspace_shrink", (DL_FUNC) &_tulpaRatio_cpp_tls_workspace_shrink, 3},
-    {"_tulpaRatio_cpp_test_vi_math", (DL_FUNC) &_tulpaRatio_cpp_test_vi_math, 0},
+    {"_tulpaRatio_cpp_get_max_threads", (DL_FUNC) &_tulpaRatio_cpp_get_max_threads, 0},
     {"_tulpaRatio_cpp_tulpa_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_compiled_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_compiled_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_runtime_abi_version", (DL_FUNC) &_tulpaRatio_cpp_tulpa_runtime_abi_version, 0},
     {"_tulpaRatio_cpp_tulpa_pg_binomial_gibbs", (DL_FUNC) &_tulpaRatio_cpp_tulpa_pg_binomial_gibbs, 13},
-    {"_tulpaRatio_cpp_tulpaRatio_run_nuts_specs", (DL_FUNC) &_tulpaRatio_cpp_tulpaRatio_run_nuts_specs, 30},
-    {"_tulpaRatio_cpp_vi_fit", (DL_FUNC) &_tulpaRatio_cpp_vi_fit, 20},
+    {"_tulpaRatio_cpp_tulpaRatio_sample", (DL_FUNC) &_tulpaRatio_cpp_tulpaRatio_sample, 32},
     {NULL, NULL, 0}
 };
 

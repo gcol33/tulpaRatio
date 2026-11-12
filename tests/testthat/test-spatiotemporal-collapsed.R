@@ -27,13 +27,13 @@ collapsed_spec <- function(adj, parameterization) {
   )
 }
 
-test_that("the Gaussian collapsed density is exact at matched physical ranges", {
+test_that("the engine Gaussian interaction matches its dense conditional", {
   # The Laplace step is exact when the likelihood is Gaussian in the
   # interaction, so the centred density at any delta less N(delta; dh, H^-1)
   # is the collapsed one; a missing normalizer or penalty term shows as a gap.
-  for (field in c("stgp_collapsed", "stgp_gneiting_collapsed")) {
+  for (field in c("stgp", "stgp_gneiting")) {
     for (seed in c(42L, 181L)) {
-      expect_lt(tulpaRatio:::cpp_st_collapsed_exactness(field, n_draws = 8L,
+      expect_lt(tulpaRatio:::cpp_st_gaussian_conditional_exactness(field, n_draws = 8L,
                                                       seed = seed), 1e-8)
     }
   }

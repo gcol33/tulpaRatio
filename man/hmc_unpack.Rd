@@ -9,10 +9,9 @@ posterior draws matrix, the per-structure draws the \code{svc()} / \code{tvc()} 
 \code{temporal()} / \code{spatiotemporal_effects()} extractors read, the fitted values,
 the predictions and the ratio draws.
 
-The block order mirrors \code{compute_param_layout()} in \code{src/hmc_sampler.cpp},
-which is the sampler's own layout, and \code{hmc_param_layout()} is the only place
-an offset is computed. The eta assembly mirrors the observation loop of
-\code{compute_log_post_impl()} in \code{src/log_post_impl.h}, including which
-structures a \code{shared} flag lets reach the denominator.
+\code{hmc_param_layout()} describes the model-facing order of engine draws.
+The engine adapter translates its model-specific extra-parameter block to
+this order. Predictor assembly follows the engine's field storage convention
+and each structure's process-sharing mask.
 }
 \keyword{internal}

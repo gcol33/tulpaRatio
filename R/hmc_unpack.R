@@ -6,11 +6,10 @@
 #' `temporal()` / `spatiotemporal_effects()` extractors read, the fitted values,
 #' the predictions and the ratio draws.
 #'
-#' The block order mirrors `compute_param_layout()` in `src/hmc_sampler.cpp`,
-#' which is the sampler's own layout, and `hmc_param_layout()` is the only place
-#' an offset is computed. The eta assembly mirrors the observation loop of
-#' `compute_log_post_impl()` in `src/log_post_impl.h`, including which
-#' structures a `shared` flag lets reach the denominator.
+#' `hmc_param_layout()` describes the model-facing order of engine draws.
+#' The engine adapter translates its model-specific extra-parameter block to
+#' this order. Predictor assembly follows the engine's field storage convention
+#' and each structure's process-sharing mask.
 #'
 #' @name hmc_unpack
 #' @keywords internal
@@ -365,14 +364,7 @@ layout_st_block <- function(cur, st_info) {
   is_gp <- st_info$type %in% c("separable", "nonsep_gp")
   is_hsgp <- isTRUE(st_info$spatial_is_hsgp)
 
-  # A non-centred Knorr-Held interaction stores z with delta = z / sqrt(tau)
-  noncentered <- st_info$type %in% c("I", "II", "III", "IV") && !is_hsgp &&
-    identical(st_info$stored_parameterization %||% st_info$parameterization, "noncentered")
-  # A collapsed GP interaction is integrated out and has no slots; its draws
-  # come from the sampler separately
-  collapsed <- is_gp && identical(st_info$parameterization, "collapsed")
   out <- list(type = st_info$type, is_gp = is_gp, is_hsgp = is_hsgp,
-              noncentered = noncentered, collapsed = collapsed,
               log_tau = cur$one())
   out$logit_rho <- if (st_has_rho(st_info)) cur$one() else integer(0)
   if (is_gp) {
@@ -383,7 +375,7 @@ layout_st_block <- function(cur, st_info) {
     out$log_sigma2_hsgp <- cur$one()
     out$log_lengthscale_hsgp <- cur$one()
   }
-  out$delta <- if (collapsed) integer(0) else cur$take(st_info$n_params)
+  out$delta <- cur$take(st_info$n_params)
   out
 }
 
@@ -458,7 +450,6 @@ block_draws <- function(samples, idx) {
 #' @param latent_info,st_info,ms_temporal_info Optional info lists
 #' @param gp_w_star,icar_phi_star,bym2_theta_star Fields from the inner Laplace
 #'   optimization of a collapsed parameterization
-#' @param st_delta_draws Draws of a collapsed GP interaction
 #'
 #' @return A list with one entry per structure, each holding the draws on the
 #'   natural scale.
@@ -469,7 +460,7 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
                              latent_info = NULL, st_info = NULL,
                              ms_temporal_info = NULL,
                              gp_w_star = NULL, icar_phi_star = NULL,
-                             bym2_theta_star = NULL, st_delta_draws = NULL) {
+                             bym2_theta_star = NULL) {
   n_samples <- nrow(samples)
   out <- list(n_samples = n_samples)
 
@@ -497,7 +488,7 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
   out$ms_temporal <- unpack_ms_temporal(samples, layout$ms_temporal)
   out$svc <- unpack_svc(samples, layout$svc, spatial_info)
   out$latent <- unpack_latent(samples, layout$latent, latent_info)
-  out$st <- unpack_st(samples, layout$st, st_delta_draws)
+  out$st <- unpack_st(samples, layout$st)
   out$hsgp <- unpack_hsgp(samples, layout$hsgp, spatial_info)
   out$tvc <- unpack_tvc(samples, layout$tvc)
 
@@ -650,15 +641,7 @@ unpack_temporal <- function(samples, lay, temporal_info) {
     phi_upper <- temporal_info$phi_prior_upper %||% 10.0
     out$phi <- phi_lower + (phi_upper - phi_lower) * inv_logit(samples[, lay$logit_phi])
     x <- block_draws(samples, lay$effects)
-    params <- c(list(n_times = as.integer(temporal_info$n_times),
-                     n_groups = as.integer(temporal_info$n_groups),
-                     shared = temporal_info$shared %||% TRUE),
-                temporal_gp_fields(temporal_info))
-    field <- if (params$gp_parameterization == "centered") x else
-      cpp_temporal_gp_field(unname(as.matrix(x)),
-                                   samples[, lay$log_sigma2],
-                                   samples[, lay$logit_phi], params)
-    dimnames(field) <- dimnames(x)
+    field <- x
     out$field <- field
     return(out)
   }
@@ -912,7 +895,7 @@ unpack_latent <- function(samples, lay, latent_info) {
 
 
 #' @keywords internal
-unpack_st <- function(samples, lay, st_delta_draws = NULL) {
+unpack_st <- function(samples, lay) {
   if (identical(lay$type, "none")) return(NULL)
   out <- list(type = lay$type, is_hsgp = lay$is_hsgp)
   out$tau <- exp(samples[, lay$log_tau])
@@ -927,12 +910,7 @@ unpack_st <- function(samples, lay, st_delta_draws = NULL) {
     out$sigma2_hsgp <- exp(samples[, lay$log_sigma2_hsgp])
     out$lengthscale_hsgp <- exp(samples[, lay$log_lengthscale_hsgp])
   }
-  out$field <- if (isTRUE(lay$collapsed)) {
-    st_delta_draws
-  } else {
-    block_draws(samples, lay$delta)
-  }
-  if (isTRUE(lay$noncentered)) out$field <- out$field / sqrt(out$tau)
+  out$field <- block_draws(samples, lay$delta)
   out
 }
 
@@ -1002,16 +980,61 @@ hmc_eta_design <- function(X_num, X_denom, re_group = NULL,
 }
 
 
-#' Whether a fit's draws use the HMC parameter layout
+sampler_draw_state <- function(samples, inp, re_param, layout = NULL,
+                               conditional = list()) {
+  layout <- layout %||% hmc_param_layout(
+    hmc_data = inp$hmc_data, spatial_info = inp$spatial_info,
+    temporal_info = inp$temporal_info, zi_info = inp$zi_info,
+    model_type = inp$model_type, latent_info = inp$latent_info,
+    st_info = inp$spatiotemporal_info, ms_temporal_info = inp$ms_temporal_info)
+  if (layout$total != ncol(samples)) {
+    stop("The engine parameter layout describes ", layout$total,
+         " parameters; the draw matrix contains ", ncol(samples), ".", call. = FALSE)
+  }
+  unpack <- function(x, fields = conditional) {
+    hmc_unpack_draws(samples = x, layout = layout, hmc_data = inp$hmc_data,
+      spatial_info = inp$spatial_info, temporal_info = inp$temporal_info,
+      model_type = inp$model_type, re_param = re_param,
+      latent_info = inp$latent_info, st_info = inp$spatiotemporal_info,
+      ms_temporal_info = inp$ms_temporal_info,
+      gp_w_star = fields$gp_w_star, icar_phi_star = fields$icar_phi_star,
+      bym2_theta_star = fields$bym2_theta_star)
+  }
+  unpacked <- unpack(samples)
+  internal <- c(list(samples = samples, hmc_data = inp$hmc_data,
+    model_type = inp$model_type, latent_info = inp$latent_info,
+    ms_temporal_info = inp$ms_temporal_info, layout = layout, eta_dropped = NULL,
+    gp_w_star = conditional$gp_w_star, icar_phi_star = conditional$icar_phi_star,
+    bym2_theta_star = conditional$bym2_theta_star), hmc_structure_draws(unpacked))
+  list(layout = layout, unpacked = unpacked, internal = internal, unpack = unpack)
+}
+
+engine_fit_metadata <- function(result, setup, re_param = "centered") {
+  inp <- setup$inputs
+  state <- sampler_draw_state(result$draws, inp, re_param, setup$layout)
+  result$.internal <- state$internal
+  result$spatial <- inp$spatial_info
+  result$temporal <- inp$temporal_info
+  result$spatiotemporal <- inp$spatiotemporal_info
+  result$zi <- inp$zi_info
+  result$latent <- inp$latent_info
+  result$re_param <- re_param
+  result$chains <- 1L
+  result$n_save <- nrow(result$draws)
+  result
+}
+
+
+#' Whether a fit's draws use the engine parameter layout
 #'
-#' The HMC and ESS samplers share one parameter vector, so their fits are
-#' unpacked, predicted from and scored the same way.
+#' The engine sampler backends share one parameter vector. Their fits are
+#' unpacked, predicted from and scored through the same layout.
 #'
 #' @param object A `ratiod_fit`
 #' @return `TRUE` or `FALSE`
 #' @keywords internal
 has_hmc_layout <- function(object) {
-  isTRUE(object$backend %in% c("hmc", "ess")) && !is.null(object$.internal$layout)
+  isTRUE(object$backend %in% c("hmc", "ess", "sghmc", "sgld", "vi")) && !is.null(object$.internal$layout)
 }
 
 
@@ -1035,8 +1058,7 @@ hmc_fit_unpack <- function(object) {
     ms_temporal_info = internal$ms_temporal_info,
     gp_w_star = internal$gp_w_star,
     icar_phi_star = internal$icar_phi_star,
-    bym2_theta_star = internal$bym2_theta_star,
-    st_delta_draws = internal$st_delta_draws
+    bym2_theta_star = internal$bym2_theta_star
   )
 }
 

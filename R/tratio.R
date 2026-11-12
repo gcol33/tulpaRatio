@@ -128,7 +128,7 @@
 #'     diagonal (balanced); `"fullrank"` full Cholesky (best for small models).
 #'
 #'   Stochastic gradient backends (`mode = "sghmc"` / `"sgld"`):
-#'   - `batch_size`: minibatch size (default `ceiling(sqrt(n))`).
+#'   - `batch_size`: rows in each stochastic-gradient update; currently must equal `n`.
 #'   - `epsilon`: step size.
 #'   - `alpha`: friction coefficient (`"sghmc"` only).
 #'   - `schedule_a`, `schedule_b`, `schedule_gamma`, `use_schedule`: step-size
@@ -430,7 +430,7 @@ tratio_backend_args <- function(context, controls, structures = character()) {
 
 tratio_sg_backend_args <- function(context, backend) {
   args <- tratio_backend_args(context, c("iter", "warmup"), "zi")
-  args$batch_size <- context$control$batch_size %||% ceiling(sqrt(nrow(args$data)))
+  args$batch_size <- context$control$batch_size %||% nrow(args$data)
   c(args, .tratio_sg_args(context$control, backend))
 }
 
@@ -486,8 +486,8 @@ tratio_backend_message <- function(backend, args) {
     message(sprintf("  Batch size: %d (%.1f%% of data)", args$batch_size,
                     100 * args$batch_size / nrow(args$data)))
     message(switch(backend,
-      sghmc = "  Note: SGHMC uses minibatch gradients for scalability",
-      sgld = "  Note: SGLD uses Langevin dynamics with minibatch gradients"))
+      sghmc = "  Note: SGHMC uses full-data gradients and friction noise",
+      sgld = "  Note: SGLD uses Langevin dynamics with full-data gradients"))
   }
 }
 
@@ -514,7 +514,7 @@ suggest_mode <- function(n_obs, structures, current_mode) {
   }
 
   alternatives <- c(
-    sghmc = "  - mode = 'sghmc' for minibatch MCMC (Tier 3, scales better)",
+    sghmc = "  - mode = 'sghmc' for full-data stochastic dynamics (Tier 3)",
     sgld = "  - mode = 'sgld' for stochastic gradient Langevin dynamics (Tier 3)",
     laplace = "  - mode = 'structured' for Tier 2 (Laplace approximation)"
   )

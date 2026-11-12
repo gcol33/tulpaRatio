@@ -1,3 +1,7 @@
+gradient_fixture_family <- function(field) {
+  if (field %in% c("latent2", "latent2_first_zero", "stgp_latent2")) "poisson_gamma" else "binomial"
+}
+
 fixture_re_params <- function(n, group = rep(0L, n), n_groups = 0L, n_terms = 0L) {
   list(
     group = as.integer(group),
@@ -39,6 +43,8 @@ fixture_temporal_params <- function(n, time_idx = rep(0L, n),
     n_params = as.integer(n_times * n_groups),
     cyclic = cyclic,
     shared = TRUE,
+    rho_prior_a = 1,
+    rho_prior_b = 1,
     sigma_prior_U = 3.0,
     sigma_prior_alpha = 0.01,
     # GP-specific fields (required even for non-GP types)

@@ -163,7 +163,7 @@ diagonal (balanced); \code{"fullrank"} full Cholesky (best for small models).
 
 Stochastic gradient backends (\code{mode = "sghmc"} / \code{"sgld"}):
 \itemize{
-\item \code{batch_size}: minibatch size (default \code{ceiling(sqrt(n))}).
+\item \code{batch_size}: rows in each stochastic-gradient update; currently must equal \code{n}.
 \item \code{epsilon}: step size.
 \item \code{alpha}: friction coefficient (\code{"sghmc"} only).
 \item \code{schedule_a}, \code{schedule_b}, \code{schedule_gamma}, \code{use_schedule}: step-size

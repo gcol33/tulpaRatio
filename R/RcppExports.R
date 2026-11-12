@@ -13,10 +13,6 @@ cpp_enum_names <- function(kind) {
     .Call(`_tulpaRatio_cpp_enum_names`, kind)
 }
 
-cpp_ess_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose) {
-    .Call(`_tulpaRatio_cpp_ess_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, seed, verbose)
-}
-
 cpp_test_gibbs_margin <- function(family, y, yd, en, ed, pn, pd) {
     .Call(`_tulpaRatio_cpp_test_gibbs_margin`, family, y, yd, en, ed, pn, pd)
 }
@@ -31,18 +27,6 @@ cpp_gpu_available <- function() {
 
 cpp_gpu_info <- function() {
     .Call(`_tulpaRatio_cpp_gpu_info`)
-}
-
-cpp_hmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str = "auto", max_treedepth = 10L, metric_str = "auto", adapt_delta = -1.0, walnuts = FALSE, n_cores = 0L) {
-    .Call(`_tulpaRatio_cpp_hmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, L, n_chains, seed, n_threads, verbose, gradient_mode_str, max_treedepth, metric_str, adapt_delta, walnuts, n_cores)
-}
-
-cpp_get_max_threads <- function() {
-    .Call(`_tulpaRatio_cpp_get_max_threads`)
-}
-
-cpp_test_spatial_covariance <- function(distance, variance, range, covariance, nu = 1.5) {
-    .Call(`_tulpaRatio_cpp_test_spatial_covariance`, distance, variance, range, covariance, nu)
 }
 
 cpp_hsgp_spectrum <- function(eigenvalues, sigma2, lengthscale, dimension, kernel) {
@@ -129,22 +113,6 @@ cpp_ratio_precision_density <- function(y, mu, phi, trials) {
     .Call(`_tulpaRatio_cpp_ratio_precision_density`, y, mu, phi, trials)
 }
 
-cpp_sghmc_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose) {
-    .Call(`_tulpaRatio_cpp_sghmc_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, alpha, L, seed, verbose)
-}
-
-cpp_sgld_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose) {
-    .Call(`_tulpaRatio_cpp_sgld_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, n_iter, n_warmup, batch_size, epsilon, schedule_a, schedule_b, schedule_gamma, use_schedule, seed, verbose)
-}
-
-cpp_temporal_gp_field <- function(x, log_sigma2, logit_phi, temporal_params) {
-    .Call(`_tulpaRatio_cpp_temporal_gp_field`, x, log_sigma2, logit_phi, temporal_params)
-}
-
-cpp_temporal_gp_log_prior <- function(x, log_sigma2, logit_phi, temporal_params) {
-    .Call(`_tulpaRatio_cpp_temporal_gp_log_prior`, x, log_sigma2, logit_phi, temporal_params)
-}
-
 cpp_chain_concurrency <- function(n_chains, max_concurrent) {
     .Call(`_tulpaRatio_cpp_chain_concurrency`, n_chains, max_concurrent)
 }
@@ -165,6 +133,26 @@ cpp_num_procs <- function() {
     .Call(`_tulpaRatio_cpp_num_procs`)
 }
 
+cpp_test_residual_accumulation <- function() {
+    .Call(`_tulpaRatio_cpp_test_residual_accumulation`)
+}
+
+cpp_test_collapsed_margin <- function(family, y, yd, en, ed, pn, pd, shared) {
+    .Call(`_tulpaRatio_cpp_test_collapsed_margin`, family, y, yd, en, ed, pn, pd, shared)
+}
+
+cpp_test_collapsed_gp_reference <- function(beta, y, n, sigma) {
+    .Call(`_tulpaRatio_cpp_test_collapsed_gp_reference`, beta, y, n, sigma)
+}
+
+cpp_test_negbin_h_kernels <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_negbin_h_kernels`, y, mu, phi)
+}
+
+cpp_test_spatial_covariance <- function(distance, variance, range, covariance, nu = 1.5) {
+    .Call(`_tulpaRatio_cpp_test_spatial_covariance`, distance, variance, range, covariance, nu)
+}
+
 cpp_gradient_fields <- function() {
     .Call(`_tulpaRatio_cpp_gradient_fields`)
 }
@@ -179,10 +167,6 @@ cpp_scale_prior_check <- function(field, x, U = 0.8, alpha = 0.15) {
 
 cpp_scale_conditional_draws <- function(n, quad, rank, U, alpha) {
     .Call(`_tulpaRatio_cpp_scale_conditional_draws`, n, quad, rank, U, alpha)
-}
-
-cpp_gradient_dispatch <- function(field, n_obs = 40L, n_units = 8L, n_times = 5L, seed = 42L, family = "binomial") {
-    .Call(`_tulpaRatio_cpp_gradient_dispatch`, field, n_obs, n_units, n_times, seed, family)
 }
 
 cpp_gradient_check <- function(field, n_obs = 400L, n_units = 25L, n_times = 10L, eps = 1e-5, seed = 42L, mode = "handcoded", precenter = FALSE, family = "binomial", temporal_shared = TRUE, zi = "none", near_unit_rho = FALSE, n_threads = 1L, link_num = "", link_denom = "", link_inflation = "") {
@@ -205,8 +189,8 @@ cpp_st_ar1_zero_density <- function(field, correlations) {
     .Call(`_tulpaRatio_cpp_st_ar1_zero_density`, field, correlations)
 }
 
-cpp_st_collapsed_exactness <- function(field = "stgp_collapsed", n_draws = 4L, seed = 42L, n_obs = 200L, n_units = 9L, n_times = 4L) {
-    .Call(`_tulpaRatio_cpp_st_collapsed_exactness`, field, n_draws, seed, n_obs, n_units, n_times)
+cpp_st_gaussian_conditional_exactness <- function(field = "stgp", n_draws = 4L, seed = 42L, n_obs = 200L, n_units = 9L, n_times = 4L) {
+    .Call(`_tulpaRatio_cpp_st_gaussian_conditional_exactness`, field, n_draws, seed, n_obs, n_units, n_times)
 }
 
 cpp_ms_temporal_nc_coordinate_spread <- function(field = "ms_temporal_nc", n = 12L, sigma2 = 0.25, n_draws = 6L, seed = 42L, n_groups = 1L) {
@@ -215,10 +199,6 @@ cpp_ms_temporal_nc_coordinate_spread <- function(field = "ms_temporal_nc", n = 1
 
 cpp_polygamma <- function(n, x) {
     .Call(`_tulpaRatio_cpp_polygamma`, n, x)
-}
-
-cpp_test_negbin_h_kernels <- function(y, mu, phi) {
-    .Call(`_tulpaRatio_cpp_test_negbin_h_kernels`, y, mu, phi)
 }
 
 cpp_test_negbin_jet <- function(y, mu, phi) {
@@ -235,10 +215,6 @@ cpp_test_cholesky <- function(x) {
 
 cpp_test_inverse_logit <- function(x) {
     .Call(`_tulpaRatio_cpp_test_inverse_logit`, x)
-}
-
-cpp_test_integrator <- function(q, p, epsilon) {
-    .Call(`_tulpaRatio_cpp_test_integrator`, q, p, epsilon)
 }
 
 cpp_test_autodiff_unary <- function(op, value, parameter = 1.0) {
@@ -317,26 +293,6 @@ cpp_test_compute_linear_predictors <- function(X_num, beta_num, X_denom, beta_de
     .Call(`_tulpaRatio_cpp_test_compute_linear_predictors`, X_num, beta_num, X_denom, beta_denom, n_threads)
 }
 
-cpp_test_rw1_quadratic_form <- function(phi, cyclic) {
-    .Call(`_tulpaRatio_cpp_test_rw1_quadratic_form`, phi, cyclic)
-}
-
-cpp_test_rw2_quadratic_form <- function(phi, cyclic) {
-    .Call(`_tulpaRatio_cpp_test_rw2_quadratic_form`, phi, cyclic)
-}
-
-cpp_test_ar1_log_density <- function(phi, rho, tau) {
-    .Call(`_tulpaRatio_cpp_test_ar1_log_density`, phi, rho, tau)
-}
-
-cpp_test_temporal_log_prior <- function(phi, type_str, tau, rho, cyclic, n_groups = 1L, augment = FALSE, tvc = FALSE) {
-    .Call(`_tulpaRatio_cpp_test_temporal_log_prior`, phi, type_str, tau, rho, cyclic, n_groups, augment, tvc)
-}
-
-cpp_test_ms_rw_log_lik <- function(phi, sigma2, order, cyclic, augment) {
-    .Call(`_tulpaRatio_cpp_test_ms_rw_log_lik`, phi, sigma2, order, cyclic, augment)
-}
-
 cpp_test_log1pexp <- function(x) {
     .Call(`_tulpaRatio_cpp_test_log1pexp`, x)
 }
@@ -405,40 +361,8 @@ cpp_test_parallel_likelihood <- function(y, mu, n_threads) {
     .Call(`_tulpaRatio_cpp_test_parallel_likelihood`, y, mu, n_threads)
 }
 
-cpp_test_st_gp_log_lik <- function(w, sigma2, phi_space, phi_time, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type = "product", cov_space = "exponential", cov_time = "exponential") {
-    .Call(`_tulpaRatio_cpp_test_st_gp_log_lik`, w, sigma2, phi_space, phi_time, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type, cov_space, cov_time)
-}
-
-cpp_test_st_gp_margin_normalizer <- function(tau, phi_space, phi_time, n_spatial, n_times, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type = "gneiting") {
-    .Call(`_tulpaRatio_cpp_test_st_gp_margin_normalizer`, tau, phi_space, phi_time, n_spatial, n_times, coords, time_values, nn, nn_idx, nn_dist_space, nn_dist_time, nn_order, nonsep_type)
-}
-
-cpp_test_st_ar1_margin_normalizer <- function(rho, n_spatial, n_times, type = "II") {
-    .Call(`_tulpaRatio_cpp_test_st_ar1_margin_normalizer`, rho, n_spatial, n_times, type)
-}
-
 cpp_test_pg_rw2_conditional <- function(omega, residual, tau) {
     .Call(`_tulpaRatio_cpp_test_pg_rw2_conditional`, omega, residual, tau)
-}
-
-cpp_test_gradient_trajectory <- function(type, block, mode, path, n = 5L, steps = 7L, epsilon = 0.1) {
-    .Call(`_tulpaRatio_cpp_test_gradient_trajectory`, type, block, mode, path, n, steps, epsilon)
-}
-
-cpp_test_metric_step <- function(type, block, n = 5L, epsilon = 0.15, extreme = FALSE) {
-    .Call(`_tulpaRatio_cpp_test_metric_step`, type, block, n, epsilon, extreme)
-}
-
-cpp_test_metric_epsilon <- function(type, n = 5L) {
-    .Call(`_tulpaRatio_cpp_test_metric_epsilon`, type, n)
-}
-
-cpp_test_metric_geometry <- function(type, block, n = 5L, n_draws = 20000L) {
-    .Call(`_tulpaRatio_cpp_test_metric_geometry`, type, block, n, n_draws)
-}
-
-cpp_test_multiscale_prior <- function(structure, phi, log_sigma2, logit_rho) {
-    .Call(`_tulpaRatio_cpp_test_multiscale_prior`, structure, phi, log_sigma2, logit_rho)
 }
 
 cpp_test_negbin_math <- function(y, phi) {
@@ -453,20 +377,16 @@ cpp_test_precision_jet <- function(y, phi, beta) {
     .Call(`_tulpaRatio_cpp_test_precision_jet`, y, phi, beta)
 }
 
-cpp_test_precision_h <- function(y, mu, phi, family) {
-    .Call(`_tulpaRatio_cpp_test_precision_h`, y, mu, phi, family)
-}
-
-cpp_test_precision_legacy <- function(y, mu, phi) {
-    .Call(`_tulpaRatio_cpp_test_precision_legacy`, y, mu, phi)
+cpp_test_precision_scalar <- function(y, mu, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_scalar`, y, mu, phi)
 }
 
 cpp_test_precision_gibbs <- function(y, mu, phi) {
     .Call(`_tulpaRatio_cpp_test_precision_gibbs`, y, mu, phi)
 }
 
-cpp_test_precision_beta_legacy <- function(y, n, phi) {
-    .Call(`_tulpaRatio_cpp_test_precision_beta_legacy`, y, n, phi)
+cpp_test_precision_beta_scalar <- function(y, n, phi) {
+    .Call(`_tulpaRatio_cpp_test_precision_beta_scalar`, y, n, phi)
 }
 
 cpp_test_precision_spec_h <- function(y, mu, phi) {
@@ -487,18 +407,6 @@ cpp_test_precision_beta_spec_h <- function(y, n, phi) {
 
 cpp_test_linked_margin <- function(family, y, n, eta, phi, link, inflation = "none", zi = -0.6, oi = -1.0, zi_link = "logit", oi_link = "logit") {
     .Call(`_tulpaRatio_cpp_test_linked_margin`, family, y, n, eta, phi, link, inflation, zi, oi, zi_link, oi_link)
-}
-
-cpp_test_collapsed_gp_reference <- function(beta, y, n, sigma) {
-    .Call(`_tulpaRatio_cpp_test_collapsed_gp_reference`, beta, y, n, sigma)
-}
-
-cpp_test_collapsed_margin <- function(family, y, yd, en, ed, pn, pd, shared) {
-    .Call(`_tulpaRatio_cpp_test_collapsed_margin`, family, y, yd, en, ed, pn, pd, shared)
-}
-
-cpp_test_residual_accumulation <- function() {
-    .Call(`_tulpaRatio_cpp_test_residual_accumulation`)
 }
 
 cpp_test_ratio_margin <- function(family, y, n, eta, phi, cached) {
@@ -529,12 +437,16 @@ cpp_test_scalar_boundaries <- function(probability) {
     .Call(`_tulpaRatio_cpp_test_scalar_boundaries`, probability)
 }
 
+cpp_test_spec17 <- function(family, field) {
+    .Call(`_tulpaRatio_cpp_test_spec17`, family, field)
+}
+
 cpp_tls_workspace_shrink <- function(cycles, work, n) {
     .Call(`_tulpaRatio_cpp_tls_workspace_shrink`, cycles, work, n)
 }
 
-cpp_test_vi_math <- function() {
-    .Call(`_tulpaRatio_cpp_test_vi_math`)
+cpp_get_max_threads <- function() {
+    .Call(`_tulpaRatio_cpp_get_max_threads`)
 }
 
 cpp_tulpa_abi_version <- function() {
@@ -553,11 +465,7 @@ cpp_tulpa_pg_binomial_gibbs <- function(y, n, X, group, n_groups, n_iter = 2000L
     .Call(`_tulpaRatio_cpp_tulpa_pg_binomial_gibbs`, y, n, X, group, n_groups, n_iter, n_warmup, thin, prior_beta_sd, prior_sigma_scale, store_eta, verbose, n_threads)
 }
 
-cpp_tulpaRatio_run_nuts_specs <- function(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth = 10L, adapt_delta = 0.8, seed = 1L, verbose = FALSE, gradient_mode = "A_r", sigma_beta = 2.5, phi_prior_shape = 1.0, phi_prior_rate = 0.01, sigma_prior_scale = 1.0, re_params, spatial_params, temporal_params, n_chains = 1L, n_threads = 1L, L = 0L, metric = "auto", walnuts = FALSE, svc_spec = NULL, tvc_spec = NULL, latent_spec = NULL, st_spec = NULL) {
-    .Call(`_tulpaRatio_cpp_tulpaRatio_run_nuts_specs`, y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts, svc_spec, tvc_spec, latent_spec, st_spec)
-}
-
-cpp_vi_fit <- function(q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose = TRUE) {
-    .Call(`_tulpaRatio_cpp_vi_fit`, q_init, y_num, y_denom, y_num_cont, y_denom_cont, X_num, X_denom, family, re_params, spatial_params, gp_params, temporal_params, prior_params, zi_params, latent_params, st_params, tvc_params, svc_params, vi_options, verbose)
+cpp_tulpaRatio_sample <- function(y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth = 10L, adapt_delta = 0.8, seed = 1L, verbose = FALSE, gradient_mode = "A_r", sigma_beta = 2.5, phi_prior_shape = 1.0, phi_prior_rate = 0.01, sigma_prior_scale = 1.0, re_params = NULL, spatial_params = NULL, temporal_params = NULL, n_chains = 1L, n_threads = 1L, L = 0L, metric = "auto", walnuts = FALSE, svc_spec = NULL, tvc_spec = NULL, latent_spec = NULL, st_spec = NULL, method = "nuts", sampler_options = NULL) {
+    .Call(`_tulpaRatio_cpp_tulpaRatio_sample`, y_num, y_denom, y_num_cont, y_denom_cont, X_list, cfg_list, init, n_iter, n_warmup, max_treedepth, adapt_delta, seed, verbose, gradient_mode, sigma_beta, phi_prior_shape, phi_prior_rate, sigma_prior_scale, re_params, spatial_params, temporal_params, n_chains, n_threads, L, metric, walnuts, svc_spec, tvc_spec, latent_spec, st_spec, method, sampler_options)
 }
 

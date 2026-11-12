@@ -2,7 +2,7 @@
 % Please edit documentation in R/hmc_unpack.R
 \name{has_hmc_layout}
 \alias{has_hmc_layout}
-\title{Whether a fit's draws use the HMC parameter layout}
+\title{Whether a fit's draws use the engine parameter layout}
 \usage{
 has_hmc_layout(object)
 }
@@ -13,7 +13,7 @@ has_hmc_layout(object)
 \code{TRUE} or \code{FALSE}
 }
 \description{
-The HMC and ESS samplers share one parameter vector, so their fits are
-unpacked, predicted from and scored the same way.
+The engine sampler backends share one parameter vector. Their fits are
+unpacked, predicted from and scored through the same layout.
 }
 \keyword{internal}
