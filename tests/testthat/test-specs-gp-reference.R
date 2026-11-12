@@ -12,11 +12,17 @@ test_that("collapsed and sampled Gaussian field posteriors match dense integrati
   ref_sd <- sqrt(sum((beta-ref_mean)^2*posterior))
   ref_q <- approx(cumsum(posterior),beta,c(.1,.5,.9),ties='ordered')$y
   expect_lt(abs(sum(beta*marginal)-ref_mean)/ref_sd,.005)
-  sampled <- tulpaRatio:::cpp_tulpaRatio_run_nuts_specs(
+  fit <- tulpaRatio:::cpp_tulpaRatio_run_nuts_specs(
     y_num=y,y_denom=n,y_num_cont=numeric(),y_denom_cont=numeric(),
     X_list=list(matrix(c(1,1),1)),cfg_list=list(family='binomial'),
     init=c(0,0),n_iter=8000L,n_warmup=2000L,seed=224L,sigma_beta=sigma,
-    re_params=list(),spatial_params=list(),temporal_params=list())$samples[,1L]
+    metric="dense",re_params=list(),spatial_params=list(),temporal_params=list())
+  sampled <- fit$samples[,1L]
+  bridge19_write_evidence(data.frame(route="gaussian_integral",seed=224L,
+    divergences=sum(fit$divergent),ess=posterior::ess_bulk(matrix(sampled)),
+    mean_gap=abs(mean(sampled)-ref_mean)/ref_sd,
+    quantile_gap=max(abs(quantile(sampled,c(.1,.5,.9))-ref_q))/ref_sd),
+    "gaussian-integration-reference.tsv")
   expect_lt(abs(mean(sampled)-ref_mean)/ref_sd,.12)
   expect_lt(max(abs(quantile(sampled,c(.1,.5,.9))-ref_q))/ref_sd,.15)
 })
