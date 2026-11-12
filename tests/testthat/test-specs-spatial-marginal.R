@@ -34,6 +34,7 @@ test_that("engine marginal and joint spatial posteriors agree across three seeds
     args <- capture$args
     args$spatial_params$parameterization <- 'collapsed'
     args$init <- args$init[seq_len(outer)]
+    args$adapt_delta <- .995
     timing <- system.time(marginal <- do.call(tulpaRatio:::cpp_tulpaRatio_run_nuts_specs, args))
     joint <- capture$result
     expect_equal(ncol(marginal$samples), outer)
