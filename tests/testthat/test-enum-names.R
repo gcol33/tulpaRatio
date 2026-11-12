@@ -14,7 +14,10 @@ test_that("structure and covariance choices are names the sampler parses", {
   expect_setequal(eval(formals(spatial_multiscale)$sampler), enum_names("msgp_sampler"))
   expect_setequal(setdiff(eval(formals(temporal_tvc)$structure), "gp"),
                   enum_names("tvc"))
-  expect_setequal(eval(formals(spatial_gp)$cov), enum_names("cov"))
+  expect_setequal(c(setdiff(eval(formals(spatial_gp)$cov), "matern"),
+                    "matern", "matern52"), enum_names("cov"))
+  expect_identical(vapply(c(.5, 1.5, 2.5), function(nu)
+    tulpaRatio:::cov_type_code("matern", nu), 0L), c(0L, 1L, 4L))
   for (spec in list(temporal_rw1("t"), temporal_rw2("t"), temporal_ar1("t"),
                     temporal_iid("t"), temporal_gp("t"))) {
     expect_true(spec$type %in% enum_names("temporal"), label = spec$type)
