@@ -33,7 +33,7 @@ unity_core.o: \
   linalg_fast.h \
   hmc_temporal.h \
   hmc_temporal_gp.h \
-  hmc_zi.h \
+  ratio_margins.h \
   link_function.h \
   spatial_field_constraint.h \
   hmc_svc.h \
@@ -47,14 +47,12 @@ unity_core.o: \
   autodiff_utils.h \
   tls_workspace.h \
   hmc_cov.h \
-  ratio_margins.h \
   icar_quadratic.h \
   omp_sum.h \
   ar1_shared.h \
-  hmc_temporal_nc.h \
-  hmc_svc_autodiff.h \
-  hsgp_spectral.h \
-  ratio_math.h
+  ratio_math.h \
+  taylor_jet.h \
+  hmc_svc_autodiff.h
 unity_exports.o: \
   unity_exports.cpp \
   RcppExports.cpp
@@ -94,12 +92,14 @@ unity_hmc.o: \
   hmc_sampler.h \
   hmc_gradient_vectorized.h \
   ar1_shared.h \
+  st_range.h \
   hmc_car_proper.h \
   linalg_fast.h \
   ratio_collapsed_lik.h \
   re_model_data.h \
   hmc_temporal_gp.h \
   hmc_temporal_multiscale.h \
+  temporal_restriction_setup.h \
   hmc_cov.h \
   hmc_re.h \
   hmc_tvc.h \
@@ -118,15 +118,12 @@ unity_hmc.o: \
   hmc_gp.h \
   scale_prior.h \
   hmc_temporal.h \
-  hmc_zi.h \
+  ratio_margins.h \
   link_function.h \
   hmc_svc.h \
   hmc_svc_field.h \
-  ratio_margins.h \
-  hmc_temporal_nc.h \
   enum_names.h \
   hmc_temporal_autodiff.h \
-  hsgp_spectral.h \
   ratio_math.h \
   taylor_jet.h
 unity_likelihood.o: \
@@ -136,17 +133,19 @@ unity_likelihood.o: \
   tulpa_bridge.cpp \
   lik_specs/family_registry.h \
   lik_specs/family_kernel.h \
+  lik_specs/family_weights.h \
   lik_specs/lik_grad_h_kernel.h \
   lik_specs/lik_helpers.h \
   ratio_margins.h \
+  spatial_model_data.h \
   pg_engine.h \
   re_model_data.h \
   lik_specs/ratio_config.h \
-  hmc_zi.h \
   ratio_math.h \
-  autodiff_utils.h \
   enum_names.h \
-  link_function.h
+  taylor_jet.h \
+  link_function.h \
+  autodiff_utils.h
 unity_pg.o: \
   unity_pg.cpp \
   pg_binomial.cpp \
@@ -169,7 +168,8 @@ unity_pg.o: \
   omp_sum.h \
   ratio_math.h \
   link_function.h \
-  ratio_margins.h
+  ratio_margins.h \
+  taylor_jet.h
 unity_samplers.o: \
   unity_samplers.cpp \
   ess_sampler.cpp \
@@ -191,7 +191,7 @@ unity_samplers.o: \
   linalg_fast.h \
   hmc_temporal.h \
   hmc_temporal_gp.h \
-  hmc_zi.h \
+  ratio_margins.h \
   link_function.h \
   spatial_field_constraint.h \
   hmc_svc.h \
@@ -207,6 +207,7 @@ unity_samplers.o: \
   ar1_shared.h \
   icar_quadratic.h \
   hmc_re.h \
+  st_range.h \
   hmc_gp_autodiff.h \
   hmc_svc_autodiff.h \
   hmc_tvc_autodiff.h \
@@ -218,22 +219,19 @@ unity_samplers.o: \
   ratio_obs_lik.h \
   st_gp_laplace.h \
   enum_names.h \
-  ratio_margins.h \
   re_model_data.h \
   cov_type_code.h \
+  temporal_restriction_setup.h \
   hmc_cov.h \
-  hmc_temporal_nc.h \
-  hmc_temporal_autodiff.h \
-  hsgp_spectral.h \
   ratio_math.h \
-  ratio_collapsed_lik.h \
-  taylor_jet.h
+  taylor_jet.h \
+  hmc_temporal_autodiff.h \
+  ratio_collapsed_lik.h
 unity_spatial.o: \
   unity_spatial.cpp \
   hsgp_spectral.cpp \
   kriging.cpp \
   temporal_gp_field.cpp \
-  hsgp_spectral.h \
   cov_type_code.h \
   hmc_cov.h \
   hmc_sampler.h \
@@ -244,7 +242,7 @@ unity_spatial.o: \
   linalg_fast.h \
   hmc_temporal.h \
   hmc_temporal_gp.h \
-  hmc_zi.h \
+  ratio_margins.h \
   link_function.h \
   spatial_field_constraint.h \
   hmc_svc.h \
@@ -258,11 +256,11 @@ unity_spatial.o: \
   rsr.h \
   ar1_shared.h \
   re_model_data.h \
+  temporal_restriction_setup.h \
   ratio_math.h \
-  ratio_margins.h \
   omp_sum.h \
+  taylor_jet.h \
   tls_workspace.h \
-  hmc_temporal_nc.h \
   hmc_temporal_autodiff.h \
   hmc_svc_autodiff.h
 unity_tests.o: \
@@ -287,6 +285,7 @@ unity_tests.o: \
   hmc_temporal.h \
   log_post_impl.h \
   hmc_field_coordinates.h \
+  temporal_restriction_setup.h \
   pg_common.h \
   pg_temporal.h \
   omp_sum.h \
@@ -294,7 +293,7 @@ unity_tests.o: \
   taylor_jet.h \
   linalg_fast.h \
   hmc_temporal_multiscale.h \
-  hmc_zi.h \
+  ratio_margins.h \
   hmc_spatiotemporal.h \
   hmc_grad_helpers.h \
   hmc_gp_collapsed.h \
@@ -303,7 +302,6 @@ unity_tests.o: \
   lik_specs/lik_helpers.h \
   autodiff_utils.h \
   gibbs_spatial.h \
-  ratio_margins.h \
   ratio_math.h \
   tls_workspace.h \
   vi_meanfield.h \
@@ -324,6 +322,7 @@ unity_tests.o: \
   ar1_shared.h \
   icar_quadratic.h \
   hmc_re.h \
+  st_range.h \
   hmc_gp_autodiff.h \
   hmc_svc_autodiff.h \
   hmc_tvc_autodiff.h \
@@ -331,12 +330,10 @@ unity_tests.o: \
   hmc_car_proper.h \
   st_gp_laplace.h \
   pg_rng.h \
-  hmc_temporal_nc.h \
   hmc_cov.h \
   hmc_temporal_autodiff.h \
   hmc_grad_internal.h \
   hmc_gradient_vectorized.h \
   ratio_collapsed_lik.h \
-  vi_types.h \
-  hsgp_spectral.h
+  vi_types.h
 # unity-build: end
