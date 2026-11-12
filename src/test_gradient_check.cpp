@@ -101,18 +101,22 @@ Rcpp::List cpp_scale_prior_check(std::string field, double x,
   if (layout.has_svc) {
     for (int j = layout.log_sigma2_svc_start; j < layout.log_sigma2_svc_end; ++j) add(j, 0.5);
   }
-  auto set = [&](double u, double a) {
-    data.spatial_sigma_prior_U = data.temporal_sigma_prior_U = u;
-    data.tvc_sigma_prior_U = data.svc_sigma_prior_U = u;
-    data.gp_sigma2_prior_U = data.hsgp_sigma2_prior_U = u;
-    data.spatial_sigma_prior_alpha = data.temporal_sigma_prior_alpha = a;
-    data.tvc_sigma_prior_alpha = data.svc_sigma_prior_alpha = a;
-    data.gp_sigma2_prior_alpha = data.hsgp_sigma2_prior_alpha = a;
+  auto set = [](Fixture& model, double u, double a) {
+    model.spatial_sigma_prior_U = model.temporal_sigma_prior_U = u;
+    model.tvc_sigma_prior_U = model.svc_sigma_prior_U = u;
+    model.gp_sigma2_prior_U = model.hsgp_sigma2_prior_U = u;
+    model.spatial_sigma_prior_alpha = model.temporal_sigma_prior_alpha = a;
+    model.tvc_sigma_prior_alpha = model.svc_sigma_prior_alpha = a;
+    model.gp_sigma2_prior_alpha = model.hsgp_sigma2_prior_alpha = a;
   };
-  set(1.0, 0.01);
+  set(data, 1.0, 0.01);
   const double base = point_value(params, data, layout);
-  set(U, alpha);
-  const double changed = point_value(params, data, layout);
+  Fixture alternative = data;
+  set(alternative, U, alpha);
+  const auto alternative_layout = fixture_layout(alternative);
+  if (alternative_layout.total_params != layout.total_params)
+    Rcpp::stop("Prior anchors must preserve the parameter layout");
+  const double changed = point_value(params, alternative, alternative_layout);
   Rcpp::NumericVector density(slopes.size()), gradient(slopes.size());
   for (size_t j = 0; j < slopes.size(); ++j) {
     density[j] = ratiod::math::pc_log_density(x, slopes[j], U, alpha);

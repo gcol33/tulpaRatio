@@ -93,12 +93,12 @@ test_that("a known exposure must be positive", {
     "must be positive")
 })
 
-test_that("samplers with likelihoods of their own refuse the new pairs", {
+test_that("Laplace refuses unsupported zero inflation", {
   d <- exposure_data(40)
   expect_error(
     tratio(count | exposure ~ x, data = d,
            family = ratiod_zi_poisson(denom_family = "fixed"), mode = "laplace"),
-    "likelihood")
+    "zero/one inflation")
 })
 
 test_that("a count over a known exposure has a constructor of its own", {
