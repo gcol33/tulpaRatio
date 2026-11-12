@@ -386,6 +386,9 @@ double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
   Fixture data_nc = make_model(field, 400, 25, 10, seed);
   Fixture data_c = make_model(centred_field, 400, 25, 10, seed);
   ParamLayout layout = fixture_layout(data_nc);
+  const ParamLayout centered_layout = fixture_layout(data_c);
+  if (centered_layout.total_params != layout.total_params)
+    Rcpp::stop("ST coordinate charts must have equal dimensions");
   const int n_params = layout.total_params;
   const int ST = data_nc.spatiotemporal_data.n_params;
 
@@ -399,7 +402,7 @@ double cpp_st_gp_nc_coordinate_spread(std::string field = "stgp_nc",
     const double lp_nc = point_value(params_nc, data_nc, layout);
 
     std::vector<double> params_c = stored_point(params_nc,data_nc,layout);
-    const double diff = lp_nc - point_value(params_c, data_c, layout);
+    const double diff = lp_nc - point_value(params_c, data_c, centered_layout);
     lo = std::min(lo, diff);
     hi = std::max(hi, diff);
   }
