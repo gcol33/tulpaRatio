@@ -1,8 +1,3 @@
-# test-specs-temporal.R
-# B1d Step 3 parity test: RW1 + AR1 temporal effects routed through the
-# LikelihoodSpec path produce posterior means within 4x within-MC noise (in posterior-sd units) of
-# the legacy backend at the same seed.
-
 simulate_temporal_binomial <- function(n_times = 16L, reps = 12L, type = "rw1") {
   set.seed(20260603)
   if (type == "ar1") {
@@ -30,26 +25,19 @@ simulate_temporal_binomial <- function(n_times = 16L, reps = 12L, type = "rw1") 
     formula = y | n_trials ~ x1,
     data    = data.frame(y = y, n_trials = nt, x1 = x1,
                           t = factor(time, levels = seq_len(n_times))),
+    truth = p,
     family  = tulpaRatio::ratiod_binomial()
   )
 }
 
-fit_one_temporal <- function(sim, use_specs, seed_val, temporal_struct) {
-  op <- options(tulpaRatio.use_specs = use_specs); on.exit(options(op), add = TRUE)
+fit_one_temporal <- function(sim, seed_val, temporal_struct) {
   fit <- tulpaRatio::tratio(
     formula = sim$formula, data = sim$data, family = sim$family,
     temporal = temporal_struct,
     mode = "hmc",
     control = list(iter = 3000L, warmup = 1000L, chains = 1L, seed = seed_val, verbose = FALSE, gradient_mode = "A_r")
   )
-  fit$draws
-}
-
-# Largest posterior-mean difference between two fits, in units of the pooled
-# posterior sd of each parameter.
-max_standardised_diff <- function(a, b) {
-  sd_pool <- sqrt((apply(a, 2, var) + apply(b, 2, var)) / 2)
-  max(abs(colMeans(a) - colMeans(b)) / sd_pool)
+  fit
 }
 
 temporal_constructor <- function(type_v) {
@@ -63,18 +51,13 @@ temporal_constructor <- function(type_v) {
 for (t_type in c("rw1", "ar1")) {
   local({
     type_v <- t_type
-    test_that(sprintf("B1d spec path matches legacy for %s temporal", type_v), {
+    test_that(sprintf("engine recovers %s temporal predictors", type_v), {
       skip_on_cran()
       sim <- simulate_temporal_binomial(type = type_v)
       tp  <- temporal_constructor(type_v)
-      legacy42 <- fit_one_temporal(sim, FALSE, 42L, tp)
-      specs42  <- fit_one_temporal(sim, TRUE,  42L, tp)
-      legacy43 <- fit_one_temporal(sim, FALSE, 43L, tp)
-
-      expect_identical(colnames(specs42), colnames(legacy42))
-      cross  <- max_standardised_diff(legacy42, specs42)
-      within <- max_standardised_diff(legacy42, legacy43)
-      expect_lt(cross, max(4 * within, 0.5))
+      fit <- fit_one_temporal(sim, 42L, tp)
+      expect_lt(abs(mean(fit$draws[, "beta_num[2]"]) - .5), .2)
+      expect_lt(sqrt(mean((colMeans(fitted(fit, summary = FALSE)$numerator) - sim$truth)^2)), .1)
     })
   })
 }

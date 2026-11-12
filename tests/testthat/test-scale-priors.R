@@ -102,17 +102,14 @@ scale_temporal_reference <- function(n_eta = 121L, n_sigma = 161L, n_rho = 81L) 
         rho = weighted_quantile(rho, colSums(weights)))
 }
 
-test_that("temporal spec and legacy quantiles agree with dense quadrature", {
+test_that("temporal engine quantiles agree with dense quadrature", {
   skip_on_cran()
   skip_unless_slow()
   d <- data.frame(y = c(5L, 35L), trials = 40L, time = 1:2)
   p <- ratiod_priors(beta = prior_normal(0, 0.5),
                     sigma_temporal = prior_pc(0.8, 0.15),
                     rho_temporal = prior_beta(3, 4))
-  old <- options(tulpaRatio.use_specs = FALSE)
-  on.exit(options(old), add = TRUE)
-  fit_one <- function(specs, seed) {
-    options(tulpaRatio.use_specs = specs)
+  fit_one <- function(seed) {
     fit <- tratio(y | trials ~ 1, data = d, family = ratiod_binomial(),
                   temporal = temporal_ar1("time"), priors = p, mode = "hmc",
                   control = list(iter = 16000L, warmup = 4000L, chains = 1L,
@@ -122,14 +119,11 @@ test_that("temporal spec and legacy quantiles agree with dense quadrature", {
     cbind(sigma = 1 / sqrt(dr[, "tau_temporal"]),
           rho = dr[, "rho_ar1"])
   }
-  a <- fit_one(FALSE, 1701L)
-  b <- fit_one(TRUE, 1702L)
   probabilities <- c(0.25, 0.5, 0.75)
-  qa <- apply(a, 2, quantile, probs = probabilities)
-  qb <- apply(b, 2, quantile, probs = probabilities)
   reference <- scale_temporal_reference()
-  sd_reference <- sqrt((apply(a, 2, var) + apply(b, 2, var)) / 2)
-  expect_lt(max(abs(sweep(qa - reference, 2, sd_reference, `/`))), 0.2)
-  expect_lt(max(abs(sweep(qb - reference, 2, sd_reference, `/`))), 0.2)
-  expect_lt(max(abs(sweep(qa - qb, 2, sqrt((apply(a, 2, var) + apply(b, 2, var)) / 2), `/`))), 0.2)
+  for (seed in c(1701L, 1702L)) {
+    draws <- fit_one(seed)
+    sampled <- apply(draws, 2, quantile, probs = probabilities)
+    expect_lt(max(abs(sweep(sampled - reference, 2, apply(draws, 2, sd), `/`))), 0.2)
+  }
 })

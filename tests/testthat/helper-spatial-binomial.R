@@ -29,6 +29,7 @@ simulate_spatial_binomial <- function(n_units = 8L, reps = 16L) {
     data    = data.frame(y = y, n_trials = nt, x1 = x1,
                           unit = factor(unit, levels = seq_len(n_units))),
     family  = tulpaRatio::ratiod_binomial(),
+    truth = p,
     adj     = build_chain_adjacency(n_units)
   )
 }

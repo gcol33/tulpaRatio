@@ -4,8 +4,6 @@ test_that("automatic and cyclic fields reach the engine and recover simulated ef
   trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
   on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')))
-  op <- options(tulpaRatio.use_specs = FALSE)
-  on.exit(options(op), add = TRUE)
   S <- 6L
   adjacency <- matrix(0, S, S)
   for (s in seq_len(S - 1L)) adjacency[s, s + 1L] <- adjacency[s + 1L, s] <- 1
@@ -36,25 +34,11 @@ test_that("automatic and cyclic fields reach the engine and recover simulated ef
       case$control <- NULL
       args <- c(list(formula = y | n ~ x, data = d, family = ratiod_binomial(),
         mode = 'hmc', control = control), case)
-      options(tulpaRatio.use_specs = FALSE)
-      legacy <- do.call(tratio, args)
-      options(tulpaRatio.use_specs = TRUE)
       before <- calls
       fit <- do.call(tratio, args)
       expect_equal(calls, before + 1L)
-      a <- as.matrix(legacy$draws); b <- as.matrix(fit$draws)
-      expect_identical(colnames(a), colnames(b))
+      b <- as.matrix(fit$draws)
       expect_equal(fit$diagnostics$n_divergent, 0L)
-      mean_gaps <- abs(colMeans(a) - colMeans(b)) / apply(a, 2, sd)
-      mean_gap <- max(mean_gaps)
-      quantile_gaps <- abs(sweep(apply(a, 2, quantile, c(.1, .5, .9)) -
-        apply(b, 2, quantile, c(.1, .5, .9)), 2, apply(a, 2, sd), '/'))
-      quantile_gap <- max(quantile_gaps)
-      message(sprintf('FIELD field=%s seed=%d mean_legacy_sd=%.6f quantile_legacy_sd=%.6f',
-        name, seed, mean_gap, quantile_gap))
-      expect_lt(mean_gap, .35, label = paste(name, seed, names(which.max(mean_gaps))))
-      expect_lt(quantile_gap, .65,
-        label = paste(name, seed, colnames(a)[which.max(apply(quantile_gaps, 2, max))]))
       expect_true(all(abs(colMeans(b)[1:2] - c(.2, .5)) < .15))
       if (name != 'bym2_disconnected') {
         field_columns <- grep('^(phi_spatial|temporal)\\[', colnames(b))

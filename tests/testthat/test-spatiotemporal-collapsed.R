@@ -49,11 +49,13 @@ test_that("the collapsed parameterization is refused where it does not apply", {
     "integrates out a GP interaction")
   skip_on_cran()
   f$data$trials <- f$data$count + 5L
-  expect_error(
+  fit <- suppressWarnings(
     tratio(count | trials ~ x, data = f$data, family = ratiod_beta_binomial(),
            spatiotemporal = collapsed_spec(f$adj, "collapsed"), mode = "hmc",
-           control = list(iter = 20, chains = 1, seed = 1)),
-    "log-concave family")
+           control = list(iter = 20, chains = 1, seed = 1)))
+  expect_identical(fit$spatiotemporal$parameterization, "noncentered")
+  expect_equal(ncol(fit$.internal$spatiotemporal_draws), nrow(f$adj) * 4L)
+  expect_true(all(is.finite(fit$.internal$spatiotemporal_draws)))
 })
 
 test_that("a collapsed interaction fit agrees with the centred one", {

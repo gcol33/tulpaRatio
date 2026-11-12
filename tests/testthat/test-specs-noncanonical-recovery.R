@@ -13,7 +13,7 @@ test_that("noncanonical numerator and denominator links agree across seeds", {
     d$denom <- rgamma(nrow(d), 30, rate = 30 / denominator)
     args <- list(formula = y | denom ~ x, data = d,
       family = ratiod_gamma_gamma(link_num = links[1L], link_denom = links[2L]), mode = "hmc")
-    fit <- bridge19_pair(args, paste0("links_", name), seed)
+    fit <- engine_recovery_fit(args, paste0("links_", name), seed)
     recovery <- colMeans(as.matrix(fit$draws))[1:4]
     truth <- c(if (links[1L] == "identity") c(3, .3) else c(.8, .1),
       if (links[2L] == "identity") c(2, .2) else c(.8, .1))

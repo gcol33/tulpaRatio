@@ -1,4 +1,4 @@
-test_that("Knorr-Held interaction bridges agree across seeds and recover planted fields", {
+test_that("Knorr-Held interaction bridges recover planted fields", {
   skip_on_cran()
   nt <- 4L
   cases <- list(st_i = c("I", "rw1", "centered"),
@@ -77,7 +77,7 @@ test_that("Knorr-Held interaction bridges agree across seeds and recover planted
     args <- list(formula = if (paired) y | denom ~ x else y | n ~ x, data = d,
       family = if (paired) ratiod_poisson(denom_family = "gamma") else ratiod_binomial(),
       spatial = main, spatiotemporal = st, mode = "hmc")
-    fit <- bridge19_pair(args, name, seed)
+    fit <- engine_recovery_fit(args, name, seed)
     b <- as.matrix(fit$draws)
     expected_beta <- if (paired) c(beta, 1, .2) else beta
     expect_true(all(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta) < .2), info = paste(name, seed))

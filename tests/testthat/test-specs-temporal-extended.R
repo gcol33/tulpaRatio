@@ -1,4 +1,4 @@
-test_that("temporal and linked routes agree across seeds and recover planted predictors", {
+test_that("temporal and linked routes recover planted predictors", {
   skip_on_cran()
   cases <- bridge19_cases()
   bridge19_inventory("temporal", names(cases))
@@ -9,7 +9,7 @@ test_that("temporal and linked routes agree across seeds and recover planted pre
     args <- list(formula = y | n ~ x, data = d,
       family = ratiod_binomial(case$link %||% "logit"), temporal = case$temporal,
       mode = "hmc")
-    fit <- bridge19_pair(args, name, seed)
+    fit <- engine_recovery_fit(args, name, seed)
     b <- as.matrix(fit$draws)
     recovery <- bridge19_temporal_recovery(fit, d, case$link %||% "logit")
     bridge19_write_evidence(cbind(attr(fit, "bridge19"), recovery),

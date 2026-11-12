@@ -1,9 +1,4 @@
-# test-specs-binomial.R
-# Smoke test for the B1a LikelihoodSpec PoC.
-# Confirms that the feature flag routes through the spec path and produces
-# posterior means consistent with the legacy backend (within MC noise).
-
-test_that("B1a LikelihoodSpec PoC matches legacy binomial within MC noise", {
+test_that("engine binomial posterior recovers planted coefficients", {
   skip_on_cran()
 
   set.seed(20260503)
@@ -15,9 +10,7 @@ test_that("B1a LikelihoodSpec PoC matches legacy binomial within MC noise", {
   y <- rbinom(n, n_trials, p)
   dat <- data.frame(y = y, n_trials = n_trials, x1 = x1, x2 = x2)
 
-  fit_one <- function(use_specs, seed_val) {
-    op <- options(tulpaRatio.use_specs = use_specs)
-    on.exit(options(op), add = TRUE)
+  fit_one <- function(seed_val) {
     fit <- tulpaRatio::tratio(
       formula = y | n_trials ~ x1 + x2, data = dat,
       family = tulpaRatio::ratiod_binomial(), mode = "hmc",
@@ -27,16 +20,8 @@ test_that("B1a LikelihoodSpec PoC matches legacy binomial within MC noise", {
     if (is.matrix(draws)) colMeans(draws) else stop("unexpected draws shape")
   }
 
-  legacy42 <- fit_one(FALSE, 42L)
-  specs42  <- fit_one(TRUE,  42L)
-  legacy43 <- fit_one(FALSE, 43L)
-
-  expect_named(specs42, names(legacy42))
-
-  cross  <- max(abs(legacy42 - specs42))
-  within <- max(abs(legacy42 - legacy43))
-
-  # Cross-backend posterior-mean drift must stay within 4x the within-backend
-  # MC noise (which is itself a single-seed estimate, so we keep the cap loose).
-  expect_lt(cross, max(4 * within, 5e-3))
+  for (seed in c(42L, 43L)) {
+    estimates <- fit_one(seed)
+    expect_lt(max(abs(estimates - c(.4, .8, -.5))), .2)
+  }
 })

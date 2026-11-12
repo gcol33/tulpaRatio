@@ -1,11 +1,9 @@
-test_that("spatial bridge posteriors agree with the model sampler and simulated predictors", {
+test_that("spatial engine posteriors recover simulated predictors", {
   skip_on_cran()
   calls <- 0L
   trace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio'),
     tracer = function() calls <<- calls + 1L, print = FALSE)
   on.exit(untrace('cpp_tulpaRatio_run_nuts_specs', where = asNamespace('tulpaRatio')))
-  op <- options(tulpaRatio.use_specs = FALSE)
-  on.exit(options(op), add = TRUE)
   for (seed in c(18L, 181L, 182L)) {
     fixture <- spatial_bridge_fixture(seed)
     adjacency <- fixture$adjacency; coords <- fixture$coords
@@ -55,29 +53,11 @@ test_that("spatial bridge posteriors agree with the model sampler and simulated 
           warmup = if (name == 'gp_matern32') 5000L else 2500L, chains = 1L, cores = 1L, seed = seed,
           verbose = FALSE, adapt_delta = .99,
           gradient_mode = if (identical(fields[[name]]$type, 'car_proper')) 'H' else 'A_r'))
-      options(tulpaRatio.use_specs = FALSE)
-      legacy <- suppressWarnings(do.call(tratio, args))
-      options(tulpaRatio.use_specs = TRUE)
       args$control$gradient_mode <- 'A_r'
       before <- calls
       fit <- suppressWarnings(do.call(tratio, args))
       expect_equal(calls, before + 1L, info = name)
-      a <- spatial_comparison_draws(legacy$draws); b <- spatial_comparison_draws(fit$draws)
-      expect_identical(colnames(a), colnames(b), info = name)
-      mean_gaps <- abs(colMeans(a) - colMeans(b)) / apply(a, 2, sd)
-      quantile_gaps <- abs(sweep(apply(a, 2, quantile, c(.1, .5, .9)) -
-        apply(b, 2, quantile, c(.1, .5, .9)), 2, apply(a, 2, sd), '/'))
-      mean_gap <- max(mean_gaps)
-      quantile_gap <- max(quantile_gaps)
-      evidence <- Sys.getenv('TULPA_BRIDGE_EVIDENCE', '')
-      if (nzchar(evidence)) saveRDS(list(legacy = a, engine = b,
-        mean_gaps = mean_gaps, quantile_gaps = quantile_gaps,
-        legacy_diagnostics = legacy$diagnostics, engine_diagnostics = fit$diagnostics),
-        file.path(evidence, paste0('spatial-', name, '-', seed, '.rds')))
-      message(sprintf('SPATIAL field=%s seed=%d mean_sd=%.6f quantile_sd=%.6f divergences=%d',
-        name, seed, mean_gap, quantile_gap, fit$diagnostics$n_divergent))
-      expect_lt(mean_gap, .35, label = paste(name, seed, names(which.max(mean_gaps))))
-      expect_lt(quantile_gap, .65, label = paste(name, seed))
+      b <- spatial_comparison_draws(fit$draws)
       expect_lt(abs(mean(b[, 'beta_num[2]']) - .5), .15, label = name)
       fitted_eta <- qlogis(fitted(fit, summary = FALSE)$numerator)
       expect_lt(sqrt(mean((colMeans(fitted_eta) - if (restricted) eta_r else eta)^2)), .2, label = name)

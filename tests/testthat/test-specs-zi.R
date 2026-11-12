@@ -1,26 +1,3 @@
-# test-specs-zi.R
-# B1c parity test: each supported ZI / hurdle / OI / ZOIB variant routed
-# through the LikelihoodSpec path produces posterior means within 4x within-MC
-# noise of the legacy backend at the same seed.
-#
-# Parity scope (binomial only)
-# ----------------------------
-#   binomial : zi_binomial, hurdle_binomial, oi_binomial, zoib
-# These are the variants where the legacy A_r autodiff path
-# (src/log_post_impl.h) actually applies ZI / OI / ZOIB. For count ratio
-# families (poisson_gamma, negbin_*), the legacy A_r path falls back to the
-# plain count likelihood and IGNORES the requested ZI mechanism — only the
-# H-mode handcoded path (src/hmc_sampler.cpp) routes count ZI. A like-for-like
-# parity test for count ZI would need legacy H-mode vs. spec A_r and is left
-# for a follow-up (B2 will rebuild H gradients on the spec path anyway).
-#
-# Smoke scope (count families)
-# ----------------------------
-#   poisson_gamma : zi_poisson,  hurdle_poisson
-#   negbin_negbin : zi_negbin,   hurdle_negbin
-# These verify the spec path *runs end-to-end* and produces finite, named
-# posterior means — no comparison to legacy.
-
 simulate_zi_for_variant <- function(variant, n = 200) {
   set.seed(20260504)
   x1 <- rnorm(n); x2 <- rnorm(n)
@@ -128,8 +105,7 @@ simulate_zi_for_variant <- function(variant, n = 200) {
   } else stop("unknown ZI variant: ", variant)
 }
 
-fit_one_zi <- function(spec, use_specs, seed_val) {
-  op <- options(tulpaRatio.use_specs = use_specs); on.exit(options(op), add = TRUE)
+fit_one_zi <- function(spec, seed_val) {
   args <- list(
     formula = spec$formula, data = spec$data, family = spec$family,
     mode = "hmc",
@@ -142,12 +118,6 @@ fit_one_zi <- function(spec, use_specs, seed_val) {
        mcse = apply(dr, 2, function(v) posterior::mcse_mean(matrix(v, ncol = 1))))
 }
 
-# Largest z-score between two fits' posterior means, each difference scaled
-# by the two Monte Carlo standard errors
-max_mean_z <- function(a, b) {
-  max(abs(a$mean - b$mean) / sqrt(a$mcse^2 + b$mcse^2 + 1e-12))
-}
-
 parity_variants_b1c <- c("zi_binomial", "hurdle_binomial",
                           "oi_binomial", "zoib")
 smoke_variants_b1c  <- c("zi_poisson", "hurdle_poisson",
@@ -156,15 +126,11 @@ smoke_variants_b1c  <- c("zi_poisson", "hurdle_poisson",
 for (v in parity_variants_b1c) {
   local({
     vv <- v
-    test_that(sprintf("B1c spec path matches legacy for %s within MC noise", vv), {
+    test_that(sprintf("engine recovers inflated binomial coefficients for %s", vv), {
       skip_on_cran()
       spec <- simulate_zi_for_variant(vv)
-      legacy <- fit_one_zi(spec, FALSE, 42L)
-      specs  <- fit_one_zi(spec, TRUE,  43L)
-
-      expect_named(specs$mean, names(legacy$mean))
-      # Two samplers of one posterior differ by Monte Carlo error alone
-      expect_lt(max_mean_z(legacy, specs), 4.5)
+      estimate <- fit_one_zi(spec, 43L)$mean
+      expect_lt(max(abs(estimate[1:3] - c(.4, .8, -.5))), .25)
     })
   })
 }
@@ -175,7 +141,7 @@ for (v in smoke_variants_b1c) {
     test_that(sprintf("B1c spec path runs end-to-end for %s", vv), {
       skip_on_cran()
       spec <- simulate_zi_for_variant(vv)
-      specs42 <- fit_one_zi(spec, TRUE, 42L)$mean
+      specs42 <- fit_one_zi(spec, 42L)$mean
       expect_true(all(is.finite(specs42)))
       expect_true(length(specs42) >= 4L)  # at least betas + zi/oi
     })

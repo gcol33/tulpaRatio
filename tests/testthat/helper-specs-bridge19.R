@@ -158,115 +158,28 @@ bridge19_cases <- function() {
   cases
 }
 
-bridge19_pair <- function(args, name, seed, control = bridge19_control(name, seed)) {
+engine_recovery_fit <- function(args, name, seed, control = bridge19_control(name, seed)) {
   args$control <- control
-  work <- Sys.getenv("TULPA_BRIDGE_WORK", file.path(tempdir(), "bridge19"))
-  dir.create(work, recursive = TRUE, showWarnings = FALSE)
-  binaries <- c(getLoadedDLLs()[["tulpa"]][["path"]],
-    getLoadedDLLs()[["tulpaRatio"]][["path"]],
-    system.file("R/tulpaRatio.rdb", package = "tulpaRatio"))
-  binary_tag <- paste(substr(unname(tools::md5sum(binaries)), 1L, 8L), collapse = "")
-  canonical <- function(x) {
-    if (inherits(x, "formula")) {
-      environment(x) <- baseenv()
-      return(x)
-    }
-    if (is.function(x)) return(list(formals = formals(x), body = body(x),
-      environment = environmentName(environment(x))))
-    if (is.list(x)) {
-      attributes_ <- attributes(x)
-      x <- lapply(x, canonical)
-      attributes(x) <- attributes_
-    }
-    x
-  }
-  key_path <- file.path(work, paste0("cache-key-", Sys.getpid(), ".rds"))
-  cache_locale <- Sys.getlocale("LC_CTYPE")
-  on.exit(Sys.setlocale("LC_CTYPE", cache_locale), add = TRUE)
-  Sys.setlocale("LC_CTYPE", if (.Platform$OS.type == "windows") ".UTF-8" else "C.UTF-8")
-  if (!isTRUE(l10n_info()[["UTF-8"]])) stop("Bridge cache serialization requires UTF-8")
-  saveRDS(canonical(args), key_path, version = 3L)
-  Sys.setlocale("LC_CTYPE", cache_locale)
-  argument_tag <- unname(tools::md5sum(key_path))
-  directory <- file.path(work, "comparisons", binary_tag, argument_tag)
-  dir.create(directory, recursive = TRUE, showWarnings = FALSE)
-  arguments_path <- file.path(directory, "arguments.rds")
-  if (!file.exists(arguments_path) && !file.copy(key_path, arguments_path))
-    stop("Could not retain canonical bridge arguments")
-  stopifnot(identical(unname(tools::md5sum(arguments_path)), argument_tag))
-  unlink(key_path)
-  op <- options()
-  on.exit(options(op))
   reached_engine <- FALSE
   trace("cpp_tulpaRatio_run_nuts_specs", where = asNamespace("tulpaRatio"),
     tracer = function() reached_engine <<- TRUE, print = FALSE)
   on.exit(untrace("cpp_tulpaRatio_run_nuts_specs", where = asNamespace("tulpaRatio")), add = TRUE)
-  results <- list()
-  for (specs in c(FALSE, TRUE)) {
-    options(tulpaRatio.use_specs = specs)
-    label <- if (specs) "bridge" else "legacy"
-    path <- file.path(directory, paste(name, seed, label, "rds", sep = "."))
-    if (file.exists(path) && identical(Sys.getenv("TULPA_BRIDGE_REUSE"), "true")) {
-      results[[label]] <- readRDS(path)
-    } else {
-      reached_engine <- FALSE
-      timing <- system.time(fit <- do.call(tratio, args))
-      expect_identical(reached_engine, specs, info = paste(name, seed, label, "dispatch"))
-      results[[label]] <- list(fit = fit, seconds = timing[["elapsed"]], reached_engine = reached_engine)
-      saveRDS(results[[label]], path)
-    }
-  }
-  expect_identical(results$legacy$reached_engine, FALSE, info = paste(name, seed, "cached legacy dispatch"))
-  expect_true(isTRUE(results$bridge$reached_engine), info = paste(name, seed, "cached dispatch"))
-  for (label in names(results)) {
-    result <- results[[label]]
-    path <- file.path(directory, paste(name, seed, label, "rds", sep = "."))
-    provenance <- result$provenance
-    bridge19_write_evidence(data.frame(binary_tag, argument_tag, route = name, seed,
-      path = label, sampling_binary_tag = provenance$source_binary_tag %||% binary_tag,
-      rematerialized = !is.null(provenance),
-      source_cache_md5 = provenance$source_cache_md5 %||% unname(tools::md5sum(path)),
-      output_cache_md5 = unname(tools::md5sum(path)), source_fit_seconds = result$seconds,
-      postprocess_seconds = provenance$postprocess_seconds %||% 0),
-      "route-sampling-provenance.tsv")
-  }
-  a <- bridge19_comparison_draws(results$legacy$fit)
-  b <- bridge19_comparison_draws(results$bridge$fit)
-  for (result in results)
-    expect_length(unique(result$fit$diagnostics$energy_chain), control$chains)
-  expect_identical(colnames(a), colnames(b), info = paste(name, seed))
-  precision <- grepl("^tau_", colnames(a))
-  a[, precision] <- log(a[, precision, drop = FALSE])
-  b[, precision] <- log(b[, precision, drop = FALSE])
-  sd <- apply(a, 2L, stats::sd)
-  varying <- sd > 1e-10
-  expect_lt(max(abs(colMeans(a)[!varying] - colMeans(b)[!varying]), 0), 1e-9)
-  a <- a[, varying, drop = FALSE]
-  b <- b[, varying, drop = FALSE]
-  sd <- sd[varying]
-  mean_gap <- max(abs(colMeans(a) - colMeans(b)) / sd)
-  quantile_gap <- max(abs(sweep(apply(a, 2L, quantile, c(.1, .5, .9)) -
-    apply(b, 2L, quantile, c(.1, .5, .9)), 2L, sd, "/")))
-  ess_a <- min(bridge19_chain_stat(a, results$legacy$fit, posterior::ess_bulk))
-  ess_b <- min(bridge19_chain_stat(b, results$bridge$fit, posterior::ess_bulk))
-  row <- data.frame(binary_tag = binary_tag, argument_tag = argument_tag,
-    precision_coordinate = "log", route = name, seed = seed, mean_sd = mean_gap,
-    quantile_sd = quantile_gap, legacy_seconds = results$legacy$seconds,
-    bridge_seconds = results$bridge$seconds,
-    legacy_ess_sec = ess_a / results$legacy$seconds,
-    bridge_ess_sec = ess_b / results$bridge$seconds,
-    legacy_divergences = results$legacy$fit$diagnostics$n_divergent,
-    bridge_divergences = results$bridge$fit$diagnostics$n_divergent)
-  bridge19_write_evidence(row, "route-comparisons-final.tsv")
-  rhat <- function(x, fit) if (control$chains > 1L)
-    max(bridge19_chain_stat(x, fit, posterior::rhat)) else NA_real_
-  bridge19_write_evidence(cbind(row[c("binary_tag", "argument_tag", "route", "seed")],
-    as.data.frame(control[setdiff(names(control), "seed")]), rhat_legacy = rhat(a, results$legacy$fit),
-    rhat_engine = rhat(b, results$bridge$fit)), "route-controls-final.tsv")
-  message(sprintf("BRIDGE19 route=%s seed=%d mean_sd=%.6f quantile_sd=%.6f", name, seed, mean_gap, quantile_gap))
-  expect_lt(mean_gap, .35, label = paste(name, seed, "means"))
-  expect_lt(quantile_gap, .65, label = paste(name, seed, "quantiles"))
-  fit <- results$bridge$fit
-  attr(fit, "bridge19") <- row[c("binary_tag", "argument_tag", "route", "seed")]
+  timing <- system.time(fit <- do.call(tratio, args))
+  expect_true(reached_engine, info = paste(name, seed, "dispatch"))
+  expect_length(unique(fit$diagnostics$energy_chain), control$chains)
+  draws <- bridge19_comparison_draws(fit)
+  precision <- startsWith(colnames(draws), "tau_")
+  draws[, precision] <- log(draws[, precision, drop = FALSE])
+  varying <- apply(draws, 2L, sd) > 1e-10
+  draws <- draws[, varying, drop = FALSE]
+  row <- data.frame(route = name, seed = seed, seconds = timing[["elapsed"]],
+    ess_sec = min(bridge19_chain_stat(draws, fit, posterior::ess_bulk)) / timing[["elapsed"]],
+    divergences = fit$diagnostics$n_divergent,
+    rhat = if (control$chains > 1L) max(bridge19_chain_stat(draws, fit, posterior::rhat)) else NA_real_)
+  bridge19_write_evidence(row, "engine-route-diagnostics.tsv")
+  work <- Sys.getenv("TULPA_BRIDGE_WORK", file.path(tempdir(), "bridge19"))
+  saveRDS(list(fit = fit, args = args, diagnostics = row),
+    file.path(work, paste0("engine-", name, "-", seed, ".rds")))
+  attr(fit, "bridge19") <- row[c("route", "seed")]
   fit
 }

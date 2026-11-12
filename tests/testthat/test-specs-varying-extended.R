@@ -1,4 +1,4 @@
-test_that("SVC and factor bridges agree across seeds and recover planted predictors", {
+test_that("SVC and factor bridges recover planted predictors", {
   skip_on_cran()
   cases <- list(svc_nngp = "nngp", svc_hsgp = "hsgp",
     svc_matern = "matern", svc_gaussian = "gaussian", svc_spherical = "spherical",
@@ -56,7 +56,7 @@ test_that("SVC and factor bridges agree across seeds and recover planted predict
         approx = if (kind == "hsgp") "hsgp" else "nngp", m = 3L,
         cov = if (kind %in% c("matern", "gaussian", "spherical")) kind else "exponential",
         shared = kind != "unshared"))
-    fit <- bridge19_pair(args, name, seed)
+    fit <- engine_recovery_fit(args, name, seed)
     b <- as.matrix(fit$draws)
     expected_beta <- if (paired) c(beta, 1, .2) else beta
     expect_true(all(abs(colMeans(b)[seq_along(expected_beta)] - expected_beta) < .3), info = paste(name, seed))

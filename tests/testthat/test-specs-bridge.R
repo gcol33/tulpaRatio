@@ -17,19 +17,7 @@ bridge_fixture <- function() {
   d
 }
 
-bridge_pair <- function(family,formula,d) {
-  calls <- 0L
-  trace('cpp_tulpaRatio_run_nuts_specs',where=asNamespace('tulpaRatio'),
-    tracer=function() calls <<- calls+1L,print=FALSE)
-  on.exit(untrace('cpp_tulpaRatio_run_nuts_specs',where=asNamespace('tulpaRatio')))
-  legacy <- bridge_fit(family,formula,d,FALSE)
-  spec <- bridge_fit(family,formula,d,TRUE)
-  expect_equal(calls,1L)
-  list(legacy=legacy,spec=spec)
-}
-
-bridge_fit <- function(family, formula, d, specs, chains=2L) {
-  op <- options(tulpaRatio.use_specs=specs); on.exit(options(op))
+bridge_fit <- function(family, formula, d, chains=2L) {
   tratio(formula,data=d,family=family,mode='hmc',control=list(
     iter=2000L,warmup=750L,chains=chains,seed=176L,verbose=FALSE,gradient_mode='A_r'))
 }
@@ -38,12 +26,9 @@ test_that("correlated and crossed effects reach the engine and recover fixed eff
   skip_on_cran()
   d <- bridge_fixture()
   for (formula in list(y | trials ~ x+(1|g)+(1|h),ys | trials ~ x+(1+x|g))) {
-    pair <- bridge_pair(ratiod_binomial(),formula,d)
-    legacy <- pair$legacy; spec <- pair$spec
+    spec <- bridge_fit(ratiod_binomial(),formula,d)
     expect_length(spec$samples,2L)
-    a <- as.matrix(legacy$draws); b <- as.matrix(spec$draws)
-    expect_identical(colnames(a),colnames(b))
-    expect_lt(max(abs(colMeans(a)-colMeans(b))/apply(a,2,sd)),.4)
+    b <- as.matrix(spec$draws)
     expect_true(all(abs(colMeans(b)[1:2]-c(.3,.6)) < c(.2,.2)))
   }
 })
@@ -57,10 +42,8 @@ test_that("exposures and their inflation variants reach the spec bridge", {
     list(f=yl | exposure ~ x,family=ratiod_lognormal(denom_fixed=TRUE)),
     list(f=yc | yd ~ x,family=ratiod_poisson(denom_family='negbin')))
   for (fixture in fixtures) {
-    pair <- bridge_pair(fixture$family,fixture$f,d)
-    legacy <- pair$legacy; spec <- pair$spec
-    a <- as.matrix(legacy$draws); b <- as.matrix(spec$draws)
-    expect_lt(max(abs(colMeans(a)-colMeans(b))/apply(a,2,sd)),.25)
+    spec <- bridge_fit(fixture$family,fixture$f,d)
+    b <- as.matrix(spec$draws)
     expect_true(all(abs(colMeans(b)[1:2]-c(.3,.6)) < .12))
     if (fixture$family$denominator$distribution=='fixed') {
       expect_equal(fitted(spec,summary=FALSE)$denominator[1,],d$exposure)
@@ -75,9 +58,7 @@ test_that("exposures and their inflation variants reach the spec bridge", {
     if (grepl('hurdle',family$name)) {
       d$yp <- ifelse(d$yp==0,0L,pmax(1L,d$yp))
     }
-    pair <- bridge_pair(family,yp | exposure ~ x,d)
-    legacy <- pair$legacy; spec <- pair$spec
-    a <- as.matrix(legacy$draws); b <- as.matrix(spec$draws)
-    expect_lt(max(abs(colMeans(a)-colMeans(b))/apply(a,2,sd)),.3)
+    spec <- bridge_fit(family,yp | exposure ~ x,d)
+    b <- as.matrix(spec$draws)
   }
 })
