@@ -60,7 +60,8 @@ gradient/likelihood work. Defaults to the machine's OpenMP thread cap.}
 
 \item{verbose}{Print progress}
 
-\item{gradient_mode}{Gradient computation method: "auto", "H", "A_r", "A", "N"}
+\item{gradient_mode}{Gradient source: "auto", "N" / "numerical",
+"A_r" / "arena", or "H" / "handcoded".}
 
 \item{re_param}{Random effects parameterization: "centered" or "noncentered"}
 

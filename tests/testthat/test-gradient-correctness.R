@@ -41,13 +41,19 @@ ALL_FIELDS <- c(FIELDS, MULTI_FIELDS, STRUCTURE_FIELDS, ST_IV_FIELDS, ST_OTHER_F
 MODES <- c("handcoded", "arena")
 
 test_that("gradient controls expose the supported scalar implementations", {
-    expect_error(tulpaRatio:::.tratio_control(list(gradient_mode = "A_t")), "one of")
+    for (mode in c("A", "A_t", "autodiff", "autodiff_tape", "forward",
+                   "autodiff_arena", "analytical", "AUTO", "numer", "typo")) {
+        expect_error(tulpaRatio:::.tratio_control(list(gradient_mode = mode)),
+                     "auto.*N.*numerical.*A_r.*arena.*H.*handcoded")
+        expect_error(tulpaRatio:::cpp_gradient_check("none", mode = mode),
+                     "auto.*N.*numerical.*A_r.*arena.*H.*handcoded")
+    }
     expect_error(tulpaRatio:::cpp_gradient_check("none", mode = "tape"), "gradient mode")
 })
 
-AUTODIFF_MODES <- c("arena", "forward")
+AUTODIFF_MODES <- "arena"
 
-AUTODIFF_MODES_STR <- c("A_r", "A")
+AUTODIFF_MODES_STR <- "A_r"
 
 for (field in FIELDS) {
     for (mode in MODES) {
@@ -422,7 +428,7 @@ test_that("every binomial inflation type reports the density its gradient descri
 
 
 test_that("proper CAR fields have automatic-differentiation engine gradients", {
-      for(field in CAR_PROPER_FIELDS) for(mode in c("A_r","A")) {
+      for(field in CAR_PROPER_FIELDS) for(mode in "A_r") {
         r<-tulpaRatio:::cpp_gradient_check(field, family = gradient_fixture_family(field),n_obs=40L,n_units=8L,mode=mode,seed=17L)
         expect_lt(max(grad_rel_dev(r)),1e-4,label=paste(field,mode))
       }

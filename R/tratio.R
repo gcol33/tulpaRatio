@@ -110,11 +110,10 @@
 #'     step picks the same one. The kernel is exact, and its step follows the
 #'     local curvature, which is what a funnel-shaped posterior (a hierarchical
 #'     scale near zero) needs. `FALSE` (default) runs NUTS.
-#'   - `gradient_mode`: `"auto"` (default) selects the fastest available;
-#'     `"H"` hand-coded analytical (fastest); `"A_r"` arena reverse-mode
-#'     autodiff (fast, O(N)); `"A"` forward-mode (O(p*N), thread-safe);
-#'     `"N"` numerical finite
-#'     differences (slowest, always works).
+#'   - `gradient_mode`: `"auto"` (default) selects the available gradient;
+#'     `"H"` / `"handcoded"` selects the hand-coded source;
+#'     `"A_r"` / `"arena"` selects arena reverse-mode autodiff;
+#'     `"N"` / `"numerical"` selects numerical finite differences.
 #'   - `re_param`: random-effect parameterization. `"noncentered"` (default)
 #'     stores z ~ N(0, 1) and computes re = sigma * z (or diag(sigma) * L * z
 #'     when correlated), suiting weakly-informed effects or small groups;

@@ -1,9 +1,4 @@
-# Benchmark Batch 9: Missing H timings and A/A_t comparisons
-#
-# Focus:
-#   1. Row 45: negbin + MS_t (missing H timing)
-#   2. Row 75: binomial + MS_t (missing H timing)
-#   3. A/A_t timing for rows that only have H timing
+# Hand-coded and arena gradient timings
 #
 # Standard parameters: N=500, iter=500, warmup=250, chains=1
 
@@ -76,7 +71,7 @@ df_pg <- data.frame(
 # HELPER FUNCTIONS
 # ============================================================
 
-time_gradient_modes <- function(nd_call, modes = c("H", "A_t"), timeout = 600) {
+time_gradient_modes <- function(nd_call, modes = c("H", "A_r"), timeout = 600) {
   times <- setNames(rep(NA_real_, length(modes)), modes)
 
   for (mode in modes) {
@@ -114,7 +109,7 @@ time_gradient_modes <- function(nd_call, modes = c("H", "A_t"), timeout = 600) {
   times
 }
 
-run_bench <- function(row, name, nd_call, modes = c("H", "A_t"), timeout = 600) {
+run_bench <- function(row, name, nd_call, modes = c("H", "A_r"), timeout = 600) {
   cat(sprintf("\n========== Row %d: %s ==========\n", row, name))
   result <- list(row = row, name = name)
 
@@ -150,55 +145,55 @@ results[["75"]] <- run_bench(75, "bin_ms_t",
   timeout = 600
 )
 
-# ----- Row 8: poisson_gamma + HSGP (get A_t timing) -----
+# ----- Row 8: poisson_gamma + HSGP -----
 results[["8"]] <- run_bench(8, "pg_hsgp",
   nd_call = quote(tratio(y | denom ~ x + (1|site), data = df_pg,
                          family = ratiod_poisson_gamma(),
                          spatial = spatial_hsgp(coords = c("lon", "lat"), m = 8))),
-  modes = c("H", "A_t")
+  modes = c("H", "A_r")
 )
 
-# ----- Row 38: negbin + HSGP (verify A_t timing) -----
+# ----- Row 38: negbin + HSGP -----
 results[["38"]] <- run_bench(38, "nb_hsgp",
   nd_call = quote(tratio(y | denom ~ x + (1|site), data = df_nb,
                          family = ratiod_negbin_negbin(),
                          spatial = spatial_hsgp(coords = c("lon", "lat"), m = 8))),
-  modes = c("H", "A_t")
+  modes = c("H", "A_r")
 )
 
-# ----- Row 68: binomial + HSGP (get A_t timing) -----
+# ----- Row 68: binomial + HSGP -----
 results[["68"]] <- run_bench(68, "bin_hsgp",
   nd_call = quote(tratio(y | trials ~ x + (1|site), data = df_bin,
                          family = ratiod_binomial(),
                          spatial = spatial_hsgp(coords = c("lon", "lat"), m = 8))),
-  modes = c("H", "A_t")
+  modes = c("H", "A_r")
 )
 
-# ----- Row 22: pg + HSGP + RW1 (get A_t timing) -----
+# ----- Row 22: pg + HSGP + RW1 -----
 results[["22"]] <- run_bench(22, "pg_hsgp_rw1",
   nd_call = quote(tratio(y | denom ~ x + (1|site), data = df_pg,
                          family = ratiod_poisson_gamma(),
                          spatial = spatial_hsgp(coords = c("lon", "lat"), m = 8),
                          temporal = temporal_rw1("time_factor"))),
-  modes = c("H", "A_t")
+  modes = c("H", "A_r")
 )
 
-# ----- Row 52: nb + HSGP + RW1 (verify A_t timing) -----
+# ----- Row 52: nb + HSGP + RW1 -----
 results[["52"]] <- run_bench(52, "nb_hsgp_rw1",
   nd_call = quote(tratio(y | denom ~ x + (1|site), data = df_nb,
                          family = ratiod_negbin_negbin(),
                          spatial = spatial_hsgp(coords = c("lon", "lat"), m = 8),
                          temporal = temporal_rw1("time_factor"))),
-  modes = c("H", "A_t")
+  modes = c("H", "A_r")
 )
 
-# ----- Row 84: bin + HSGP + RW1 (get A_t timing) -----
+# ----- Row 84: bin + HSGP + RW1 -----
 results[["84"]] <- run_bench(84, "bin_hsgp_rw1",
   nd_call = quote(tratio(y | trials ~ x + (1|site), data = df_bin,
                          family = ratiod_binomial(),
                          spatial = spatial_hsgp(coords = c("lon", "lat"), m = 8),
                          temporal = temporal_rw1("time_factor"))),
-  modes = c("H", "A_t")
+  modes = c("H", "A_r")
 )
 
 # ============================================================
@@ -211,13 +206,13 @@ cat("BATCH 9 RESULTS SUMMARY\n")
 cat(paste(rep("=", 90), collapse = ""), "\n")
 
 cat("\nGRADIENT TIMING (seconds):\n")
-cat(sprintf("%-6s %-20s %10s %10s %10s\n", "Row", "Model", "H", "A_t", "Speedup"))
+cat(sprintf("%-6s %-20s %10s %10s %10s\n", "Row", "Model", "H", "A_r", "Speedup"))
 cat(paste(rep("-", 60), collapse = ""), "\n")
 
 for (r in results) {
   if (!is.null(r$times)) {
     h <- r$times["H"]
-    at <- if ("A_t" %in% names(r$times)) r$times["A_t"] else NA
+    at <- if ("A_r" %in% names(r$times)) r$times["A_r"] else NA
     speedup <- if (!is.na(h) && !is.na(at) && at > 0) round(at / h, 1) else NA
 
     cat(sprintf("%-6s %-20s %10s %10s %10s\n",
@@ -238,8 +233,8 @@ for (r in results) {
   if (!is.null(r$times)) {
     updates <- c()
     if (!is.na(r$times["H"])) updates <- c(updates, sprintf("H=%.1f", r$times["H"]))
-    if ("A_t" %in% names(r$times) && !is.na(r$times["A_t"])) {
-      updates <- c(updates, sprintf("A_t=%.1f", r$times["A_t"]))
+    if ("A_r" %in% names(r$times) && !is.na(r$times["A_r"])) {
+      updates <- c(updates, sprintf("A_r=%.1f", r$times["A_r"]))
     }
     if (length(updates) > 0) {
       cat(sprintf("  Row %s: %s\n", r$row, paste(updates, collapse = ", ")))

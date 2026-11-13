@@ -4,7 +4,7 @@ test_that("backend argument builders forward each control to its fitter", {
     spatiotemporal = NULL, zi = NULL, latent = NULL, priors = ratiod_priors())
   control <- tulpaRatio:::.tratio_control(list(iter = 140, warmup = 60, chains = 2,
     cores = 1, thin = 2, seed = 181, L = 7L, adapt_delta = 0.91,
-    max_treedepth = 9L, metric = "dense", gradient_mode = "A", re_param = "centered",
+    max_treedepth = 9L, metric = "dense", gradient_mode = "A_r", re_param = "centered",
     vi_variant = "meanfield", batch_size = 11L, epsilon = 0.002, alpha = 0.2,
     schedule_a = 0.03, schedule_b = 2, schedule_gamma = 0.7, use_schedule = FALSE,
     verbose = FALSE))

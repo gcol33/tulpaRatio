@@ -66,7 +66,7 @@ test_that("a hurdle fit has no region where the truncation adds mass", {
                   habitat = factor(rep(c("a", "b"), 60)), trials = 10L)
   d$detected <- ifelse(runif(n) < 0.7, pmax(1L, rbinom(n, 10, 0.4)), 0L)
   fit <- tratio(detected | trials ~ habitat + (1 | site), data = d, family = ratiod_hurdle_binomial(zi_formula = ~habitat),
-    control = list(iter = 300, chains = 2, cores = 1, seed = 1, gradient_mode = "A"))
+    control = list(iter = 300, chains = 2, cores = 1, seed = 1, gradient_mode = "A_r"))
   expect_true(all(fit$log_prob < 0))
   expect_equal(fit$diagnostics$n_divergent, 0)
 })

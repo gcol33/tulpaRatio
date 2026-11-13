@@ -66,8 +66,8 @@
   L             = list(default = NULL, validate = .tratio_nonneg_int),
   metric        = list(default = "auto",
                        choices = c("auto", "dense", "diag", "block_diag")),
-  gradient_mode = list(default = "auto",
-                       choices = c("auto", "N", "A", "A_r", "H")),
+  # tulpa_check_control validates gradient names against the engine registry.
+  gradient_mode = list(default = "auto", validate = function(x, nm) x),
   re_param      = list(default = "noncentered",
                        choices = c("noncentered", "centered")),
 

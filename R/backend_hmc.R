@@ -62,7 +62,8 @@ NULL
 #' @param L Number of leapfrog steps per iteration
 #' @param seed Random seed for reproducibility
 #' @param verbose Print progress
-#' @param gradient_mode Gradient computation method: "auto", "H", "A_r", "A", "N"
+#' @param gradient_mode Gradient source: "auto", "N" / "numerical",
+#'   "A_r" / "arena", or "H" / "handcoded".
 #' @param re_param Random effects parameterization: "centered" or "noncentered"
 #' @param metric Mass matrix type: "auto" (default), "diag", "dense", or "block_diag"
 #' @param walnuts Run each NUTS trajectory as a WALNUTS transition: TRUE or

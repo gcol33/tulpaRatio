@@ -141,11 +141,10 @@ joint log density within tolerance and keeps it only if the reversed
 step picks the same one. The kernel is exact, and its step follows the
 local curvature, which is what a funnel-shaped posterior (a hierarchical
 scale near zero) needs. \code{FALSE} (default) runs NUTS.
-\item \code{gradient_mode}: \code{"auto"} (default) selects the fastest available;
-\code{"H"} hand-coded analytical (fastest); \code{"A_r"} arena reverse-mode
-autodiff (fast, O(N)); \code{"A"} forward-mode (O(p*N), thread-safe);
-\code{"N"} numerical finite
-differences (slowest, always works).
+\item \code{gradient_mode}: \code{"auto"} (default) selects the available gradient;
+\code{"H"} / \code{"handcoded"} selects the hand-coded source;
+\code{"A_r"} / \code{"arena"} selects arena reverse-mode autodiff;
+\code{"N"} / \code{"numerical"} selects numerical finite differences.
 \item \code{re_param}: random-effect parameterization. \code{"noncentered"} (default)
 stores z ~ N(0, 1) and computes re = sigma * z (or diag(sigma) * L * z
 when correlated), suiting weakly-informed effects or small groups;

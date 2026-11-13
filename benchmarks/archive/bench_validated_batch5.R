@@ -79,9 +79,8 @@ df_bb <- data.frame(y = y_bb, trials = trials, x = x,
 # HELPER FUNCTIONS (same as batch 3)
 # ============================================================
 
-# Only run H mode to avoid A_t segfaults on spatial/temporal models
 time_H_only <- function(nd_call, timeout = 300) {
-  times <- setNames(rep(NA_real_, 4), c("H", "A", "A_t", "N"))
+  times <- setNames(NA_real_, "H")
 
   timing_call <- nd_call
   timing_call$gradient_mode <- "H"
@@ -136,7 +135,6 @@ run_bench <- function(row, name, nd_call, brms_call = NULL, skip_stan = FALSE, v
   cat(sprintf("\n========== Row %d: %s ==========\n", row, name))
   result <- list(row = row, name = name)
 
-  # H-only timing (A_t causes segfaults on spatial/temporal models)
   cat("Gradient timing:")
   result$times <- time_H_only(nd_call)
 
@@ -437,14 +435,11 @@ cat(paste(rep("=", 90), collapse = ""), "\n")
 
 # Gradient timing table
 cat("\nGRADIENT TIMING (seconds):\n")
-cat(sprintf("%-6s %-20s %8s %8s\n", "Row", "Model", "H", "A_t"))
+cat(sprintf("%-6s %-20s %8s\n", "Row", "Model", "H"))
 cat(paste(rep("-", 50), collapse = ""), "\n")
 for (r in results) {
   if (!is.null(r$times)) {
-    cat(sprintf("%-6s %-20s %8.1f %8.1f\n",
-                r$row, r$name,
-                ifelse(is.na(r$times["H"]), NA, r$times["H"]),
-                ifelse(is.na(r$times["A_t"]), NA, r$times["A_t"])))
+    cat(sprintf("%-6s %-20s %8.1f\n", r$row, r$name, r$times["H"]))
   }
 }
 
@@ -482,14 +477,10 @@ cat("\nResults saved to benchmarks/results_batch5.rds\n")
 
 # Print markdown for gradient_methods.md
 cat("\n\nMARKDOWN TABLE UPDATE:\n")
-cat("Copy the H(s) and A_t(s) values to gradient_methods.md\n")
+cat("Copy the H(s) values to gradient_methods.md\n")
 for (r in results) {
   if (!is.null(r$times)) {
     note <- if (!is.null(r$pass) && r$pass) "Stan PASS" else ""
-    cat(sprintf("Row %s: H=%.1f, A_t=%.1f %s\n",
-                r$row,
-                ifelse(is.na(r$times["H"]), NA, r$times["H"]),
-                ifelse(is.na(r$times["A_t"]), NA, r$times["A_t"]),
-                note))
+    cat(sprintf("Row %s: H=%.1f %s\n", r$row, r$times["H"], note))
   }
 }

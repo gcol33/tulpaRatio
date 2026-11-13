@@ -7,7 +7,10 @@ enum_names <- function(kind) tulpaRatio:::cpp_enum_names(kind)
 test_that("the control choices are names the sampler parses", {
   ctrl <- tulpaRatio:::.TRATIO_CONTROL
   expect_setequal(ctrl$metric$choices, enum_names("metric"))
-  expect_true(all(ctrl$gradient_mode$choices %in% enum_names("gradient_mode")))
+  for (mode in enum_names("gradient_mode")) {
+    expect_identical(tulpaRatio:::.tratio_control(list(gradient_mode = mode))$gradient_mode,
+                     mode)
+  }
 })
 
 test_that("structure and covariance choices are names the sampler parses", {

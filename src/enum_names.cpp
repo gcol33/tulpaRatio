@@ -15,7 +15,7 @@ std::vector<std::string> cpp_enum_names(std::string kind) {
   if (kind == "temporal") return enum_names(tulpaRatio::TEMPORAL_NAMES);
   if (kind == "tvc") return enum_names(tulpaRatio::TVC_NAMES);
   if (kind == "cov") return enum_names(ratiod_cov::COV_TYPE_NAMES);
-  if (kind == "gradient_mode") return enum_names(tulpaRatio::GRADIENT_NAMES);
+  if (kind == "gradient_mode") return tulpa::gradient_mode_names();
   if (kind == "metric") return enum_names(tulpaRatio::METRIC_NAMES);
   if (kind == "msgp_sampler") return enum_names(tulpaRatio::MSGP_NAMES);
   if (kind == "zi") return enum_names(ratiod_zi::ZI_TYPE_NAMES);

@@ -3,7 +3,7 @@ test_that("seeded chains retain their draws after other gradient families run", 
   fields <- c("none", "gp", "gp_temporal", "icar", "bym2",
               "svc", "svc_hsgp", "tvc", "latent", "hsgp", "ms_temporal",
               "temporal_gp", "st4", "gp_tgp", "icar_rsr")
-  for (mode in c("N", "A", "A_r", "H")) {
+  for (mode in c("N", "A_r", "H")) {
     first <- tulpaRatio:::cpp_gradient_chain_fixture("none", mode)
     for (field in fields) {
       tulpaRatio:::cpp_gradient_check(field, n_obs = 20L, n_units = 4L,
