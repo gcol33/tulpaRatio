@@ -185,23 +185,19 @@ const char* const KNOWN_FIELDS[] = {
   "st4_rw2", "st4_rw2_nc", "st4_rw2_cyclic", "st4_rw2_cyclic_nc",
   "st2_rw2_nc", "st2_ar1_nc", "st2_cyclic", "st2_cyclic_nc", "st3_nc",
   "stgp", "stgp_matern", "stgp_gneiting", "stgp_latent",
-  "stgp_nc", "stgp_gneiting_nc", "stgp_collapsed", "stgp_gneiting_collapsed",
-  "icar_collapsed", "bym2_collapsed",
-  "icar_collapsed_rw1", "bym2_collapsed_rw1",
-  "hsgp",
+  "stgp_nc", "stgp_gneiting_nc", "hsgp",
   "ms_temporal_nc", "ms_temporal_rw2", "ms_temporal_rw2_nc",
   "ms_temporal_seasonal", "ms_temporal_seasonal_nc",
   "tvc", "tvc_iid", "tvc_ar1", "tvc_rw2",
   "re", "re_crossed", "re_slopes", "re_slopes_corr",
   "gp", "gp_matern", "gp_gaussian", "gp_spherical",
-  "gp_nc", "gp_collapsed", "gp_temporal",
+  "gp_nc", "gp_temporal",
   "msgp_temporal", "msgp_hsgp",
   "svc", "svc_hsgp", "svc_nc",
   "temporal_gp", "ms_temporal", "latent", "latent2", "latent_num",
   "latent2_first_zero", "stgp_latent2",
 
-  "gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4", "gp_collapsed_st4",
-  "icar_collapsed_st4", "bym2_collapsed_st4", "tvc_st4", "temporal_gp_st4",
+  "gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4", "tvc_st4", "temporal_gp_st4",
   "gp_tgp", "svc_ms", "svc_ms_nc", "gp_slopes", "gp_slopes_corr", "gp_crossed",
 
   "temporal_gp_centered", "temporal_gp_matern32", "temporal_gp_matern52",
@@ -391,9 +387,7 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
                          field == "st4_rw2_cyclic" || field == "st4_rw2_cyclic_nc" ||
                          field == "st4_ar1" || field == "st4_ar1_nc" ||
                          field == "gp_st4" || field == "gp_temporal_st4" ||
-                         field == "msgp_st4" || field == "gp_collapsed_st4" ||
-                         field == "icar_collapsed_st4" ||
-                         field == "bym2_collapsed_st4" ||
+                         field == "msgp_st4" ||
                          field == "tvc_st4" || field == "temporal_gp_st4");
 
   const bool want_st2 = (field == "st2" || field == "st2_rw2" ||
@@ -406,8 +400,6 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
                           field == "stgp_gneiting" || field == "stgp_latent" ||
                           field == "stgp_latent2" ||
                           field == "stgp_nc" || field == "stgp_gneiting_nc" ||
-                          field == "stgp_collapsed" ||
-                          field == "stgp_gneiting_collapsed" ||
                           field == "gp_stgp");
 
   const bool want_disconnected = (field == "icar_disconnected" ||
@@ -416,14 +408,10 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
   const bool want_icar = (field == "icar" || field == "icar_rw1" ||
                           field == "icar_disconnected" ||
                           field == "icar_disconnected_rw1" ||
-                          field == "icar_ms" || field == "icar_st" ||
-                          field == "icar_collapsed" || field == "icar_collapsed_rw1" ||
-                          field == "icar_collapsed_st4");
+                          field == "icar_ms" || field == "icar_st");
   const bool want_bym2 = (field == "bym2" || field == "bym2_ms" ||
                           field == "bym2_disconnected" ||
-                          field == "bym2_st" || field == "bym2_collapsed" ||
-                          field == "bym2_collapsed_rw1" ||
-                          field == "bym2_collapsed_st4");
+                          field == "bym2_st");
 
   const bool want_car_proper = (field == "car_proper" ||
                                 field == "car_proper_ms" ||
@@ -434,7 +422,6 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
                           field == "rw1_panel" || field == "rw1_nc_panel" ||
                           field == "rw1_cyclic_nc_panel" ||
                           field == "icar_rw1" || field == "icar_disconnected_rw1" || want_st ||
-                          field == "icar_collapsed_rw1" || field == "bym2_collapsed_rw1" ||
                           field == "gp_temporal" || field == "msgp_temporal" ||
                           field == "gp_temporal_st4");
   const bool want_rw2  = (field == "rw2" || field == "rw2_nc" ||
@@ -448,14 +435,10 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
   const bool want_tvc  = (field == "tvc" || field == "tvc_iid" || field == "tvc_rw2" ||
                           field == "tvc_ar1" || field == "tvc_st4");
 
-  const bool want_gp_collapsed = (field == "gp_collapsed" ||
-                                  field == "gp_collapsed_st4");
-
   const bool want_gp_nc = (field == "gp_nc");
   const bool want_gp = (field == "gp" || field == "gp_matern" ||
                         field == "gp_gaussian" || field == "gp_spherical" ||
                         field == "gp_temporal" || want_gp_nc ||
-                        want_gp_collapsed ||
                         field == "gp_st4" || field == "gp_stgp" ||
                         field == "gp_temporal_st4" ||
                         field.rfind("gp_tgp", 0) == 0 ||
@@ -653,11 +636,6 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
     for (int i = 0; i < n_obs; i++) data.spatial_group[i] = (i % n_units) + 1;
     data.bym2_scale_factor = 1.0;
 
-    data.icar_collapsed = (field == "icar_collapsed" || field == "icar_collapsed_rw1" ||
-                           field == "icar_collapsed_st4");
-    data.bym2_collapsed = (field == "bym2_collapsed" || field == "bym2_collapsed_rw1" ||
-                           field == "bym2_collapsed_st4");
-
     data.car_rho_lower = 0.0;
     data.car_rho_upper = 1.0;
     data.car_rho_prior_a = 1.0;
@@ -702,7 +680,6 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
     if (want_gp) {
       data.spatial_type = SpatialType::GP;
       data.has_gp = true;
-      data.gp_collapsed = want_gp_collapsed;
       auto& gp = data.gp_data;
       gp.n_obs = n_units;
       gp.nn = nn;
@@ -999,8 +976,7 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
 
   if (want_stgp) {
     auto& st = data.spatiotemporal_data;
-    st.type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc" ||
-               field == "stgp_gneiting_collapsed")
+    st.type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc")
                   ? tulpa::STType::NONSEP_GP
                   : tulpa::STType::SEPARABLE;
     st.shared = true;
@@ -1056,8 +1032,7 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
     st.cov_space = (field == "stgp_matern") ? tulpa::CovType::MATERN32
                                             : tulpa::CovType::EXPONENTIAL;
     st.cov_time = st.cov_space;
-    st.nonsep_type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc" ||
-                      field == "stgp_gneiting_collapsed")
+    st.nonsep_type = (field == "stgp_gneiting" || field == "stgp_gneiting_nc")
                          ? tulpa::NonsepType::GNEITING
                          : tulpa::NonsepType::PRODUCT;
 
@@ -1069,7 +1044,7 @@ inline Fixture make_model(const std::string& field_in, int n_obs, int n_units,
       return field.size() > sfx.size() &&
              field.compare(field.size() - sfx.size(), sfx.size(), sfx) == 0;
     };
-    data.st_parameterization = ends_with("_nc") ? 1 : ends_with("_collapsed") ? 2 : 0;
+    data.st_parameterization = ends_with("_nc") ? 1 : 0;
   }
 
   data.zi_type = zi_type;

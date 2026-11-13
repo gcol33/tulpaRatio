@@ -28,6 +28,9 @@ test_that("collapsed spatial requests recover planted fields through the engine"
       list(fit = fit, seconds = timing[['elapsed']])
     }
     b <- fit_one()
+    expect_identical(b$fit$spatial$parameterization, 'auto')
+    expect_identical(b$fit$target, 'Joint posterior')
+    expect_identical(b$fit$inference_tier, 1L)
     y <- spatial_comparison_draws(b$fit$draws)
     expect_lt(abs(mean(y[, 'beta_num[2]']) - .5), .15, label = name)
     eta <- .2 + .5 * d$x + truth[d$unit]

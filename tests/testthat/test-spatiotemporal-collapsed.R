@@ -1,6 +1,3 @@
-# The GP space-time interaction integrated out by a Laplace approximation
-# inside HMC (gcol33/tulpaRatio#143).
-
 collapsed_fixture <- function(seed = 7) {
   set.seed(seed)
   coords <- expand.grid(x = 1:3, y = 1:3)
@@ -46,7 +43,7 @@ test_that("the collapsed parameterization is refused where it does not apply", {
       spatial = spatial_car(f$adj, spatial_level = "group", group_var = "region"),
       temporal = temporal_rw1("year"), type = "IV",
       parameterization = "collapsed"),
-    "integrates out a GP interaction")
+    "selects full-field GP coordinates")
   skip_on_cran()
   f$data$trials <- f$data$count + 5L
   fit <- suppressWarnings(
@@ -58,32 +55,6 @@ test_that("the collapsed parameterization is refused where it does not apply", {
   expect_true(all(is.finite(fit$.internal$spatiotemporal_draws)))
 })
 
-test_that("a collapsed interaction fit agrees with the centred one", {
-  skip_on_cran()
-  f <- collapsed_fixture()
-  fit_with <- function(par) {
-    suppressWarnings(tratio(
-      count | effort ~ x, data = f$data, family = ratiod_poisson_gamma(),
-      spatiotemporal = collapsed_spec(f$adj, par), mode = "hmc",
-      control = list(iter = 800, chains = 1, seed = 3)))
-  }
-  cen <- fit_with("centered")
-  col <- fit_with("collapsed")
-
-  # The collapsed fit reports the interaction as draws from its Gaussian
-  # approximation, one per saved iteration
-  st_col <- col$.internal$spatiotemporal_draws
-  st_cen <- cen$.internal$spatiotemporal_draws
-  expect_equal(dim(st_col), dim(st_cen))
-  expect_true(all(is.finite(st_col)))
-  expect_gt(stats::cor(colMeans(st_col), colMeans(st_cen)), 0.9)
-
-  b_col <- coef(col)
-  b_cen <- coef(cen)
-  expect_lt(abs(b_col[["num:x"]] - b_cen[["num:x"]]), 0.05)
-  tau <- function(fit) stats::median(as.matrix(fit$draws)[, "tau_st"])
-  expect_lt(abs(log(tau(col)) - log(tau(cen))), log(1.5))
-})
 
 test_that("the polygamma the third-order jets read matches R's", {
   x <- c(0.05, 0.3, 1, 2.5, 7, 11.9, 12, 40, 300)

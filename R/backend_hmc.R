@@ -1491,26 +1491,9 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
     temporal_info = temporal_info, zi_info = zi_info, model_type = model_type,
     latent_info = latent_info, spatiotemporal_info = spatiotemporal_info,
     ms_temporal_info = ms_temporal_info)
-  # Fields the inner Laplace optimization of a collapsed parameterization
-  # leaves behind (NULL otherwise): one matrix per chain, stacked as the
-  # samples are
-  star <- function(name, chain = NULL) {
-    x <- fit_raw[[name]]
-    if (is.null(x) || chains == 1) return(x)
-    if (is.null(chain)) do.call(rbind, x) else x[[chain]]
-  }
-  gp_w_star <- star("gp_w_star")
-  icar_phi_star <- star("icar_phi_star")
-  bym2_theta_star <- star("bym2_theta_star")
-
-  state <- sampler_draw_state(all_samples, inp, re_param,
-    conditional = list(gp_w_star = gp_w_star, icar_phi_star = icar_phi_star,
-                       bym2_theta_star = bym2_theta_star))
+  state <- sampler_draw_state(all_samples, inp, re_param)
   layout <- state$layout
-  unpack <- function(samples, chain = NULL) state$unpack(samples,
-    list(gp_w_star = star("gp_w_star", chain),
-         icar_phi_star = star("icar_phi_star", chain),
-         bym2_theta_star = star("bym2_theta_star", chain)))
+  unpack <- function(samples, chain = NULL) state$unpack(samples)
   unpacked <- state$unpacked
   draws_list <- hmc_draws_list(unpacked)
   draws <- do.call(cbind, draws_list)
@@ -1566,6 +1549,8 @@ convert_hmc_to_ratiod_fit_full <- function(fit_raw, hmc_data, spatial_info,
     latent = latent_info,
     backend = "hmc",
     algorithm = fit_raw$sampler %||% "HMC",
+    target = fit_raw$target,
+    inference_tier = fit_raw$inference_tier,
     re_param = re_param,
     iter = iter,
     warmup = warmup,

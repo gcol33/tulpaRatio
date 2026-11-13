@@ -6,9 +6,7 @@ MULTI_FIELDS <- c("icar_ms", "bym2_ms", "icar_st", "bym2_st")
 
 STRUCTURE_FIELDS <- c("re", "re_crossed", "re_slopes", "re_slopes_corr", "hsgp", "tvc", "tvc_ar1", "tvc_iid")
 
-COLLAPSED_FIELDS <- c("icar_collapsed", "bym2_collapsed")
 
-COLLAPSED_TEMPORAL_FIELDS <- c("icar_collapsed_rw1", "bym2_collapsed_rw1")
 
 CAR_PROPER_FIELDS <- c("car_proper", "car_proper_raw", "car_proper_ms", "car_proper_st")
 
@@ -27,13 +25,11 @@ KERNEL_FIELDS <- c("gp", "gp_matern", "gp_gaussian", "gp_spherical", "gp_tempora
     "ms_temporal_seasonal_nc", "temporal_gp_centered", "temporal_gp_matern32", "temporal_gp_matern52",
     "temporal_gp_gaussian", "temporal_gp_periodic", "temporal_gp_matern32_centered", "temporal_gp_periodic_centered")
 
-KERNEL_COLLAPSED_FIELDS <- c("gp_collapsed", "stgp_collapsed", "stgp_gneiting_collapsed")
 
 DISPATCH_MASK_FIELDS <- c("gp_st4", "gp_stgp", "gp_temporal_st4", "msgp_st4", "tvc_st4", "temporal_gp_st4",
     "gp_tgp", "svc_ms", "svc_ms_nc", "gp_slopes", "gp_slopes_corr", "gp_crossed", "gp_tgp_matern32",
     "gp_tgp_centered", "gp_tgp_gaussian_centered")
 
-DISPATCH_MASK_COLLAPSED_FIELDS <- c("gp_collapsed_st4", "icar_collapsed_st4", "bym2_collapsed_st4")
 
 RSR_FIELDS <- c("icar_rsr", "bym2_rsr", "hsgp_rsr", "gp_rsr")
 
@@ -66,27 +62,7 @@ for (field in FIELDS) {
     }
 }
 
-for (field in COLLAPSED_TEMPORAL_FIELDS) {
-    test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
-        r <- tulpaRatio:::cpp_gradient_check(field, family = gradient_fixture_family(field), mode = "handcoded")
-        expect_gt(r$n_params, 0)
-        dev <- grad_rel_dev(r)
-        worst <- which.max(dev)
-        expect_lt(max(dev), 1e-04, label = sprintf("%s: worst parameter %d (block %s), analytic %.6f vs finite-diff %.6f",
-            field, worst, r$block[worst], r$analytic[worst], r$finite_diff[worst]))
-    })
-}
 
-for (field in DISPATCH_MASK_COLLAPSED_FIELDS) {
-    test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
-        r <- tulpaRatio:::cpp_gradient_check(field, family = gradient_fixture_family(field), mode = "handcoded")
-        expect_gt(r$n_params, 0)
-        dev <- grad_rel_dev(r)
-        worst <- which.max(dev)
-        expect_lt(max(dev), 1e-04, label = sprintf("%s: worst parameter %d (block %s), analytic %.6f vs finite-diff %.6f",
-            field, worst, r$block[worst], r$analytic[worst], r$finite_diff[worst]))
-    })
-}
 
 for (field in CAR_PROPER_FIELDS) {
     test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
@@ -214,13 +190,6 @@ test_that("an inflated model never reaches a gradient written without inflation"
     }
 })
 
-test_that("the collapsed GP interaction carries the log-concave families", {
-    for (field in c("stgp_collapsed", "stgp_gneiting_collapsed")) {
-        for (family in setdiff(HANDCODED_FAMILIES, "beta_binomial")) {
-            check_per_obs(field, family)
-        }
-    }
-})
 
 test_that("a count-response ZI or hurdle term reaches both instantiations", {
     for (case in ZI_COUNT_CASES) {
@@ -288,16 +257,6 @@ for (field in KERNEL_FIELDS) {
     }
 }
 
-for (field in KERNEL_COLLAPSED_FIELDS) {
-    test_that(sprintf("analytic gradient matches finite differences (%s, handcoded)", field), {
-        r <- tulpaRatio:::cpp_gradient_check(field, family = gradient_fixture_family(field), mode = "handcoded")
-        expect_gt(r$n_params, 0)
-        dev <- grad_rel_dev(r)
-        worst <- which.max(dev)
-        expect_lt(max(dev), 1e-04, label = sprintf("%s: worst parameter %d (block %s), analytic %.6f vs finite-diff %.6f",
-            field, worst, r$block[worst], r$analytic[worst], r$finite_diff[worst]))
-    })
-}
 
 for (field in c("temporal_ar1", "tvc_ar1", "ms_temporal", "st4_ar1", "st4_ar1_nc", "st2_ar1")) {
     test_that(sprintf("the densities agree where the 1 - rho^2 floor binds (%s)", field), {
@@ -461,13 +420,6 @@ test_that("every binomial inflation type reports the density its gradient descri
     }
 })
 
-test_that("collapsed areal targets have finite engine gradients", {
-      for(field in COLLAPSED_FIELDS) {
-        r<-tulpaRatio:::cpp_gradient_check(field, family = gradient_fixture_family(field),n_obs=40L,n_units=8L,mode="H",seed=17L)
-        expect_true(is.finite(r$log_post),info=field)
-        expect_lt(max(grad_rel_dev(r)),1e-4,label=field)
-      }
-    })
 
 test_that("proper CAR fields have automatic-differentiation engine gradients", {
       for(field in CAR_PROPER_FIELDS) for(mode in c("A_r","A")) {

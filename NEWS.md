@@ -1,5 +1,11 @@
 # tulpaRatio 1.7.3
 
+* Collapsed spatial requests use the existing full-field engine route.
+  Direct native requests error with guidance to full-field NUTS. Unsupported
+  native collapsed fixtures and conditional-field readers are removed.
+  The bridge reports the engine sampling target and inference tier.
+  Linked consumers rebuild against engine ABI 61 (gcol33/tulpa#1177).
+
 * All HMC, NUTS, WALNUTS, elliptical slice, stochastic-gradient and variational
   fits evaluate the tulpa engine target. The model-side sampler stack and its
   selection option and environment override are removed (#176). Collapsed
@@ -11,7 +17,7 @@
 
 * The engine NUTS route forwards fixed-step HMC, the metric, WALNUTS and the
   automatic acceptance target, and reports leapfrog counts and starting
-  Hamiltonians. Linked consumers use engine ABI 59 and require rebuilding.
+  Hamiltonians.
 
 * Shared response-margin values and gradients retain the frozen round-17
   numerical fixtures (#176).

@@ -693,7 +693,6 @@ Rcpp::List cpp_tulpaRatio_sample(
              divergent(n_chains),treedepth(n_chains),n_leapfrog(n_chains),energy(n_chains);
   Rcpp::NumericVector epsilon(n_chains);
   Rcpp::CharacterVector samplers(n_chains);
-  Rcpp::List spatial_fields(n_chains), unstructured_fields(n_chains);
   for (int c=0;c<n_chains;++c) {
     auto& result=results[c];
     const int n=result.n_sample;
@@ -709,15 +708,6 @@ Rcpp::List cpp_tulpaRatio_sample(
     const std::string sampler(result.sampler);
     samplers[c]=sampler == "nuts" ? "NUTS" : sampler;
     epsilon[c]=result.epsilon;
-    if (layout.is_icar_collapsed || layout.is_bym2_collapsed || layout.is_gp_collapsed) {
-      const int units = layout.is_gp ? data.gp_data.n_obs : data.n_spatial_units;
-      if (result.n_spatial_fields != units || (n > 0 && (!result.spatial_draws ||
-          (layout.is_bym2_collapsed && !result.unstructured_draws))))
-        Rcpp::stop("The engine must return conditional spatial fields for every retained draw");
-      spatial_fields[c] = row_major_matrix(result.spatial_draws, n, units);
-      if (layout.is_bym2_collapsed)
-        unstructured_fields[c] = row_major_matrix(result.unstructured_draws, n, units);
-    }
     result.free_buffers();
   }
   const auto pack = [n_chains](const Rcpp::List& x) -> SEXP {
@@ -729,7 +719,6 @@ Rcpp::List cpp_tulpaRatio_sample(
     Rcpp::Named("divergent")=pack(divergent),Rcpp::Named("epsilon")=epsilon,
     Rcpp::Named("energy")=pack(energy),
     Rcpp::Named("sampler")=Rcpp::as<std::string>(samplers[0]),
-    Rcpp::Named("icar_phi_star")=(layout.is_icar_collapsed || layout.is_bym2_collapsed) ? pack(spatial_fields) : R_NilValue,
-    Rcpp::Named("bym2_theta_star")=layout.is_bym2_collapsed ? pack(unstructured_fields) : R_NilValue,
-    Rcpp::Named("gp_w_star")=layout.is_gp_collapsed ? pack(spatial_fields) : R_NilValue);
+    Rcpp::Named("target")=tulpa::sampling_target_name(results[0].target),
+    Rcpp::Named("inference_tier")=results[0].inference_tier);
 }

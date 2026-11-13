@@ -14,10 +14,7 @@ hmc_unpack_draws(
   re_param = "noncentered",
   latent_info = NULL,
   st_info = NULL,
-  ms_temporal_info = NULL,
-  gp_w_star = NULL,
-  icar_phi_star = NULL,
-  bym2_theta_star = NULL
+  ms_temporal_info = NULL
 )
 }
 \arguments{
@@ -32,9 +29,6 @@ hmc_unpack_draws(
 \item{re_param}{Random-effect parameterization}
 
 \item{latent_info, st_info, ms_temporal_info}{Optional info lists}
-
-\item{gp_w_star, icar_phi_star, bym2_theta_star}{Fields from the inner Laplace
-optimization of a collapsed parameterization}
 }
 \value{
 A list with one entry per structure, each holding the draws on the

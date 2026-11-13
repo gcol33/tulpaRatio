@@ -108,14 +108,12 @@ hmc_draws_list <- function(unpacked) {
       put("rho_spatial", sp$rho)
       put("sigma_s_spatial", sp$sigma_s)
       put("sigma_u_spatial", sp$sigma_u)
-      if (!sp$collapsed) {
-        put_cols("phi_scaled", sp$phi_scaled)
-        put_cols("theta", sp$theta)
-      }
+      put_cols("phi_scaled", sp$phi_scaled)
+      put_cols("theta", sp$theta)
     } else {
       put("tau_spatial", sp$tau)
       if (!is.null(sp$rho)) put("rho_spatial", sp$rho)
-      if (!sp$collapsed) put_cols("phi_spatial", sp$field)
+      put_cols("phi_spatial", sp$field)
     }
   }
 
@@ -142,7 +140,7 @@ hmc_draws_list <- function(unpacked) {
   if (!is.null(gp)) {
     put("sigma2_gp", gp$sigma2)
     put("phi_gp", gp$phi)
-    if (!gp$collapsed) put_cols("gp_w", gp$field)
+    put_cols("gp_w", gp$field)
   }
 
   # Multi-scale GP

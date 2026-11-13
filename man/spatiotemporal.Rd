@@ -47,15 +47,7 @@ interaction directly; \code{"noncentered"} uses Gaussian innovations and
 reconstructs the interaction with its spatial and temporal sum constraints.
 The default is \code{"noncentered"} for the GP types and an HSGP spatial margin,
 and \code{"centered"} for the other Knorr-Held types (\code{"I"} to \code{"IV"}).
-\code{"collapsed"}, for the GP
-types, integrates the interaction out with a Laplace approximation
-inside HMC (Margossian et al. 2020): the sampler moves the
-hyperparameters and every other block, and the interaction is drawn from
-its Gaussian approximation at each saved iteration. That removes the
-interaction's field-against-hyperparameter funnel; the marginal it
-targets is an approximation, exact for a Gaussian likelihood. It needs a
-log-concave family with canonical links (binomial, Poisson-gamma,
-negative binomial, gamma-gamma, lognormal) without zero inflation. An
+\code{"collapsed"} selects noncentered full-field coordinates for the GP types. An
 HSGP spatial margin's temporal precision and sum constraint determine its
 innovation transform. Ignored outside the HMC backend.}
 

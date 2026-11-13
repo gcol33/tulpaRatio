@@ -471,18 +471,10 @@ fit <- tratio(
 )
 ```
 
-A GP interaction has one value per space-time cell, and with the field
-sampled alongside its precision and two ranges NUTS needs a small step size
-and deep trees. `parameterization = "collapsed"` integrates the interaction
-out with a Laplace approximation inside HMC, so the sampler moves only its
-three hyperparameters beside the other blocks, and the interaction is drawn
-from its Gaussian approximation at each saved iteration. On this model the
-two chains above take about ten minutes in all, at about 20 leapfrog steps
-per draw where the centred interaction takes about 390. Both settle at a
-spatial range of about 0.15 and a `tau_st` of about 2.9, with an `rhat` of at
-most 1.03 and about 50 divergent transitions in the 1000 saved draws, most of
-them where the spatial range is short. The chunk is not run when this article is built, since
-the fit takes those ten minutes.
+A GP interaction has one value per space-time cell.
+With the HMC backend, `parameterization = "collapsed"` selects noncentered full-field NUTS.
+The sampler draws the complete interaction jointly with its precision,
+two ranges and the other model parameters.
 
 Non-separability types:
 

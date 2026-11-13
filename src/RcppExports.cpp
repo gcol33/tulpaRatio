@@ -610,20 +610,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_test_collapsed_gp_reference
-Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta, int y, int n, double sigma);
-RcppExport SEXP _tulpaRatio_cpp_test_collapsed_gp_reference(SEXP betaSEXP, SEXP ySEXP, SEXP nSEXP, SEXP sigmaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type beta(betaSEXP);
-    Rcpp::traits::input_parameter< int >::type y(ySEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_test_collapsed_gp_reference(beta, y, n, sigma));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_test_negbin_h_kernels
 Rcpp::NumericMatrix cpp_test_negbin_h_kernels(int y, double mu, double phi);
 RcppExport SEXP _tulpaRatio_cpp_test_negbin_h_kernels(SEXP ySEXP, SEXP muSEXP, SEXP phiSEXP) {
@@ -1778,7 +1764,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_num_procs", (DL_FUNC) &_tulpaRatio_cpp_num_procs, 0},
     {"_tulpaRatio_cpp_test_residual_accumulation", (DL_FUNC) &_tulpaRatio_cpp_test_residual_accumulation, 0},
     {"_tulpaRatio_cpp_test_collapsed_margin", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_margin, 8},
-    {"_tulpaRatio_cpp_test_collapsed_gp_reference", (DL_FUNC) &_tulpaRatio_cpp_test_collapsed_gp_reference, 4},
     {"_tulpaRatio_cpp_test_negbin_h_kernels", (DL_FUNC) &_tulpaRatio_cpp_test_negbin_h_kernels, 3},
     {"_tulpaRatio_cpp_test_spatial_covariance", (DL_FUNC) &_tulpaRatio_cpp_test_spatial_covariance, 5},
     {"_tulpaRatio_cpp_gradient_fields", (DL_FUNC) &_tulpaRatio_cpp_gradient_fields, 0},

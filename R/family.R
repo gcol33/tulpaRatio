@@ -271,7 +271,7 @@ LINKS_PROBABILITY <- c("logit", "probit", "cloglog")
 LINKS_GAMMA <- c("log", "identity", "inverse")
 
 #' Canonical links: the link of each domain the Gibbs, Polya-Gamma and
-#' Laplace samplers and the collapsed fields are written for
+#' Laplace samplers are written for
 #' @rdname LINKS_PROBABILITY
 #' @keywords internal
 LINKS_CANONICAL <- c("log", "logit")

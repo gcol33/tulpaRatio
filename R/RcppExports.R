@@ -141,10 +141,6 @@ cpp_test_collapsed_margin <- function(family, y, yd, en, ed, pn, pd, shared) {
     .Call(`_tulpaRatio_cpp_test_collapsed_margin`, family, y, yd, en, ed, pn, pd, shared)
 }
 
-cpp_test_collapsed_gp_reference <- function(beta, y, n, sigma) {
-    .Call(`_tulpaRatio_cpp_test_collapsed_gp_reference`, beta, y, n, sigma)
-}
-
 cpp_test_negbin_h_kernels <- function(y, mu, phi) {
     .Call(`_tulpaRatio_cpp_test_negbin_h_kernels`, y, mu, phi)
 }

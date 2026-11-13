@@ -37,6 +37,8 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
     const std::string type = Rcpp::as<std::string>(sp["type"]);
     if (type == "none") return 0;
     const std::string param = Rcpp::as<std::string>(sp["parameterization"]);
+    if (param == "collapsed")
+        Rcpp::stop("tulpaRatio native collapsed spatial integration is unavailable. Use full-field NUTS through tratio() or parameterization = 'auto'.");
     const int n = Rcpp::as<int>(sp["n_units"]);
     const bool shared = Rcpp::as<bool>(sp["shared"]);
     for (int k = 1; k < data.n_processes; ++k) data.sharing.spatial[k] = shared;
@@ -50,8 +52,6 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
             : type == "bym2" ? tulpa::SpatialType::BYM2 : tulpa::SpatialType::CAR_PROPER;
         data.spatial_component_centering = true;
         data.auto_spatial_coordinates = param == "auto";
-        data.icar_collapsed = type == "icar" && param == "collapsed";
-        data.bym2_collapsed = type == "bym2" && param == "collapsed";
         data.spatial_sigma_prior_U = Rcpp::as<double>(sp["sigma_prior_U"]);
         data.spatial_sigma_prior_alpha = Rcpp::as<double>(sp["sigma_prior_alpha"]);
         data.spatial_group = Rcpp::as<std::vector<int>>(sp["group"]);
@@ -87,8 +87,6 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
             if (solver.info() != Eigen::Success) Rcpp::stop("CAR adjacency eigendecomposition failed");
             data.car_adj_eigenvalues.assign(solver.eigenvalues().data(), solver.eigenvalues().data() + n);
         }
-        if (data.icar_collapsed) return 1;
-        if (data.bym2_collapsed) return 2;
         return type == "bym2" ? 2 + 2 * n : (type == "car_proper" ? 2 : 1) + n;
     }
     Rcpp::List gp = sp["gp"];
@@ -97,7 +95,6 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
     if (type == "gp") {
         data.spatial_type = tulpa::SpatialType::GP;
         data.has_gp = true;
-        data.gp_collapsed = param == "collapsed";
         data.gp_parameterization = (param == "noncentered" || param == "auto") ? 1 : 0;
         data.auto_gp_coordinates = param == "auto";
         data.conditional_gp_coordinates = gp.containsElementNamed("conditional_coordinates") &&
@@ -127,7 +124,7 @@ inline int apply_spatial_model_data(tulpa::ModelData& data, const Rcpp::List& sp
         data.gp_range_prior.type = tulpa::RangePriorType::UNIFORM;
         data.gp_range_prior.lower = Rcpp::as<double>(gp["phi_prior_lower"]);
         data.gp_range_prior.upper = Rcpp::as<double>(gp["phi_prior_upper"]);
-        return data.gp_collapsed ? 2 : 2 + n;
+        return 2 + n;
     }
     if (type == "hsgp") {
         data.spatial_type = tulpa::SpatialType::HSGP;

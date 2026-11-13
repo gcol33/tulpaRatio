@@ -363,7 +363,7 @@ test_that("an intrinsic field is reported as the field the likelihood saw", {
     expect_gt(max(abs(block_means(f_ar1, "temporal"))), 1e-09)
 })
 
-test_that("sampled and collapsed ICAR recover the dense log-precision posterior", {
+test_that("sampled ICAR coordinates recover the dense log-precision posterior", {
     skip_on_cran()
     skip_if_not_installed("posterior")
     skip_unless_slow()
@@ -385,16 +385,14 @@ test_that("sampled and collapsed ICAR recover the dense log-precision posterior"
         dr <- as.matrix(f$draws)
         log_tau <- log(dr[, "tau_spatial"])
         m <- matrix(log_tau, nrow = nrow(dr)/f$chains, ncol = f$chains)
-        list(draws = m, intercept = mean(dr[, "beta_num[1]"]))
+        list(draws = m)
     }
     summarise_tau <- function(fits) {
         m <- do.call(cbind, lapply(fits, `[[`, "draws"))
-        list(mean = mean(m), mcse = posterior::mcse_mean(m), ess = posterior::ess_bulk(m), rhat = posterior::rhat(m),
-            intercept = mean(vapply(fits, `[[`, numeric(1), "intercept")))
+        list(mean = mean(m), mcse = posterior::mcse_mean(m), rhat = posterior::rhat(m))
     }
     sampled_fits <- lapply(c(7L, 17L), function(seed) fit_tau("standard", seed, TRUE))
     standard <- summarise_tau(sampled_fits)
-    collapsed <- summarise_tau(list(fit_tau("collapsed", 7L)))
     defaults <- lapply(c(7L, 17L), function(seed) fit_tau("auto", seed, automatic = TRUE))
     for (fit in defaults) {
         result <- summarise_tau(list(fit))
@@ -407,15 +405,11 @@ test_that("sampled and collapsed ICAR recover the dense log-precision posterior"
         expect_lt(result$rhat, 1.01)
         expect_lt(abs(result$mean - reference$mean), 0.1 * reference$sd)
     }
-    for (result in list(standard, collapsed)) {
-        error <- abs(result$mean - reference$mean)
-        expect_lt(result$rhat, 1.01)
-        expect_lt(result$mcse, reference$sd/30)
-        expect_lt(error, 0.1 * reference$sd)
-        expect_lt(error, 3 * sqrt(result$mcse^2 + reference$mcse^2) + reference$grid_error)
-    }
-    expect_lt(abs(collapsed$intercept - standard$intercept), 0.005)
-    expect_gt(collapsed$ess, standard$ess)
+    error <- abs(standard$mean - reference$mean)
+    expect_lt(standard$rhat, 1.01)
+    expect_lt(standard$mcse, reference$sd/30)
+    expect_lt(error, 0.1 * reference$sd)
+    expect_lt(error, 3 * sqrt(standard$mcse^2 + reference$mcse^2) + reference$grid_error)
 })
 
 test_that("multiscale RW2 funnel diagnostics and posterior agree with dense integration", {

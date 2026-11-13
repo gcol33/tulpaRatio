@@ -64,15 +64,7 @@ NULL
 #'   reconstructs the interaction with its spatial and temporal sum constraints.
 #'   The default is `"noncentered"` for the GP types and an HSGP spatial margin,
 #'   and `"centered"` for the other Knorr-Held types (`"I"` to `"IV"`).
-#'   `"collapsed"`, for the GP
-#'   types, integrates the interaction out with a Laplace approximation
-#'   inside HMC (Margossian et al. 2020): the sampler moves the
-#'   hyperparameters and every other block, and the interaction is drawn from
-#'   its Gaussian approximation at each saved iteration. That removes the
-#'   interaction's field-against-hyperparameter funnel; the marginal it
-#'   targets is an approximation, exact for a Gaussian likelihood. It needs a
-#'   log-concave family with canonical links (binomial, Poisson-gamma,
-#'   negative binomial, gamma-gamma, lognormal) without zero inflation. An
+#'   `"collapsed"` selects noncentered full-field coordinates for the GP types. An
 #'   HSGP spatial margin's temporal precision and sum constraint determine its
 #'   innovation transform. Ignored outside the HMC backend.
 #' @param nonsep_type For `type = "nonsep_gp"`: `"product"` (the separable
@@ -234,7 +226,7 @@ spatiotemporal <- function(spatial,
   parameterization <- match.arg(parameterization)
   nonsep_type <- match.arg(nonsep_type)
   if (parameterization == "collapsed" && !is_gp_type) {
-    stop("parameterization = \"collapsed\" integrates out a GP interaction; ",
+    stop("parameterization = \"collapsed\" selects full-field GP coordinates; ",
          "use type = \"separable\" or \"nonsep_gp\".", call. = FALSE)
   }
 

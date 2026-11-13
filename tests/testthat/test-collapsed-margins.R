@@ -44,7 +44,7 @@ test_that("an unshared GP uses only the numerator in its inner likelihood", {
   }
 })
 
-test_that("collapsed and sampled ICAR posteriors match dense integration", {
+test_that("sampled ICAR posteriors match dense integration", {
   skip_on_cran()
   set.seed(224)
   n <- rep(250L,2)
@@ -65,14 +65,12 @@ test_that("collapsed and sampled ICAR posteriors match dense integration", {
   ref_sd <- sqrt(sum((beta-ref_mean)^2*beta_weights))
   ref_q <- approx(cumsum(beta_weights),beta,c(.1,.5,.9),ties='ordered')$y
   adj <- matrix(c(0,1,1,0),2)
-  for (parameterization in c('standard','collapsed')) {
-    fit <- tratio(y | n ~ 1,data=d,family=ratiod_binomial(),
-      spatial=spatial_car(adj,spatial_level='group',group_var='site',
-                          parameterization=parameterization), mode='hmc',
-      control=list(iter=5000L,warmup=1500L,chains=1L,seed=224L,
-                   gradient_mode='H',adapt_delta=.99))
-    draws <- as.matrix(fit$draws)[,1L]
-    expect_lt(abs(mean(draws)-ref_mean)/ref_sd,.15)
-    expect_lt(max(abs(quantile(draws,c(.1,.5,.9))-ref_q))/ref_sd,.2)
-  }
+  fit <- tratio(y | n ~ 1,data=d,family=ratiod_binomial(),
+    spatial=spatial_car(adj,spatial_level='group',group_var='site',
+                        parameterization='standard'), mode='hmc',
+    control=list(iter=5000L,warmup=1500L,chains=1L,seed=224L,
+                 gradient_mode='H',adapt_delta=.99))
+  draws <- as.matrix(fit$draws)[,1L]
+  expect_lt(abs(mean(draws)-ref_mean)/ref_sd,.15)
+  expect_lt(max(abs(quantile(draws,c(.1,.5,.9))-ref_q))/ref_sd,.2)
 })

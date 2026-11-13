@@ -64,32 +64,6 @@ Rcpp::NumericMatrix cpp_test_collapsed_margin(int family,int y,double yd,double 
 }
 
 // [[Rcpp::export]]
-Rcpp::NumericVector cpp_test_collapsed_gp_reference(Rcpp::NumericVector beta,int y,int n,double sigma) {
-  auto data=engine_fixture::make_model("none",1,1,1,1);
-  data.response.y_num={y};data.response.y_denom={n};
-  data.processes[0].p=1;data.processes[0].X_flat={1};
-  data.spatial_type=tulpa::SpatialType::GP;data.has_gp=true;data.gp_collapsed=true;
-  data.gp_range_prior.type=tulpa::RangePriorType::UNIFORM;
-  data.gp_range_prior.lower=0.01;data.gp_range_prior.upper=100;
-  auto& gp=data.gp_data;
-  gp.n_obs=1;gp.nn=1;gp.nn_order={0};gp.nn_order_inv={0};gp.coords={0,0};
-  gp.nn_idx={0};gp.nn_dist={0};gp.nn_neighbor_dist={0};gp.obs_to_loc={0};gp.shared=false;
-  auto layout=engine_fixture::fixture_layout(data);
-  std::vector<double> q(layout.total_params,0);
-  q[layout.log_sigma2_gp_idx]=2*std::log(sigma);
-  Rcpp::NumericVector out(beta.size());
-  for(int i=0;i<beta.size();++i) {
-    q[layout.process_beta_start[0]]=beta[i];
-    double value,prior;
-    tulpa::ModelPointRequest request;
-    request.position=q.data();request.n_params=q.size();request.value=&value;request.prior=&prior;
-    tulpa::get_model_point_fn()(&data,&layout,&request);
-    out[i]=value-prior;
-  }
-  return out;
-}
-
-// [[Rcpp::export]]
 Rcpp::NumericMatrix cpp_test_negbin_h_kernels(int y,double mu,double phi) {
   const NegBin margin(phi);
   Observation observation{double(y),std::log(mu)};

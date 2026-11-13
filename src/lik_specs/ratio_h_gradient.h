@@ -9,7 +9,7 @@ inline void assert_no_latent_structure(const tulpa::ParamLayout& layout) {
     const bool any_latent =
         layout.has_re || layout.has_re_slopes ||
         layout.has_spatial || layout.is_gp || layout.is_multiscale_gp ||
-        layout.is_hsgp || layout.is_icar_collapsed || layout.is_bym2_collapsed ||
+        layout.is_hsgp ||
         layout.has_temporal || layout.has_multiscale_temporal ||
         layout.is_temporal_gp || layout.has_zi || layout.has_oi ||
         layout.has_svc || layout.has_tvc || layout.has_latent ||

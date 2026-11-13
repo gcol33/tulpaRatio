@@ -210,20 +210,18 @@ layout_areal_block <- function(cur, spatial_info) {
     return(list(type = "none"))
   }
   n_units <- spatial_info$n_units
-  param <- spatial_info$parameterization %||% "standard"
-  collapsed <- identical(param, "collapsed")
 
   if (identical(type, "bym2")) {
-    out <- list(type = "bym2", collapsed = collapsed,
+    out <- list(type = "bym2",
                 log_sigma = cur$one(), logit_rho = cur$one())
-    out$phi <- if (collapsed) integer(0) else cur$take(n_units)
-    out$theta <- if (collapsed) integer(0) else cur$take(n_units)
+    out$phi <- cur$take(n_units)
+    out$theta <- cur$take(n_units)
     return(out)
   }
 
-  out <- list(type = type, collapsed = collapsed, log_tau = cur$one())
+  out <- list(type = type, log_tau = cur$one())
   out$logit_rho <- if (identical(type, "car_proper")) cur$one() else integer(0)
-  out$phi <- if (collapsed) integer(0) else cur$take(n_units)
+  out$phi <- cur$take(n_units)
   out
 }
 
@@ -250,10 +248,9 @@ layout_gp_block <- function(cur, spatial_info) {
   if (!identical(spatial_info$type %||% "none", "gp")) {
     return(list(type = "none"))
   }
-  collapsed <- identical(spatial_info$parameterization %||% "centered", "collapsed")
-  out <- list(type = "gp", collapsed = collapsed,
+  out <- list(type = "gp",
               log_sigma2 = cur$one(), log_phi = cur$one())
-  out$w <- if (collapsed) integer(0) else cur$take(spatial_info$n_units)
+  out$w <- cur$take(spatial_info$n_units)
   out
 }
 
@@ -448,8 +445,6 @@ block_draws <- function(samples, idx) {
 #' @param model_type Model type string
 #' @param re_param Random-effect parameterization
 #' @param latent_info,st_info,ms_temporal_info Optional info lists
-#' @param gp_w_star,icar_phi_star,bym2_theta_star Fields from the inner Laplace
-#'   optimization of a collapsed parameterization
 #'
 #' @return A list with one entry per structure, each holding the draws on the
 #'   natural scale.
@@ -458,9 +453,7 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
                              temporal_info, model_type,
                              re_param = "noncentered",
                              latent_info = NULL, st_info = NULL,
-                             ms_temporal_info = NULL,
-                             gp_w_star = NULL, icar_phi_star = NULL,
-                             bym2_theta_star = NULL) {
+                             ms_temporal_info = NULL) {
   n_samples <- nrow(samples)
   out <- list(n_samples = n_samples)
 
@@ -478,12 +471,11 @@ hmc_unpack_draws <- function(samples, layout, hmc_data, spatial_info,
     out$dispersion[[disp_names[["denom"]]]] <- exp(samples[, layout$phi_denom])
   }
 
-  out$spatial <- unpack_areal(samples, layout$spatial, spatial_info,
-                              icar_phi_star, bym2_theta_star)
+  out$spatial <- unpack_areal(samples, layout$spatial, spatial_info)
   out$temporal <- unpack_temporal(samples, layout$temporal, temporal_info)
   out$zi <- block_draws(samples, layout$zi)
   out$oi <- block_draws(samples, layout$oi)
-  out$gp <- unpack_gp(samples, layout$gp, gp_w_star)
+  out$gp <- unpack_gp(samples, layout$gp)
   out$msgp <- unpack_msgp(samples, layout$msgp, spatial_info)
   out$ms_temporal <- unpack_ms_temporal(samples, layout$ms_temporal)
   out$svc <- unpack_svc(samples, layout$svc, spatial_info)
@@ -591,10 +583,9 @@ unpack_re <- function(samples, lay, re_param) {
 
 
 #' @keywords internal
-unpack_areal <- function(samples, lay, spatial_info, icar_phi_star = NULL,
-                         bym2_theta_star = NULL) {
+unpack_areal <- function(samples, lay, spatial_info) {
   if (identical(lay$type, "none")) return(NULL)
-  out <- list(type = lay$type, collapsed = lay$collapsed)
+  out <- list(type = lay$type)
 
   if (identical(lay$type, "bym2")) {
     sigma_total <- exp(samples[, lay$log_sigma])
@@ -604,18 +595,9 @@ unpack_areal <- function(samples, lay, spatial_info, icar_phi_star = NULL,
     out$sigma_s <- sigma_total * sqrt(rho)
     out$sigma_u <- sigma_total * sqrt(1 - rho)
     scale <- spatial_info$bym2_scale %||% 1.0
-    if (lay$collapsed) {
-      out$phi_scaled <- icar_phi_star
-      out$theta <- bym2_theta_star
-    } else {
-      out$phi_scaled <- block_draws(samples, lay$phi)
-      out$theta <- block_draws(samples, lay$theta)
-    }
-    out$field <- if (!is.null(out$phi_scaled) && !is.null(out$theta)) {
-      out$sigma_s * out$phi_scaled * scale + out$sigma_u * out$theta
-    } else {
-      NULL
-    }
+    out$phi_scaled <- block_draws(samples, lay$phi)
+    out$theta <- block_draws(samples, lay$theta)
+    out$field <- out$sigma_s * out$phi_scaled * scale + out$sigma_u * out$theta
     return(out)
   }
 
@@ -625,7 +607,7 @@ unpack_areal <- function(samples, lay, spatial_info, icar_phi_star = NULL,
     rho_upper <- spatial_info$rho_upper %||% 1.0
     out$rho <- rho_lower + (rho_upper - rho_lower) * inv_logit(samples[, lay$logit_rho])
   }
-  out$field <- if (lay$collapsed) icar_phi_star else block_draws(samples, lay$phi)
+  out$field <- block_draws(samples, lay$phi)
   out
 }
 
@@ -657,14 +639,13 @@ unpack_temporal <- function(samples, lay, temporal_info) {
 
 
 #' @keywords internal
-unpack_gp <- function(samples, lay, gp_w_star = NULL) {
+unpack_gp <- function(samples, lay) {
   if (identical(lay$type, "none")) return(NULL)
   list(
     type = "gp",
-    collapsed = lay$collapsed,
     sigma2 = exp(samples[, lay$log_sigma2]),
     phi = exp(samples[, lay$log_phi]),
-    field = if (lay$collapsed) gp_w_star else block_draws(samples, lay$w)
+    field = block_draws(samples, lay$w)
   )
 }
 
@@ -980,8 +961,7 @@ hmc_eta_design <- function(X_num, X_denom, re_group = NULL,
 }
 
 
-sampler_draw_state <- function(samples, inp, re_param, layout = NULL,
-                               conditional = list()) {
+sampler_draw_state <- function(samples, inp, re_param, layout = NULL) {
   layout <- layout %||% hmc_param_layout(
     hmc_data = inp$hmc_data, spatial_info = inp$spatial_info,
     temporal_info = inp$temporal_info, zi_info = inp$zi_info,
@@ -991,21 +971,17 @@ sampler_draw_state <- function(samples, inp, re_param, layout = NULL,
     stop("The engine parameter layout describes ", layout$total,
          " parameters; the draw matrix contains ", ncol(samples), ".", call. = FALSE)
   }
-  unpack <- function(x, fields = conditional) {
+  unpack <- function(x) {
     hmc_unpack_draws(samples = x, layout = layout, hmc_data = inp$hmc_data,
       spatial_info = inp$spatial_info, temporal_info = inp$temporal_info,
       model_type = inp$model_type, re_param = re_param,
       latent_info = inp$latent_info, st_info = inp$spatiotemporal_info,
-      ms_temporal_info = inp$ms_temporal_info,
-      gp_w_star = fields$gp_w_star, icar_phi_star = fields$icar_phi_star,
-      bym2_theta_star = fields$bym2_theta_star)
+      ms_temporal_info = inp$ms_temporal_info)
   }
   unpacked <- unpack(samples)
   internal <- c(list(samples = samples, hmc_data = inp$hmc_data,
     model_type = inp$model_type, latent_info = inp$latent_info,
-    ms_temporal_info = inp$ms_temporal_info, layout = layout, eta_dropped = NULL,
-    gp_w_star = conditional$gp_w_star, icar_phi_star = conditional$icar_phi_star,
-    bym2_theta_star = conditional$bym2_theta_star), hmc_structure_draws(unpacked))
+    ms_temporal_info = inp$ms_temporal_info, layout = layout, eta_dropped = NULL), hmc_structure_draws(unpacked))
   list(layout = layout, unpacked = unpacked, internal = internal, unpack = unpack)
 }
 
@@ -1055,10 +1031,7 @@ hmc_fit_unpack <- function(object) {
     re_param = object$re_param %||% "noncentered",
     latent_info = internal$latent_info,
     st_info = object$spatiotemporal,
-    ms_temporal_info = internal$ms_temporal_info,
-    gp_w_star = internal$gp_w_star,
-    icar_phi_star = internal$icar_phi_star,
-    bym2_theta_star = internal$bym2_theta_star
+    ms_temporal_info = internal$ms_temporal_info
   )
 }
 
@@ -1173,16 +1146,14 @@ hmc_structure_contributions <- function(unpacked, design) {
   # Areal spatial: always shared between the two linear predictors
   if (!is.null(unpacked$spatial)) {
     field <- unpacked$spatial$field
-    add("spatial", restrict(spread_effect(field, spatial_info$group, N)), TRUE,
-        if (is.null(field)) "collapsed_field_unavailable" else NULL)
+    add("spatial", restrict(spread_effect(field, spatial_info$group, N)), TRUE)
   }
 
   # GP
   if (!is.null(unpacked$gp)) {
     field <- unpacked$gp$field
     add("gp", restrict(spread_effect(field, spatial_info$group, N)),
-        spatial_info$shared %||% TRUE,
-        if (is.null(field)) "collapsed_field_unavailable" else NULL)
+        spatial_info$shared %||% TRUE)
   }
 
   # HSGP: the basis is evaluated at the observations

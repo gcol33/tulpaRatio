@@ -2,7 +2,7 @@ test_that("field scale priors carry the SD density to every sampled coordinate",
   fields <- c("rw1", "rw1_nc", "rw2", "rw2_nc", "temporal_ar1",
               "temporal_ar1_nc", "temporal_iid", "tvc", "tvc_iid", "tvc_ar1",
               "svc", "svc_nc", "svc_hsgp", "hsgp", "icar", "bym2", "car_proper",
-              "icar_collapsed", "bym2_collapsed", "icar_rw1", "bym2_ms",
+              "icar_rw1", "bym2_ms",
               "tvc_st4", "svc_ms")
   U <- 0.8
   alpha <- 0.15
