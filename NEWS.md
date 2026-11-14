@@ -1,5 +1,11 @@
 # tulpaRatio 1.7.3
 
+* `gpu_available()`, `gpu_info()` and `print.tulpaRatio_gpu_info()` are removed
+  together with the package's copy of the GPU backend. Nothing in tulpaRatio
+  ran on a device; use `tulpa::gpu_info()`, and select a device for a fit with
+  the engine's `control$device`. Linked consumers rebuild against engine
+  ABI 63 (gcol33/tulpa#1179, #234).
+
 * Collapsed spatial requests use the existing full-field engine route.
   Direct native requests error with guidance to full-field NUTS. Unsupported
   native collapsed fixtures and conditional-field readers are removed.

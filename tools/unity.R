@@ -3,7 +3,7 @@ if (length(setdiff(args, "--check"))) stop("usage: Rscript tools/unity.R [--chec
 check_only <- "--check" %in% args
 src <- "src"
 
-groups <- list(core = c("array_utils.cpp", "crt_rng.cpp", "enum_names.cpp", "gpu_backend.cpp", "precision_density.cpp"
+groups <- list(core = c("array_utils.cpp", "crt_rng.cpp", "enum_names.cpp", "precision_density.cpp"
 ), exports = c("RcppExports.cpp", "thread_count.cpp"), likelihood = c("lik_dispatch.cpp", "tulpa_bridge.cpp"
 ), pg = c("pg_binomial.cpp", "pg_negbin.cpp", "pg_rng.cpp", "pg_spatial.cpp"), samplers = "gibbs_spatial.cpp",
     spatial = c("hsgp_spectral.cpp", "kriging.cpp"), tests = c("test_chain_concurrency.cpp", "test_gradient_check.cpp",

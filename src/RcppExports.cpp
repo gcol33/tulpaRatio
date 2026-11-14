@@ -76,26 +76,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_gpu_available
-bool cpp_gpu_available();
-RcppExport SEXP _tulpaRatio_cpp_gpu_available() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_gpu_available());
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_gpu_info
-List cpp_gpu_info();
-RcppExport SEXP _tulpaRatio_cpp_gpu_info() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_gpu_info());
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_hsgp_spectrum
 Rcpp::NumericMatrix cpp_hsgp_spectrum(Rcpp::NumericVector eigenvalues, Rcpp::NumericVector sigma2, Rcpp::NumericVector lengthscale, int dimension, int kernel);
 RcppExport SEXP _tulpaRatio_cpp_hsgp_spectrum(SEXP eigenvaluesSEXP, SEXP sigma2SEXP, SEXP lengthscaleSEXP, SEXP dimensionSEXP, SEXP kernelSEXP) {
@@ -1734,8 +1714,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_tulpaRatio_cpp_enum_names", (DL_FUNC) &_tulpaRatio_cpp_enum_names, 1},
     {"_tulpaRatio_cpp_test_gibbs_margin", (DL_FUNC) &_tulpaRatio_cpp_test_gibbs_margin, 7},
     {"_tulpaRatio_cpp_gibbs_spatial", (DL_FUNC) &_tulpaRatio_cpp_gibbs_spatial, 1},
-    {"_tulpaRatio_cpp_gpu_available", (DL_FUNC) &_tulpaRatio_cpp_gpu_available, 0},
-    {"_tulpaRatio_cpp_gpu_info", (DL_FUNC) &_tulpaRatio_cpp_gpu_info, 0},
     {"_tulpaRatio_cpp_hsgp_spectrum", (DL_FUNC) &_tulpaRatio_cpp_hsgp_spectrum, 5},
     {"_tulpaRatio_cpp_kriging_predict", (DL_FUNC) &_tulpaRatio_cpp_kriging_predict, 7},
     {"_tulpaRatio_cpp_ratio_family_entries", (DL_FUNC) &_tulpaRatio_cpp_ratio_family_entries, 0},

@@ -21,14 +21,6 @@ cpp_gibbs_spatial <- function(data_list) {
     .Call(`_tulpaRatio_cpp_gibbs_spatial`, data_list)
 }
 
-cpp_gpu_available <- function() {
-    .Call(`_tulpaRatio_cpp_gpu_available`)
-}
-
-cpp_gpu_info <- function() {
-    .Call(`_tulpaRatio_cpp_gpu_info`)
-}
-
 cpp_hsgp_spectrum <- function(eigenvalues, sigma2, lengthscale, dimension, kernel) {
     .Call(`_tulpaRatio_cpp_hsgp_spectrum`, eigenvalues, sigma2, lengthscale, dimension, kernel)
 }

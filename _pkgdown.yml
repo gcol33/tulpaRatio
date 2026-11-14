@@ -104,12 +104,6 @@ reference:
   contents:
   - inference_mode_info
   - validate_mode
-- title: GPU Support
-  desc: GPU device discovery and configuration
-  contents:
-  - gpu-support
-  - gpu_available
-  - gpu_info
 - title: Temporal Structure
   desc: Temporal random effect specifications
   contents:

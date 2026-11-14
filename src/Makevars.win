@@ -24,7 +24,6 @@ unity_core.o: \
   array_utils.cpp \
   crt_rng.cpp \
   enum_names.cpp \
-  gpu_backend.cpp \
   precision_density.cpp \
   array_utils.h \
   crt_rng.h \
@@ -33,7 +32,6 @@ unity_core.o: \
   covariance.h \
   ratio_margins.h \
   gibbs_spatial.h \
-  gpu_backend.h \
   ratio_math.h \
   taylor_jet.h \
   scale_prior.h \

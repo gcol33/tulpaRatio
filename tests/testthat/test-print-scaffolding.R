@@ -32,7 +32,6 @@ print_scaffolding_cases <- function() {
     latent = latent_factor(2),
     priors = ratiod_priors(),
     zi = tulpaRatio:::family_inflation_spec(ratiod_zi_poisson(denom_family = "negbin")),
-    gpu = structure(list(available = FALSE), class = "tulpaRatio_gpu_info"),
     ratio = structure(list(type = "log", n_obs = 6, n_draws = 10), class = "ratiod_ratio"),
     ratio_summary = structure(data.frame(mean = 1:2), type = "response",
                               class = c("ratiod_ratio_summary", "data.frame")),
