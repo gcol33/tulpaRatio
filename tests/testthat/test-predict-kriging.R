@@ -29,8 +29,8 @@ test_that("GP kriging at training locations returns the fitted field", {
   rows <- 1:4
   p <- predict(fit, newdata = df[rows, ], coords.0 = as.matrix(df[rows, c("x", "y")]),
                return_spatial = TRUE)
-  expect_equal(unname(p$w.0.samples), unname(field_at_rows(fit, rows)),
-               tolerance = 1e-3)
+  # A coincident location carries the field's own draw, with no solve.
+  expect_identical(unname(p$w.0.samples), unname(field_at_rows(fit, rows)))
   expect_true(all(is.finite(p$w.0.samples)))
 })
 

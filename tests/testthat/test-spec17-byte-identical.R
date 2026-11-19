@@ -1,13 +1,26 @@
 test_that("the archived likelihood and gradient reductions are byte identical", {
   reference <- readRDS(test_path("fixtures", "spec17-gradient-before-fused.rds"))
+  # Byte identity holds on the platform the archive was written on, Windows
+  # x86-64. A floating-point reduction is not bit-reproducible across
+  # compilers and instruction sets, so on any other platform the values are
+  # compared to a relative 1e-12.
+  archive_platform <- identical(.Platform$OS.type, "windows") &&
+    identical(R.version$arch, "x86_64")
   for (key in names(reference)) {
     parts <- strsplit(key," ",fixed=TRUE)[[1]]
     actual <- tulpaRatio:::cpp_test_spec17(parts[1], parts[2])
     expected <- reference[[key]]
-    expect_identical(writeBin(actual$analytic,raw(),size=8L),
-                     writeBin(expected$analytic,raw(),size=8L),info=key)
-    expect_identical(writeBin(actual$log_post,raw(),size=8L),
-                     writeBin(expected$log_post,raw(),size=8L),info=key)
+    if (archive_platform) {
+      expect_identical(writeBin(actual$analytic,raw(),size=8L),
+                       writeBin(expected$analytic,raw(),size=8L),info=key)
+      expect_identical(writeBin(actual$log_post,raw(),size=8L),
+                       writeBin(expected$log_post,raw(),size=8L),info=key)
+    } else {
+      expect_equal(actual$analytic, expected$analytic, tolerance = 1e-12,
+                   info = key)
+      expect_equal(actual$log_post, expected$log_post, tolerance = 1e-12,
+                   info = key)
+    }
   }
 })
 

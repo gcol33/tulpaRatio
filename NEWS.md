@@ -1,5 +1,10 @@
 # tulpaRatio 1.7.3
 
+* Kriging a GP field onto a location that coincides with a training location
+  returns the field's own draw there. The jittered neighbour solve moved the
+  value by up to about 0.1% on a 25-location fit, more as the range grows.
+* The package requires tulpa 0.8.0 (engine ABI 64).
+
 * `gpu_available()`, `gpu_info()` and `print.tulpaRatio_gpu_info()` are removed
   together with the package's copy of the GPU backend. Nothing in tulpaRatio
   ran on a device; use `tulpa::gpu_info()`, and select a device for a fit with

@@ -118,6 +118,15 @@ Rcpp::NumericMatrix cpp_kriging_predict(
     const double ph = phi[s];
 
     for (int i = 0; i < n_new; i++) {
+      // A new location that coincides with a training location carries the
+      // field's own value there. The jittered neighbour block is not an
+      // interpolator: its weights at distance zero are e_a - jitter *
+      // C_SS^{-1} e_a, which moves the value by an amount that grows as the
+      // block's conditioning worsens with the range.
+      if (nb_dist[static_cast<size_t>(i) * k] == 0.0) {
+        out(s, i) = w_train(s, nb_idx[static_cast<size_t>(i) * k]);
+        continue;
+      }
       for (int a = 0; a < k; a++) {
         const size_t slot = static_cast<size_t>(i) * k + a;
         c_s0(a) = ratiod_cov::compute_cov(nb_dist[slot], s2, ph, cov);
