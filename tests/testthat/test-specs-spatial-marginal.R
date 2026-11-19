@@ -16,8 +16,8 @@ test_that("the native bridge refuses collapsed spatial requests for every family
 })
 
 test_that("the NUTS bridge reports its joint target and matching engine ABI", {
-  expect_identical(tulpaRatio:::cpp_tulpa_compiled_abi_version(), 61L)
-  expect_identical(tulpaRatio:::cpp_tulpa_runtime_abi_version(), 61L)
+  expect_identical(tulpaRatio:::cpp_tulpa_compiled_abi_version(), 64L)
+  expect_identical(tulpaRatio:::cpp_tulpa_runtime_abi_version(), 64L)
   for (chains in 1:2) {
     fit <- tulpaRatio:::cpp_tulpaRatio_sample(
       y_num = rep(1L, 4), y_denom = rep(2L, 4),
