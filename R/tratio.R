@@ -854,12 +854,16 @@ compute_param_summary <- function(draws, probs) {
 }
 
 
-#' Read the fixed effects of a Laplace summary off the engine's mixture
+#' Read a Laplace summary's fixed effects and hyperparameters off the engine
 #'
 #' The engine integrates the hyperparameters over its outer grid, so the
 #' fixed-effect posterior is a Gaussian mixture whose mean, covariance and
-#' interval it reads exactly. The stored draws serve derived quantities; the
-#' fixed-effect rows of the summary do not move with their seed.
+#' interval it reads exactly. Each hyperparameter's mean and SD are the
+#' engine's read of its own axis, which is `Inf` where the posterior has no
+#' such moment (a precision under the PC prior keeps a `tau^(-3/2)` tail; the
+#' engine's `moment_existence` gives the reason). The stored draws serve
+#' derived quantities and the hyperparameter quantiles; the rows read off the
+#' engine do not move with their seed.
 #' @keywords internal
 apply_laplace_engine_summary <- function(summ, fit, level) {
   engine <- fit$engine
@@ -869,6 +873,13 @@ apply_laplace_engine_summary <- function(summ, fit, level) {
   summ$sd[rows] <- sqrt(diag(stats::vcov(engine)))
   summ$q_lower[rows] <- interval[, 1L]
   summ$q_upper[rows] <- interval[, 2L]
+  axes <- fit$hyper_axes
+  for (axis in intersect(names(axes), names(engine$theta_mean))) {
+    row <- match(axes[[axis]], summ$parameter)
+    if (is.na(row)) next
+    summ$mean[row] <- engine$theta_mean[[axis]]
+    summ$sd[row] <- engine$theta_sd[[axis]]
+  }
   summ
 }
 

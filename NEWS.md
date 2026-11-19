@@ -4,6 +4,17 @@
   returns the field's own draw there. The jittered neighbour solve moved the
   value by up to about 0.1% on a 25-location fit, more as the range grows.
 * The package requires tulpa 0.8.0 (engine ABI 64).
+* The hyperparameter rows of a Laplace fit's summary take their mean and SD
+  from the engine's read of each outer-grid axis, as the fixed effects
+  already did, so they no longer move with the draws' seed. A field
+  precision under the PC prior has no posterior mean (its tail is
+  `tau^(-3/2)`) and now reads `Inf`, with the engine's reason in
+  `fit$engine$moment_existence`; the sample mean of its draws was a sum over
+  the cells the grid holds. Quantiles still come from the draws.
+* `mode = "ess"` mixes the intercept and the slopes of a random-intercept
+  model: the engine's exact level move and its fixed-effect shift now run
+  when the random effect enters both the numerator and the denominator
+  (tulpa >= 0.8.0 at gcol33/tulpa@0073d848; #235).
 
 * `gpu_available()`, `gpu_info()` and `print.tulpaRatio_gpu_info()` are removed
   together with the package's copy of the GPU backend. Nothing in tulpaRatio

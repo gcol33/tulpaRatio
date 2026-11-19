@@ -25,6 +25,41 @@ test_that("the fixed-effect rows of a Laplace summary are the engine's mixture r
                unname(stats::confint(fit$engine, level = 0.95)[, 1L]))
 })
 
+test_that("hyperparameter rows of a Laplace summary are the engine's axis read", {
+  fit <- laplace_summary_fit()
+  summ <- apply_laplace_engine_summary(
+    compute_param_summary(fit$draws, c(0.025, 0.5, 0.975)), fit, level = 0.95
+  )
+  axes <- fit$hyper_axes
+  expect_true(length(axes) > 0L)
+  for (axis in names(axes)) {
+    row <- match(axes[[axis]], summ$parameter)
+    expect_equal(summ$mean[row], fit$engine$theta_mean[[axis]])
+    expect_equal(summ$sd[row], fit$engine$theta_sd[[axis]])
+  }
+})
+
+test_that("a field precision under the PC prior reports no mean, with the engine's reason", {
+  set.seed(2)
+  n <- 40
+  adj <- matrix(0L, 5, 5)
+  for (i in 1:4) adj[i, i + 1] <- adj[i + 1, i] <- 1L
+  df <- data.frame(s = rbinom(n, 10, 0.4), n = 10L, x = rnorm(n),
+                   site = factor(rep(1:5, 8)))
+  fit <- tratio(s | n ~ x, data = df, family = ratiod_binomial(), mode = "laplace",
+                spatial = spatial_car(adjacency = adj, group_var = "site"),
+                control = list(verbose = FALSE))
+  tau_axes <- names(fit$hyper_axes)[endsWith(names(fit$hyper_axes), ".tau")]
+  expect_true(length(tau_axes) > 0L)
+  coefs <- summary(fit)$coefficients
+  for (axis in tau_axes) {
+    row <- match(fit$hyper_axes[[axis]], coefs$parameter)
+    expect_identical(coefs$mean[row], Inf)
+    expect_true(axis %in% names(fit$engine$moment_existence))
+    expect_true(is.finite(coefs$q_lower[row]) && is.finite(coefs$q_upper[row]))
+  }
+})
+
 test_that("the draws of a Laplace fit centre on the engine's fixed effects", {
   fit <- laplace_summary_fit()
   est <- unname(stats::coef(fit$engine))
