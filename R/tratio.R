@@ -670,6 +670,9 @@ summary.ratiod_fit <- function(object, probs = 0.95, ...) {
   summ <- compute_param_summary(draws, quantile_probs)
   if (identical(backend, "laplace")) {
     summ <- apply_laplace_engine_summary(summ, object, level = probs)
+  } else {
+    summ <- apply_precision_moment_rule(summ)
+    out$moment_existence <- attr(summ, "moment_existence")
   }
 
   # Add diagnostics for MCMC backends
@@ -713,6 +716,33 @@ print.summary.ratiod_fit <- function(x, ...) {
   print_diagnostics_summary(x$run)
   print_convergence_flags(x$coefficients, x$run$chains %||% 1)
   invisible(x)
+}
+
+
+#' Mark the moments a sampled field precision does not have
+#'
+#' Every field SD carries a PC prior, exponential in the SD, so its precision
+#' `tau = 1 / sigma^2` has a prior tail `tau^(-3/2)`. As `tau` grows the field
+#' shrinks to zero and the likelihood tends to its positive value at a zero
+#' field, adding no decay, so `E[tau^p]` is finite only for `p < 1/2`: the
+#' precision has neither a posterior mean nor an SD, and the sample moments of
+#' its draws estimate nothing. Their rows read `Inf`; the quantiles stand.
+#' This is the rule tulpa applies to the precisions it reports.
+#' @param summ Summary table from [compute_param_summary()].
+#' @return `summ` with `mean` and `sd` set to `Inf` on the precision rows, and
+#'   a `moment_existence` attribute naming each with its reason.
+#' @keywords internal
+apply_precision_moment_rule <- function(summ) {
+  rows <- grep("^tau_", summ$parameter)
+  if (!length(rows)) return(summ)
+  summ$mean[rows] <- Inf
+  summ$sd[rows] <- Inf
+  attr(summ, "moment_existence") <- stats::setNames(
+    rep(paste("prior tail tau^(-3/2) from the PC prior on the field SD,",
+              "no likelihood decay as the field vanishes; moment order must be < 0.5"),
+        length(rows)),
+    summ$parameter[rows])
+  summ
 }
 
 

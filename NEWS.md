@@ -10,7 +10,11 @@
   precision under the PC prior has no posterior mean (its tail is
   `tau^(-3/2)`) and now reads `Inf`, with the engine's reason in
   `fit$engine$moment_existence`; the sample mean of its draws was a sum over
-  the cells the grid holds. Quantiles still come from the draws.
+  the cells the grid holds. Quantiles still come from the draws. The
+  sampler backends apply the same rule to the precisions they draw
+  (`tau_spatial`, `tau_temporal`, `tau_st`, `tau_tvc[...]`): every field SD
+  carries a PC prior, so their mean and SD read `Inf`, with the reason in
+  `summary(fit)$moment_existence`.
 * `mode = "ess"` mixes the intercept and the slopes of a random-intercept
   model: the engine's exact level move and its fixed-effect shift now run
   when the random effect enters both the numerator and the denominator

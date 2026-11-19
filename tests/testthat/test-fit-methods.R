@@ -121,3 +121,19 @@ test_that("print() names the random effects whichever backend fitted them", {
                           fixed = TRUE)), label = mode)
   }
 })
+
+test_that("a sampled field precision reports no mean or SD, its quantiles kept", {
+  summ <- data.frame(parameter = c("beta_num[1]", "tau_spatial", "tau_tvc[x]", "sigma_re"),
+                     mean = c(0.5, 12, 4, 0.7), sd = c(0.1, 30, 9, 0.2),
+                     q_lower = c(0.3, 1.2, 0.5, 0.4), q_median = c(0.5, 6, 2, 0.7),
+                     q_upper = c(0.7, 80, 30, 1.1))
+  out <- apply_precision_moment_rule(summ)
+  tau <- c("tau_spatial", "tau_tvc[x]")
+  rows <- match(tau, out$parameter)
+  expect_identical(out$mean[rows], c(Inf, Inf))
+  expect_identical(out$sd[rows], c(Inf, Inf))
+  expect_identical(out$q_upper[rows], summ$q_upper[rows])
+  expect_identical(out[-rows, ], summ[-rows, ], ignore_attr = TRUE)
+  expect_identical(names(attr(out, "moment_existence")), tau)
+  expect_identical(apply_precision_moment_rule(summ[c(1, 4), ]), summ[c(1, 4), ])
+})
