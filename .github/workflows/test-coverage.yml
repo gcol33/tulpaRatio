@@ -56,12 +56,21 @@ jobs:
                        fixed = TRUE)
           filter <- paste0("^(", paste(stem, collapse = "|"), ")$")
           out <- file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv")
+          cat("tulpa", format(utils::packageVersion("tulpa")), "at",
+              utils::packageDescription("tulpa")$RemoteSha %||% "unknown", "\n")
+          # Each test's failure and error messages travel in the results file,
+          # since covr runs the tests in a subprocess whose output stays in
+          # its own .Rout file.
           code <- sprintf(paste0(
-            "r <- as.data.frame(testthat::test_dir(%s, filter = %s, ",
+            "res <- testthat::test_dir(%s, filter = %s, ",
             "package = 'tulpaRatio', load_package = 'installed', ",
-            "stop_on_failure = FALSE, reporter = 'summary')); ",
-            "utils::write.csv(r[, c('file', 'test', 'failed', 'error', 'skipped')], %s, ",
-            "row.names = FALSE)"),
+            "stop_on_failure = FALSE, reporter = 'summary'); ",
+            "r <- as.data.frame(res); ",
+            "r$message <- vapply(res, function(t) paste(vapply(Filter(function(e) ",
+            "inherits(e, c('expectation_failure', 'expectation_error')), t$results), ",
+            "conditionMessage, ''), collapse = ' | '), ''); ",
+            "utils::write.csv(r[, c('file', 'test', 'failed', 'error', 'skipped', ",
+            "'message')], %s, row.names = FALSE)"),
             deparse(tests), deparse(filter), deparse(out))
           cov <- covr::package_coverage(
             type = "none", code = code, quiet = FALSE, clean = FALSE,
@@ -84,7 +93,9 @@ jobs:
         run: |
           r <- utils::read.csv(file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv"))
           bad <- r[r$failed > 0 | r$error, ]
-          print(bad, row.names = FALSE)
+          for (i in seq_len(nrow(bad))) {
+            cat(bad$file[i], "::", bad$test[i], "\n  ", bad$message[i], "\n")
+          }
           cat(nrow(r), "tests,", sum(r$failed), "failed,", sum(r$error), "errors\n")
           if (nrow(bad) > 0) quit(status = 1L)
         shell: Rscript {0}
