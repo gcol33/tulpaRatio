@@ -2,7 +2,9 @@ name: test-coverage
 
 # Line coverage of the test suite at NOT_CRAN=true. Under covr the whole suite
 # runs past the six-hour job limit, so it runs in shards, one job each: shard k
-# takes every SHARDS-th test file in sorted order from the k-th. Each shard
+# takes every SHARDS-th test file in sorted order from the k-th. At eight
+# shards the slowest two reached the 300-minute job limit, so there are 16;
+# each shard prints its files' seconds for a split by measured cost. Each shard
 # uploads its own report and Codecov merges the uploads of one commit. A shard
 # whose tests fail still uploads its coverage; the job then fails on them.
 
@@ -21,12 +23,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       MAKEFLAGS: "-j4"
       SHARD: ${{ matrix.shard }}
-      SHARDS: 8
+      SHARDS: 16
 
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +80,7 @@ jobs:
             "inherits(e, c('expectation_failure', 'expectation_error')), t$results), ",
             "conditionMessage, ''), collapse = ' | '), ''); ",
             "utils::write.csv(r[, c('file', 'test', 'failed', 'error', 'skipped', ",
-            "'message')], %s, row.names = FALSE)"),
+            "'real', 'message')], %s, row.names = FALSE)"),
             deparse(tests), deparse(filter), deparse(out))
           cov <- covr::package_coverage(
             type = "none", code = code, quiet = FALSE, clean = FALSE,
@@ -105,6 +107,7 @@ jobs:
             cat(bad$file[i], "::", bad$test[i], "\n  ", bad$message[i], "\n")
           }
           cat(nrow(r), "tests,", sum(r$failed), "failed,", sum(r$error), "errors\n")
+          print(round(sort(tapply(r$real, r$file, sum), decreasing = TRUE)))
           if (nrow(bad) > 0) quit(status = 1L)
         shell: Rscript {0}
 
