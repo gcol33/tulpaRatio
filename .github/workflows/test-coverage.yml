@@ -1,5 +1,11 @@
 name: test-coverage
 
+# Line coverage of the test suite at NOT_CRAN=true. Under covr the whole suite
+# runs past the six-hour job limit, so it runs in shards, one job each: shard k
+# takes every SHARDS-th test file in sorted order from the k-th. Each shard
+# uploads its own report and Codecov merges the uploads of one commit. A shard
+# whose tests fail still uploads its coverage; the job then fails on them.
+
 on:
   push:
     branches: [main, master]
@@ -9,10 +15,18 @@ on:
 
 jobs:
   test-coverage:
+    name: shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       MAKEFLAGS: "-j4"
+      SHARD: ${{ matrix.shard }}
+      SHARDS: 8
 
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +43,30 @@ jobs:
 
       - name: Test coverage
         run: |
+          shard <- as.integer(Sys.getenv("SHARD"))
+          n <- as.integer(Sys.getenv("SHARDS"))
+          tests <- normalizePath("tests/testthat", winslash = "/")
+          files <- sort(list.files(tests, "^test-.*\\.R$"))
+          mine <- files[(seq_along(files) - 1L) %% n == shard - 1L]
+          cat("shard", shard, "of", n, ":", length(mine), "files\n")
+          cat(mine, sep = "\n")
+          # Test file stems hold letters, digits, '-', '_' and '.'; only the
+          # dot is a regex metacharacter among them.
+          stem <- gsub(".", "\\.", sub("\\.R$", "", sub("^test-", "", mine)),
+                       fixed = TRUE)
+          filter <- paste0("^(", paste(stem, collapse = "|"), ")$")
+          out <- file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv")
+          code <- sprintf(paste0(
+            "r <- as.data.frame(testthat::test_dir(%s, filter = %s, ",
+            "package = 'tulpaRatio', load_package = 'installed', ",
+            "stop_on_failure = FALSE, reporter = 'summary')); ",
+            "utils::write.csv(r[, c('file', 'test', 'failed', 'error', 'skipped')], %s, ",
+            "row.names = FALSE)"),
+            deparse(tests), deparse(filter), deparse(out))
           cov <- covr::package_coverage(
-            quiet = FALSE,
-            clean = FALSE,
-            install_path = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"), winslash = "/"), "package")
-          )
+            type = "none", code = code, quiet = FALSE, clean = FALSE,
+            install_path = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"),
+                                                   winslash = "/"), "package"))
           print(cov)
           covr::to_cobertura(cov)
         shell: Rscript {0}
@@ -42,20 +75,22 @@ jobs:
         with:
           fail_ci_if_error: ${{ github.event_name != 'pull_request' || secrets.CODECOV_TOKEN != '' }}
           files: ./cobertura.xml
+          flags: shard-${{ matrix.shard }}
           plugins: noop
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Show testthat output
-        if: always()
+      - name: Test results
         run: |
-          ## --------------------------------------------------------------------
+          r <- utils::read.csv(file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv"))
+          bad <- r[r$failed > 0 | r$error, ]
+          print(bad, row.names = FALSE)
+          cat(nrow(r), "tests,", sum(r$failed), "failed,", sum(r$error), "errors\n")
+          if (nrow(bad) > 0) quit(status = 1L)
+        shell: Rscript {0}
+
+      - name: Show testthat output
+        if: failure()
+        run: |
           find '${{ runner.temp }}/package' -name 'testthat.Rout*' -exec cat '{}' \; || true
         shell: bash
-
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-test-failures
-          path: ${{ runner.temp }}/package
