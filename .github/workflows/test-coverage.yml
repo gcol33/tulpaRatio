@@ -41,6 +41,14 @@ jobs:
           extra-packages: any::covr, any::xml2
           needs: coverage
 
+      # tulpa is developed alongside this package and keeps its version
+      # number between commits, so a dependency cache restored from an earlier
+      # run can hold an older build of the same version, which the lockfile
+      # accepts. Install the current build every run.
+      - name: Install the current tulpa
+        run: install.packages("tulpa")
+        shell: Rscript {0}
+
       - name: Test coverage
         run: |
           shard <- as.integer(Sys.getenv("SHARD"))
@@ -56,8 +64,8 @@ jobs:
                        fixed = TRUE)
           filter <- paste0("^(", paste(stem, collapse = "|"), ")$")
           out <- file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv")
-          cat("tulpa", format(utils::packageVersion("tulpa")), "at",
-              utils::packageDescription("tulpa")$RemoteSha %||% "unknown", "\n")
+          cat("tulpa", format(utils::packageVersion("tulpa")), "packaged",
+              utils::packageDescription("tulpa")$Packaged %||% "unknown", "\n")
           # Each test's failure and error messages travel in the results file,
           # since covr runs the tests in a subprocess whose output stays in
           # its own .Rout file.

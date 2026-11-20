@@ -38,6 +38,14 @@ jobs:
           extra-packages: any::pkgdown, local::.
           needs: website
 
+      # tulpa is developed alongside this package and keeps its version
+      # number between commits, so a dependency cache restored from an earlier
+      # run can hold an older build of the same version, which the lockfile
+      # accepts. Install the current build every run.
+      - name: Install the current tulpa
+        run: install.packages("tulpa")
+        shell: Rscript {0}
+
       - name: Build site
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}

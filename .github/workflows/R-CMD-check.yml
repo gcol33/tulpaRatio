@@ -58,6 +58,14 @@ jobs:
           cache-version: 2
           needs: check
 
+      # tulpa is developed alongside this package and keeps its version
+      # number between commits, so a dependency cache restored from an earlier
+      # run can hold an older build of the same version, which the lockfile
+      # accepts. Install the current build every run.
+      - name: Install the current tulpa
+        run: install.packages("tulpa")
+        shell: Rscript {0}
+
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
