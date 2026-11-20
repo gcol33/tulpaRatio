@@ -32,6 +32,26 @@ test_that("auto selects only a sampler implemented for the family", {
   }
 })
 
+# Under covr every statement arrives as `if (TRUE) { <counter call>; expr }`;
+# unwrap that back to `expr` so a body is read as written. The counter call
+# names a covr internal either as its function (`covr:::count(key)`) or as an
+# argument (`.Call(covr:::covr_count, key)`).
+uninstrument_covr <- function(e) {
+  is_internal <- function(x) is.call(x) && length(x) == 3L &&
+    identical(x[[1L]], as.name(":::")) && identical(x[[2L]], as.name("covr"))
+  is_count <- function(x) is.call(x) && any(vapply(as.list(x), is_internal, logical(1)))
+  if (!is.call(e)) return(e)
+  if (identical(e[[1L]], as.name("if")) && length(e) == 3L && isTRUE(e[[2L]]) &&
+      is.call(e[[3L]]) && identical(e[[3L]][[1L]], as.name("{")) &&
+      length(e[[3L]]) == 3L && is_count(e[[3L]][[2L]])) {
+    return(uninstrument_covr(e[[3L]][[3L]]))
+  }
+  for (i in seq_along(e)) {
+    if (is.call(e[[i]])) e[i] <- list(uninstrument_covr(e[[i]]))
+  }
+  e
+}
+
 test_that("exported family constructors each call the shared builder", {
   constructors <- getNamespaceExports("tulpaRatio")
   constructors <- constructors[startsWith(constructors, "ratiod_")]
@@ -39,7 +59,7 @@ test_that("exported family constructors each call the shared builder", {
     "ratiod_average", "ratiod_benchmark", "ratiod_benchmark_compare", "ratiod_compare"))
   for (name in constructors) {
     fn <- getExportedValue("tulpaRatio", name)
-    calls <- as.list(body(fn))
+    calls <- as.list(uninstrument_covr(body(fn)))
     expect_equal(length(calls), 2L, info = name)
     expect_identical(calls[[2L]][[1L]], as.name("new_ratiod_family"), info = name)
   }
