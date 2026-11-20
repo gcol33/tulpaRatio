@@ -22,7 +22,10 @@ jobs:
       matrix:
         config:
           - {os: macos-latest,   r: 'release'}
-          - {os: windows-latest, r: 'release'}
+          # The full NOT_CRAN suite runs past the six-hour job limit inside
+          # R CMD check on Windows, so its tests run in the windows-tests
+          # shards below and the check itself skips them.
+          - {os: windows-latest, r: 'release', check-args: 'c("--no-manual", "--as-cran", "--no-tests")'}
           - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,  r: 'release'}
           - {os: ubuntu-latest,  r: 'oldrel-1'}
@@ -69,4 +72,66 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
+          args: ${{ matrix.config.check-args || 'c("--no-manual", "--as-cran")' }}
           build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+
+  windows-tests:
+    # The NOT_CRAN suite on the installed package, split into shards (one job
+    # each) by .github/scripts/test-shard.R; each shard prints its files'
+    # seconds for a split by measured cost.
+    name: windows tests shard ${{ matrix.shard }}
+    runs-on: windows-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      MAKEFLAGS: "-j4"
+      NOT_CRAN: "true"
+      SHARD: ${{ matrix.shard }}
+      SHARDS: 8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+          extra-repositories: https://gcol33.r-universe.dev
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 2
+          needs: check
+
+      - name: Install the current tulpa
+        run: install.packages("tulpa")
+        shell: Rscript {0}
+
+      - name: Install tulpaRatio
+        run: R CMD INSTALL --no-test-load .
+        shell: bash
+
+      - name: Tests
+        run: |
+          source(".github/scripts/test-shard.R")
+          shard <- as.integer(Sys.getenv("SHARD"))
+          n <- as.integer(Sys.getenv("SHARDS"))
+          tests <- normalizePath("tests/testthat", winslash = "/")
+          mine <- shard_files(tests, shard, n)
+          cat("shard", shard, "of", n, ":", length(mine), "files\n")
+          cat(mine, sep = "\n")
+          cat("tulpa", format(utils::packageVersion("tulpa")), "packaged",
+              utils::packageDescription("tulpa")$Packaged %||% "unknown", "\n")
+          out <- file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv")
+          res <- testthat::test_dir(tests, filter = shard_filter(mine),
+                                    package = "tulpaRatio",
+                                    load_package = "installed",
+                                    stop_on_failure = FALSE,
+                                    reporter = "summary")
+          write_shard_results(res, out)
+          report_shard_results(out)
+        shell: Rscript {0}

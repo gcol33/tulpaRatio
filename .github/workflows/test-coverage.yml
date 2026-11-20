@@ -53,18 +53,14 @@ jobs:
 
       - name: Test coverage
         run: |
+          helpers <- normalizePath(".github/scripts/test-shard.R", winslash = "/")
+          source(helpers)
           shard <- as.integer(Sys.getenv("SHARD"))
           n <- as.integer(Sys.getenv("SHARDS"))
           tests <- normalizePath("tests/testthat", winslash = "/")
-          files <- sort(list.files(tests, "^test-.*\\.R$"))
-          mine <- files[(seq_along(files) - 1L) %% n == shard - 1L]
+          mine <- shard_files(tests, shard, n)
           cat("shard", shard, "of", n, ":", length(mine), "files\n")
           cat(mine, sep = "\n")
-          # Test file stems hold letters, digits, '-', '_' and '.'; only the
-          # dot is a regex metacharacter among them.
-          stem <- gsub(".", "\\.", sub("\\.R$", "", sub("^test-", "", mine)),
-                       fixed = TRUE)
-          filter <- paste0("^(", paste(stem, collapse = "|"), ")$")
           out <- file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv")
           cat("tulpa", format(utils::packageVersion("tulpa")), "packaged",
               utils::packageDescription("tulpa")$Packaged %||% "unknown", "\n")
@@ -72,16 +68,13 @@ jobs:
           # since covr runs the tests in a subprocess whose output stays in
           # its own .Rout file.
           code <- sprintf(paste0(
+            "source(%s); ",
             "res <- testthat::test_dir(%s, filter = %s, ",
             "package = 'tulpaRatio', load_package = 'installed', ",
             "stop_on_failure = FALSE, reporter = 'summary'); ",
-            "r <- as.data.frame(res); ",
-            "r$message <- vapply(res, function(t) paste(vapply(Filter(function(e) ",
-            "inherits(e, c('expectation_failure', 'expectation_error')), t$results), ",
-            "conditionMessage, ''), collapse = ' | '), ''); ",
-            "utils::write.csv(r[, c('file', 'test', 'failed', 'error', 'skipped', ",
-            "'real', 'message')], %s, row.names = FALSE)"),
-            deparse(tests), deparse(filter), deparse(out))
+            "write_shard_results(res, %s)"),
+            deparse(helpers), deparse(tests), deparse(shard_filter(mine)),
+            deparse(out))
           cov <- covr::package_coverage(
             type = "none", code = code, quiet = FALSE, clean = FALSE,
             install_path = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"),
@@ -101,14 +94,8 @@ jobs:
 
       - name: Test results
         run: |
-          r <- utils::read.csv(file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv"))
-          bad <- r[r$failed > 0 | r$error, ]
-          for (i in seq_len(nrow(bad))) {
-            cat(bad$file[i], "::", bad$test[i], "\n  ", bad$message[i], "\n")
-          }
-          cat(nrow(r), "tests,", sum(r$failed), "failed,", sum(r$error), "errors\n")
-          print(round(sort(tapply(r$real, r$file, sum), decreasing = TRUE)))
-          if (nrow(bad) > 0) quit(status = 1L)
+          source(".github/scripts/test-shard.R")
+          report_shard_results(file.path(Sys.getenv("RUNNER_TEMP"), "shard-results.csv"))
         shell: Rscript {0}
 
       - name: Show testthat output
