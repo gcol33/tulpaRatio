@@ -14,12 +14,28 @@ nb_inflated_reference <- function(y, mu, phi, z, type) {
   -log1p(exp(-z)) + nb_count_reference(y, mu, phi) - log(-expm1(lp0))
 }
 
+# R's sum() accumulates in long double where the platform has an extended
+# type (x86) and in double where it does not (arm64); over 5000 log terms near
+# 39 a double running sum drifts by about 1e-8. A compensated (Neumaier) sum
+# is accurate to a few ulp on both, so it is the reference the compiled value
+# is held to.
+compensated_sum <- function(x) {
+  s <- 0
+  err <- 0
+  for (v in x) {
+    t <- s + v
+    err <- err + if (abs(s) >= abs(v)) (s - t) + v else (v - t) + s
+    s <- t
+  }
+  s + err
+}
+
 test_that("count normalizers and polygamma differences match finite sums", {
   for (y in c(0L, 1L, 3L, 32L, 33L, 200L, 5000L)) {
     for (phi in c(0.001, 0.7, 9.5, 50, 999, 1000, 1e8, 1e17)) {
       v <- tulpaRatio:::cpp_test_negbin_math(y, phi)
       terms <- phi + seq_len(y) - 1
-      expect_lt(abs(v[1] - sum(log(terms))), 2e-10)
+      expect_lt(abs(v[1] - compensated_sum(log(terms))), 2e-10)
       for (k in 0:3) {
         ref <- sum((-1)^k * factorial(k) / terms^(k + 1))
         expect_lt(abs(v[k + 2] - ref) / max(abs(ref), 1e-300), 1e-11)

@@ -1,4 +1,12 @@
 test_that("the archived likelihood and gradient reductions are byte identical", {
+  # The fixture's data and parameter vector are drawn with the standard
+  # library's distributions from a seeded mt19937. The engine's output is
+  # specified, the distributions' algorithms are not: libstdc++ (Linux,
+  # Windows) and libc++ (macOS) draw different values from the same seed, so
+  # the archive, recorded under libstdc++, describes a different model there.
+  # The next test checks the gradients against the engine on any platform.
+  skip_if(identical(Sys.info()[["sysname"]], "Darwin"),
+          "the archived fixture inputs are drawn by libstdc++")
   reference <- readRDS(test_path("fixtures", "spec17-gradient-before-fused.rds"))
   # Byte identity holds on the platform the archive was written on, Windows
   # x86-64. A floating-point reduction is not bit-reproducible across
