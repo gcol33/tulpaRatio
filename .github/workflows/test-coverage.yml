@@ -1,10 +1,10 @@
 name: test-coverage
 
 # Line coverage of the test suite at NOT_CRAN=true. Under covr the whole suite
-# runs past the six-hour job limit, so it runs in shards, one job each: shard k
-# takes every SHARDS-th test file in sorted order from the k-th. At eight
-# shards the slowest two reached the 300-minute job limit, so there are 16;
-# each shard prints its files' seconds for a split by measured cost. Each shard
+# runs past the six-hour job limit, so it runs in 16 shards, one job each,
+# placed by the per-file seconds in .github/test-seconds.csv
+# (.github/scripts/test-shard.R). Each shard prints its files' seconds, the
+# source for refreshing that table when the suite changes. Each shard
 # uploads its own report and Codecov merges the uploads of one commit. A shard
 # whose tests fail still uploads its coverage; the job then fails on them.
 

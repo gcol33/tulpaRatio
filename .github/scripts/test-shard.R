@@ -1,11 +1,25 @@
 # Test-file sharding shared by the workflows that split the NOT_CRAN suite
-# into parallel jobs. Shard k of n takes every n-th test file in sorted order
-# from the k-th, and the filter matches exactly those files in
+# into parallel jobs. Files are placed by measured cost: `seconds` lists each
+# file's seconds from a coverage run (the slower of the two workflows), a
+# file it does not list costs the median, and files are taken from the most
+# expensive down and each given to the shard with the least cost so far
+# (ties go to the lower shard and the earlier name, so every job computes the
+# same plan). The filter matches exactly one shard's files in
 # testthat::test_dir(filter =).
 
-shard_files <- function(tests, shard, n) {
+shard_files <- function(tests, shard, n, seconds = ".github/test-seconds.csv") {
   files <- sort(list.files(tests, "^test-.*\\.R$"))
-  files[(seq_along(files) - 1L) %% n == shard - 1L]
+  measured <- utils::read.csv(seconds)
+  cost <- measured$seconds[match(files, measured$file)]
+  cost[is.na(cost)] <- stats::median(measured$seconds)
+  load <- numeric(n)
+  owner <- integer(length(files))
+  for (i in order(-cost, files)) {
+    k <- which.min(load)
+    owner[i] <- k
+    load[k] <- load[k] + cost[i]
+  }
+  files[owner == shard]
 }
 
 # Test file stems hold letters, digits, '-', '_' and '.'; only the dot is a
