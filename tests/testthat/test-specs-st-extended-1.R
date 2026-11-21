@@ -1,4 +1,4 @@
-test_that("Knorr-Held interaction bridges recover planted fields, part 1 of 4", {
+test_that("Knorr-Held interaction bridges recover planted fields, part 1 of 8", {
   skip_on_cran()
-  bridge19_st_recovery(1L, 4L)
+  bridge19_st_recovery(1L, 8L)
 })
